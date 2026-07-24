@@ -17,8 +17,11 @@ actually appears in its document.
 ## Status
 
 First Plan/Report pair built for review: **PCP-003 / PCR-003 (production
-bioreactor, Step 3)**. The remaining documents are planned but not yet generated
-(see *Document set* below).
+bioreactor, Step 3)**. Written to BLA-supporting depth — the report is ~35 pages
+(full DoE analysis: effect estimates, response-surface models with ANOVA and
+lack-of-fit, design space, capability, appendices with the complete design
+matrices and effect tables); the plan (protocol) is ~22 pages. The remaining
+documents are planned but not yet generated (see *Document set* below).
 
 ## Document set and ID scheme
 
@@ -48,6 +51,7 @@ numbers (prefixes recognized by the `nlp_reports` document-ID matcher).
 | `PCP-003_bioreactor.{docx,pdf}`, `PCR-003_bioreactor.{docx,pdf}` | rendered deliverables |
 | `ground_truth/PCP-003.json`, `ground_truth/PCR-003.json` | composite ground-truth annexes |
 | `_pcpkg.py` | shared Quarto helpers, document registry, title-block / cross-ref tables (reuses `outputs/`) |
+| `doe_report.py` | DoE analysis engine: effect/coefficient tables, R²/adjusted/predicted R², ANOVA with lack-of-fit, design matrices, RSM contour & diagnostic figures (statsmodels, from the seeded DoE data) |
 | `schema_ext.py` | the annex schema: reuses `nlp_reports/app/models`, adds local extensions |
 | `build_ground_truth.py` | builds the annexes from the same seeded CSVs the documents render |
 | `validate_annex.py` | validates every `ground_truth/*.json` against the schema |

@@ -229,7 +229,9 @@ def related_docs_md(doc_id):
 
 
 def sop_table(sops=None, amvs=None):
-    rows = [[sid, title, "SOP"] for sid, title in (sops or SOP_REFS)]
-    rows += [[aid, title, "Method validation"] for aid, title in (amvs or AMV_REFS)]
+    sops = SOP_REFS if sops is None else sops
+    amvs = AMV_REFS if amvs is None else amvs
+    rows = [[sid, title, "SOP"] for sid, title in sops]
+    rows += [[aid, title, "Method validation"] for aid, title in amvs]
     df = pd.DataFrame(rows, columns=["Reference", "Title", "Type"])
     return df.to_markdown(index=False)

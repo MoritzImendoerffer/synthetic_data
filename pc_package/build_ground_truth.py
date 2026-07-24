@@ -146,9 +146,9 @@ def build_sites(doc_id, file_name, sec):
 
 
 def build_params(doc_id, file_name, sec, classified):
-    caption = ("Production-bioreactor parameters, ranges and post-characterization classification."
+    caption = ("Production-bioreactor process parameters, set-points, ranges and post-characterization classification."
                if classified else
-               "Production-bioreactor process parameters, set-points, characterization ranges and study type.")
+               "Production-bioreactor parameters, set-points, characterization ranges and planned study type.")
     out = []
     for r in PARAM_ROWS:
         name = r["parameter"]
@@ -178,8 +178,8 @@ def build_params(doc_id, file_name, sec, classified):
 
 def build_cqas(doc_id, file_name, sec, report):
     if report:
-        sec_title = "CQA outcomes and process capability"
-        quote = "bioreactor-set CQA distributions and process capability"
+        sec_title = "Process capability and robustness"
+        quote = "CQA distributions and process capability"
         table_title = "Commercial-scale process capability for the bioreactor-set CQAs"
     else:
         sec_title = "Quality attributes in scope"
@@ -209,8 +209,8 @@ def build_methods(doc_id, file_name, sec):
         out.append(S.AnalyticalMethod(
             method_id=mid, method_name=mname, method_type=mtype, analytes=analytes,
             associated_attributes=[CQA_CONCEPT[a] for a in attrs], validation_status="validated",
-            source_references=[ref(doc_id, file_name, sec, "Study design",
-                                   "Responses are measured by the validated methods")],
+            source_references=[ref(doc_id, file_name, sec, "Analytical methods",
+                                   "measured by the validated methods")],
             metadata=meta()))
     return out
 
@@ -260,7 +260,7 @@ def build_studies(doc_id, file_name, report):
             factors=["Initial viable cell conc."], responses=["process performance"],
             associated_parameters=["param:initial_vcc"],
             source_references=[ref(doc_id, file_name, sec, sec,
-                                   "initial viable cell concentration is evaluated one factor at a time")],
+                                   "evaluated one factor at a time")],
             metadata=meta()))
     return studies
 
@@ -284,12 +284,12 @@ def build_assertions(doc_id, file_name, report):
     for name, cid in PARAM_CONCEPT.items():
         add("step:production_bioreactor", "step_has_parameter", cid,
             f"{UO_NAME} has process parameter {name}.",
-            "Parameters and classification" if report else "Parameters and ranges to be characterized",
-            "process parameters" if not report else "parameters studied")
+            "Study design" if report else "Factors, ranges and study type",
+            "Nine parameters were studied" if report else "process parameters")
     for r in CQA_ROWS:
         if report:
             add("step:production_bioreactor", "step_has_quality_attribute", CQA_CONCEPT[r["key"]],
-                f"{UO_NAME} sets/controls {r['cqa']}.", "CQA outcomes and process capability",
+                f"{UO_NAME} sets/controls {r['cqa']}.", "Process capability and robustness",
                 "bioreactor-set CQA")
         else:
             add("step:production_bioreactor", "step_has_quality_attribute", CQA_CONCEPT[r["key"]],
@@ -299,7 +299,7 @@ def build_assertions(doc_id, file_name, report):
     if not report:
         for r in CQA_ROWS:
             add(CQA_CONCEPT[r["key"]], "attribute_measured_by_method", f"method:{CQA_METHOD[r['key']]}",
-                f"{r['cqa']} is measured by {CQA_METHOD[r['key']]}.", "Study design",
+                f"{r['cqa']} is measured by {CQA_METHOD[r['key']]}.", "Analytical methods",
                 "measured by the validated methods")
     # attribute -> acceptance criterion (both docs state acceptance criteria)
     for r in CQA_ROWS:
@@ -313,15 +313,15 @@ def build_assertions(doc_id, file_name, report):
                      "Osmolality", "Culture duration"]]:
             add(cid, "parameter_impacts_attribute", "attr:afucosylation",
                 "Parameter significantly affects the glycan/charge-variant CQAs (WC-CPP).",
-                "Parameter classification and rationale", "significantly affect the glycan and charge-variant CQAs")
+                "Parameter classification", "significantly affect the glycan and charge-variant CQAs")
         for cid in [PARAM_CONCEPT[k] for k in
                     ["Dissolved oxygen", "Initial viable cell conc.", "Nutrient feed-1 volume"]]:
             add(cid, "parameter_does_not_significantly_impact_attribute", "attr:afucosylation",
                 "Parameter affects performance without a significant CQA impact (KPP).",
-                "Parameter classification and rationale", "without a significant CQA impact and are KPP")
+                "Parameter classification", "do not significantly impact the CQAs")
         add("param:medium_concentration", "parameter_does_not_significantly_impact_attribute",
             "attr:afucosylation", "No meaningful impact over a wide range (GPP).",
-            "Parameter classification and rationale", "no meaningful impact over a wide range and is GPP")
+            "Parameter classification", "No meaningful impact on CQAs or performance")
 
     return AssertionStore(run_id=f"gt-{doc_id}", assertions=A, rationales=[])
 
@@ -360,17 +360,28 @@ def build_report_sections(doc_id, file_name, report):
             st(1, "PCP-003 defines the Stage 1 characterization of the A-Mab production bioreactor (Step 3).",
                "Purpose and scope", "defines the Stage 1 (Process Design) characterization"),
             st(2, "Nine process parameters are characterized against the bioreactor-set CQAs.",
-               "Parameters and ranges to be characterized", "Nine process parameters are in scope"),
+               "Factors, ranges and study type", "Nine parameters are in scope"),
             st(3, "The study uses a screening fractional-factorial design followed by a response-surface design on a 2 L scale-down model.",
-               "Study design", "sequential design-of-experiments (DoE) strategy"),
+               "Response-surface design", "face-centred central-composite design"),
+            st(4, "Models are acceptable when there is no significant lack of fit against the center-point pure error.",
+               "Acceptance and decision criteria", "no significant lack of fit"),
+            st(5, "The study must establish a design space over which every in-scope CQA is satisfied simultaneously.",
+               "Acceptance and decision criteria",
+               "a design space exists over which every in-scope CQA is satisfied simultaneously"),
         ])]
     return [ReportSection(section_id=f"{doc_id}-summary", title="Report summary", statements=[
         st(1, "Culture pH, temperature, dissolved CO2, osmolality and culture duration are classified WC-CPP.",
            "Executive summary", "are classified **well-controlled CPP (WC-CPP)**"),
         st(2, f"The nominal fed-batch reaches a peak VCD of {P.V['peak_vcd_e6']} x10^6 cells/mL and titer of {P.V['nominal_titer_g_per_l']} g/L.",
-           "Nominal batch performance", "peak viable cell density"),
+           "Center-point performance and reproducibility", "peak viable cell density"),
         st(3, "All in-scope CQAs meet acceptance and a multivariate design space was established.",
-           "Response surface and design space", "defined the multivariate design space"),
+           "Design space", "the multivariate region"),
+        st(4, "The response-surface models are adequate for all five CQAs.",
+           "Response-surface models", "response-surface models are adequate for all five CQAs"),
+        st(5, "There was no significant lack of fit relative to the center-point pure error.",
+           "Response-surface models", "no significant lack of fit"),
+        st(6, "All bioreactor-set CQAs meet acceptance with margin at commercial scale.",
+           "Process capability and robustness", "minimum capability"),
     ])]
 
 
@@ -382,9 +393,8 @@ def build_design_spaces(doc_id, file_name):
         quality_attributes_constrained=[CQA_CONCEPT[r["key"]] for r in CQA_ROWS],
         definition="Multivariate region in culture pH, temperature, duration and dissolved CO2 over "
                    "which every cell-culture CQA is satisfied simultaneously.",
-        source_references=[ref(doc_id, file_name, "Response surface and design space",
-                               "Response surface and design space",
-                               "defining a robust design space in culture pH, temperature, duration and dissolved CO")],
+        source_references=[ref(doc_id, file_name, "Design space", "Design space",
+                               "multivariate region of culture pH, temperature, culture duration and dissolved CO")],
         metadata=meta())]
 
 

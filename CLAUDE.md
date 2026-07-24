@@ -20,6 +20,11 @@ the corpus; recoverable from git history if needed.) Full workflow:
 [`pc_package/README.md`](pc_package/README.md); DoE engine:
 [`pc_package/DOE_ENGINE.md`](pc_package/DOE_ENGINE.md).
 
+**Continuing the corpus?** The remaining documents (per-unit-operation plans/reports for
+Steps 4–10, plus PTP-001 / RA-001 / PCMP-001 / PCMR-001) and how to build each are listed
+in **[`pc_package/TASKS.md`](pc_package/TASKS.md)** — start there. The bioreactor pair
+`PCP-003` / `PCR-003` is the reference implementation.
+
 ## Golden rules (do not violate)
 
 1. **Single source of truth.** Every number originates in `config/parameters.yaml` →

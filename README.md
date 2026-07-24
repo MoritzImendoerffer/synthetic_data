@@ -9,13 +9,18 @@ process parameters/CQAs, table extraction, QA over GMP-style text).
 
 ## A-Mab Process Characterization
 
-A **Process Characterization (PC) Report** (Word + PDF) and a **post-PC Process Risk
-Assessment / FMEA** (Excel) for the *A-Mab* drug substance — a humanized IgG1
-monoclonal antibody. Both documents are generated from a seeded Python model of the
-entire drug-substance train, so every figure, table and number can be re-created with
-a single command.
+A **document corpus** for the *A-Mab* drug substance — a humanized IgG1 monoclonal
+antibody — comprising a set of cross-referenced Quarto documents (a transfer plan, a
+pre-characterization risk assessment, a characterization master plan, a plan/report
+pair per unit operation, and a master report) each paired with a machine-readable
+**ground-truth JSON annex**. Every figure, table and number is generated from a seeded
+Python model of the entire drug-substance train, so the whole set can be re-created —
+consistently — with a single command. The corpus doubles as standalone CMC
+deliverables and as a labelled test corpus for the NLP pipeline in the sibling
+`nlp_reports` project. See [`pc_package/README.md`](pc_package/README.md).
 
-Grounded in three source documents (`original_data/`):
+Grounded in source documents kept outside the repo (at `$SYNTHETIC_DATA_SOURCES`, default
+`/home/moritz/Nextcloud/Datasets/synthetic_data/source_documents/`; page-marked extracts in `refs/text/`):
 
 - **A-Mab Case Study v2.1** (CMC Biotech Working Group, 2009) — process model, CQAs,
   risk methodology.
@@ -28,21 +33,21 @@ Grounded in three source documents (`original_data/`):
 
 | Deliverable | Path |
 |---|---|
-| Process Characterization Report (Word) | `report/process_characterization.docx` |
-| Process Characterization Report (PDF) | `report/process_characterization.pdf` |
-| Post-PC Process Risk Assessment (FMEA, Excel) | `risk_assessment/A-Mab_Post-PC_Process_Risk_Assessment.xlsx` |
+| Document corpus (Quarto → Word + PDF) + ground-truth annexes | `pc_package/` (see its README) |
+| First pair built: bioreactor Plan / Report | `pc_package/PCP-003_bioreactor.*`, `pc_package/PCR-003_bioreactor.*` |
+| Per-document ground truth (JSON) | `pc_package/ground_truth/*.json` |
 
 ### Reproduce everything
 
 ```bash
 make env      # install Python dependencies (one time)
-make all      # data -> figures -> report (Word + PDF) -> FMEA workbook
+make all      # data -> figures -> corpus (documents + ground-truth annexes)
 ```
 
 Requires **Quarto** (with a LaTeX engine for PDF) and **Python 3.11+**. Individual
-stages: `make data`, `make figures`, `make report`, `make fmea`, `make test`,
-`make clean`. Everything derives from the master seed in `config/parameters.yaml`
-(`meta.seed`), so re-running reproduces byte-identical datasets.
+stages: `make data`, `make figures`, `make corpus`, `make test`, `make clean`.
+Everything derives from the master seed in `config/parameters.yaml` (`meta.seed`), so
+re-running reproduces byte-identical datasets and a consistent document set.
 
 ### How it fits together
 
@@ -65,8 +70,11 @@ amab_process/              <- the process model (Python package)
 scripts/generate_data.py   <- writes outputs/data/*.csv + outputs/report_values.json
 scripts/make_figures.py    <- writes outputs/figures/*.png
         |
-        |--> report/process_characterization.qmd  -> Word + PDF (Quarto executes Python)
-        \--> risk_assessment/build_fmea.py         -> Excel FMEA workbook
+        v
+pc_package/                <- document-corpus generator (see pc_package/README.md)
+  _pcpkg.py + doe_report.py       <- shared helpers + DoE analysis engine
+  PCP-00N_*.qmd / PCR-00N_*.qmd   -> Word + PDF (Quarto executes Python)
+  build_ground_truth.py           -> ground_truth/*.json (validated vs nlp_reports models)
 ```
 
 ### The process model
@@ -87,13 +95,14 @@ All randomness is seeded; `make test` checks reproducibility, mass balance,
 in-spec CQAs at set-point, viral-clearance margin, capability, and that the DoE
 reproduces the documented A-Mab effect directions.
 
-### Risk assessment (FMEA)
+### Risk-assessment content (`risk_assessment/build_fmea.py`)
 
-A-Mab-aligned post-characterization FMEA: **RPN = Severity × Occurrence × Detection**,
-with the CPP rule **Severity ≥ 8 or RPN > 72**. The workbook shows the RPN *before*
-and *after* characterization (and the resulting control strategy), making the risk
-reduction explicit, and splits critical parameters into CPP vs well-controlled CPP
-(WC-CPP) per the case-study designation.
+`build_fmea.py` builds an A-Mab-aligned post-characterization FMEA
+(**RPN = Severity × Occurrence × Detection**; CPP rule **Severity ≥ 8 or RPN > 72**)
+and carries a curated per-parameter failure-mode / effect / control map. It is retained
+as the **content source** for the corpus's Pre-Characterization Risk Assessment
+(`RA-001`); run `make fmea` to build the workbook. It is not a shipped deliverable (the
+workbook is gitignored).
 
 ### Source-text extracts
 

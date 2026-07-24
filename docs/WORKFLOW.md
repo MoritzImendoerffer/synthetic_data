@@ -20,25 +20,34 @@ code is assumed.
 12. [Where the numbers come from (traceability)](#12-where-the-numbers-come-from-traceability)
 13. [How this project was built and verified](#13-how-this-project-was-built-and-verified)
 14. [Directory map](#14-directory-map)
+15. [Generating the NLP document corpus (`pc_package/`)](#15-generating-the-nlp-document-corpus-pc_package)
 
 ---
 
 ## 1. What this project does
 
-It produces three documents about the manufacturing process for **A-Mab**, a (fictional,
-industry-standard case-study) monoclonal-antibody drug:
+It produces a **document corpus** about the manufacturing process for **A-Mab**, a
+(fictional, industry-standard case-study) monoclonal-antibody drug — a set of
+cross-referenced Quarto documents (Word + PDF), each paired with a machine-readable
+ground-truth JSON annex (`pc_package/`, see §15):
 
-| Document | File | What it is |
+| Output | Where | What it is |
 |---|---|---|
-| **PC Report (Word)** | `report/process_characterization.docx` | A ~26-page process characterization report |
-| **PC Report (PDF)** | `report/process_characterization.pdf` | The same report as a PDF |
-| **Risk Assessment (Excel)** | `risk_assessment/A-Mab_Post-PC_Process_Risk_Assessment.xlsx` | A post-characterization FMEA workbook |
+| **Document corpus** (Word + PDF) | `pc_package/PCP-00N_*`, `PCR-00N_*`, … | per-unit-operation plans/reports + transfer/master documents |
+| **Ground-truth annexes** (JSON) | `pc_package/ground_truth/*.json` | labelled entities/relations/summaries per document, for NLP |
 
-The key idea: **every number, table and figure in those documents is *calculated* by a
-computer model, not typed by hand.** A small Python model simulates each step of the
-manufacturing process, generates data, draws the charts, and Quarto/openpyxl assemble the
-documents. So you can regenerate the entire set from scratch with **one command**
-(`make all`), and if you change a model assumption, the documents update automatically.
+> **History.** An earlier version produced a single consolidated PC report
+> (`report/process_characterization.qmd`) and a rendered FMEA workbook. Those were
+> superseded by the corpus and removed (recoverable from git history); the FMEA
+> *builder* `risk_assessment/build_fmea.py` is kept as a content source for the
+> Pre-Characterization Risk Assessment (`RA-001`). Sections 3–7 (config, model, data,
+> figures) still apply unchanged; §8 is superseded by §15.
+
+The key idea: **every number, table and figure is *calculated* by a computer model, not
+typed by hand.** A small Python model simulates each step of the manufacturing process,
+generates data, draws the charts, and Quarto assembles the documents. So you can
+regenerate the entire set from scratch with **one command** (`make all`), and if you
+change a model assumption the documents update automatically.
 
 Think of it like a spreadsheet where the cells are formulas: change an input, and every
 dependent result recomputes.
@@ -66,18 +75,19 @@ flowchart TD
     DATA --> FIGS["scripts/make_figures.py"]
     FIGS --> PNG[("outputs/figures/*.png")]
 
-    DATA --> QMD["report/process_characterization.qmd"]
+    DATA --> QMD["pc_package/*.qmd<br/>(+ _pcpkg.py, doe_report.py)"]
     PNG --> QMD
     QMD -->|Quarto| DOCX["Word .docx"]
     QMD -->|Quarto| PDF["PDF"]
-
-    CFG --> FMEA["risk_assessment/build_fmea.py"]
-    FMEA --> XLSX["Excel FMEA"]
+    DATA --> GT["pc_package/build_ground_truth.py"]
+    GT --> JSON[("ground_truth/*.json")]
 
     style CFG fill:#eef4fb,stroke:#2a78d6
     style DATA fill:#f4f7fb
     style PNG fill:#f4f7fb
 ```
+
+The corpus generator and the ground-truth annexes are described in detail in §15.
 
 The one command that runs this whole chain is `make all`. Each arrow is a script that
 reads its inputs and writes its outputs — nothing is manual.
@@ -283,40 +293,42 @@ the viral-clearance summary, the process-capability histograms, and the yield wa
 
 ---
 
-## 8. Building the report (Word + PDF)
+## 8. Building the documents (Word + PDF)
 
-The report is a **Quarto** document: `report/process_characterization.qmd`. Quarto is a tool
-that mixes narrative text with live code. When it renders, it runs the Python code inside the
-document, which loads the CSVs and prints tables and numbers — then Quarto turns the result
-into **both Word and PDF** from the same source.
+> **Superseded by §15.** The single consolidated report this section originally
+> described was removed; the documents are now the `pc_package/` corpus. The
+> mechanism below is unchanged — each corpus document is a **Quarto** `.qmd` that runs
+> Python inline (via the shared `_pcpkg.py` / `doe_report.py` helpers), loads the CSVs,
+> prints tables/numbers, and renders to **both Word and PDF** from the same source.
 
 ```mermaid
 flowchart LR
-    QMD["process_characterization.qmd<br/>(text + Python)"] --> Q{"Quarto render"}
+    QMD["pc_package/*.qmd<br/>(text + Python)"] --> Q{"Quarto render"}
     DATA[("outputs/data/*.csv")] -.reads.-> QMD
     PNG[("outputs/figures/*.png")] -.embeds.-> QMD
-    BIB["references.bib"] -.citations.-> Q
-    REF["reference.docx<br/>(Word styling)"] -.template.-> Q
+    BIB["pc_package/references.bib"] -.citations.-> Q
+    REF["pc_package/reference.docx<br/>(Word styling)"] -.template.-> Q
     Q --> DOCX["Word .docx"]
     Q --> PDF["PDF (via LaTeX)"]
 ```
 
-- The Python inside the `.qmd` reads the data and renders tables as it goes, so **you never
+- The Python inside each `.qmd` reads the data and renders tables as it goes, so **you never
   copy-paste numbers**.
-- The report's structure follows the industry guidelines (PDA TR 60 §3.11 and the ISPE
-  Good Practice Guide): purpose/scope, product background, CQAs, risk strategy, scale-down
-  models, per-step characterization, parameter classification, capability, control strategy,
-  conclusions.
-- `references.bib` supplies the citations (ICH, PDA, ISPE, FDA); `reference.docx` controls the
-  Word look.
+- Every document follows a fixed section template (see `CLAUDE.md`) so the set is consistent
+  across unit operations; structure follows PDA TR 60 §3.11 and the ISPE Good Practice Guide.
+- `pc_package/references.bib` supplies the citations (ICH, PDA, ISPE, FDA);
+  `pc_package/reference.docx` controls the Word look. Build with `make corpus`.
 
 ---
 
-## 9. Building the risk assessment (Excel FMEA)
+## 9. The risk-assessment content builder (Excel FMEA)
 
 `risk_assessment/build_fmea.py` reads the config and writes a formatted Excel workbook with
 five sheets. **FMEA** = Failure Mode and Effects Analysis: for each parameter, "what could go
-wrong, how bad, how likely, how detectable?"
+wrong, how bad, how likely, how detectable?" It is retained as the **content source** (its
+curated per-parameter failure-mode/effect/control map) for the corpus's Pre-Characterization
+Risk Assessment (`RA-001`); run `make fmea` to build the workbook (gitignored, not a shipped
+deliverable).
 
 ```mermaid
 flowchart TD
@@ -349,22 +361,23 @@ Everything is driven by the `Makefile`. From the repo root:
 
 ```bash
 make env       # one time: install Python dependencies
-make all       # rebuild data → figures → report (Word+PDF) → FMEA
+make all       # rebuild data → figures → corpus (documents + ground-truth annexes)
 ```
 
 ```mermaid
 flowchart LR
     ENV["make env"] --> ALL
-    subgraph ALL["make all"]
+    subgraph ALL["make all = make corpus"]
       direction LR
-      D["make data"] --> F["make figures"] --> R["make report"]
-      X["make fmea"]
+      D["make data"] --> F["make figures"] --> R["render pc_package/*.qmd"] --> G["build + validate annexes"]
     end
-    ALL --> OUT["all 3 documents,<br/>freshly computed"]
+    ALL --> OUT["corpus documents +<br/>ground-truth annexes,<br/>freshly computed"]
 ```
 
-Individual targets: `make data`, `make figures`, `make report`, `make fmea`, `make test`,
-`make clean`. A full clean rebuild takes about **20 seconds**.
+Individual targets: `make data`, `make figures`, `make corpus`, `make fmea` (optional
+FMEA content source), `make test`, `make clean`. Data and figures rebuild in ~20 s;
+rendering the documents adds a minute or two. To re-run the whole example with different
+settings, edit `config/parameters.yaml` and run `make clean && make all`.
 
 **Requirements:** Python 3.11+, Quarto (with a LaTeX engine for PDF). See `requirements.txt`.
 
@@ -383,7 +396,7 @@ Almost every change is a one-line edit to `config/parameters.yaml`, then `make a
 | Change a quality limit | Edit the CQA's `acceptance` in `config/parameters.yaml` → `make all` |
 | Make the process more/less robust | Adjust the model coefficients or `noise_cv` in the config → `make all` |
 | Change how strongly a parameter affects a CQA | Edit that step's model coefficients in the config → `make all` |
-| Reword the report | Edit `report/process_characterization.qmd` → `make report` |
+| Reword a document | Edit the relevant `pc_package/PCP-00N_*.qmd` / `PCR-00N_*.qmd` → `make corpus` |
 | Change FMEA failure modes / controls | Edit the `CONTENT` map in `risk_assessment/build_fmea.py` → `make fmea` |
 | Change the chart look | Edit the palette/style in `amab_process/viz.py` → `make figures` |
 | Use a different random seed | Change `meta.seed` in the config → `make all` |
@@ -464,14 +477,8 @@ synthetic_data/
 │   ├── extract_sources.py       ← PDFs → text (grounding)
 │   ├── generate_data.py         ← model → outputs/data/*.csv
 │   └── make_figures.py          ← data → outputs/figures/*.png
-├── report/
-│   ├── process_characterization.qmd   ← the report source (text + Python)
-│   ├── references.bib           ← citations
-│   ├── reference.docx           ← Word styling template
-│   └── process_characterization.{docx,pdf}   ← the rendered report
 ├── risk_assessment/
-│   ├── build_fmea.py            ← builds the Excel FMEA
-│   └── A-Mab_Post-PC_Process_Risk_Assessment.xlsx
+│   └── build_fmea.py            ← FMEA builder; content source for RA-001 (xlsx gitignored)
 ├── outputs/
 │   ├── data/                    ← 27 generated CSVs
 │   ├── figures/                 ← 13 generated PNGs
@@ -479,13 +486,85 @@ synthetic_data/
 ├── refs/
 │   ├── text/                    ← source PDFs as text
 │   └── grounding/               ← structured facts from the sources
-├── original_data/               ← the source PDFs
+│   # source PDFs are external: $SYNTHETIC_DATA_SOURCES (default Nextcloud path); extracts in refs/text/
+├── pc_package/                  ← NLP document-corpus generator (see §15)
+│   ├── _pcpkg.py                ← shared Quarto helpers + document registry
+│   ├── doe_report.py            ← DoE analysis engine (see pc_package/DOE_ENGINE.md)
+│   ├── schema_ext.py            ← ground-truth annex schema (reuses nlp_reports models)
+│   ├── build_ground_truth.py    ← builds the JSON annexes from the seeded data
+│   ├── validate_annex.py        ← validates the annexes against the schema
+│   ├── PCP-00N_*.qmd / PCR-00N_*.qmd  ← per-unit-op plan/report documents
+│   ├── reference.docx / references.bib ← Word styling + citations (shared by all documents)
+│   └── ground_truth/*.json      ← per-document ground-truth annexes
 ├── tests/                       ← reproducibility & correctness tests
-├── Makefile                     ← `make all` builds everything
+├── Makefile                     ← `make all` = `make corpus`; `make fmea` optional
 ├── requirements.txt             ← Python dependencies
+├── CLAUDE.md                    ← conventions for regenerating everything consistently
 ├── README.md                    ← quick start
 └── docs/WORKFLOW.md             ← this document
 ```
+
+---
+
+## 15. Generating the NLP document corpus (`pc_package/`)
+
+Besides the single consolidated PC report, this project also generates a **set** of
+smaller, cross-referenced documents plus machine-readable **ground-truth annexes**,
+for use as a test corpus for the sibling `nlp_reports` document-intelligence pipeline
+(named-entity recognition, entity linking, summarization, long-document QA). Like
+everything else, the documents are computed from the seeded model — no numbers are
+typed by hand — so the corpus regenerates consistently whenever the config changes.
+
+```mermaid
+flowchart TD
+    CFG["config/parameters.yaml"] --> MODEL["amab_process/ + studies"]
+    MODEL --> OUT[("outputs/data/*.csv<br/>+ figures")]
+    OUT --> HELP["pc_package/_pcpkg.py<br/>+ doe_report.py"]
+    HELP --> QMD["pc_package/*.qmd"]
+    QMD -->|Quarto| DOCS["DOCX + PDF documents"]
+    HELP --> GT["build_ground_truth.py"]
+    SCHEMA["schema_ext.py<br/>(reuses nlp_reports app/models<br/>+ local extensions)"] --> GT
+    GT --> JSON[("ground_truth/*.json")]
+    JSON --> VAL["validate_annex.py"]
+
+    style CFG fill:#eef4fb,stroke:#2a78d6
+    style JSON fill:#f4f7fb
+    style DOCS fill:#f4f7fb
+```
+
+**The document set.** A Process Transfer Plan (`PTP-001`), a Pre-Characterization
+Risk Assessment (`RA-001`), a Process Characterization Master Plan (`PCMP-001`), a
+Plan/Report pair per unit operation numbered by process step (`PCP-003…010` /
+`PCR-003…010`), and a Process Characterization Master Report (`PCMR-001`). Each
+document has an ID/version/effective-date title block, a synthetic banner, and
+cross-references to its siblings and to placeholder SOP/AMV numbers.
+
+**The ground-truth annexes.** For each document, `build_ground_truth.py` writes
+`ground_truth/<ID>.json` — a composite manifest whose blocks (document-type
+classification, per-section entities, canonical concepts, DoE studies and design
+space, extractive-summary statements, relation assertions) each validate against a
+Pydantic model in the sibling `nlp_reports/app/models`, plus a few local extensions
+in `schema_ext.py`. Every value is pulled from the same CSVs the documents render, and
+every citation quote is verified to appear verbatim in the rendered text.
+
+**The DoE engine.** The reports' statistical depth (effect tables, response-surface
+models, ANOVA with lack-of-fit, design matrices, contour/diagnostic figures) is
+produced by `pc_package/doe_report.py` — documented in
+[`pc_package/DOE_ENGINE.md`](../pc_package/DOE_ENGINE.md).
+
+**Build it.**
+
+```bash
+make corpus     # figures -> render all pc_package documents (docx+pdf) -> build & validate annexes
+```
+
+**Regenerate with different settings.** Because the whole corpus is config-driven,
+changing `config/parameters.yaml` (e.g. `meta.seed`, a parameter range, a CQA limit)
+and running `make clean && make data figures && make corpus` regenerates every
+document and annex consistently, with no manual edits. See
+[`pc_package/README.md`](../pc_package/README.md) for the package layout and
+[`CLAUDE.md`](../CLAUDE.md) for the conventions that keep the documents consistent
+across unit operations and across re-runs.
 
 ---
 

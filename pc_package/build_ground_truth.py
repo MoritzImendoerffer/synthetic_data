@@ -1650,11 +1650,437 @@ def build_report_viral_inactivation():
         assertions=vi_assertions(doc, f, report=True), concepts=vi_concepts())
 
 
+# =========================================================================== #
+# Cation Exchange Chromatography (Step 7) — PCP-007 / PCR-007.                  #
+# --------------------------------------------------------------------------- #
+# Additive, self-contained builders for the CEX polishing DoE pair. The step    #
+# sets NO CQA: it is the principal aggregate-reduction (polish) step and a major #
+# clearance step for HCP, residual DNA and leached Protein A, all formed         #
+# upstream. The DoE is a four-factor full-factorial screen + face-centred CCD in #
+# load / wash-conductivity / elution-pH / stop-collect; flow is a univariate GPP.#
+# All four multivariate factors are WC-CPP (each affects aggregate or HCP).      #
+# =========================================================================== #
+CXUO = "cex"
+CXUO_NAME = P.CFG.unit_op(CXUO).name             # "Cation Exchange Chromatography"
+CXSTEP = P.CFG.unit_op(CXUO).step                # 7
+CXSTEP_LABEL = f"{CXUO_NAME} (Step {CXSTEP})"
+
+PCP7_FILE = "PCP-007_cex.docx"
+PCR7_FILE = "PCR-007_cex.docx"
+
+CXPARAM_ROWS = P.param_reg[P.param_reg.unit_operation == CXUO_NAME].to_dict("records")
+CXPARAM_CONCEPT = {
+    "Protein load": "param:cex_load",
+    "Load/Wash conductivity": "param:cex_wash_cond",
+    "Elution buffer pH": "param:cex_elution_ph",
+    "Elution stop collect": "param:cex_stop_collect",
+    "Elution flow rate": "param:cex_flow",
+}
+# The four DoE factors (all WC-CPP) vs the univariate GPP.
+CX_MULTIVARIATE = ["Protein load", "Load/Wash conductivity", "Elution buffer pH",
+                   "Elution stop collect"]
+CX_UNIVARIATE = ["Elution flow rate"]
+CX_AGG_DRIVERS = ["Protein load", "Elution buffer pH", "Elution stop collect"]  # -> aggregate
+CX_HCP_DRIVER = "Load/Wash conductivity"                                        # -> HCP
+
+# CEX sets no CQA; it controls/clears these (formed upstream).
+CX_CQA_KEYS = ["aggregates_hmw", "hcp", "residual_dna", "leached_protein_a"]
+CXATTR_CONCEPT = {
+    "aggregates_hmw": "attr:aggregates_hmw", "hcp": "attr:hcp",
+    "residual_dna": "attr:residual_dna", "leached_protein_a": "attr:leached_protein_a",
+}
+CXATTR_NAME = {
+    "aggregates_hmw": "Aggregates (HMW)", "hcp": "Host Cell Protein (HCP)",
+    "residual_dna": "Residual DNA", "leached_protein_a": "Leached Protein A",
+}
+CX_CQA_METHOD = {"aggregates_hmw": "AMV-3011", "hcp": "AMV-3012",
+                 "residual_dna": "AMV-3014", "leached_protein_a": "AMV-3016"}
+CXMETHODS = [
+    ("AMV-3011", "Size-Variants (SEC-HPLC)", "chromatography",
+     ["aggregate", "monomer"], ["aggregates_hmw"]),
+    ("AMV-3012", "Host-Cell Protein ELISA", "immunoassay", ["host-cell protein"], ["hcp"]),
+    ("AMV-3014", "Residual DNA (qPCR)", "qPCR", ["residual host-cell DNA"], ["residual_dna"]),
+    ("AMV-3016", "Leached Protein A by ELISA (ppm)", "immunoassay",
+     ["leached Protein A"], ["leached_protein_a"]),
+]
+
+
+def _cx_cqa_row(key):
+    return P.cqa_reg[P.cqa_reg.key == key].iloc[0].to_dict()
+
+
+def cx_step(doc_id, file_name, sec, report):
+    if report:
+        src = ref(doc_id, file_name, sec, "Executive summary",
+                  "cation-exchange (CEX) polishing chromatography step (Step 7)")
+    else:
+        src = ref(doc_id, file_name, sec, "Unit-operation description and prior knowledge",
+                  "the first polishing step of the A-Mab purification train")
+    return S.ProcessStep(
+        step_id="step:cex", step_name=CXUO_NAME, step_number=str(CXSTEP),
+        unit_operation=CXUO_NAME,
+        description="Bind-and-elute cation-exchange polishing: the principal "
+                    "aggregate-reduction step of the process, and a major clearance step "
+                    "for HCP with modular clearance of residual DNA and leached Protein A. "
+                    "Forms no product-quality CQA; the CQAs it governs are formed upstream.",
+        input_materials=["neutralized viral-inactivation pool (cation-exchange feed)"],
+        output_materials=["cation-exchange eluate pool (anion-exchange feed)"],
+        equipment=["cation-exchange column", "scale-down chromatography column"],
+        source_references=[src], metadata=meta())
+
+
+def cx_equipment(doc_id, file_name, sec, report):
+    sdm = S.Equipment(
+        equipment_id="equip:cex_sdm_column", equipment_name="scale-down chromatography column",
+        equipment_type="chromatography column (scale-down)", site_name=P.SENDING_SITE,
+        source_references=[ref(doc_id, file_name, sec,
+                               "Scale-down model and its qualification",
+                               "qualified scale-down cation-exchange column" if report
+                               else "scale-down cation-exchange column")],
+        metadata=meta())
+    if report:
+        return [sdm]
+    return [
+        S.Equipment(equipment_id="equip:cex_column",
+                    equipment_name="commercial-scale cation-exchange polishing column",
+                    equipment_type="chromatography column", site_name=P.RECEIVING_SITE,
+                    source_references=[ref(doc_id, file_name, sec, "Purpose and scope",
+                                           "commercial-scale cation-exchange polishing step")],
+                    metadata=meta()),
+        sdm,
+    ]
+
+
+def cx_sites(doc_id, file_name, sec):
+    return [
+        S.ManufacturingSite(site_id="site:cambridge", site_name=P.SENDING_SITE, site_role="sending",
+                            location="Cambridge, MA",
+                            source_references=[ref(doc_id, file_name, sec, "Title block",
+                                                   "Cambridge, MA (Development)")],
+                            metadata=meta()),
+        S.ManufacturingSite(site_id="site:grafton", site_name=P.RECEIVING_SITE, site_role="receiving",
+                            location="Grafton, WI",
+                            source_references=[ref(doc_id, file_name, sec, "Title block",
+                                                   "Grafton, WI (Commercial DS)")],
+                            metadata=meta()),
+    ]
+
+
+def cx_params(doc_id, file_name, sec, classified):
+    caption = ("Cation-exchange process parameters, set-points, ranges and post-characterization classification."
+               if classified else
+               "Cation-exchange parameters, set-points, characterization ranges and planned study type.")
+    rats = {"WC-CPP": "Significantly affects the eluate-pool aggregate and/or HCP presented "
+                      "downstream; reliably controlled within the operating region.",
+            "GPP": "No meaningful CQA or performance impact over a wide range."}
+    out = []
+    for r in CXPARAM_ROWS:
+        name = r["parameter"]
+        ptype = r["classification"] if classified else "unclassified"
+        out.append(S.ProcessParameter(
+            parameter_id=CXPARAM_CONCEPT[name], parameter_name=name, parameter_type=ptype,
+            unit=r["unit"], target_value=f"{r['setpoint']:g}",
+            NOR=f"{r['nor_low']:g}–{r['nor_high']:g} {r['unit']}",
+            PAR=f"{r['par_low']:g}–{r['par_high']:g} {r['unit']}",
+            associated_step=CXSTEP_LABEL,
+            rationale_for_criticality=rats.get(r["classification"]) if classified else None,
+            source_references=[ref(doc_id, file_name, sec,
+                                   "Factors, ranges and the knowledge space" if classified
+                                   else "Factors, ranges and study type",
+                                   caption, table_title=caption,
+                                   table_id=f"{doc_id}_tab_params")],
+            metadata=meta()))
+    return out
+
+
+def cx_cqas(doc_id, file_name, sec, report):
+    quotes = {"aggregates_hmw": "principal reduction step for the high-molecular-weight aggregate"}
+    default_quote = "major clearance step for the impurity CQAs formed upstream"
+    out = []
+    for key in CX_CQA_KEYS:
+        r = _cx_cqa_row(key)
+        out.append(S.QualityAttribute(
+            attribute_id=CXATTR_CONCEPT[key], attribute_name=r["cqa"], attribute_type="CQA",
+            unit=r["unit"],
+            acceptance_criteria=[f"{r['acc_low']:g}–{r['acc_high']:g} {r['unit']}"],
+            analytical_method=None if report else CX_CQA_METHOD[key],
+            associated_steps=[CXSTEP_LABEL],
+            rationale_for_criticality=f"A-Mab Tool #1 Risk Score = Impact × Uncertainty = {r['tool1_score']}.",
+            criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
+            tool2_severity=int(r["tool2_severity"]),
+            source_references=[ref(doc_id, file_name, sec, "Quality attributes in scope",
+                                   quotes.get(key, default_quote),
+                                   table_title="CQAs controlled by the cation-exchange step",
+                                   table_id=f"{doc_id}_tab_cqa")],
+            metadata=meta()))
+    return out
+
+
+def cx_methods(doc_id, file_name, sec, report):
+    quote = "measured by validated methods" if report else "measured by the validated methods"
+    out = []
+    for mid, mname, mtype, analytes, attrs in CXMETHODS:
+        out.append(S.AnalyticalMethod(
+            method_id=mid, method_name=mname, method_type=mtype, analytes=analytes,
+            associated_attributes=[CXATTR_CONCEPT[a] for a in attrs], validation_status="validated",
+            source_references=[ref(doc_id, file_name, sec, "Analytical methods", quote)],
+            metadata=meta()))
+    return out
+
+
+def cx_studies(doc_id, file_name, report):
+    sec = "Study execution" if report else "Study design"
+    n_scr, n_rsm = P.doe_runs(CXUO, "screening"), P.doe_runs(CXUO, "rsm")
+    responses = ["aggregate_out_pct", "hcp_out_ng_mg", "step_yield"]
+    return [
+        S.StudyDesign(
+            study_id="study:cex_screening", study_type="screening_doe",
+            design_name="two-level full factorial", unit_operation=CXUO_NAME,
+            factors=CX_MULTIVARIATE, responses=responses,
+            n_runs=n_scr, n_center_points=3, scale_down_model="scale-down chromatography column",
+            associated_parameters=[CXPARAM_CONCEPT[f] for f in CX_MULTIVARIATE],
+            source_references=[ref(doc_id, file_name, sec, "Screening design",
+                                   "a two-level full factorial in the four multivariate factors")],
+            metadata=meta()),
+        S.StudyDesign(
+            study_id="study:cex_rsm", study_type="response_surface_doe",
+            design_name="face-centred central-composite design", unit_operation=CXUO_NAME,
+            factors=CX_MULTIVARIATE, responses=responses,
+            n_runs=n_rsm, n_center_points=4, scale_down_model="scale-down chromatography column",
+            associated_parameters=[CXPARAM_CONCEPT[f] for f in CX_MULTIVARIATE],
+            source_references=[ref(doc_id, file_name, sec, "Response-surface design",
+                                   "face-centred central-composite")],
+            metadata=meta()),
+        S.StudyDesign(
+            study_id="study:cex_sdm_qual", study_type="scale_down_qualification",
+            unit_operation=CXUO_NAME, scale_down_model="scale-down chromatography column",
+            source_references=[ref(doc_id, file_name, "Materials and methods",
+                                   "Scale-down model and its qualification",
+                                   "qualified against at-scale reference data")],
+            metadata=meta()),
+        S.StudyDesign(
+            study_id="study:cex_univariate", study_type="univariate",
+            design_name="one-factor-at-a-time ranging", unit_operation=CXUO_NAME,
+            factors=CX_UNIVARIATE, responses=["step yield", "eluate-pool aggregate", "eluate-pool HCP"],
+            associated_parameters=[CXPARAM_CONCEPT[f] for f in CX_UNIVARIATE],
+            source_references=[ref(doc_id, file_name, "Study design", "Univariate assessment",
+                                   "evaluated one factor at a time")],
+            metadata=meta()),
+    ]
+
+
+def cx_concepts():
+    from app.models.concepts import Concept, ConceptStore
+    cs = [Concept(concept_id="step:cex", concept_type="PROCESS_STEP",
+                  canonical_name=CXUO_NAME,
+                  aliases=["cation exchange", "CEX", "cation-exchange polishing", "Step 7"],
+                  review_status="human_verified")]
+    for name, cid in CXPARAM_CONCEPT.items():
+        cs.append(Concept(concept_id=cid, concept_type="PROCESS_PARAMETER", canonical_name=name,
+                          review_status="human_verified"))
+    for key in CX_CQA_KEYS:
+        cs.append(Concept(concept_id=CXATTR_CONCEPT[key], concept_type="QUALITY_ATTRIBUTE",
+                          canonical_name=CXATTR_NAME[key], aliases=[key],
+                          review_status="human_verified"))
+    for mid, mname, *_ in CXMETHODS:
+        cs.append(Concept(concept_id=f"method:{mid}", concept_type="ANALYTICAL_METHOD",
+                          canonical_name=mname, aliases=[mid], review_status="human_verified"))
+    return ConceptStore(run_id="gt-cex", concepts=cs)
+
+
+def cx_assertions(doc_id, file_name, report):
+    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    A = []
+    n = [0]
+
+    def add(subj, pred, obj, text, sec, quote):
+        n[0] += 1
+        A.append(EvidenceBackedAssertion(
+            assertion_id=f"{doc_id}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
+            assertion_text=text,
+            source_references=[ref(doc_id, file_name, sec, sec, quote)], metadata=meta()))
+
+    param_sec = "Factors, ranges and the knowledge space" if report else "Factors, ranges and study type"
+    param_quote = "Five parameters were studied" if report else "Five parameters are in scope"
+    for name, cid in CXPARAM_CONCEPT.items():
+        add("step:cex", "step_has_parameter", cid,
+            f"{CXUO_NAME} has process parameter {name}.", param_sec, param_quote)
+    # step is the principal aggregate polish; clears HCP, DNA and leached Protein A
+    add("step:cex", "step_has_quality_attribute", "attr:aggregates_hmw",
+        f"{CXUO_NAME} is the principal aggregate-reduction step.", "Quality attributes in scope",
+        "principal reduction step for the high-molecular-weight aggregate")
+    for key in ["hcp", "residual_dna", "leached_protein_a"]:
+        add("step:cex", "step_has_quality_attribute", CXATTR_CONCEPT[key],
+            f"{CXUO_NAME} clears {CXATTR_NAME[key]} (formed upstream).",
+            "Quality attributes in scope",
+            "major clearance step for the impurity CQAs formed upstream")
+    # attribute -> method (plan only; the report does not restate the linkage)
+    if not report:
+        for key in CX_CQA_METHOD:
+            add(CXATTR_CONCEPT[key], "attribute_measured_by_method", f"method:{CX_CQA_METHOD[key]}",
+                f"{CXATTR_NAME[key]} is measured by {CX_CQA_METHOD[key]}.", "Analytical methods",
+                "measured by the validated methods")
+    # acceptance criterion for the principal CQA the step governs
+    agg = _cx_cqa_row("aggregates_hmw")
+    add("attr:aggregates_hmw", "attribute_has_acceptance_criterion", "lit:aggregates_hmw_acc",
+        f"Aggregate acceptance: {agg['acc_low']:g}–{agg['acc_high']:g} {agg['unit']}.",
+        "Quality attributes in scope", "acceptance criterion")
+    # parameter -> attribute impacts / non-impacts
+    if report:
+        add("param:cex_load", "parameter_impacts_attribute", "attr:aggregates_hmw",
+            "Protein load significantly affects the eluate-pool aggregate and HCP (WC-CPP).",
+            "Parameter classification", "Significantly affects both the eluate-pool aggregate")
+        add("param:cex_wash_cond", "parameter_impacts_attribute", "attr:hcp",
+            "Load/wash conductivity is the dominant factor for HCP clearance (WC-CPP).",
+            "Parameter classification", "The dominant factor for HCP clearance")
+        for name in ["Elution buffer pH", "Elution stop collect"]:
+            add(CXPARAM_CONCEPT[name], "parameter_impacts_attribute", "attr:aggregates_hmw",
+                f"{name} significantly affects the eluate-pool aggregate (WC-CPP).",
+                "Parameter classification", "Each significantly affects the eluate-pool aggregate")
+        add("param:cex_flow", "parameter_does_not_significantly_impact_attribute", "attr:aggregates_hmw",
+            "Elution flow rate has no meaningful CQA or performance impact (GPP).",
+            "Parameter classification", "No meaningful impact on the CQAs or on performance")
+    else:
+        for name in CX_MULTIVARIATE:
+            add(CXPARAM_CONCEPT[name], "parameter_impacts_attribute", "attr:aggregates_hmw",
+                f"{name} carries a credible impact to the eluate-pool aggregate or HCP.",
+                "Risk-based prioritization of parameters",
+                "a credible main-effect and interaction risk to the eluate-pool aggregate or HCP")
+        add("param:cex_flow", "parameter_does_not_significantly_impact_attribute", "attr:aggregates_hmw",
+            "Elution flow rate is expected to affect only process performance.",
+            "Risk-based prioritization of parameters",
+            "expected to affect only process performance over a wide range")
+    return AssertionStore(run_id=f"gt-{doc_id}", assertions=A, rationales=[])
+
+
+def cx_report_sections(doc_id, file_name, report):
+    from app.models.summaries import ReportSection, ReportStatement
+
+    def st(i, text, sec, quote):
+        return ReportStatement(statement_id=f"{doc_id}-S{i:02d}", statement_text=text,
+                               confidence="high", review_status="accepted",
+                               source_references=[ref(doc_id, file_name, sec, sec, quote)])
+    if not report:
+        return [ReportSection(section_id=f"{doc_id}-summary", title="Plan summary", statements=[
+            st(1, "PCP-007 defines the Stage 1 characterization of the A-Mab cation-exchange polishing step (Step 7).",
+               "Purpose and scope", "defines the Stage 1 (Process Design) characterization"),
+            st(2, "Five process parameters are characterized; four are studied in the multivariate DoE and the flow rate univariately.",
+               "Factors, ranges and study type", "Five parameters are in scope"),
+            st(3, "The study uses a full-factorial screen followed by a face-centred central-composite design on a scale-down column.",
+               "Response-surface design", "face-centred central-composite design"),
+            st(4, "Cation exchange is the principal aggregate-reduction step and a major clearance step for HCP, DNA and leached Protein A.",
+               "Quality attributes in scope", "principal reduction step for the high-molecular-weight aggregate"),
+            st(5, "The study must establish a multivariate operating region over which the eluate-pool aggregate and HCP are controlled.",
+               "Acceptance and decision criteria",
+               "a multivariate operating region exists over which the eluate-pool aggregate and HCP are controlled"),
+        ])]
+    return [ReportSection(section_id=f"{doc_id}-summary", title="Report summary", statements=[
+        st(1, "All four multivariate parameters are well-controlled CPPs and the elution flow rate is a general process parameter.",
+           "Parameter classification", "the four multivariate parameters are well-controlled CPPs"),
+        st(2, "Cation exchange is the principal aggregate-reduction step of the process.",
+           "Process capability and robustness", "principal aggregate-reduction step of the process"),
+        st(3, "Pool HCP is governed by the load/wash conductivity and protein load through a significant load × conductivity interaction.",
+           "Screening: factor effects", "significant load × conductivity interaction"),
+        st(4, "The aggregate and pool-HCP response-surface models are adequate and predictive.",
+           "Response-surface models", "adequate and predictive"),
+        st(5, "The step yield is governed by protein load and is otherwise robust.",
+           "Discussion", "governed by protein load and is otherwise robust"),
+        st(6, "Cation exchange is the principal contributor to the drug-substance aggregate capability.",
+           "Conclusions", "principal contributor to the drug-substance aggregate"),
+    ])]
+
+
+def cx_design_spaces(doc_id, file_name):
+    return [S.DesignSpace(
+        design_space_id="ds:cex", unit_operation=CXUO_NAME,
+        parameters=["param:cex_load", "param:cex_wash_cond", "param:cex_elution_ph"],
+        quality_attributes_constrained=["attr:aggregates_hmw", "attr:hcp"],
+        definition="Multivariate region in protein load, wash conductivity and elution pH over "
+                   "which the eluate-pool aggregate and HCP are controlled so the drug substance "
+                   "meets its aggregate and HCP limits.",
+        source_references=[ref(doc_id, file_name, "Design space", "Design space",
+                               "multivariate region of the four well-controlled CPPs")],
+        metadata=meta())]
+
+
+def cx_inventory(doc_id, file_name, dtype):
+    return S.DocumentInventoryItem(
+        document_id=doc_id, file_name=file_name, predicted_document_type=dtype,
+        product_name_candidates=["A-Mab"], process_name_candidates=[CXUO_NAME],
+        site_candidates=[P.SENDING_SITE, P.RECEIVING_SITE], date_candidates=[P.EFFECTIVE_DATE],
+        main_topics=["process characterization", "cation-exchange chromatography", "aggregate clearance",
+                     "host-cell protein clearance", "design of experiments", "parameter classification"],
+        rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc_id][0]}'.",
+        source_references=[ref(doc_id, file_name, "Title block", "Title block",
+                               P.DOC_REGISTRY[doc_id][0])],
+        metadata=meta())
+
+
+def build_plan_cex():
+    doc, f = "PCP-007", PCP7_FILE
+    entities = [
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_uo",
+                                  process_steps=[cx_step(doc, f, f"{doc}_sec_uo", report=False)],
+                                  equipment=cx_equipment(doc, f, f"{doc}_sec_uo", report=False),
+                                  sites=cx_sites(doc, f, f"{doc}_sec_uo")),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_cqa",
+                                  quality_attributes=cx_cqas(doc, f, f"{doc}_sec_cqa", report=False)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_param",
+                                  parameters=cx_params(doc, f, f"{doc}_sec_param", classified=False)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_methods",
+                                  analytical_methods=cx_methods(doc, f, f"{doc}_sec_methods", report=False)),
+    ]
+    return S.GroundTruthAnnex(
+        document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
+        document_class=P.DOC_REGISTRY[doc][0], version=P.VERSION, effective_date=P.EFFECTIVE_DATE,
+        schema_extensions_used=COMMON_EXT,
+        out_of_schema_notes=[
+            "CEX sets no CQA; the QualityAttribute entities are the CQAs it controls/clears (formed upstream).",
+            "Eluate-pool aggregate and HCP are in-process responses with no released spec; captured via StudyDesign.responses.",
+            "The Plan states classification is an OUTPUT; parameter_type left 'unclassified' here.",
+        ],
+        inventory=cx_inventory(doc, f, "process_characterization_plan"),
+        entities=entities,
+        studies=cx_studies(doc, f, report=False),
+        report_sections=cx_report_sections(doc, f, report=False),
+        assertions=cx_assertions(doc, f, report=False), concepts=cx_concepts())
+
+
+def build_report_cex():
+    doc, f = "PCR-007", PCR7_FILE
+    entities = [
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_exec",
+                                  process_steps=[cx_step(doc, f, f"{doc}_sec_exec", report=True)],
+                                  equipment=cx_equipment(doc, f, f"{doc}_sec_exec", report=True)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_param",
+                                  parameters=cx_params(doc, f, f"{doc}_sec_param", classified=True)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_cqa",
+                                  quality_attributes=cx_cqas(doc, f, f"{doc}_sec_cqa", report=True)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_methods",
+                                  analytical_methods=cx_methods(doc, f, f"{doc}_sec_methods", report=True)),
+    ]
+    return S.GroundTruthAnnex(
+        document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
+        document_class=P.DOC_REGISTRY[doc][0], version=P.VERSION, effective_date=P.EFFECTIVE_DATE,
+        schema_extensions_used=COMMON_EXT,
+        out_of_schema_notes=[
+            "CEX sets no CQA; the QualityAttribute entities are the CQAs it controls/clears (formed upstream).",
+            "Eluate-pool aggregate and HCP are in-process responses with no released spec; reported via studies/report_sections.",
+            "Process-capability (Cpk) values have no dedicated field; reported as report_sections statements.",
+        ],
+        inventory=cx_inventory(doc, f, "process_characterization_report"),
+        entities=entities, studies=cx_studies(doc, f, report=True),
+        design_spaces=cx_design_spaces(doc, f),
+        report_sections=cx_report_sections(doc, f, report=True),
+        assertions=cx_assertions(doc, f, report=True), concepts=cx_concepts())
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     for annex in (build_plan(), build_report(), build_plan_harvest(), build_report_harvest(),
                   build_plan_protein_a(), build_report_protein_a(),
-                  build_plan_viral_inactivation(), build_report_viral_inactivation()):
+                  build_plan_viral_inactivation(), build_report_viral_inactivation(),
+                  build_plan_cex(), build_report_cex()):
         path = os.path.join(OUT, f"{annex.document_id}.json")
         with open(path, "w") as fh:
             json.dump(annex.model_dump(mode="json"), fh, indent=2, ensure_ascii=False)

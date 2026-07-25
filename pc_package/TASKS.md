@@ -16,8 +16,8 @@ the verification checklist before marking a document done.
 | Document | Class | Step / key | State |
 |---|---|---|---|
 | `PCP-003` / `PCR-003` | Plan / Report | 3 · bioreactor | ✅ done (reference pair) |
-| `PCP-004` / `PCR-004` | Plan / Report | 4 · harvest | ☐ todo (no DoE) |
-| `PCP-005` / `PCR-005` | Plan / Report | 5 · protein_a | ☐ todo (DoE) |
+| `PCP-004` / `PCR-004` | Plan / Report | 4 · harvest | ✅ done (no DoE) |
+| `PCP-005` / `PCR-005` | Plan / Report | 5 · protein_a | ✅ done (DoE) |
 | `PCP-006` / `PCR-006` | Plan / Report | 6 · viral_inactivation | ☐ todo (DoE) |
 | `PCP-007` / `PCR-007` | Plan / Report | 7 · cex | ☐ todo (DoE) |
 | `PCP-008` / `PCR-008` | Plan / Report | 8 · aex | ☐ todo (DoE) |
@@ -98,6 +98,15 @@ Use these to write grounded content quickly. "DoE?" tells you whether to use `do
 5. **`build_ground_truth.py` currently only builds `PCP-003`/`PCR-003`.** Extend it per pair
    (or do the refactor above). `make corpus` runs it, so it must produce every annex.
 6. Depth targets (`CLAUDE.md`): DoE reports ~30–35 pp, plans ~20 pp; non-DoE pairs shorter.
+7. **Robust / low-R² responses are a finding, not a defect.** protein_a `leached_protein_a_ppm`
+   has no significant factor effect (RSM R²≈0.37); don't claim the models are "adequate for all
+   responses". Separate the modelled responses (pool HCP, step yield, R²≈0.97) from the robust
+   one and report the latter as robust. Downstream steps may have similar responses.
+8. **Config self-consistency.** The `study` column in `config/parameters.yaml` must match the
+   actual DoE factor list in `studies.DOE_FACTORS[key]`. protein_a's operating temperature was
+   labelled `study: multivariate` but is not a DoE factor (only 4 factors) — fixed to
+   `univariate` (it stays GPP). Any such config edit needs `make data figures` to regenerate the
+   CSVs before the parameter tables/prose agree (the committed CSV is stale until then).
 
 ## Transfer & master documents
 
@@ -153,7 +162,13 @@ report, but as a summary that cites the `PCR-00N` documents.
 ## Cross-cutting TODOs
 
 - ☐ `ispett2023` entry in `pc_package/references.bib` (for PTP-001).
-- ☐ Extend `doe_report.RESP_LABEL` for downstream response keys.
+- ✅ Extend `doe_report.RESP_LABEL` for downstream response keys (done in the protein_a pass:
+  added `pool_hcp_ng_mg`, `hcp_out_ng_mg`, `leached_protein_a_ppm`, `step_yield`,
+  `aggregate_out_pct`, `xmulv_lrf`, `mvm_lrf`).
+- ✅ `doe_report.rsm_factors` now falls back to `DOE_FACTORS[key][:4]` when a step has no
+  `RSM_TOP` entry (matches `studies.rsm_doe`); `fig_rsm_contours` grid now adapts to the
+  response count (5→2×3, 4→2×2, 3→1×3). Still per-step: pass the two dominant factors, e.g.
+  `fig_rsm_contours(UO, "load", "elution_ph")` for protein_a.
 - ☐ Refactor `build_ground_truth.py` to be per-unit-operation; add `check_grounding.py` and
   wire both into `make corpus`.
 - ☐ (Flag, do not change `nlp_reports`.) Its `regex_matchers.py` DOCUMENT_ID pattern recognises

@@ -93,6 +93,41 @@ AMV_REFS = [
     ("AMV-3014", "Residual DNA (qPCR)"),
 ]
 
+# Harvest / clarification (Step 4) controlled-document subsets. Placeholders,
+# defined here so the harvest documents pull their references from the shared
+# registry rather than hard-coding numbers in the .qmd. Reuses the corpus-wide
+# SOP/AMV numbers where they apply and adds the two clarification-specific SOPs.
+HARVEST_SOP_REFS = [
+    ("SOP-1001", "Qualification of Scale-Down Models"),
+    ("SOP-2005", "Harvest by Continuous Disk-Stack Centrifugation"),
+    ("SOP-2006", "Clarification by Depth and Sterile Filtration"),
+    ("SOP-4001", "Process-Parameter Classification and Control-Strategy Definition"),
+]
+HARVEST_AMV_REFS = [
+    ("AMV-3015", "Turbidity by Nephelometry (NTU)"),
+    ("AMV-3012", "Host-Cell Protein ELISA"),
+    ("AMV-3014", "Residual DNA (qPCR)"),
+    ("AMV-3011", "Size-Variants (SEC-HPLC)"),
+]
+
+# Protein A capture (Step 5) controlled-document subsets. Placeholders defined
+# here so the Protein A documents pull references from the shared registry rather
+# than hard-coding numbers. Reuses the corpus-wide HCP/DNA/SEC methods and adds
+# the capture-specific SOP and the leached-Protein-A assay (AMV-3016).
+PROTEIN_A_SOP_REFS = [
+    ("SOP-1001", "Qualification of Scale-Down Models"),
+    ("SOP-1002", "Design, Execution and Statistical Analysis of DoE Studies"),
+    ("SOP-2007", "Operation of the Protein A Capture Chromatography Step"),
+    ("SOP-2008", "Chromatography Resin Life-Cycle, Packing and Sanitization"),
+    ("SOP-4001", "Process-Parameter Classification and Control-Strategy Definition"),
+]
+PROTEIN_A_AMV_REFS = [
+    ("AMV-3016", "Leached Protein A by ELISA (ppm)"),
+    ("AMV-3012", "Host-Cell Protein ELISA"),
+    ("AMV-3014", "Residual DNA (qPCR)"),
+    ("AMV-3011", "Size-Variants (SEC-HPLC)"),
+]
+
 
 # --------------------------------------------------------------------------- #
 # Data helpers (mirror the consolidated report's setup chunk).                 #

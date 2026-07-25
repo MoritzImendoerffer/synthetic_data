@@ -25,6 +25,11 @@ RESP_LABEL = {
     "afucosylation": "Afucosylation", "galactosylation": "Galactosylation",
     "high_mannose": "High mannose", "acidic_variants": "Acidic variants",
     "aggregates_hmw": "Aggregates (HMW)",
+    # downstream unit-operation responses (protein_a, viral_inactivation, cex, aex, vf)
+    "pool_hcp_ng_mg": "Pool HCP (ng/mg)", "hcp_out_ng_mg": "Pool HCP (ng/mg)",
+    "leached_protein_a_ppm": "Leached Protein A (ppm)", "step_yield": "Step yield",
+    "aggregate_out_pct": "Aggregates (HMW, %)",
+    "xmulv_lrf": "XMuLV LRF (log₁₀)", "mvm_lrf": "MVM LRF (log₁₀)",
 }
 _LETTERS = "ABCDEFGH"
 
@@ -34,7 +39,9 @@ def screening_factors(key):
 
 
 def rsm_factors(key):
-    return st.RSM_TOP[key]
+    # Mirror studies.rsm_doe: use the explicit RSM_TOP subset if defined,
+    # otherwise the first four screening factors (the CCD default).
+    return st.RSM_TOP.get(key, screening_factors(key)[:4])
 
 
 def responses(key):
@@ -234,12 +241,21 @@ def _natural(coded, key, f):
 
 
 def fig_rsm_contours(key, xf="pH", yf="duration"):
-    """2x3 panel of RSM response surfaces over two factors (others at set-point)."""
+    """Panel of RSM response surfaces over two factors (others at set-point).
+
+    The grid adapts to the number of responses (bioreactor: 5 -> 2x3;
+    protein_a / most downstream steps: 3 -> 1x3; aex: 4 -> 2x2).
+    """
     import matplotlib.pyplot as plt
     resps = responses(key)
     names = {p.key: p.name for p in CFG.unit_op(key).parameters}
-    fig, axes = plt.subplots(2, 3, figsize=(11, 6.6))
-    for ax, resp in zip(axes.ravel(), resps):
+    n = len(resps)
+    ncols = 3 if n >= 5 else (2 if n == 4 else n)
+    nrows = -(-n // ncols)  # ceil
+    fig, axes = plt.subplots(nrows, ncols, figsize=(min(11, 3.7 * ncols), 3.3 * nrows),
+                             squeeze=False)
+    axes = axes.ravel()
+    for ax, resp in zip(axes, resps):
         r = fit(key, "rsm", resp)
         XX, YY, Z = _predict_grid(r, xf, yf)
         xn = _natural(XX, key, xf)
@@ -251,7 +267,7 @@ def fig_rsm_contours(key, xf="pH", yf="duration"):
         ax.set_xlabel(names.get(xf, xf), fontsize=8)
         ax.set_ylabel(names.get(yf, yf), fontsize=8)
         ax.tick_params(labelsize=7)
-    for ax in axes.ravel()[len(resps):]:
+    for ax in axes[len(resps):]:
         ax.axis("off")
     fig.suptitle("Response-surface predictions (remaining factors held at set-point)", fontsize=11)
     fig.tight_layout(rect=[0, 0, 1, 0.96])

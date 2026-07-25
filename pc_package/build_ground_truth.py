@@ -2075,12 +2075,454 @@ def build_report_cex():
         assertions=cx_assertions(doc, f, report=True), concepts=cx_concepts())
 
 
+# =========================================================================== #
+# Anion Exchange Chromatography (Step 8) — PCP-008 / PCR-008.                   #
+# --------------------------------------------------------------------------- #
+# Additive, self-contained builders for the AEX flow-through polishing DoE      #
+# pair. Unlike CEX, AEX SETS one CQA of its own — the cumulative MVM             #
+# (parvovirus) clearance claim — and is a major clearance step for enveloped    #
+# virus (XMuLV), HCP, residual DNA and leached Protein A. The DoE is a           #
+# four-factor full-factorial screen + face-centred CCD in load-pH /             #
+# wash1-conductivity / load-conductivity / load; the operating flow rate is a    #
+# univariate WC-CPP (residence-time / viral-clearance). All five parameters are  #
+# WC-CPP. Two deviations are documented in the report (DEV-01 deamidated load →  #
+# designs re-executed; DEV-02 pool-collection UV set-point corrected by          #
+# modelling + verification runs); the annex captures the DoE-grounded entities.  #
+# =========================================================================== #
+AXUO = "aex"
+AXUO_NAME = P.CFG.unit_op(AXUO).name             # "Anion Exchange Chromatography"
+AXSTEP = P.CFG.unit_op(AXUO).step                # 8
+AXSTEP_LABEL = f"{AXUO_NAME} (Step {AXSTEP})"
+
+PCP8_FILE = "PCP-008_aex.docx"
+PCR8_FILE = "PCR-008_aex.docx"
+
+AXPARAM_ROWS = P.param_reg[P.param_reg.unit_operation == AXUO_NAME].to_dict("records")
+AXPARAM_CONCEPT = {
+    "Load pH": "param:aex_load_ph",
+    "Equil/Wash-1 conductivity": "param:aex_wash1_cond",
+    "Load conductivity": "param:aex_load_cond",
+    "Protein load": "param:aex_load",
+    "Operating flow rate": "param:aex_flow",
+}
+# The four DoE factors (WC-CPP, multivariate) vs the univariate WC-CPP flow rate.
+AX_MULTIVARIATE = ["Load pH", "Equil/Wash-1 conductivity", "Load conductivity", "Protein load"]
+AX_UNIVARIATE = ["Operating flow rate"]
+AX_HCP_DRIVERS = ["Load pH", "Equil/Wash-1 conductivity"]     # -> flow-through-pool HCP
+AX_VIRAL_DRIVERS = ["Load pH", "Load conductivity"]           # -> XMuLV / MVM log-reduction
+
+# AEX sets lrv_mvm; it controls/clears the others. MVM first (the CQA it sets).
+AX_CQA_KEYS = ["lrv_mvm", "lrv_xmulv", "hcp", "residual_dna", "leached_protein_a"]
+AXATTR_CONCEPT = {
+    "lrv_mvm": "attr:lrv_mvm", "lrv_xmulv": "attr:lrv_xmulv", "hcp": "attr:hcp",
+    "residual_dna": "attr:residual_dna", "leached_protein_a": "attr:leached_protein_a",
+}
+AXATTR_NAME = {
+    "lrv_mvm": "Viral clearance — MVM (parvovirus)",
+    "lrv_xmulv": "Viral clearance — XMuLV (enveloped)",
+    "hcp": "Host Cell Protein (HCP)", "residual_dna": "Residual DNA",
+    "leached_protein_a": "Leached Protein A",
+}
+AX_CQA_METHOD = {"lrv_mvm": "AMV-3018", "lrv_xmulv": "AMV-3017", "hcp": "AMV-3012",
+                 "residual_dna": "AMV-3014", "leached_protein_a": "AMV-3016"}
+AXMETHODS = [
+    ("AMV-3012", "Host-Cell Protein ELISA", "immunoassay", ["host-cell protein"], ["hcp"]),
+    ("AMV-3014", "Residual DNA (qPCR)", "qPCR", ["residual host-cell DNA"], ["residual_dna"]),
+    ("AMV-3016", "Leached Protein A by ELISA (ppm)", "immunoassay",
+     ["leached Protein A"], ["leached_protein_a"]),
+    ("AMV-3017", "XMuLV Infectivity Titre (TCID50)", "infectivity_assay",
+     ["XMuLV infectious titre"], ["lrv_xmulv"]),
+    ("AMV-3018", "MVM Infectivity Titre (TCID50/qPCR)", "infectivity_assay",
+     ["MVM infectious titre"], ["lrv_mvm"]),
+]
+
+
+def _ax_cqa_row(key):
+    return P.cqa_reg[P.cqa_reg.key == key].iloc[0].to_dict()
+
+
+def ax_step(doc_id, file_name, sec, report):
+    if report:
+        src = ref(doc_id, file_name, sec, "Executive summary",
+                  "anion-exchange (AEX) polishing chromatography step (Step 8)")
+    else:
+        src = ref(doc_id, file_name, sec, "Unit-operation description and prior knowledge",
+                  "the final polishing step of the A-Mab purification train")
+    return S.ProcessStep(
+        step_id="step:aex", step_name=AXUO_NAME, step_number=str(AXSTEP),
+        unit_operation=AXUO_NAME,
+        description="Flow-through anion-exchange polishing: the final chromatographic step of "
+                    "the process. Sets the cumulative MVM (parvovirus) viral-clearance claim and "
+                    "is a major clearance step for enveloped virus (XMuLV), HCP, residual DNA and "
+                    "leached Protein A. The product transmits while impurities and virus bind.",
+        input_materials=["cation-exchange eluate pool (anion-exchange feed)"],
+        output_materials=["anion-exchange flow-through pool (virus-filtration feed)"],
+        equipment=["anion-exchange column", "scale-down chromatography column"],
+        source_references=[src], metadata=meta())
+
+
+def ax_equipment(doc_id, file_name, sec, report):
+    sdm = S.Equipment(
+        equipment_id="equip:aex_sdm_column", equipment_name="scale-down chromatography column",
+        equipment_type="chromatography column (scale-down)", site_name=P.SENDING_SITE,
+        source_references=[ref(doc_id, file_name, sec,
+                               "Scale-down model and its qualification",
+                               "qualified scale-down anion-exchange column" if report
+                               else "scale-down anion-exchange column")],
+        metadata=meta())
+    if report:
+        return [sdm]
+    return [
+        S.Equipment(equipment_id="equip:aex_column",
+                    equipment_name="commercial-scale anion-exchange polishing column",
+                    equipment_type="chromatography column", site_name=P.RECEIVING_SITE,
+                    source_references=[ref(doc_id, file_name, sec, "Purpose and scope",
+                                           "commercial-scale anion-exchange polishing step")],
+                    metadata=meta()),
+        sdm,
+    ]
+
+
+def ax_sites(doc_id, file_name, sec):
+    return [
+        S.ManufacturingSite(site_id="site:cambridge", site_name=P.SENDING_SITE, site_role="sending",
+                            location="Cambridge, MA",
+                            source_references=[ref(doc_id, file_name, sec, "Title block",
+                                                   "Cambridge, MA (Development)")],
+                            metadata=meta()),
+        S.ManufacturingSite(site_id="site:grafton", site_name=P.RECEIVING_SITE, site_role="receiving",
+                            location="Grafton, WI",
+                            source_references=[ref(doc_id, file_name, sec, "Title block",
+                                                   "Grafton, WI (Commercial DS)")],
+                            metadata=meta()),
+    ]
+
+
+def ax_params(doc_id, file_name, sec, classified):
+    caption = ("Anion-exchange process parameters, set-points, ranges and post-characterization classification."
+               if classified else
+               "Anion-exchange parameters, set-points, characterization ranges and planned study type.")
+    rats = {"WC-CPP": "Significantly affects the flow-through-pool HCP and/or the credited viral "
+                      "log-reduction, or is controlled to preserve the residence time credited for "
+                      "viral clearance; reliably controlled within the operating region."}
+    out = []
+    for r in AXPARAM_ROWS:
+        name = r["parameter"]
+        ptype = r["classification"] if classified else "unclassified"
+        out.append(S.ProcessParameter(
+            parameter_id=AXPARAM_CONCEPT[name], parameter_name=name, parameter_type=ptype,
+            unit=r["unit"], target_value=f"{r['setpoint']:g}",
+            NOR=f"{r['nor_low']:g}–{r['nor_high']:g} {r['unit']}",
+            PAR=f"{r['par_low']:g}–{r['par_high']:g} {r['unit']}",
+            associated_step=AXSTEP_LABEL,
+            rationale_for_criticality=rats.get(r["classification"]) if classified else None,
+            source_references=[ref(doc_id, file_name, sec,
+                                   "Factors, ranges and the knowledge space" if classified
+                                   else "Factors, ranges and study type",
+                                   caption, table_title=caption,
+                                   table_id=f"{doc_id}_tab_params")],
+            metadata=meta()))
+    return out
+
+
+def ax_cqas(doc_id, file_name, sec, report):
+    quotes = {"lrv_mvm": "sets one CQA of its own"}
+    default_quote = ("major clearance step for the enveloped-virus (XMuLV) log-reduction and "
+                     "for the process-related impurity CQAs")
+    out = []
+    for key in AX_CQA_KEYS:
+        r = _ax_cqa_row(key)
+        out.append(S.QualityAttribute(
+            attribute_id=AXATTR_CONCEPT[key], attribute_name=r["cqa"], attribute_type="CQA",
+            unit=r["unit"],
+            acceptance_criteria=[f"{r['acc_low']:g}–{r['acc_high']:g} {r['unit']}"],
+            analytical_method=None if report else AX_CQA_METHOD[key],
+            associated_steps=[AXSTEP_LABEL],
+            rationale_for_criticality=f"A-Mab Tool #1 Risk Score = Impact × Uncertainty = {r['tool1_score']}.",
+            criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
+            tool2_severity=int(r["tool2_severity"]),
+            source_references=[ref(doc_id, file_name, sec, "Quality attributes in scope",
+                                   quotes.get(key, default_quote),
+                                   table_title="CQAs in scope for the anion-exchange step",
+                                   table_id=f"{doc_id}_tab_cqa")],
+            metadata=meta()))
+    return out
+
+
+def ax_methods(doc_id, file_name, sec, report):
+    quote = "measured by validated methods" if report else "measured by the validated methods"
+    out = []
+    for mid, mname, mtype, analytes, attrs in AXMETHODS:
+        out.append(S.AnalyticalMethod(
+            method_id=mid, method_name=mname, method_type=mtype, analytes=analytes,
+            associated_attributes=[AXATTR_CONCEPT[a] for a in attrs], validation_status="validated",
+            source_references=[ref(doc_id, file_name, sec, "Analytical methods", quote)],
+            metadata=meta()))
+    return out
+
+
+def ax_studies(doc_id, file_name, report):
+    sec = "Study execution" if report else "Study design"
+    n_scr, n_rsm = P.doe_runs(AXUO, "screening"), P.doe_runs(AXUO, "rsm")
+    responses = ["hcp_out_ng_mg", "xmulv_lrf", "mvm_lrf", "step_yield"]
+    return [
+        S.StudyDesign(
+            study_id="study:aex_screening", study_type="screening_doe",
+            design_name="two-level full factorial", unit_operation=AXUO_NAME,
+            factors=AX_MULTIVARIATE, responses=responses,
+            n_runs=n_scr, n_center_points=3, scale_down_model="scale-down chromatography column",
+            associated_parameters=[AXPARAM_CONCEPT[f] for f in AX_MULTIVARIATE],
+            source_references=[ref(doc_id, file_name, sec, "Screening design",
+                                   "a two-level full factorial in the four multivariate factors")],
+            metadata=meta()),
+        S.StudyDesign(
+            study_id="study:aex_rsm", study_type="response_surface_doe",
+            design_name="face-centred central-composite design", unit_operation=AXUO_NAME,
+            factors=AX_MULTIVARIATE, responses=responses,
+            n_runs=n_rsm, n_center_points=4, scale_down_model="scale-down chromatography column",
+            associated_parameters=[AXPARAM_CONCEPT[f] for f in AX_MULTIVARIATE],
+            source_references=[ref(doc_id, file_name, sec, "Response-surface design",
+                                   "face-centred central-composite")],
+            metadata=meta()),
+        S.StudyDesign(
+            study_id="study:aex_sdm_qual", study_type="scale_down_qualification",
+            unit_operation=AXUO_NAME, scale_down_model="scale-down chromatography column",
+            source_references=[ref(doc_id, file_name, "Materials and methods",
+                                   "Scale-down model and its qualification",
+                                   "qualified against at-scale reference data")],
+            metadata=meta()),
+        S.StudyDesign(
+            study_id="study:aex_univariate", study_type="univariate",
+            design_name="one-factor-at-a-time ranging", unit_operation=AXUO_NAME,
+            factors=AX_UNIVARIATE,
+            responses=["flow-through-pool HCP", "XMuLV log-reduction", "MVM log-reduction", "step yield"],
+            associated_parameters=[AXPARAM_CONCEPT[f] for f in AX_UNIVARIATE],
+            source_references=[ref(doc_id, file_name, "Study design", "Univariate assessment",
+                                   "evaluated one factor at a time")],
+            metadata=meta()),
+    ]
+
+
+def ax_concepts():
+    from app.models.concepts import Concept, ConceptStore
+    cs = [Concept(concept_id="step:aex", concept_type="PROCESS_STEP",
+                  canonical_name=AXUO_NAME,
+                  aliases=["anion exchange", "AEX", "anion-exchange polishing",
+                           "flow-through polish", "Step 8"],
+                  review_status="human_verified")]
+    for name, cid in AXPARAM_CONCEPT.items():
+        cs.append(Concept(concept_id=cid, concept_type="PROCESS_PARAMETER", canonical_name=name,
+                          review_status="human_verified"))
+    for key in AX_CQA_KEYS:
+        cs.append(Concept(concept_id=AXATTR_CONCEPT[key], concept_type="QUALITY_ATTRIBUTE",
+                          canonical_name=AXATTR_NAME[key], aliases=[key],
+                          review_status="human_verified"))
+    for mid, mname, *_ in AXMETHODS:
+        cs.append(Concept(concept_id=f"method:{mid}", concept_type="ANALYTICAL_METHOD",
+                          canonical_name=mname, aliases=[mid], review_status="human_verified"))
+    return ConceptStore(run_id="gt-aex", concepts=cs)
+
+
+def ax_assertions(doc_id, file_name, report):
+    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    A = []
+    n = [0]
+
+    def add(subj, pred, obj, text, sec, quote):
+        n[0] += 1
+        A.append(EvidenceBackedAssertion(
+            assertion_id=f"{doc_id}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
+            assertion_text=text,
+            source_references=[ref(doc_id, file_name, sec, sec, quote)], metadata=meta()))
+
+    param_sec = "Factors, ranges and the knowledge space" if report else "Factors, ranges and study type"
+    param_quote = "Five parameters were studied" if report else "Five parameters are in scope"
+    for name, cid in AXPARAM_CONCEPT.items():
+        add("step:aex", "step_has_parameter", cid,
+            f"{AXUO_NAME} has process parameter {name}.", param_sec, param_quote)
+    # step sets the MVM clearance CQA; clears XMuLV, HCP, DNA and leached Protein A
+    add("step:aex", "step_has_quality_attribute", "attr:lrv_mvm",
+        f"{AXUO_NAME} sets the cumulative MVM (parvovirus) clearance claim.",
+        "Quality attributes in scope", "sets one CQA of its own")
+    for key in ["lrv_xmulv", "hcp", "residual_dna", "leached_protein_a"]:
+        add("step:aex", "step_has_quality_attribute", AXATTR_CONCEPT[key],
+            f"{AXUO_NAME} clears {AXATTR_NAME[key]}.", "Quality attributes in scope",
+            "major clearance step for the enveloped-virus (XMuLV) log-reduction and "
+            "for the process-related impurity CQAs")
+    # attribute -> method (plan only; the report does not restate the linkage)
+    if not report:
+        for key in AX_CQA_METHOD:
+            add(AXATTR_CONCEPT[key], "attribute_measured_by_method", f"method:{AX_CQA_METHOD[key]}",
+                f"{AXATTR_NAME[key]} is measured by {AX_CQA_METHOD[key]}.", "Analytical methods",
+                "measured by the validated methods")
+    # acceptance criterion for the CQA the step sets
+    mvm = _ax_cqa_row("lrv_mvm")
+    add("attr:lrv_mvm", "attribute_has_acceptance_criterion", "lit:lrv_mvm_acc",
+        f"MVM clearance acceptance: ≥ {mvm['acc_low']:g} {mvm['unit']}.",
+        "Quality attributes in scope", "acceptance criterion")
+    # parameter -> attribute impacts (all five are WC-CPP)
+    if report:
+        add("param:aex_load_ph", "parameter_impacts_attribute", "attr:hcp",
+            "Load pH is the dominant factor for the flow-through-pool HCP and the viral log-reduction (WC-CPP).",
+            "Parameter classification", "The dominant factor for the flow-through-pool HCP")
+        add("param:aex_wash1_cond", "parameter_impacts_attribute", "attr:hcp",
+            "Equil/Wash-1 conductivity significantly affects the flow-through-pool HCP (WC-CPP).",
+            "Parameter classification", "Significantly affects the flow-through-pool HCP")
+        add("param:aex_load_cond", "parameter_impacts_attribute", "attr:lrv_mvm",
+            "Load conductivity is the second factor for the XMuLV and MVM log-reduction (WC-CPP).",
+            "Parameter classification", "The second factor for the XMuLV and MVM log-reduction")
+        add("param:aex_load", "parameter_impacts_attribute", "attr:hcp",
+            "Protein load carries a credible risk to the impurity and viral load and is a WC-CPP; "
+            "the load-related risk is localized to the load-material charge-variant quality.",
+            "Parameter classification", "Carries a credible risk to the impurity and viral load")
+        add("param:aex_flow", "parameter_impacts_attribute", "attr:lrv_mvm",
+            "Operating flow rate is controlled as a WC-CPP to preserve the residence time credited for viral clearance.",
+            "Parameter classification",
+            "Controlled to preserve the minimum residence time credited for the viral-clearance claim")
+    else:
+        for name in AX_MULTIVARIATE:
+            add(AXPARAM_CONCEPT[name], "parameter_impacts_attribute", "attr:hcp",
+                f"{name} carries a credible impact to the flow-through-pool HCP or the viral log-reduction.",
+                "Risk-based prioritization of parameters",
+                "a credible main-effect and interaction risk to the flow-through-pool HCP or to the viral log-reduction")
+        add("param:aex_flow", "parameter_impacts_attribute", "attr:lrv_mvm",
+            "Operating flow rate acts on viral clearance through residence time and is a WC-CPP.",
+            "Risk-based prioritization of parameters",
+            "acts on the viral-clearance claim through residence time")
+    return AssertionStore(run_id=f"gt-{doc_id}", assertions=A, rationales=[])
+
+
+def ax_report_sections(doc_id, file_name, report):
+    from app.models.summaries import ReportSection, ReportStatement
+
+    def st(i, text, sec, quote):
+        return ReportStatement(statement_id=f"{doc_id}-S{i:02d}", statement_text=text,
+                               confidence="high", review_status="accepted",
+                               source_references=[ref(doc_id, file_name, sec, sec, quote)])
+    if not report:
+        return [ReportSection(section_id=f"{doc_id}-summary", title="Plan summary", statements=[
+            st(1, "PCP-008 defines the Stage 1 characterization of the A-Mab anion-exchange polishing step (Step 8).",
+               "Purpose and scope", "defines the Stage 1 (Process Design) characterization"),
+            st(2, "Five process parameters are characterized; four are studied in the multivariate DoE and the flow rate univariately.",
+               "Factors, ranges and study type", "Five parameters are in scope"),
+            st(3, "The study uses a full-factorial screen followed by a face-centred central-composite design on a scale-down column.",
+               "Response-surface design", "face-centred central-composite design"),
+            st(4, "Anion exchange sets the MVM (parvovirus) clearance claim and is a major clearance step for XMuLV, HCP, DNA and leached Protein A.",
+               "Quality attributes in scope", "sets one CQA of its own"),
+            st(5, "The study must establish a multivariate operating region over which the flow-through-pool HCP and the credited viral clearance are controlled.",
+               "Acceptance and decision criteria",
+               "a multivariate operating region exists over which the flow-through-pool HCP"),
+        ])]
+    return [ReportSection(section_id=f"{doc_id}-summary", title="Report summary", statements=[
+        st(1, "All four multivariate parameters and the flow rate are well-controlled CPPs.",
+           "Parameter classification", "the four multivariate parameters and the flow rate are all well-controlled CPPs"),
+        st(2, "Anion exchange is the principal contributor to the cumulative MVM (parvovirus) clearance claim.",
+           "Conclusions", "principal contributor to the cumulative MVM (parvovirus) clearance claim"),
+        st(3, "Pool HCP is governed by load pH and the equilibration/wash-1 conductivity through a significant load-pH × conductivity interaction.",
+           "Screening: factor effects", "significant load-pH × conductivity interaction"),
+        st(4, "The flow-through-pool HCP, XMuLV-clearance and MVM-clearance response-surface models are adequate.",
+           "Response-surface models",
+           "response-surface models for the flow-through-pool HCP and the XMuLV and MVM log-reduction are adequate"),
+        st(5, "In the requalified-load DoE the protein-load × conductivity interaction is statistically absent, confirming the DEV-01 root cause.",
+           "Screening: factor effects", "statistically absent"),
+        st(6, "Two deviations were recorded and resolved without impact to the operating region or the parameter classifications.",
+           "Conclusions", "Two deviations were recorded and resolved"),
+    ])]
+
+
+def ax_design_spaces(doc_id, file_name):
+    return [S.DesignSpace(
+        design_space_id="ds:aex", unit_operation=AXUO_NAME,
+        parameters=["param:aex_load_ph", "param:aex_wash1_cond", "param:aex_load_cond", "param:aex_load"],
+        quality_attributes_constrained=["attr:lrv_mvm", "attr:lrv_xmulv", "attr:hcp"],
+        definition="Multivariate region in load pH, equilibration/wash-1 conductivity, load "
+                   "conductivity and protein load over which the flow-through-pool HCP and the "
+                   "credited MVM and XMuLV log-reduction are controlled so the drug substance meets "
+                   "its HCP limit and its cumulative viral-clearance requirements.",
+        source_references=[ref(doc_id, file_name, "Design space", "Design space",
+                               "multivariate region of the four well-controlled CPPs")],
+        metadata=meta())]
+
+
+def ax_inventory(doc_id, file_name, dtype):
+    return S.DocumentInventoryItem(
+        document_id=doc_id, file_name=file_name, predicted_document_type=dtype,
+        product_name_candidates=["A-Mab"], process_name_candidates=[AXUO_NAME],
+        site_candidates=[P.SENDING_SITE, P.RECEIVING_SITE], date_candidates=[P.EFFECTIVE_DATE],
+        main_topics=["process characterization", "anion-exchange chromatography", "viral clearance",
+                     "host-cell protein clearance", "design of experiments", "parameter classification"],
+        rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc_id][0]}'.",
+        source_references=[ref(doc_id, file_name, "Title block", "Title block",
+                               P.DOC_REGISTRY[doc_id][0])],
+        metadata=meta())
+
+
+def build_plan_aex():
+    doc, f = "PCP-008", PCP8_FILE
+    entities = [
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_uo",
+                                  process_steps=[ax_step(doc, f, f"{doc}_sec_uo", report=False)],
+                                  equipment=ax_equipment(doc, f, f"{doc}_sec_uo", report=False),
+                                  sites=ax_sites(doc, f, f"{doc}_sec_uo")),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_cqa",
+                                  quality_attributes=ax_cqas(doc, f, f"{doc}_sec_cqa", report=False)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_param",
+                                  parameters=ax_params(doc, f, f"{doc}_sec_param", classified=False)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_methods",
+                                  analytical_methods=ax_methods(doc, f, f"{doc}_sec_methods", report=False)),
+    ]
+    return S.GroundTruthAnnex(
+        document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
+        document_class=P.DOC_REGISTRY[doc][0], version=P.VERSION, effective_date=P.EFFECTIVE_DATE,
+        schema_extensions_used=COMMON_EXT,
+        out_of_schema_notes=[
+            "AEX sets one CQA (cumulative MVM clearance); the other QualityAttribute entities are the CQAs it controls/clears (formed/introduced upstream).",
+            "Flow-through-pool HCP and step-LRF are in-process/modular responses; captured via StudyDesign.responses.",
+            "The Plan states classification is an OUTPUT; parameter_type left 'unclassified' here.",
+        ],
+        inventory=ax_inventory(doc, f, "process_characterization_plan"),
+        entities=entities,
+        studies=ax_studies(doc, f, report=False),
+        report_sections=ax_report_sections(doc, f, report=False),
+        assertions=ax_assertions(doc, f, report=False), concepts=ax_concepts())
+
+
+def build_report_aex():
+    doc, f = "PCR-008", PCR8_FILE
+    entities = [
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_exec",
+                                  process_steps=[ax_step(doc, f, f"{doc}_sec_exec", report=True)],
+                                  equipment=ax_equipment(doc, f, f"{doc}_sec_exec", report=True)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_param",
+                                  parameters=ax_params(doc, f, f"{doc}_sec_param", classified=True)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_cqa",
+                                  quality_attributes=ax_cqas(doc, f, f"{doc}_sec_cqa", report=True)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_methods",
+                                  analytical_methods=ax_methods(doc, f, f"{doc}_sec_methods", report=True)),
+    ]
+    return S.GroundTruthAnnex(
+        document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
+        document_class=P.DOC_REGISTRY[doc][0], version=P.VERSION, effective_date=P.EFFECTIVE_DATE,
+        schema_extensions_used=COMMON_EXT,
+        out_of_schema_notes=[
+            "AEX sets one CQA (cumulative MVM clearance); the other QualityAttribute entities are the CQAs it controls/clears.",
+            "Deviations (DEV-01 load re-execution; DEV-02 pool-stop correction by modelling + verification runs) are narrative; the annex captures the DoE-grounded entities and the requalified-load results reported.",
+            "Process-capability (Cpk) values have no dedicated field; reported as report_sections statements.",
+        ],
+        inventory=ax_inventory(doc, f, "process_characterization_report"),
+        entities=entities, studies=ax_studies(doc, f, report=True),
+        design_spaces=ax_design_spaces(doc, f),
+        report_sections=ax_report_sections(doc, f, report=True),
+        assertions=ax_assertions(doc, f, report=True), concepts=ax_concepts())
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     for annex in (build_plan(), build_report(), build_plan_harvest(), build_report_harvest(),
                   build_plan_protein_a(), build_report_protein_a(),
                   build_plan_viral_inactivation(), build_report_viral_inactivation(),
-                  build_plan_cex(), build_report_cex()):
+                  build_plan_cex(), build_report_cex(),
+                  build_plan_aex(), build_report_aex()):
         path = os.path.join(OUT, f"{annex.document_id}.json")
         with open(path, "w") as fh:
             json.dump(annex.model_dump(mode="json"), fh, indent=2, ensure_ascii=False)

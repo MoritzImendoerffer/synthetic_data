@@ -161,6 +161,29 @@ CEX_AMV_REFS = [
     ("AMV-3016", "Leached Protein A by ELISA (ppm)"),
 ]
 
+# Anion Exchange polishing (Step 8) controlled-document subsets. Placeholders;
+# adds the AEX-step SOP (SOP-2011) and the MVM infectivity assay (AMV-3018), and
+# reuses the shared resin life-cycle SOP and the HCP / DNA / leached-Protein-A /
+# XMuLV-infectivity / charge-variant methods. AEX is a flow-through final polish:
+# it SETS the MVM viral-clearance CQA and is a major clearance step for HCP,
+# residual DNA, leached Protein A and enveloped virus (XMuLV). The charge-variant
+# (icIEF) method supports the load-material acidic-variant (deamidation) assessment.
+AEX_SOP_REFS = [
+    ("SOP-1001", "Qualification of Scale-Down Models"),
+    ("SOP-1002", "Design, Execution and Statistical Analysis of DoE Studies"),
+    ("SOP-2011", "Operation of the Anion-Exchange Polishing Chromatography Step"),
+    ("SOP-2008", "Chromatography Resin Life-Cycle, Packing and Sanitization"),
+    ("SOP-4001", "Process-Parameter Classification and Control-Strategy Definition"),
+]
+AEX_AMV_REFS = [
+    ("AMV-3012", "Host-Cell Protein ELISA"),
+    ("AMV-3014", "Residual DNA (qPCR)"),
+    ("AMV-3016", "Leached Protein A by ELISA (ppm)"),
+    ("AMV-3017", "XMuLV Infectivity Titre (TCID50)"),
+    ("AMV-3018", "MVM Infectivity Titre (TCID50/qPCR)"),
+    ("AMV-3013", "Charge Variants (icIEF)"),
+]
+
 
 # --------------------------------------------------------------------------- #
 # Data helpers (mirror the consolidated report's setup chunk).                 #

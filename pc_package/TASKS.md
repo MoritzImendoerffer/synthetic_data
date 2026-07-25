@@ -20,7 +20,7 @@ the verification checklist before marking a document done.
 | `PCP-005` / `PCR-005` | Plan / Report | 5 · protein_a | ✅ done (DoE) |
 | `PCP-006` / `PCR-006` | Plan / Report | 6 · viral_inactivation | ✅ done (DoE) |
 | `PCP-007` / `PCR-007` | Plan / Report | 7 · cex | ✅ done (DoE) |
-| `PCP-008` / `PCR-008` | Plan / Report | 8 · aex | ☐ todo (DoE) |
+| `PCP-008` / `PCR-008` | Plan / Report | 8 · aex | ✅ done (DoE; report includes DEV-01 deamidated-load re-run + DEV-02 UV pool-stop by modelling) |
 | `PCP-009` / `PCR-009` | Plan / Report | 9 · virus_filtration | ☐ todo (DoE) |
 | `PCP-010` / `PCR-010` | Plan / Report | 10 · ufdf | ☐ todo (no DoE) |
 | `PTP-001` | Process Transfer Plan | — | ☐ todo |

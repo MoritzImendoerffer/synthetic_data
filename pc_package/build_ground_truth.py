@@ -1237,10 +1237,424 @@ def build_report_protein_a():
         assertions=pa_assertions(doc, f, report=True), concepts=pa_concepts())
 
 
+# =========================================================================== #
+# Low-pH Viral Inactivation (Step 6) — PCP-006 / PCR-006.                       #
+# --------------------------------------------------------------------------- #
+# Additive, self-contained builders for the viral-inactivation DoE pair. The    #
+# step sets the (cumulative) XMuLV clearance CQA and can increase aggregate; the #
+# DoE is a three-factor full-factorial screen + face-centred CCD in inactivation #
+# pH / hold time / temperature. pH is the only true CPP in the process.          #
+# =========================================================================== #
+VIUO = "viral_inactivation"
+VIUO_NAME = P.CFG.unit_op(VIUO).name             # "Low-pH Viral Inactivation"
+VISTEP = P.CFG.unit_op(VIUO).step                # 6
+VISTEP_LABEL = f"{VIUO_NAME} (Step {VISTEP})"
+
+PCP6_FILE = "PCP-006_viral_inactivation.docx"
+PCR6_FILE = "PCR-006_viral_inactivation.docx"
+
+VIPARAM_ROWS = P.param_reg[P.param_reg.unit_operation == VIUO_NAME].to_dict("records")
+VIPARAM_CONCEPT = {
+    "Inactivation pH": "param:vi_ph",
+    "Hold time": "param:vi_hold_time",
+    "Temperature": "param:vi_temperature",
+    "A-Mab concentration": "param:vi_protein_conc",
+}
+VI_MULTIVARIATE = ["Inactivation pH", "Hold time", "Temperature"]
+VI_UNIVARIATE = ["A-Mab concentration"]
+VI_CPP = ["Inactivation pH"]                 # dominant XMuLV factor; the only CPP
+VI_WCCPP = ["Hold time", "Temperature"]      # affect both LRF and aggregate
+
+VI_CQA_KEYS = ["lrv_xmulv", "aggregates_hmw"]
+VIATTR_CONCEPT = {
+    "lrv_xmulv": "attr:lrv_xmulv", "aggregates_hmw": "attr:aggregates_hmw",
+    "acidic_variants": "attr:acidic_variants",
+}
+VIATTR_NAME = {
+    "lrv_xmulv": "Viral clearance — XMuLV", "aggregates_hmw": "Aggregates (HMW)",
+    "acidic_variants": "Acidic charge variants",
+}
+VI_CQA_METHOD = {"lrv_xmulv": "AMV-3017", "aggregates_hmw": "AMV-3011"}
+VIMETHODS = [
+    ("AMV-3017", "XMuLV Infectivity Titre (TCID50)", "infectivity_assay",
+     ["XMuLV infectious titre"], ["lrv_xmulv"]),
+    ("AMV-3011", "Size-Variants (SEC-HPLC)", "chromatography",
+     ["aggregate", "monomer"], ["aggregates_hmw"]),
+    ("AMV-3013", "Charge Variants (icIEF)", "electrophoresis",
+     ["acidic variants"], ["acidic_variants"]),
+]
+
+
+def _vi_cqa_row(key):
+    return P.cqa_reg[P.cqa_reg.key == key].iloc[0].to_dict()
+
+
+def vi_step(doc_id, file_name, sec, report):
+    if report:
+        src = ref(doc_id, file_name, sec, "Executive summary",
+                  "low-pH viral inactivation step (Step 6)")
+    else:
+        src = ref(doc_id, file_name, sec, "Unit-operation description and prior knowledge",
+                  "the dedicated inactivation step of the A-Mab purification train")
+    return S.ProcessStep(
+        step_id="step:viral_inactivation", step_name=VIUO_NAME, step_number=str(VISTEP),
+        unit_operation=VIUO_NAME,
+        description="Dedicated viral-clearance step: the Protein A eluate is held at low pH to "
+                    "inactivate enveloped viruses (XMuLV), then neutralized. Sets the cumulative "
+                    "XMuLV clearance and can increase aggregate during the hold; ineffective "
+                    "against the non-enveloped parvovirus model MVM.",
+        input_materials=["Protein A eluate pool"],
+        output_materials=["neutralized inactivated pool (cation-exchange feed)"],
+        equipment=["low-pH inactivation vessel", "scale-down inactivation model"],
+        source_references=[src], metadata=meta())
+
+
+def vi_equipment(doc_id, file_name, sec, report):
+    sdm = S.Equipment(
+        equipment_id="equip:vi_sdm", equipment_name="scale-down inactivation model",
+        equipment_type="viral inactivation (scale-down)", site_name=P.SENDING_SITE,
+        source_references=[ref(doc_id, file_name, sec,
+                               "Study execution" if report else "Scale-down model and its qualification",
+                               "qualified scale-down inactivation model" if report
+                               else "small-scale inactivation model")],
+        metadata=meta())
+    if report:
+        return [sdm]
+    return [
+        S.Equipment(equipment_id="equip:vi_vessel",
+                    equipment_name="commercial-scale low-pH inactivation vessel",
+                    equipment_type="inactivation vessel", site_name=P.RECEIVING_SITE,
+                    source_references=[ref(doc_id, file_name, sec, "Purpose and scope",
+                                           "commercial-scale low-pH inactivation step")],
+                    metadata=meta()),
+        sdm,
+    ]
+
+
+def vi_sites(doc_id, file_name, sec):
+    return [
+        S.ManufacturingSite(site_id="site:cambridge", site_name=P.SENDING_SITE, site_role="sending",
+                            location="Cambridge, MA",
+                            source_references=[ref(doc_id, file_name, sec, "Title block",
+                                                   "Cambridge, MA (Development)")],
+                            metadata=meta()),
+        S.ManufacturingSite(site_id="site:grafton", site_name=P.RECEIVING_SITE, site_role="receiving",
+                            location="Grafton, WI",
+                            source_references=[ref(doc_id, file_name, sec, "Title block",
+                                                   "Grafton, WI (Commercial DS)")],
+                            metadata=meta()),
+    ]
+
+
+def vi_params(doc_id, file_name, sec, classified):
+    caption = ("Low-pH inactivation process parameters, set-points, ranges and post-characterization classification."
+               if classified else
+               "Low-pH inactivation parameters, set-points, characterization ranges and planned study type.")
+    rats = {"CPP": "Dominant factor for the enveloped-virus log-reduction (a Severity->=8 "
+                   "viral-safety CQA) with a narrow, high-consequence window; the only CPP.",
+            "WC-CPP": "Significantly affects both the log-reduction and aggregate; reliably "
+                      "controlled by timed, temperature-controlled operation.",
+            "GPP": "No meaningful impact on the log-reduction or aggregate over a wide range."}
+    out = []
+    for r in VIPARAM_ROWS:
+        name = r["parameter"]
+        ptype = r["classification"] if classified else "unclassified"
+        out.append(S.ProcessParameter(
+            parameter_id=VIPARAM_CONCEPT[name], parameter_name=name, parameter_type=ptype,
+            unit=r["unit"], target_value=f"{r['setpoint']:g}",
+            NOR=f"{r['nor_low']:g}–{r['nor_high']:g} {r['unit']}",
+            PAR=f"{r['par_low']:g}–{r['par_high']:g} {r['unit']}",
+            associated_step=VISTEP_LABEL,
+            rationale_for_criticality=rats.get(r["classification"]) if classified else None,
+            source_references=[ref(doc_id, file_name, sec,
+                                   "Factors, ranges and the knowledge space" if classified
+                                   else "Factors, ranges and study type",
+                                   caption, table_title=caption,
+                                   table_id=f"{doc_id}_tab_params")],
+            metadata=meta()))
+    return out
+
+
+def vi_cqas(doc_id, file_name, sec, report):
+    quotes = {"lrv_xmulv": "sets the (cumulative) enveloped-virus clearance CQA",
+              "aggregates_hmw": "risk of aggregate formation during the low-pH hold"}
+    out = []
+    for key in VI_CQA_KEYS:
+        r = _vi_cqa_row(key)
+        out.append(S.QualityAttribute(
+            attribute_id=VIATTR_CONCEPT[key], attribute_name=r["cqa"], attribute_type="CQA",
+            unit=r["unit"],
+            acceptance_criteria=[f"{r['acc_low']:g}–{r['acc_high']:g} {r['unit']}"],
+            analytical_method=None if report else VI_CQA_METHOD[key],
+            associated_steps=[VISTEP_LABEL],
+            rationale_for_criticality=f"A-Mab Tool #1 Risk Score = Impact × Uncertainty = {r['tool1_score']}.",
+            criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
+            tool2_severity=int(r["tool2_severity"]),
+            source_references=[ref(doc_id, file_name, sec, "Quality attributes in scope",
+                                   quotes[key],
+                                   table_title="Viral-clearance CQA set by the low-pH inactivation step",
+                                   table_id=f"{doc_id}_tab_cqa")],
+            metadata=meta()))
+    return out
+
+
+def vi_methods(doc_id, file_name, sec, report):
+    quote = "measured by validated methods" if report else "measured by the validated methods"
+    out = []
+    for mid, mname, mtype, analytes, attrs in VIMETHODS:
+        out.append(S.AnalyticalMethod(
+            method_id=mid, method_name=mname, method_type=mtype, analytes=analytes,
+            associated_attributes=[VIATTR_CONCEPT[a] for a in attrs], validation_status="validated",
+            source_references=[ref(doc_id, file_name, sec, "Analytical methods", quote)],
+            metadata=meta()))
+    return out
+
+
+def vi_studies(doc_id, file_name, report):
+    sec = "Study execution" if report else "Study design"
+    n_scr, n_rsm = P.doe_runs(VIUO, "screening"), P.doe_runs(VIUO, "rsm")
+    return [
+        S.StudyDesign(
+            study_id="study:vi_screening", study_type="screening_doe",
+            design_name="two-level full factorial", unit_operation=VIUO_NAME,
+            factors=VI_MULTIVARIATE,
+            responses=["xmulv_lrf", "aggregate_out_pct", "acidic_variants"],
+            n_runs=n_scr, n_center_points=3, scale_down_model="scale-down inactivation model",
+            associated_parameters=[VIPARAM_CONCEPT[f] for f in VI_MULTIVARIATE],
+            source_references=[ref(doc_id, file_name, sec, "Screening design",
+                                   "a two-level full factorial in the three multivariate factors")],
+            metadata=meta()),
+        S.StudyDesign(
+            study_id="study:vi_rsm", study_type="response_surface_doe",
+            design_name="face-centred central-composite design", unit_operation=VIUO_NAME,
+            factors=VI_MULTIVARIATE,
+            responses=["xmulv_lrf", "aggregate_out_pct", "acidic_variants"],
+            n_runs=n_rsm, n_center_points=4, scale_down_model="scale-down inactivation model",
+            associated_parameters=[VIPARAM_CONCEPT[f] for f in VI_MULTIVARIATE],
+            source_references=[ref(doc_id, file_name, sec, "Response-surface design",
+                                   "face-centred central-composite")],
+            metadata=meta()),
+        S.StudyDesign(
+            study_id="study:vi_sdm_qual", study_type="scale_down_qualification",
+            unit_operation=VIUO_NAME, scale_down_model="scale-down inactivation model",
+            source_references=[ref(doc_id, file_name, "Materials and methods",
+                                   "Scale-down model and its qualification",
+                                   "qualified against at-scale reference data")],
+            metadata=meta()),
+        S.StudyDesign(
+            study_id="study:vi_univariate", study_type="univariate",
+            design_name="one-factor-at-a-time ranging", unit_operation=VIUO_NAME,
+            factors=VI_UNIVARIATE, responses=["XMuLV log-reduction", "aggregate"],
+            associated_parameters=[VIPARAM_CONCEPT[f] for f in VI_UNIVARIATE],
+            source_references=[ref(doc_id, file_name, "Study design", "Univariate assessment",
+                                   "evaluated one factor at a time")],
+            metadata=meta()),
+    ]
+
+
+def vi_concepts():
+    from app.models.concepts import Concept, ConceptStore
+    cs = [Concept(concept_id="step:viral_inactivation", concept_type="PROCESS_STEP",
+                  canonical_name=VIUO_NAME,
+                  aliases=["viral inactivation", "low-pH hold", "low-pH viral inactivation", "Step 6"],
+                  review_status="human_verified")]
+    for name, cid in VIPARAM_CONCEPT.items():
+        cs.append(Concept(concept_id=cid, concept_type="PROCESS_PARAMETER", canonical_name=name,
+                          review_status="human_verified"))
+    for key in ["lrv_xmulv", "aggregates_hmw", "acidic_variants"]:
+        cs.append(Concept(concept_id=VIATTR_CONCEPT[key], concept_type="QUALITY_ATTRIBUTE",
+                          canonical_name=VIATTR_NAME[key], aliases=[key],
+                          review_status="human_verified"))
+    for mid, mname, *_ in VIMETHODS:
+        cs.append(Concept(concept_id=f"method:{mid}", concept_type="ANALYTICAL_METHOD",
+                          canonical_name=mname, aliases=[mid], review_status="human_verified"))
+    return ConceptStore(run_id="gt-viral_inactivation", concepts=cs)
+
+
+def vi_assertions(doc_id, file_name, report):
+    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    A = []
+    n = [0]
+
+    def add(subj, pred, obj, text, sec, quote):
+        n[0] += 1
+        A.append(EvidenceBackedAssertion(
+            assertion_id=f"{doc_id}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
+            assertion_text=text,
+            source_references=[ref(doc_id, file_name, sec, sec, quote)], metadata=meta()))
+
+    param_sec = "Factors, ranges and the knowledge space" if report else "Factors, ranges and study type"
+    param_quote = "Four parameters were studied" if report else "Four parameters are in scope"
+    for name, cid in VIPARAM_CONCEPT.items():
+        add("step:viral_inactivation", "step_has_parameter", cid,
+            f"{VIUO_NAME} has process parameter {name}.", param_sec, param_quote)
+    # step sets the XMuLV clearance CQA and carries the aggregate risk
+    add("step:viral_inactivation", "step_has_quality_attribute", "attr:lrv_xmulv",
+        f"{VIUO_NAME} sets the cumulative XMuLV clearance.", "Quality attributes in scope",
+        "sets the (cumulative) enveloped-virus clearance CQA")
+    add("step:viral_inactivation", "step_has_quality_attribute", "attr:aggregates_hmw",
+        f"{VIUO_NAME} can increase aggregate during the low-pH hold.", "Quality attributes in scope",
+        "risk of aggregate formation during the low-pH hold")
+    # attribute -> method (plan only)
+    if not report:
+        for key in VI_CQA_METHOD:
+            add(VIATTR_CONCEPT[key], "attribute_measured_by_method", f"method:{VI_CQA_METHOD[key]}",
+                f"{VIATTR_NAME[key]} is measured by {VI_CQA_METHOD[key]}.", "Analytical methods",
+                "measured by the validated methods")
+    # acceptance criterion for the viral-clearance CQA
+    xr = _vi_cqa_row("lrv_xmulv")
+    add("attr:lrv_xmulv", "attribute_has_acceptance_criterion", "lit:lrv_xmulv_acc",
+        f"Cumulative XMuLV clearance acceptance: {xr['acc_low']:g}–{xr['acc_high']:g} {xr['unit']}.",
+        "Quality attributes in scope", "acceptance criterion")
+    # parameter -> attribute impacts / non-impacts
+    if report:
+        add("param:vi_ph", "parameter_impacts_attribute", "attr:lrv_xmulv",
+            "Inactivation pH is the dominant factor for the enveloped-virus log-reduction (CPP).",
+            "Parameter classification", "dominant factor for the enveloped-virus")
+        for name in VI_WCCPP:
+            add(VIPARAM_CONCEPT[name], "parameter_impacts_attribute", "attr:lrv_xmulv",
+                f"{name} significantly affects the log-reduction and aggregate (WC-CPP).",
+                "Parameter classification", "significantly affects both the log-reduction")
+        add("param:vi_protein_conc", "parameter_does_not_significantly_impact_attribute", "attr:lrv_xmulv",
+            "A-Mab concentration has no meaningful CQA impact (GPP).",
+            "Parameter classification", "No meaningful impact on the log-reduction")
+    else:
+        for name in VI_MULTIVARIATE:
+            add(VIPARAM_CONCEPT[name], "parameter_impacts_attribute", "attr:lrv_xmulv",
+                f"{name} carries a credible impact to the enveloped-virus inactivation.",
+                "Risk-based prioritization of parameters",
+                "credible impact to the enveloped-virus inactivation")
+        add("param:vi_protein_conc", "parameter_does_not_significantly_impact_attribute", "attr:lrv_xmulv",
+            "A-Mab concentration is expected to affect neither response over a wide range.",
+            "Risk-based prioritization of parameters", "expected to affect neither over a wide range")
+    return AssertionStore(run_id=f"gt-{doc_id}", assertions=A, rationales=[])
+
+
+def vi_report_sections(doc_id, file_name, report):
+    from app.models.summaries import ReportSection, ReportStatement
+
+    def st(i, text, sec, quote):
+        return ReportStatement(statement_id=f"{doc_id}-S{i:02d}", statement_text=text,
+                               confidence="high", review_status="accepted",
+                               source_references=[ref(doc_id, file_name, sec, sec, quote)])
+    if not report:
+        return [ReportSection(section_id=f"{doc_id}-summary", title="Plan summary", statements=[
+            st(1, "PCP-006 defines the Stage 1 characterization of the A-Mab low-pH viral inactivation step (Step 6).",
+               "Purpose and scope", "defines the Stage 1 (Process Design) characterization"),
+            st(2, "Four process parameters are characterized; inactivation pH, hold time and temperature are the DoE factors.",
+               "Factors, ranges and study type", "Four parameters are in scope"),
+            st(3, "The study uses a full-factorial screen followed by a face-centred central-composite design.",
+               "Response-surface design", "face-centred central-composite design"),
+            st(4, "Low-pH inactivation is enveloped-virus specific; MVM is cleared orthogonally by AEX and virus filtration.",
+               "Unit-operation description and prior knowledge",
+               "clearance is provided orthogonally by anion exchange and small-virus filtration"),
+            st(5, "The study must establish a design space over which the XMuLV log-reduction is assured and aggregate stays within limit.",
+               "Acceptance and decision criteria",
+               "a design space exists over which the XMuLV log-reduction is assured"),
+        ])]
+    return [ReportSection(section_id=f"{doc_id}-summary", title="Report summary", statements=[
+        st(1, "Inactivation pH is classified CPP — the only true critical process parameter in the process.",
+           "Executive summary", "classified **CPP**"),
+        st(2, "At the nominal condition the step delivers a robust XMuLV log-reduction.",
+           "Executive summary", "delivers an XMuLV log-reduction of approximately"),
+        st(3, "Low-pH inactivation provides no clearance of the non-enveloped model virus MVM.",
+           "Executive summary", "no clearance of the non-enveloped model virus MVM"),
+        st(4, "A design space in inactivation pH and hold time was established.",
+           "Executive summary", "design space in inactivation pH and hold time was established"),
+        st(5, "The aggregate model is excellent; the XMuLV log-reduction model is adequate with no significant lack of fit.",
+           "Response-surface models", "XMuLV log-reduction model is adequate"),
+        st(6, "The step is the largest single contributor to the enveloped-virus clearance.",
+           "Process capability and robustness", "largest single contributor to the enveloped-virus clearance"),
+    ])]
+
+
+def vi_design_spaces(doc_id, file_name):
+    return [S.DesignSpace(
+        design_space_id="ds:viral_inactivation", unit_operation=VIUO_NAME,
+        parameters=["param:vi_ph", "param:vi_hold_time"],
+        quality_attributes_constrained=["attr:lrv_xmulv", "attr:aggregates_hmw"],
+        definition="Region in inactivation pH and hold time over which the XMuLV log-reduction is "
+                   "assured with margin and aggregate remains within its limit.",
+        source_references=[ref(doc_id, file_name, "Design space", "Design space",
+                               "region of inactivation pH and hold time")],
+        metadata=meta())]
+
+
+def vi_inventory(doc_id, file_name, dtype):
+    return S.DocumentInventoryItem(
+        document_id=doc_id, file_name=file_name, predicted_document_type=dtype,
+        product_name_candidates=["A-Mab"], process_name_candidates=[VIUO_NAME],
+        site_candidates=[P.SENDING_SITE, P.RECEIVING_SITE], date_candidates=[P.EFFECTIVE_DATE],
+        main_topics=["process characterization", "low-pH viral inactivation", "viral clearance",
+                     "XMuLV log-reduction", "design of experiments", "parameter classification"],
+        rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc_id][0]}'.",
+        source_references=[ref(doc_id, file_name, "Title block", "Title block",
+                               P.DOC_REGISTRY[doc_id][0])],
+        metadata=meta())
+
+
+def build_plan_viral_inactivation():
+    doc, f = "PCP-006", PCP6_FILE
+    entities = [
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_uo",
+                                  process_steps=[vi_step(doc, f, f"{doc}_sec_uo", report=False)],
+                                  equipment=vi_equipment(doc, f, f"{doc}_sec_uo", report=False),
+                                  sites=vi_sites(doc, f, f"{doc}_sec_uo")),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_cqa",
+                                  quality_attributes=vi_cqas(doc, f, f"{doc}_sec_cqa", report=False)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_param",
+                                  parameters=vi_params(doc, f, f"{doc}_sec_param", classified=False)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_methods",
+                                  analytical_methods=vi_methods(doc, f, f"{doc}_sec_methods", report=False)),
+    ]
+    return S.GroundTruthAnnex(
+        document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
+        document_class=P.DOC_REGISTRY[doc][0], version=P.VERSION, effective_date=P.EFFECTIVE_DATE,
+        schema_extensions_used=COMMON_EXT,
+        out_of_schema_notes=[
+            "XMuLV clearance is claimed conservatively per ICH Q5A, not from the RSM model.",
+            "The Plan states classification is an OUTPUT; parameter_type left 'unclassified' here.",
+        ],
+        inventory=vi_inventory(doc, f, "process_characterization_plan"),
+        entities=entities,
+        studies=vi_studies(doc, f, report=False),
+        report_sections=vi_report_sections(doc, f, report=False),
+        assertions=vi_assertions(doc, f, report=False), concepts=vi_concepts())
+
+
+def build_report_viral_inactivation():
+    doc, f = "PCR-006", PCR6_FILE
+    entities = [
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_exec",
+                                  process_steps=[vi_step(doc, f, f"{doc}_sec_exec", report=True)],
+                                  equipment=vi_equipment(doc, f, f"{doc}_sec_exec", report=True)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_param",
+                                  parameters=vi_params(doc, f, f"{doc}_sec_param", classified=True)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_cqa",
+                                  quality_attributes=vi_cqas(doc, f, f"{doc}_sec_cqa", report=True)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_methods",
+                                  analytical_methods=vi_methods(doc, f, f"{doc}_sec_methods", report=True)),
+    ]
+    return S.GroundTruthAnnex(
+        document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
+        document_class=P.DOC_REGISTRY[doc][0], version=P.VERSION, effective_date=P.EFFECTIVE_DATE,
+        schema_extensions_used=COMMON_EXT,
+        out_of_schema_notes=[
+            "XMuLV clearance is claimed conservatively per ICH Q5A, not from the RSM model.",
+            "Process-capability (Cpk) values have no dedicated field; reported as report_sections statements.",
+        ],
+        inventory=vi_inventory(doc, f, "process_characterization_report"),
+        entities=entities, studies=vi_studies(doc, f, report=True),
+        design_spaces=vi_design_spaces(doc, f),
+        report_sections=vi_report_sections(doc, f, report=True),
+        assertions=vi_assertions(doc, f, report=True), concepts=vi_concepts())
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     for annex in (build_plan(), build_report(), build_plan_harvest(), build_report_harvest(),
-                  build_plan_protein_a(), build_report_protein_a()):
+                  build_plan_protein_a(), build_report_protein_a(),
+                  build_plan_viral_inactivation(), build_report_viral_inactivation()):
         path = os.path.join(OUT, f"{annex.document_id}.json")
         with open(path, "w") as fh:
             json.dump(annex.model_dump(mode="json"), fh, indent=2, ensure_ascii=False)

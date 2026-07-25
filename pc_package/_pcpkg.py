@@ -128,6 +128,21 @@ PROTEIN_A_AMV_REFS = [
     ("AMV-3011", "Size-Variants (SEC-HPLC)"),
 ]
 
+# Low-pH Viral Inactivation (Step 6) controlled-document subsets. Placeholders;
+# adds the inactivation-step SOP and the XMuLV infectivity assay (AMV-3017), and
+# reuses the shared SEC / charge-variant methods.
+VIRAL_INACT_SOP_REFS = [
+    ("SOP-1001", "Qualification of Scale-Down Models"),
+    ("SOP-1002", "Design, Execution and Statistical Analysis of DoE Studies"),
+    ("SOP-2009", "Operation of the Low-pH Viral Inactivation Step"),
+    ("SOP-4001", "Process-Parameter Classification and Control-Strategy Definition"),
+]
+VIRAL_INACT_AMV_REFS = [
+    ("AMV-3017", "XMuLV Infectivity Titre (TCID50)"),
+    ("AMV-3011", "Size-Variants (SEC-HPLC)"),
+    ("AMV-3013", "Charge Variants (icIEF)"),
+]
+
 
 # --------------------------------------------------------------------------- #
 # Data helpers (mirror the consolidated report's setup chunk).                 #

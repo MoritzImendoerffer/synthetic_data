@@ -41,7 +41,7 @@ corpus: figures
 		echo "rendering $$b"; \
 		( cd $(PKG_DIR) && quarto render "$$b" --to docx && quarto render "$$b" --to pdf ) || exit 1; \
 	done
-	cd $(PKG_DIR) && $(PY) build_ground_truth.py && $(PY) validate_annex.py
+	cd $(PKG_DIR) && $(PY) build_ground_truth.py && $(PY) validate_annex.py && $(PY) check_grounding.py
 	@echo "corpus built."
 
 test:

@@ -20,13 +20,13 @@ the verification checklist before marking a document done.
 | `PCP-005` / `PCR-005` | Plan / Report | 5 · protein_a | ✅ done (DoE) |
 | `PCP-006` / `PCR-006` | Plan / Report | 6 · viral_inactivation | ✅ done (DoE) |
 | `PCP-007` / `PCR-007` | Plan / Report | 7 · cex | ✅ done (DoE) |
-| `PCP-008` / `PCR-008` | Plan / Report | 8 · aex | ☐ todo (DoE) |
-| `PCP-009` / `PCR-009` | Plan / Report | 9 · virus_filtration | ☐ todo (DoE) |
-| `PCP-010` / `PCR-010` | Plan / Report | 10 · ufdf | ☐ todo (no DoE) |
-| `PTP-001` | Process Transfer Plan | — | ☐ todo |
-| `RA-001` | Pre-Characterization Risk Assessment | — | ☐ todo |
-| `PCMP-001` | PC Master Plan | — | ☐ todo |
-| `PCMR-001` | PC Master Report | — | ☐ todo |
+| `PCP-008` / `PCR-008` | Plan / Report | 8 · aex | ✅ done (DoE; report includes DEV-01 deamidated-load re-run + DEV-02 UV pool-stop by modelling) |
+| `PCP-009` / `PCR-009` | Plan / Report | 9 · virus_filtration | ✅ done (DoE; compact 2-factor small design — MVM modelled/load-limited, XMuLV+yield robust; ICH Q5A worst-case framing) |
+| `PCP-010` / `PCR-010` | Plan / Report | 10 · ufdf | ✅ done (no DoE; formulation/mass-balance, formulation characterization deferred to DP) |
+| `PTP-001` | Process Transfer Plan | — | ✅ done (Cambridge→Grafton; TransferGap ×6; corpus-wide tables) |
+| `RA-001` | Pre-Characterization Risk Assessment | — | ✅ done (RRF study-type assignment; reuses build_fmea CONTENT via ra_content.py; pre-hoc, unclassified) |
+| `PCMP-001` | PC Master Plan | — | ✅ done (umbrella plan; CQA framework + common SDM/stat approach + PCP register) |
+| `PCMR-001` | PC Master Report | — | ✅ done (roll-up; min Cpk 1.51, viral 18.87/10.03, 5 figures; Stage-2 ready) |
 
 ## Recommended order
 
@@ -161,7 +161,10 @@ report, but as a summary that cites the `PCR-00N` documents.
 
 ## Cross-cutting TODOs
 
-- ☐ `ispett2023` entry in `pc_package/references.bib` (for PTP-001).
+- ✅ `ispett2023` entry in `pc_package/references.bib` (added for PTP-001; ISPE Technology Transfer GPG).
+- ✅ Config self-consistency (gotcha #8): virus_filtration `filtration_volume` / `pressure`
+  `study: univariate → multivariate` (they ARE the 2 DoE factors). Deterministic; headline
+  unchanged (min Cpk 1.51, viral 18.87/10.03, class counts WC-CPP 20/KPP 10/GPP 6/CPP 1).
 - ✅ Extend `doe_report.RESP_LABEL` for downstream response keys (done in the protein_a pass:
   added `pool_hcp_ng_mg`, `hcp_out_ng_mg`, `leached_protein_a_ppm`, `step_yield`,
   `aggregate_out_pct`, `xmulv_lrf`, `mvm_lrf`).

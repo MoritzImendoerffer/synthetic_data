@@ -161,6 +161,62 @@ CEX_AMV_REFS = [
     ("AMV-3016", "Leached Protein A by ELISA (ppm)"),
 ]
 
+# Anion Exchange polishing (Step 8) controlled-document subsets. Placeholders;
+# adds the AEX-step SOP (SOP-2011) and the MVM infectivity assay (AMV-3018), and
+# reuses the shared resin life-cycle SOP and the HCP / DNA / leached-Protein-A /
+# XMuLV-infectivity / charge-variant methods. AEX is a flow-through final polish:
+# it SETS the MVM viral-clearance CQA and is a major clearance step for HCP,
+# residual DNA, leached Protein A and enveloped virus (XMuLV). The charge-variant
+# (icIEF) method supports the load-material acidic-variant (deamidation) assessment.
+AEX_SOP_REFS = [
+    ("SOP-1001", "Qualification of Scale-Down Models"),
+    ("SOP-1002", "Design, Execution and Statistical Analysis of DoE Studies"),
+    ("SOP-2011", "Operation of the Anion-Exchange Polishing Chromatography Step"),
+    ("SOP-2008", "Chromatography Resin Life-Cycle, Packing and Sanitization"),
+    ("SOP-4001", "Process-Parameter Classification and Control-Strategy Definition"),
+]
+AEX_AMV_REFS = [
+    ("AMV-3012", "Host-Cell Protein ELISA"),
+    ("AMV-3014", "Residual DNA (qPCR)"),
+    ("AMV-3016", "Leached Protein A by ELISA (ppm)"),
+    ("AMV-3017", "XMuLV Infectivity Titre (TCID50)"),
+    ("AMV-3018", "MVM Infectivity Titre (TCID50/qPCR)"),
+    ("AMV-3013", "Charge Variants (icIEF)"),
+]
+
+# Small-Virus Retentive Filtration (Step 9) controlled-document subsets. Placeholders;
+# adds the virus-filtration-step SOP (SOP-2012, operation + post-use filter integrity test)
+# and reuses the MVM / XMuLV infectivity assays. Virus filtration is the dedicated
+# small-virus removal step: size-based (mechanistic) clearance that is orthogonal to the
+# low-pH (Step 6) and anion-exchange (Step 8) mechanisms. It provides the largest single
+# MVM (parvovirus) log-reduction and a major enveloped-virus (XMuLV) log-reduction.
+VIRUS_FILT_SOP_REFS = [
+    ("SOP-1001", "Qualification of Scale-Down Models"),
+    ("SOP-1002", "Design, Execution and Statistical Analysis of DoE Studies"),
+    ("SOP-2012", "Operation and Post-Use Integrity Testing of the Small-Virus Retentive Filtration Step"),
+    ("SOP-4001", "Process-Parameter Classification and Control-Strategy Definition"),
+]
+VIRUS_FILT_AMV_REFS = [
+    ("AMV-3018", "MVM Infectivity Titre (TCID50/qPCR)"),
+    ("AMV-3017", "XMuLV Infectivity Titre (TCID50)"),
+]
+
+# Ultrafiltration / Diafiltration (Step 10) controlled-document subsets. Placeholders;
+# adds the UF/DF-step SOP (SOP-2013) and reuses the SEC / charge-variant / protein-A
+# concentration methods. UF/DF is a formulation (mass-balance) operation reported with the
+# drug product: it concentrates and buffer-exchanges to the DS target and forms/clears no
+# product-quality CQA, so its parameters are KPP (process performance) not CPP.
+UFDF_SOP_REFS = [
+    ("SOP-1001", "Qualification of Scale-Down Models"),
+    ("SOP-2013", "Operation of the Ultrafiltration / Diafiltration (Formulation) Step"),
+    ("SOP-4001", "Process-Parameter Classification and Control-Strategy Definition"),
+]
+UFDF_AMV_REFS = [
+    ("AMV-3011", "Size-Variants (SEC-HPLC)"),
+    ("AMV-3019", "Protein Concentration by A280 (UV)"),
+    ("AMV-3013", "Charge Variants (icIEF)"),
+]
+
 
 # --------------------------------------------------------------------------- #
 # Data helpers (mirror the consolidated report's setup chunk).                 #
@@ -320,3 +376,63 @@ def sop_table(sops=None, amvs=None):
     rows += [[aid, title, "Method validation"] for aid, title in amvs]
     df = pd.DataFrame(rows, columns=["Reference", "Title", "Type"])
     return df.to_markdown(index=False)
+
+
+# --------------------------------------------------------------------------- #
+# Corpus-wide helpers (for the transfer / master documents, which span the      #
+# whole document set and the whole process train rather than one unit op).      #
+# --------------------------------------------------------------------------- #
+def corpus_docs_md(doc_id=None):
+    """Cross-reference table of the whole A-Mab document package.
+
+    Lists the transfer/master documents and every per-unit-operation plan/report
+    pair in process-step order, excluding ``doc_id`` (the current document)."""
+    order = ["PTP-001", "RA-001", "PCMP-001"]
+    for key in CFG.train_order:
+        step = CFG.unit_op(key).step
+        order += [f"PCP-{step:03d}", f"PCR-{step:03d}"]
+    order.append("PCMR-001")
+    rows = []
+    for rid in order:
+        if rid == doc_id or rid not in DOC_REGISTRY:
+            continue
+        cls, subject, _ = DOC_REGISTRY[rid]
+        rows.append([rid, cls, subject])
+    return pd.DataFrame(rows, columns=["Document ID", "Document class", "Subject"]).to_markdown(index=False)
+
+
+# Editorial one-line role of each unit operation in the control strategy. Narrative
+# only (no numbers); the quantitative facts are pulled from the CSVs elsewhere.
+UNIT_OP_ROLE = {
+    "bioreactor": "Forms the glycan, charge-variant and aggregate CQAs (design-space step)",
+    "harvest": "Primary recovery and clarification; forms no product-quality CQA",
+    "protein_a": "Capture; sets leached Protein A; principal HCP and DNA clearance",
+    "viral_inactivation": "Low-pH hold; sets the cumulative XMuLV (enveloped) clearance",
+    "cex": "Polish; principal aggregate reduction; major HCP/DNA/leached-PA clearance",
+    "aex": "Flow-through polish; sets the cumulative MVM clearance; clears XMuLV/HCP/DNA",
+    "virus_filtration": "Dedicated small-virus removal; principal MVM clearance",
+    "ufdf": "Formulation / mass balance; delivers drug substance at target concentration",
+}
+
+
+def process_steps_df():
+    """The drug-substance process train (Steps 3–10) with each step's principal role."""
+    rows = []
+    for key in CFG.train_order:
+        uo = CFG.unit_op(key)
+        rows.append([uo.step, UNIT_OP_TITLES.get(key, uo.name), UNIT_OP_ROLE.get(key, "")])
+    return pd.DataFrame(rows, columns=["Step", "Unit operation", "Principal role"])
+
+
+def cpp_params(kinds=("CPP", "WC-CPP")):
+    """Parameters classified CPP or WC-CPP across the train (control-strategy summaries)."""
+    d = param_reg[param_reg.classification.isin(list(kinds))].copy()
+    d["NOR"] = d.apply(lambda r: _rng_str(r.nor_low, r.nor_high), axis=1)
+    d = d.rename(columns={"unit_operation": "Unit operation", "parameter": "Parameter",
+                          "unit": "Unit", "setpoint": "Set-point", "classification": "Class"})
+    return d[["Unit operation", "Parameter", "Unit", "Set-point", "NOR", "Class"]]
+
+
+def class_counts():
+    """Parameter-classification counts across the whole train (dict, e.g. {'WC-CPP': 20, ...})."""
+    return {k: int(v) for k, v in param_reg.classification.value_counts().to_dict().items()}

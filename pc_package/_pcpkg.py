@@ -143,6 +143,24 @@ VIRAL_INACT_AMV_REFS = [
     ("AMV-3013", "Charge Variants (icIEF)"),
 ]
 
+# Cation Exchange polishing (Step 7) controlled-document subsets. Placeholders;
+# adds the CEX-step SOP (SOP-2010) and reuses the shared resin life-cycle SOP and
+# the SEC / HCP / DNA / leached-Protein-A methods. CEX is the principal aggregate
+# polish (SEC-HPLC is the primary assay) and a major HCP/DNA/leached-PA clearance step.
+CEX_SOP_REFS = [
+    ("SOP-1001", "Qualification of Scale-Down Models"),
+    ("SOP-1002", "Design, Execution and Statistical Analysis of DoE Studies"),
+    ("SOP-2010", "Operation of the Cation-Exchange Polishing Chromatography Step"),
+    ("SOP-2008", "Chromatography Resin Life-Cycle, Packing and Sanitization"),
+    ("SOP-4001", "Process-Parameter Classification and Control-Strategy Definition"),
+]
+CEX_AMV_REFS = [
+    ("AMV-3011", "Size-Variants (SEC-HPLC)"),
+    ("AMV-3012", "Host-Cell Protein ELISA"),
+    ("AMV-3014", "Residual DNA (qPCR)"),
+    ("AMV-3016", "Leached Protein A by ELISA (ppm)"),
+]
+
 
 # --------------------------------------------------------------------------- #
 # Data helpers (mirror the consolidated report's setup chunk).                 #
@@ -195,6 +213,23 @@ def report_params(key):
 def cqas_for(key):
     """CQAs primarily set/controlled by a unit operation, with acceptance criteria."""
     d = cqa_reg[cqa_reg.set_by == key].copy()
+    d["Acceptance"] = d.apply(lambda r: f"{r.acc_low:g}–{r.acc_high:g} {r.unit}", axis=1)
+    d = d.rename(columns={"cqa": "CQA", "category": "Category", "criticality": "Criticality",
+                          "tool1_score": "Tool #1"})
+    return d[["CQA", "Category", "Acceptance", "Criticality", "Tool #1"]]
+
+
+def cqas_by_keys(keys):
+    """CQAs (selected by key, in the given order) that a step controls or clears.
+
+    A downstream step (e.g. cation/anion exchange) *sets* no CQA — the impurity and
+    size-variant CQAs are formed upstream and cleared here — so ``cqas_for`` returns
+    nothing for it. This lists the CQAs it governs, in the requested order, with the
+    same columns as :func:`cqas_for`."""
+    keys = list(keys)
+    d = cqa_reg[cqa_reg.key.isin(keys)].copy()
+    d["__order"] = d["key"].apply(keys.index)
+    d = d.sort_values("__order")
     d["Acceptance"] = d.apply(lambda r: f"{r.acc_low:g}–{r.acc_high:g} {r.unit}", axis=1)
     d = d.rename(columns={"cqa": "CQA", "category": "Category", "criticality": "Criticality",
                           "tool1_score": "Tool #1"})

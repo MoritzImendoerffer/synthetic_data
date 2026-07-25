@@ -371,7 +371,7 @@ def build_report_sections(doc_id, file_name, report):
         ])]
     return [ReportSection(section_id=f"{doc_id}-summary", title="Report summary", statements=[
         st(1, "Culture pH, temperature, dissolved CO2, osmolality and culture duration are classified WC-CPP.",
-           "Executive summary", "are classified **well-controlled CPP (WC-CPP)**"),
+           "Executive summary", "are classified well-controlled CPP (WC-CPP)"),
         st(2, f"The nominal fed-batch reaches a peak VCD of {P.V['peak_vcd_e6']} x10^6 cells/mL and titer of {P.V['nominal_titer_g_per_l']} g/L.",
            "Center-point performance and reproducibility", "peak viable cell density"),
         st(3, "All in-scope CQAs meet acceptance and a multivariate design space was established.",
@@ -1141,7 +1141,7 @@ def pa_report_sections(doc_id, file_name, report):
         ])]
     return [ReportSection(section_id=f"{doc_id}-summary", title="Report summary", statements=[
         st(1, "Protein load and elution pH are classified WC-CPP; they drive the eluate-pool HCP.",
-           "Executive summary", "are classified **well-controlled CPP (WC-CPP)**"),
+           "Executive summary", "are classified well-controlled CPP (WC-CPP)"),
         st(2, f"The nominal step recovers {P.pct(float(P.csv('yield_waterfall.csv').query('step==5').iloc[0].step_yield))} of the loaded product.",
            "Executive summary", "delivers an eluate-pool HCP of approximately"),
         st(3, "A multivariate operating region in protein load and elution pH was established.",
@@ -1554,7 +1554,7 @@ def vi_report_sections(doc_id, file_name, report):
         ])]
     return [ReportSection(section_id=f"{doc_id}-summary", title="Report summary", statements=[
         st(1, "Inactivation pH is classified CPP — the only true critical process parameter in the process.",
-           "Executive summary", "classified **CPP**"),
+           "Executive summary", "classified CPP"),
         st(2, "At the nominal condition the step delivers a robust XMuLV log-reduction.",
            "Executive summary", "delivers an XMuLV log-reduction of approximately"),
         st(3, "Low-pH inactivation provides no clearance of the non-enveloped model virus MVM.",
@@ -2516,13 +2516,1342 @@ def build_report_aex():
         assertions=ax_assertions(doc, f, report=True), concepts=ax_concepts())
 
 
+# =========================================================================== #
+# Small-Virus Retentive Filtration (Step 9) — PCP-009 / PCR-009.                #
+# --------------------------------------------------------------------------- #
+# Additive, self-contained builders for the virus-filtration DoE pair. Like     #
+# CEX, the step sets NO CQA: it is the dedicated small-virus removal step and    #
+# the principal contributor to the cumulative MVM (parvovirus) log-reduction,    #
+# with a major enveloped-virus (XMuLV) log-reduction, all credited as           #
+# orthogonal/modular clearance under ICH Q5A(R2). The DoE is a compact           #
+# two-factor full-factorial screen + face-centred CCD in volumetric load /       #
+# filtration pressure; both parameters are WC-CPP (load governs the credited     #
+# MVM clearance; pressure is controlled to preserve filter performance and       #
+# retention, confirmed by a post-use integrity test). No univariate parameter.   #
+# =========================================================================== #
+VFUO = "virus_filtration"
+VFUO_NAME = P.CFG.unit_op(VFUO).name             # "Small Virus Retentive Filtration"
+VFSTEP = P.CFG.unit_op(VFUO).step                # 9
+VFSTEP_LABEL = f"{VFUO_NAME} (Step {VFSTEP})"
+
+PCP9_FILE = "PCP-009_virus_filtration.docx"
+PCR9_FILE = "PCR-009_virus_filtration.docx"
+
+VFPARAM_ROWS = P.param_reg[P.param_reg.unit_operation == VFUO_NAME].to_dict("records")
+VFPARAM_CONCEPT = {
+    "Filtration volume (load)": "param:vf_filtration_volume",
+    "Filtration pressure": "param:vf_pressure",
+}
+# Both DoE factors (WC-CPP, multivariate); there is no univariate parameter.
+VF_MULTIVARIATE = ["Filtration volume (load)", "Filtration pressure"]
+
+# Virus filtration sets no CQA; it controls/clears the two viral-clearance CQAs (MVM first,
+# the CQA it principally drives), expressed as the cumulative cross-step log-reduction.
+VF_CQA_KEYS = ["lrv_mvm", "lrv_xmulv"]
+VFATTR_CONCEPT = {"lrv_mvm": "attr:lrv_mvm", "lrv_xmulv": "attr:lrv_xmulv"}
+VFATTR_NAME = {
+    "lrv_mvm": "Viral clearance — MVM (parvovirus)",
+    "lrv_xmulv": "Viral clearance — XMuLV (enveloped)",
+}
+VF_CQA_METHOD = {"lrv_mvm": "AMV-3018", "lrv_xmulv": "AMV-3017"}
+VFMETHODS = [
+    ("AMV-3018", "MVM Infectivity Titre (TCID50/qPCR)", "infectivity_assay",
+     ["MVM infectious titre"], ["lrv_mvm"]),
+    ("AMV-3017", "XMuLV Infectivity Titre (TCID50)", "infectivity_assay",
+     ["XMuLV infectious titre"], ["lrv_xmulv"]),
+]
+
+
+def _vf_cqa_row(key):
+    return P.cqa_reg[P.cqa_reg.key == key].iloc[0].to_dict()
+
+
+def vf_step(doc_id, file_name, sec, report):
+    if report:
+        src = ref(doc_id, file_name, sec, "Executive summary",
+                  "small-virus retentive filtration step (Step 9)")
+    else:
+        src = ref(doc_id, file_name, sec, "Unit-operation description and prior knowledge",
+                  "the dedicated virus-removal step of the A-Mab purification train")
+    return S.ProcessStep(
+        step_id="step:virus_filtration", step_name=VFUO_NAME, step_number=str(VFSTEP),
+        unit_operation=VFUO_NAME,
+        description="Small-virus retentive (size-exclusion) filtration: the dedicated "
+                    "virus-removal step. Retains virus larger than the membrane rating while "
+                    "the antibody monomer transmits. Sets no product-quality CQA; it is the "
+                    "principal contributor to the cumulative MVM (parvovirus) log-reduction "
+                    "and a major contributor to the enveloped-virus (XMuLV) log-reduction, "
+                    "credited as orthogonal/modular clearance under ICH Q5A(R2).",
+        input_materials=["anion-exchange flow-through pool (virus-filtration feed)"],
+        output_materials=["virus-filtration pool (UF/DF feed)"],
+        equipment=["small-virus retentive filter", "scale-down filtration model"],
+        source_references=[src], metadata=meta())
+
+
+def vf_equipment(doc_id, file_name, sec, report):
+    sdm = S.Equipment(
+        equipment_id="equip:vf_sdm", equipment_name="scale-down filtration model",
+        equipment_type="virus filtration (scale-down)", site_name=P.SENDING_SITE,
+        source_references=[ref(doc_id, file_name, sec,
+                               "Scale-down model and its qualification",
+                               "qualified scale-down virus-filtration model" if report
+                               else "scale-down virus-filtration model")],
+        metadata=meta())
+    if report:
+        return [sdm]
+    return [
+        S.Equipment(equipment_id="equip:vf_filter",
+                    equipment_name="commercial-scale small-virus retentive filter",
+                    equipment_type="virus-retentive filter", site_name=P.RECEIVING_SITE,
+                    source_references=[ref(doc_id, file_name, sec, "Purpose and scope",
+                                           "commercial-scale small-virus retentive filtration step")],
+                    metadata=meta()),
+        sdm,
+    ]
+
+
+def vf_sites(doc_id, file_name, sec):
+    return [
+        S.ManufacturingSite(site_id="site:cambridge", site_name=P.SENDING_SITE, site_role="sending",
+                            location="Cambridge, MA",
+                            source_references=[ref(doc_id, file_name, sec, "Title block",
+                                                   "Cambridge, MA (Development)")],
+                            metadata=meta()),
+        S.ManufacturingSite(site_id="site:grafton", site_name=P.RECEIVING_SITE, site_role="receiving",
+                            location="Grafton, WI",
+                            source_references=[ref(doc_id, file_name, sec, "Title block",
+                                                   "Grafton, WI (Commercial DS)")],
+                            metadata=meta()),
+    ]
+
+
+def vf_params(doc_id, file_name, sec, classified):
+    caption = ("Virus-filtration process parameters, set-points, ranges and post-characterization classification."
+               if classified else
+               "Virus-filtration parameters, set-points, characterization ranges and planned study type.")
+    rats = {"WC-CPP": "Governs the credited MVM log-reduction (the volumetric-load limit) or is "
+                      "controlled within a defined range to preserve filter performance and the "
+                      "validated retention; reliably controlled within the operating region."}
+    out = []
+    for r in VFPARAM_ROWS:
+        name = r["parameter"]
+        ptype = r["classification"] if classified else "unclassified"
+        out.append(S.ProcessParameter(
+            parameter_id=VFPARAM_CONCEPT[name], parameter_name=name, parameter_type=ptype,
+            unit=r["unit"], target_value=f"{r['setpoint']:g}",
+            NOR=f"{r['nor_low']:g}–{r['nor_high']:g} {r['unit']}",
+            PAR=f"{r['par_low']:g}–{r['par_high']:g} {r['unit']}",
+            associated_step=VFSTEP_LABEL,
+            rationale_for_criticality=rats.get(r["classification"]) if classified else None,
+            source_references=[ref(doc_id, file_name, sec,
+                                   "Factors, ranges and the knowledge space" if classified
+                                   else "Factors, ranges and study type",
+                                   caption, table_title=caption,
+                                   table_id=f"{doc_id}_tab_params")],
+            metadata=meta()))
+    return out
+
+
+def vf_cqas(doc_id, file_name, sec, report):
+    quotes = {"lrv_mvm": "the principal MVM-removal mechanism"}
+    default_quote = "principal clearance step for the two model viruses"
+    out = []
+    for key in VF_CQA_KEYS:
+        r = _vf_cqa_row(key)
+        out.append(S.QualityAttribute(
+            attribute_id=VFATTR_CONCEPT[key], attribute_name=r["cqa"], attribute_type="CQA",
+            unit=r["unit"],
+            acceptance_criteria=[f"{r['acc_low']:g}–{r['acc_high']:g} {r['unit']}"],
+            analytical_method=None if report else VF_CQA_METHOD[key],
+            associated_steps=[VFSTEP_LABEL],
+            rationale_for_criticality=f"A-Mab Tool #1 Risk Score = Impact × Uncertainty = {r['tool1_score']}.",
+            criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
+            tool2_severity=int(r["tool2_severity"]),
+            source_references=[ref(doc_id, file_name, sec, "Quality attributes in scope",
+                                   quotes.get(key, default_quote),
+                                   table_title="Viral-clearance CQAs to which the virus-filtration step contributes",
+                                   table_id=f"{doc_id}_tab_cqa")],
+            metadata=meta()))
+    return out
+
+
+def vf_methods(doc_id, file_name, sec, report):
+    quote = "measured by validated methods" if report else "measured by the validated methods"
+    out = []
+    for mid, mname, mtype, analytes, attrs in VFMETHODS:
+        out.append(S.AnalyticalMethod(
+            method_id=mid, method_name=mname, method_type=mtype, analytes=analytes,
+            associated_attributes=[VFATTR_CONCEPT[a] for a in attrs], validation_status="validated",
+            source_references=[ref(doc_id, file_name, sec, "Analytical methods", quote)],
+            metadata=meta()))
+    return out
+
+
+def vf_studies(doc_id, file_name, report):
+    sec = "Study design"
+    n_scr, n_rsm = P.doe_runs(VFUO, "screening"), P.doe_runs(VFUO, "rsm")
+    responses = ["mvm_lrf", "xmulv_lrf", "step_yield"]
+    return [
+        S.StudyDesign(
+            study_id="study:vf_screening", study_type="screening_doe",
+            design_name="two-level full factorial", unit_operation=VFUO_NAME,
+            factors=VF_MULTIVARIATE, responses=responses,
+            n_runs=n_scr, n_center_points=3, scale_down_model="scale-down filtration model",
+            associated_parameters=[VFPARAM_CONCEPT[f] for f in VF_MULTIVARIATE],
+            source_references=[ref(doc_id, file_name, sec, "Screening design",
+                                   "a two-level full factorial in the two factors")],
+            metadata=meta()),
+        S.StudyDesign(
+            study_id="study:vf_rsm", study_type="response_surface_doe",
+            design_name="face-centred central-composite design", unit_operation=VFUO_NAME,
+            factors=VF_MULTIVARIATE, responses=responses,
+            n_runs=n_rsm, n_center_points=4, scale_down_model="scale-down filtration model",
+            associated_parameters=[VFPARAM_CONCEPT[f] for f in VF_MULTIVARIATE],
+            source_references=[ref(doc_id, file_name, sec, "Response-surface design",
+                                   "face-centred central-composite")],
+            metadata=meta()),
+        S.StudyDesign(
+            study_id="study:vf_sdm_qual", study_type="scale_down_qualification",
+            unit_operation=VFUO_NAME, scale_down_model="scale-down filtration model",
+            source_references=[ref(doc_id, file_name, "Materials and methods",
+                                   "Scale-down model and its qualification",
+                                   "qualified against at-scale reference data")],
+            metadata=meta()),
+    ]
+
+
+def vf_concepts():
+    from app.models.concepts import Concept, ConceptStore
+    cs = [Concept(concept_id="step:virus_filtration", concept_type="PROCESS_STEP",
+                  canonical_name=VFUO_NAME,
+                  aliases=["virus filtration", "small-virus retentive filtration",
+                           "nanofiltration", "VF", "Step 9"],
+                  review_status="human_verified")]
+    for name, cid in VFPARAM_CONCEPT.items():
+        cs.append(Concept(concept_id=cid, concept_type="PROCESS_PARAMETER", canonical_name=name,
+                          review_status="human_verified"))
+    for key in VF_CQA_KEYS:
+        cs.append(Concept(concept_id=VFATTR_CONCEPT[key], concept_type="QUALITY_ATTRIBUTE",
+                          canonical_name=VFATTR_NAME[key], aliases=[key],
+                          review_status="human_verified"))
+    for mid, mname, *_ in VFMETHODS:
+        cs.append(Concept(concept_id=f"method:{mid}", concept_type="ANALYTICAL_METHOD",
+                          canonical_name=mname, aliases=[mid], review_status="human_verified"))
+    return ConceptStore(run_id="gt-vf", concepts=cs)
+
+
+def vf_assertions(doc_id, file_name, report):
+    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    A = []
+    n = [0]
+
+    def add(subj, pred, obj, text, sec, quote):
+        n[0] += 1
+        A.append(EvidenceBackedAssertion(
+            assertion_id=f"{doc_id}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
+            assertion_text=text,
+            source_references=[ref(doc_id, file_name, sec, sec, quote)], metadata=meta()))
+
+    param_sec = "Factors, ranges and the knowledge space" if report else "Factors, ranges and study type"
+    param_quote = "Two parameters were studied" if report else "Two parameters are in scope"
+    for name, cid in VFPARAM_CONCEPT.items():
+        add("step:virus_filtration", "step_has_parameter", cid,
+            f"{VFUO_NAME} has process parameter {name}.", param_sec, param_quote)
+    # step is the principal MVM-removal mechanism; a major clearance step for XMuLV
+    add("step:virus_filtration", "step_has_quality_attribute", "attr:lrv_mvm",
+        f"{VFUO_NAME} is the principal contributor to the cumulative MVM (parvovirus) clearance.",
+        "Quality attributes in scope", "the principal MVM-removal mechanism")
+    add("step:virus_filtration", "step_has_quality_attribute", "attr:lrv_xmulv",
+        f"{VFUO_NAME} is a major clearance step for enveloped virus (XMuLV).",
+        "Quality attributes in scope", "principal clearance step for the two model viruses")
+    # attribute -> method (plan only; the report does not restate the linkage)
+    if not report:
+        for key in VF_CQA_METHOD:
+            add(VFATTR_CONCEPT[key], "attribute_measured_by_method", f"method:{VF_CQA_METHOD[key]}",
+                f"{VFATTR_NAME[key]} is measured by {VF_CQA_METHOD[key]}.", "Analytical methods",
+                "measured by the validated methods")
+    # acceptance criterion for the CQA the step principally drives
+    mvm = _vf_cqa_row("lrv_mvm")
+    add("attr:lrv_mvm", "attribute_has_acceptance_criterion", "lit:lrv_mvm_acc",
+        f"MVM clearance acceptance: ≥ {mvm['acc_low']:g} {mvm['unit']} (cumulative).",
+        "Quality attributes in scope", "acceptance criterion")
+    # parameter -> attribute impacts / non-impacts
+    if report:
+        add("param:vf_filtration_volume", "parameter_impacts_attribute", "attr:lrv_mvm",
+            "Volumetric load is the single significant factor for the credited MVM log-reduction "
+            "and defines the volumetric-load limit (WC-CPP).",
+            "Parameter classification", "The single significant factor for the credited MVM log-reduction")
+        add("param:vf_pressure", "parameter_does_not_significantly_impact_attribute", "attr:lrv_mvm",
+            "Filtration pressure has no significant effect on retention over the range studied but "
+            "is controlled within a defined range to preserve filter performance and retention (WC-CPP).",
+            "Parameter classification", "No significant effect on retention over the range studied")
+    else:
+        for name in VF_MULTIVARIATE:
+            add(VFPARAM_CONCEPT[name], "parameter_impacts_attribute", "attr:lrv_mvm",
+                f"{name} carries a credible risk to the credited viral log-reduction or must be "
+                f"controlled to preserve filter performance.",
+                "Risk-based prioritization of parameters",
+                "a credible risk to the credited viral log-reduction")
+    return AssertionStore(run_id=f"gt-{doc_id}", assertions=A, rationales=[])
+
+
+def vf_report_sections(doc_id, file_name, report):
+    from app.models.summaries import ReportSection, ReportStatement
+
+    def st(i, text, sec, quote):
+        return ReportStatement(statement_id=f"{doc_id}-S{i:02d}", statement_text=text,
+                               confidence="high", review_status="accepted",
+                               source_references=[ref(doc_id, file_name, sec, sec, quote)])
+    if not report:
+        return [ReportSection(section_id=f"{doc_id}-summary", title="Plan summary", statements=[
+            st(1, "PCP-009 defines the Stage 1 characterization of the A-Mab small-virus retentive filtration step (Step 9).",
+               "Purpose and scope", "defines the Stage 1 (Process Design) characterization"),
+            st(2, "Two process parameters (volumetric load and filtration pressure) are characterized in a compact two-factor DoE.",
+               "Factors, ranges and study type", "Two parameters are in scope"),
+            st(3, "The study uses a full-factorial screen followed by a face-centred central-composite design on a scale-down filtration model.",
+               "Response-surface design", "face-centred central-composite design"),
+            st(4, "Virus filtration is the principal contributor to the cumulative MVM clearance and a major contributor to the XMuLV clearance.",
+               "Purpose and scope", "principal contributor to the cumulative MVM (parvovirus) log-reduction"),
+            st(5, "The study must establish a volumetric-load limit over which the credited small-virus log-reduction is preserved.",
+               "Acceptance and decision criteria",
+               "a volumetric-load limit exists at or below which the credited MVM log-reduction is preserved"),
+        ])]
+    return [ReportSection(section_id=f"{doc_id}-summary", title="Report summary", statements=[
+        st(1, "Both process parameters (volumetric load and filtration pressure) are well-controlled CPPs.",
+           "Executive summary", "Both parameters are classified"),
+        st(2, "The MVM (parvovirus) log-reduction declines with increasing volumetric load and is insensitive to pressure.",
+           "Executive summary", "declines with increasing volumetric load and is insensitive to filtration pressure"),
+        st(3, "The enveloped virus (XMuLV) is retained essentially completely across the design, with no breakthrough.",
+           "Mechanistic interpretation", "retained essentially completely"),
+        st(4, "The MVM log-reduction response-surface model is adequate and identifies the volumetric load as the single significant factor.",
+           "Response-surface model", "identifies the volumetric load as the single significant factor"),
+        st(5, "Virus filtration is the principal contributor to the drug-substance MVM-clearance capability.",
+           "Process capability and robustness", "the principal contributor"),
+        st(6, "The credited viral log-reduction is substantiated conservatively at the worst-case (maximum-load) condition per ICH Q5A(R2).",
+           "Executive summary", "substantiated conservatively at the worst-case"),
+    ])]
+
+
+def vf_design_spaces(doc_id, file_name):
+    return [S.DesignSpace(
+        design_space_id="ds:vf", unit_operation=VFUO_NAME,
+        parameters=["param:vf_filtration_volume", "param:vf_pressure"],
+        quality_attributes_constrained=["attr:lrv_mvm"],
+        definition="Operating region defined principally by a volumetric-load limit: the credited "
+                   "MVM log-reduction is preserved with margin at or below the upper NOR bound on "
+                   "volumetric load, with filtration pressure controlled within its NOR, over which "
+                   "retention is insensitive to pressure.",
+        source_references=[ref(doc_id, file_name, "Design space", "Design space",
+                               "defined principally by a volumetric-load limit")],
+        metadata=meta())]
+
+
+def vf_inventory(doc_id, file_name, dtype):
+    return S.DocumentInventoryItem(
+        document_id=doc_id, file_name=file_name, predicted_document_type=dtype,
+        product_name_candidates=["A-Mab"], process_name_candidates=[VFUO_NAME],
+        site_candidates=[P.SENDING_SITE, P.RECEIVING_SITE], date_candidates=[P.EFFECTIVE_DATE],
+        main_topics=["process characterization", "virus filtration", "viral clearance",
+                     "small-virus retention", "design of experiments", "parameter classification"],
+        rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc_id][0]}'.",
+        source_references=[ref(doc_id, file_name, "Title block", "Title block",
+                               P.DOC_REGISTRY[doc_id][0])],
+        metadata=meta())
+
+
+def build_plan_vf():
+    doc, f = "PCP-009", PCP9_FILE
+    entities = [
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_uo",
+                                  process_steps=[vf_step(doc, f, f"{doc}_sec_uo", report=False)],
+                                  equipment=vf_equipment(doc, f, f"{doc}_sec_uo", report=False),
+                                  sites=vf_sites(doc, f, f"{doc}_sec_uo")),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_cqa",
+                                  quality_attributes=vf_cqas(doc, f, f"{doc}_sec_cqa", report=False)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_param",
+                                  parameters=vf_params(doc, f, f"{doc}_sec_param", classified=False)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_methods",
+                                  analytical_methods=vf_methods(doc, f, f"{doc}_sec_methods", report=False)),
+    ]
+    return S.GroundTruthAnnex(
+        document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
+        document_class=P.DOC_REGISTRY[doc][0], version=P.VERSION, effective_date=P.EFFECTIVE_DATE,
+        schema_extensions_used=COMMON_EXT,
+        out_of_schema_notes=[
+            "Virus filtration sets no CQA; the QualityAttribute entities are the viral-clearance CQAs it controls/clears (cumulative, cross-step).",
+            "Per-step MVM/XMuLV log-reductions are modular contributions with no released spec; captured via StudyDesign.responses.",
+            "The Plan states classification is an OUTPUT; parameter_type left 'unclassified' here.",
+        ],
+        inventory=vf_inventory(doc, f, "process_characterization_plan"),
+        entities=entities,
+        studies=vf_studies(doc, f, report=False),
+        report_sections=vf_report_sections(doc, f, report=False),
+        assertions=vf_assertions(doc, f, report=False), concepts=vf_concepts())
+
+
+def build_report_vf():
+    doc, f = "PCR-009", PCR9_FILE
+    entities = [
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_exec",
+                                  process_steps=[vf_step(doc, f, f"{doc}_sec_exec", report=True)],
+                                  equipment=vf_equipment(doc, f, f"{doc}_sec_exec", report=True)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_param",
+                                  parameters=vf_params(doc, f, f"{doc}_sec_param", classified=True)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_cqa",
+                                  quality_attributes=vf_cqas(doc, f, f"{doc}_sec_cqa", report=True)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_methods",
+                                  analytical_methods=vf_methods(doc, f, f"{doc}_sec_methods", report=True)),
+    ]
+    return S.GroundTruthAnnex(
+        document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
+        document_class=P.DOC_REGISTRY[doc][0], version=P.VERSION, effective_date=P.EFFECTIVE_DATE,
+        schema_extensions_used=COMMON_EXT,
+        out_of_schema_notes=[
+            "Virus filtration sets no CQA; the QualityAttribute entities are the viral-clearance CQAs it controls/clears (cumulative, cross-step).",
+            "Per-step MVM/XMuLV log-reductions are modular contributions with no released spec; reported via studies/report_sections.",
+            "Process-capability (Cpk) values have no dedicated field; reported as report_sections statements.",
+        ],
+        inventory=vf_inventory(doc, f, "process_characterization_report"),
+        entities=entities, studies=vf_studies(doc, f, report=True),
+        design_spaces=vf_design_spaces(doc, f),
+        report_sections=vf_report_sections(doc, f, report=True),
+        assertions=vf_assertions(doc, f, report=True), concepts=vf_concepts())
+
+
+# =========================================================================== #
+# Ultrafiltration / Diafiltration (Step 10) — PCP-010 / PCR-010.                #
+# --------------------------------------------------------------------------- #
+# Additive, self-contained builders for the non-DoE UF/DF pair. Like harvest,   #
+# UF/DF forms no product-quality CQA, so there are no QualityAttribute entities  #
+# and no design space; it is a formulation / mass-balance operation evaluated    #
+# univariately. It monitors the size- and charge-variant attributes to confirm   #
+# they are unchanged. The formulation characterization proper is reported under  #
+# the drug-product program (out of scope of this drug-substance pair).           #
+# =========================================================================== #
+UFUO = "ufdf"
+UFUO_NAME = P.CFG.unit_op(UFUO).name             # "Ultrafiltration / Diafiltration (formulation)"
+UFSTEP = P.CFG.unit_op(UFUO).step                # 10
+UFSTEP_LABEL = f"Ultrafiltration / Diafiltration (Step {UFSTEP})"
+
+PCP10_FILE = "PCP-010_ufdf.docx"
+PCR10_FILE = "PCR-010_ufdf.docx"
+
+UFPARAM_ROWS = P.param_reg[P.param_reg.unit_operation == UFUO_NAME].to_dict("records")
+UFPARAM_CONCEPT = {
+    "Number of diavolumes": "param:ufdf_diavolumes",
+    "Transmembrane pressure": "param:ufdf_tmp",
+    "Final DS concentration": "param:ufdf_final_conc",
+}
+# Product-quality attributes UF/DF monitors (it sets/clears none of them): confirmed
+# unchanged across the operation. Concentration is a process attribute, not a CQA.
+UFATTR_CONCEPT = {
+    "aggregates_hmw": "attr:aggregates_hmw",
+    "acidic_variants": "attr:acidic_variants",
+}
+UFATTR_NAME = {
+    "aggregates_hmw": "Aggregates (HMW)",
+    "acidic_variants": "Acidic charge variants (deamidation)",
+}
+UFMETHODS = [
+    ("AMV-3019", "Protein Concentration by A280 (UV)", "spectroscopy",
+     ["protein concentration"], []),
+    ("AMV-3011", "Size-Variants (SEC-HPLC)", "chromatography",
+     ["aggregate", "monomer"], ["aggregates_hmw"]),
+    ("AMV-3013", "Charge Variants (icIEF)", "electrophoresis",
+     ["acidic variants", "main peak", "basic variants"], ["acidic_variants"]),
+]
+
+
+def uf_step(doc_id, file_name, sec, report):
+    if report:
+        src = ref(doc_id, file_name, sec, "Executive summary",
+                  "final ultrafiltration / diafiltration (UF/DF) operation (Step 10)")
+    else:
+        src = ref(doc_id, file_name, sec, "Unit-operation description and prior knowledge",
+                  "the final drug-substance operation of the A-Mab train")
+    return S.ProcessStep(
+        step_id="step:ufdf", step_name=UFUO_NAME, step_number=str(UFSTEP),
+        unit_operation=UFUO_NAME,
+        description="Final ultrafiltration / diafiltration (tangential-flow filtration): "
+                    "ultrafiltration concentrates the virus-filtration pool and diafiltration "
+                    "exchanges it into the final formulation buffer, delivering the drug "
+                    "substance at its target concentration. Forms no product-quality attribute; "
+                    "a formulation / mass-balance operation.",
+        input_materials=["virus-filtration pool (UF/DF feed)"],
+        output_materials=["A-Mab drug substance (formulated)"],
+        equipment=["ultrafiltration / diafiltration membrane (TFF)", "bench-scale UF/DF model"],
+        source_references=[src], metadata=meta())
+
+
+def uf_equipment(doc_id, file_name, sec, report):
+    membrane = S.Equipment(
+        equipment_id="equip:ufdf_membrane",
+        equipment_name="ultrafiltration / diafiltration membrane (TFF)",
+        equipment_type="tangential-flow-filtration membrane", site_name=P.RECEIVING_SITE,
+        source_references=[ref(doc_id, file_name, sec, "Operation",
+                               "concentrated by ultrafiltration")],
+        metadata=meta())
+    sdm = S.Equipment(
+        equipment_id="equip:ufdf_sdm", equipment_name="bench-scale UF/DF model",
+        equipment_type="ultrafiltration / diafiltration (scale-down)", site_name=P.SENDING_SITE,
+        source_references=[ref(doc_id, file_name, sec, "Scale-down model and its qualification",
+                               "qualified bench-scale UF/DF (tangential-flow-filtration) model")],
+        metadata=meta())
+    return [membrane, sdm]
+
+
+def uf_sites(doc_id, file_name, sec):
+    return [
+        S.ManufacturingSite(site_id="site:cambridge", site_name=P.SENDING_SITE, site_role="sending",
+                            location="Cambridge, MA",
+                            source_references=[ref(doc_id, file_name, sec, "Title block",
+                                                   "Cambridge, MA (Development)")],
+                            metadata=meta()),
+        S.ManufacturingSite(site_id="site:grafton", site_name=P.RECEIVING_SITE, site_role="receiving",
+                            location="Grafton, WI",
+                            source_references=[ref(doc_id, file_name, sec, "Title block",
+                                                   "Grafton, WI (Commercial DS)")],
+                            metadata=meta()),
+    ]
+
+
+def uf_params(doc_id, file_name, sec, classified):
+    caption = ("UF/DF process parameters, set-points, ranges and post-characterization classification."
+               if classified else
+               "UF/DF parameters, set-points, characterization ranges and planned study type.")
+    rats = {"KPP": "Governs buffer-exchange completeness, permeate flux/process time or the final "
+                   "concentration (process performance) without a drug-substance CQA impact."}
+    out = []
+    for r in UFPARAM_ROWS:
+        name = r["parameter"]
+        ptype = r["classification"] if classified else "unclassified"
+        out.append(S.ProcessParameter(
+            parameter_id=UFPARAM_CONCEPT[name], parameter_name=name, parameter_type=ptype,
+            unit=r["unit"], target_value=f"{r['setpoint']:g}",
+            NOR=f"{r['nor_low']:g}–{r['nor_high']:g} {r['unit']}",
+            PAR=f"{r['par_low']:g}–{r['par_high']:g} {r['unit']}",
+            associated_step=UFSTEP_LABEL,
+            rationale_for_criticality=rats.get(r["classification"]) if classified else None,
+            source_references=[ref(doc_id, file_name, sec,
+                                   "Parameters, ranges and the knowledge space" if classified
+                                   else "Parameters, ranges and study type",
+                                   caption, table_title=caption,
+                                   table_id=f"{doc_id}_tab_params")],
+            metadata=meta()))
+    return out
+
+
+def uf_methods(doc_id, file_name, sec, report):
+    quote = "measured by validated methods" if report else "measured by the validated methods"
+    out = []
+    for mid, mname, mtype, analytes, attrs in UFMETHODS:
+        out.append(S.AnalyticalMethod(
+            method_id=mid, method_name=mname, method_type=mtype, analytes=analytes,
+            associated_attributes=[UFATTR_CONCEPT[a] for a in attrs], validation_status="validated",
+            source_references=[ref(doc_id, file_name, sec, "Analytical methods", quote)],
+            metadata=meta()))
+    return out
+
+
+def uf_studies(doc_id, file_name, report):
+    sec = "Study design"
+    return [
+        S.StudyDesign(
+            study_id="study:ufdf_univariate", study_type="univariate",
+            design_name="one-factor-at-a-time ranging", unit_operation=UFUO_NAME,
+            factors=["Number of diavolumes", "Transmembrane pressure", "Final DS concentration"],
+            responses=["step yield", "buffer-exchange completeness", "final DS concentration"],
+            scale_down_model="bench-scale UF/DF model",
+            associated_parameters=list(UFPARAM_CONCEPT.values()),
+            source_references=[ref(doc_id, file_name, sec, sec, "one factor at a time")],
+            metadata=meta()),
+        S.StudyDesign(
+            study_id="study:ufdf_sdm_qual", study_type="scale_down_qualification",
+            unit_operation=UFUO_NAME, scale_down_model="bench-scale UF/DF model",
+            source_references=[ref(doc_id, file_name, "Materials and methods",
+                                   "Scale-down model and its qualification",
+                                   "qualified against at-scale reference data")],
+            metadata=meta()),
+    ]
+
+
+def uf_concepts():
+    from app.models.concepts import Concept, ConceptStore
+    cs = [Concept(concept_id="step:ufdf", concept_type="PROCESS_STEP",
+                  canonical_name=UFUO_NAME,
+                  aliases=["UF/DF", "ultrafiltration", "diafiltration",
+                           "tangential-flow filtration", "formulation", "Step 10"],
+                  review_status="human_verified")]
+    for name, cid in UFPARAM_CONCEPT.items():
+        cs.append(Concept(concept_id=cid, concept_type="PROCESS_PARAMETER", canonical_name=name,
+                          review_status="human_verified"))
+    for key, cid in UFATTR_CONCEPT.items():
+        cs.append(Concept(concept_id=cid, concept_type="QUALITY_ATTRIBUTE",
+                          canonical_name=UFATTR_NAME[key], aliases=[key],
+                          review_status="human_verified"))
+    for mid, mname, *_ in UFMETHODS:
+        cs.append(Concept(concept_id=f"method:{mid}", concept_type="ANALYTICAL_METHOD",
+                          canonical_name=mname, aliases=[mid], review_status="human_verified"))
+    return ConceptStore(run_id="gt-ufdf", concepts=cs)
+
+
+def uf_assertions(doc_id, file_name, report):
+    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    A = []
+    n = [0]
+
+    def add(subj, pred, obj, text, sec, quote):
+        n[0] += 1
+        A.append(EvidenceBackedAssertion(
+            assertion_id=f"{doc_id}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
+            assertion_text=text,
+            source_references=[ref(doc_id, file_name, sec, sec, quote)], metadata=meta()))
+
+    param_quote = ("parameters were evaluated" if report else "parameters are in scope")
+    param_sec = ("Parameters, ranges and the knowledge space" if report
+                 else "Parameters, ranges and study type")
+    for name, cid in UFPARAM_CONCEPT.items():
+        add("step:ufdf", "step_has_parameter", cid,
+            f"{UFUO_NAME} has process parameter {name}.", param_sec, param_quote)
+    # UF/DF monitors (does not set) the product-quality attributes to confirm they are unchanged
+    for key, cid in UFATTR_CONCEPT.items():
+        add("step:ufdf", "step_has_quality_attribute", cid,
+            f"{UFUO_NAME} monitors {UFATTR_NAME[key]} to confirm it is unchanged across the operation.",
+            "Quality attributes and process-performance measures",
+            "sets or modifies no drug-substance product-quality CQA")
+    # attribute -> method (methods that measure a product-quality attribute)
+    for mid, mname, mtype, analytes, attrs in UFMETHODS:
+        for a in attrs:
+            add(UFATTR_CONCEPT[a], "attribute_measured_by_method", f"method:{mid}",
+                f"{UFATTR_NAME[a]} is measured by {mid}.", "Analytical methods",
+                "measured by validated methods" if report else "measured by the validated methods")
+    # no-CQA-impact of the operating parameters (both docs make this claim)
+    no_impact_quote = ("none significantly impacts any drug-substance CQA" if report
+                       else "no credible risk of impact to a drug-substance product-quality CQA")
+    no_impact_sec = ("Parameter classification" if report
+                     else "Risk-based prioritization of parameters")
+    for name, cid in UFPARAM_CONCEPT.items():
+        add(cid, "parameter_does_not_significantly_impact_attribute", "attr:aggregates_hmw",
+            f"{name} has no significant drug-substance product-quality (CQA) impact.",
+            no_impact_sec, no_impact_quote)
+    return AssertionStore(run_id=f"gt-{doc_id}", assertions=A, rationales=[])
+
+
+def uf_report_sections(doc_id, file_name, report):
+    from app.models.summaries import ReportSection, ReportStatement
+
+    def st(i, text, sec, quote):
+        return ReportStatement(statement_id=f"{doc_id}-S{i:02d}", statement_text=text,
+                               confidence="high", review_status="accepted",
+                               source_references=[ref(doc_id, file_name, sec, sec, quote)])
+    if not report:
+        return [ReportSection(section_id=f"{doc_id}-summary", title="Plan summary", statements=[
+            st(1, "PCP-010 defines the Stage 1 evaluation of the A-Mab final ultrafiltration / diafiltration operation (Step 10).",
+               "Purpose and scope", "defines the Stage 1 (Process Design) evaluation"),
+            st(2, "UF/DF has no impact on the drug-substance product-quality CQAs, which pass through unchanged.",
+               "Objectives", "no impact on the drug-substance product-quality CQAs"),
+            st(3, "Each parameter is evaluated one factor at a time across its characterization range.",
+               "Risk-based prioritization of parameters", "one factor at a time"),
+            st(4, "The operation is evaluated against process-performance measures because it sets no drug-substance CQA.",
+               "Quality attributes and process-performance measures", "sets or modifies no drug-substance product-quality CQA"),
+            st(5, "The formulation characterization is conducted and reported under the drug-product development program.",
+               "Purpose and scope", "drug-product development program"),
+        ])]
+    return [ReportSection(section_id=f"{doc_id}-summary", title="Report summary", statements=[
+        st(1, "UF/DF sets or modifies no drug-substance product-quality CQA; the CQAs pass through unchanged.",
+           "Quality attributes and process-performance measures", "sets or modifies no drug-substance product-quality CQA"),
+        st(2, "The operation concentrates and buffer-exchanges the pool to the drug-substance target.",
+           "No product-quality impact", "no drug-substance product-quality impact"),
+        st(3, "The drug substance is delivered at its target concentration.",
+           "Process performance and consistency", "delivers drug substance of consistent concentration"),
+        st(4, "The number of diavolumes, the transmembrane pressure and the final DS concentration are all KPP.",
+           "Parameter classification", "final DS concentration — KPP"),
+        st(5, "No UF/DF parameter is a CPP because the operation forms no drug-substance product-quality attribute.",
+           "Parameter classification", "No UF/DF parameter is a CPP"),
+        st(6, "This report rolls up into the Process Characterization Master Report (PCMR-001).",
+           "Conclusions", "rolls up into the Process Characterization Master Report"),
+    ])]
+
+
+def uf_inventory(doc_id, file_name, dtype):
+    return S.DocumentInventoryItem(
+        document_id=doc_id, file_name=file_name, predicted_document_type=dtype,
+        product_name_candidates=["A-Mab"], process_name_candidates=[UFUO_NAME],
+        site_candidates=[P.SENDING_SITE, P.RECEIVING_SITE], date_candidates=[P.EFFECTIVE_DATE],
+        main_topics=["process characterization", "ultrafiltration", "diafiltration",
+                     "formulation", "tangential-flow filtration", "parameter classification"],
+        rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc_id][0]}'.",
+        source_references=[ref(doc_id, file_name, "Title block", "Title block",
+                               P.DOC_REGISTRY[doc_id][0])],
+        metadata=meta())
+
+
+def build_plan_ufdf():
+    doc, f = "PCP-010", PCP10_FILE
+    entities = [
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_uo",
+                                  process_steps=[uf_step(doc, f, f"{doc}_sec_uo", report=False)],
+                                  equipment=uf_equipment(doc, f, f"{doc}_sec_uo", report=False),
+                                  sites=uf_sites(doc, f, f"{doc}_sec_uo")),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_param",
+                                  parameters=uf_params(doc, f, f"{doc}_sec_param", classified=False)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_methods",
+                                  analytical_methods=uf_methods(doc, f, f"{doc}_sec_methods", report=False)),
+    ]
+    return S.GroundTruthAnnex(
+        document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
+        document_class=P.DOC_REGISTRY[doc][0], version=P.VERSION, effective_date=P.EFFECTIVE_DATE,
+        schema_extensions_used=COMMON_EXT,
+        out_of_schema_notes=[
+            "UF/DF forms no drug-substance product-quality CQA; no QualityAttribute entities or DesignSpace are present.",
+            "Process-performance measures (yield, buffer-exchange completeness, final concentration) have no dedicated field; captured via report_sections/assertions.",
+            "Formulation characterization is reported under the drug-product program (out of scope of this DS pair).",
+            "The Plan states classification is an OUTPUT; parameter_type left 'unclassified' here.",
+        ],
+        inventory=uf_inventory(doc, f, "process_characterization_plan"),
+        entities=entities,
+        studies=uf_studies(doc, f, report=False),
+        report_sections=uf_report_sections(doc, f, report=False),
+        assertions=uf_assertions(doc, f, report=False), concepts=uf_concepts())
+
+
+def build_report_ufdf():
+    doc, f = "PCR-010", PCR10_FILE
+    entities = [
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_exec",
+                                  process_steps=[uf_step(doc, f, f"{doc}_sec_exec", report=True)],
+                                  equipment=uf_equipment(doc, f, f"{doc}_sec_exec", report=True)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_param",
+                                  parameters=uf_params(doc, f, f"{doc}_sec_param", classified=True)),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_methods",
+                                  analytical_methods=uf_methods(doc, f, f"{doc}_sec_methods", report=True)),
+    ]
+    return S.GroundTruthAnnex(
+        document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
+        document_class=P.DOC_REGISTRY[doc][0], version=P.VERSION, effective_date=P.EFFECTIVE_DATE,
+        schema_extensions_used=COMMON_EXT,
+        out_of_schema_notes=[
+            "UF/DF forms no drug-substance product-quality CQA; no QualityAttribute entities or DesignSpace are present.",
+            "Process-performance results (step yield, final concentration) have no dedicated field; reported as report_sections statements.",
+            "Formulation characterization is reported under the drug-product program (out of scope of this DS pair).",
+        ],
+        inventory=uf_inventory(doc, f, "process_characterization_report"),
+        entities=entities, studies=uf_studies(doc, f, report=True),
+        report_sections=uf_report_sections(doc, f, report=True),
+        assertions=uf_assertions(doc, f, report=True), concepts=uf_concepts())
+
+
+# =========================================================================== #
+# PTP-001 — Process Transfer Plan (Cambridge Development -> Grafton Commercial). #
+# --------------------------------------------------------------------------- #
+# A corpus-spanning document (not a single unit op): the ground truth captures  #
+# the two sites, the process train (Steps 3-10), the CQAs preserved across the  #
+# transfer, and — the distinctive object for this document type — the transfer  #
+# gaps (TransferGap + transfer_has_gap assertions).                              #
+# =========================================================================== #
+PTP_FILE = "PTP-001_transfer.docx"
+
+# (gap_id, gap_area, description, impact, mitigation, status, verbatim-quote)
+PTP_GAPS = [
+    ("GAP-01", "equipment",
+     "The commercial-scale chromatography skids and production bioreactor at the receiving site "
+     "differ in make and control system from the development equipment.",
+     "Operating ranges and control response may differ at commercial scale.",
+     "Engineering runs and equipment qualification confirm that the CPP and WC-CPP ranges transfer.",
+     "open", "commercial-scale chromatography skids and production bioreactor"),
+    ("GAP-02", "analytical_method",
+     "The validated release and characterization methods must be transferred and co-validated at "
+     "the receiving-site QC laboratory.",
+     "Method bias between sites could confound the comparability assessment.",
+     "Method-transfer protocols with cross-site precision and accuracy acceptance criteria are executed before PPQ.",
+     "in_progress", "transferred and co-validated at the receiving-site QC laboratory"),
+    ("GAP-03", "facility",
+     "The Grafton commercial drug-substance facility and its utilities require qualification for A-Mab manufacture.",
+     "Facility fit, segregation and environmental controls must be demonstrated for the process.",
+     "Facility, utility and equipment qualification is completed before the engineering and PPQ batches.",
+     "open", "facility and its utilities require qualification for A-Mab manufacture"),
+    ("GAP-04", "materials",
+     "The resin, virus-retentive membrane, depth-filter media and cell-culture media/feed lots at "
+     "commercial scale differ from the development lots.",
+     "Raw-material and consumable lot-to-lot variability could affect clearance, yield or product quality.",
+     "Raw-material and consumable lot bridging with incoming specifications and resin/membrane life-cycle control is applied.",
+     "open", "differ from the development lots"),
+    ("GAP-05", "process",
+     "The characterized CPPs, WC-CPPs and the multivariate design spaces must be confirmed at commercial scale.",
+     "Scale effects on the design space and on the cumulative viral clearance must be verified.",
+     "The Stage-2 PPQ campaign confirms the CPP ranges, the design spaces and the cumulative viral clearance at commercial scale.",
+     "open", "must be confirmed at commercial scale"),
+    ("GAP-06", "control_strategy",
+     "The per-CQA control strategy defined during characterization must be implemented in the "
+     "receiving-site master batch records and in-process-control plan.",
+     "Incomplete transfer of in-process controls and limits could weaken the control of a CQA.",
+     "The control strategy is transferred by mapping every in-process control and limit into the master batch records and confirming them in PPQ.",
+     "in_progress", "must be implemented in the"),
+]
+PTP_STEP_KEYS = list(P.CFG.train_order)
+PTP_CQA_ROWS = P.cqa_reg.to_dict("records")
+
+
+def ptp_inventory():
+    return S.DocumentInventoryItem(
+        document_id="PTP-001", file_name=PTP_FILE, predicted_document_type="process_transfer_plan",
+        product_name_candidates=["A-Mab"], process_name_candidates=["A-Mab drug substance"],
+        site_candidates=[P.SENDING_SITE, P.RECEIVING_SITE], date_candidates=[P.EFFECTIVE_DATE],
+        main_topics=["technology transfer", "process transfer", "site equivalency",
+                     "gap analysis", "PPQ", "control strategy"],
+        rationale=f"Title block declares document class '{P.DOC_REGISTRY['PTP-001'][0]}'.",
+        source_references=[ref("PTP-001", PTP_FILE, "Title block", "Title block",
+                               P.DOC_REGISTRY["PTP-001"][0])],
+        metadata=meta())
+
+
+def ptp_sites():
+    return [
+        S.ManufacturingSite(site_id="site:cambridge", site_name=P.SENDING_SITE, site_role="sending",
+                            location="Cambridge, MA",
+                            source_references=[ref("PTP-001", PTP_FILE, "PTP-001_sec_sites",
+                                                   "Sending and receiving sites", "Cambridge, MA")],
+                            metadata=meta()),
+        S.ManufacturingSite(site_id="site:grafton", site_name=P.RECEIVING_SITE, site_role="receiving",
+                            location="Grafton, WI",
+                            source_references=[ref("PTP-001", PTP_FILE, "PTP-001_sec_sites",
+                                                   "Sending and receiving sites", "Grafton, WI")],
+                            metadata=meta()),
+    ]
+
+
+def ptp_steps():
+    out = []
+    for key in PTP_STEP_KEYS:
+        uo = P.CFG.unit_op(key)
+        title = P.UNIT_OP_TITLES.get(key, uo.name)
+        out.append(S.ProcessStep(
+            step_id=f"step:{key}", step_name=title, step_number=str(uo.step),
+            unit_operation=title, description=P.UNIT_OP_ROLE.get(key, ""),
+            source_references=[ref("PTP-001", PTP_FILE, "PTP-001_sec_process",
+                                   "Product and process description", title)],
+            metadata=meta()))
+    return out
+
+
+def ptp_cqas():
+    out = []
+    for r in PTP_CQA_ROWS:
+        out.append(S.QualityAttribute(
+            attribute_id=f"attr:{r['key']}", attribute_name=r["cqa"], attribute_type="CQA",
+            unit=r["unit"], acceptance_criteria=[f"{r['acc_low']:g}–{r['acc_high']:g} {r['unit']}"],
+            criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
+            tool2_severity=int(r["tool2_severity"]),
+            source_references=[ref("PTP-001", PTP_FILE, "PTP-001_sec_process",
+                                   "Product and process description", r["cqa"],
+                                   table_title="Drug-substance CQAs preserved across the transfer",
+                                   table_id="PTP-001_tab_cqa")],
+            metadata=meta()))
+    return out
+
+
+def ptp_gaps():
+    out = []
+    for gid, area, desc, impact, mit, status, quote in PTP_GAPS:
+        out.append(S.TransferGap(
+            gap_id=gid, gap_area=area, description=desc, impact=impact, mitigation=mit,
+            status=status,
+            source_references=[ref("PTP-001", PTP_FILE, "PTP-001_sec_gaps", "Gap analysis", quote)],
+            metadata=meta()))
+    return out
+
+
+def ptp_concepts():
+    from app.models.concepts import Concept, ConceptStore
+    cs = [Concept(concept_id="process:amab_ds", concept_type="PROCESS",
+                  canonical_name="A-Mab drug-substance process",
+                  aliases=["A-Mab DS process", "A-Mab drug substance"], review_status="human_verified")]
+    for key in PTP_STEP_KEYS:
+        uo = P.CFG.unit_op(key)
+        cs.append(Concept(concept_id=f"step:{key}", concept_type="PROCESS_STEP",
+                          canonical_name=P.UNIT_OP_TITLES.get(key, uo.name),
+                          aliases=[key, f"Step {uo.step}"], review_status="human_verified"))
+    for r in PTP_CQA_ROWS:
+        cs.append(Concept(concept_id=f"attr:{r['key']}", concept_type="QUALITY_ATTRIBUTE",
+                          canonical_name=r["cqa"], aliases=[r["key"]], review_status="human_verified"))
+    for sid, name in [("site:cambridge", P.SENDING_SITE), ("site:grafton", P.RECEIVING_SITE)]:
+        cs.append(Concept(concept_id=sid, concept_type="MANUFACTURING_SITE", canonical_name=name,
+                          review_status="human_verified"))
+    return ConceptStore(run_id="gt-ptp", concepts=cs)
+
+
+def ptp_assertions():
+    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    A = []
+    n = [0]
+
+    def add(subj, pred, obj, text, sec, quote):
+        n[0] += 1
+        A.append(EvidenceBackedAssertion(
+            assertion_id=f"PTP-001-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
+            assertion_text=text,
+            source_references=[ref("PTP-001", PTP_FILE, "PTP-001_sec", sec, quote)], metadata=meta()))
+
+    for key in PTP_STEP_KEYS:
+        uo = P.CFG.unit_op(key)
+        title = P.UNIT_OP_TITLES.get(key, uo.name)
+        add("process:amab_ds", "process_has_step", f"step:{key}",
+            f"The A-Mab drug-substance process has the step {title}.",
+            "Product and process description", title)
+    for gid, area, desc, impact, mit, status, quote in PTP_GAPS:
+        add("transfer:amab_ds", "transfer_has_gap", f"gap:{gid}",
+            f"The transfer has {area} gap {gid}: {desc}", "Gap analysis", quote)
+    # a couple of preserved-CQA acceptance-criterion links
+    for key in ["lrv_mvm", "hcp"]:
+        r = P.cqa_reg[P.cqa_reg.key == key].iloc[0].to_dict()
+        add(f"attr:{key}", "attribute_has_acceptance_criterion", f"lit:{key}_acc",
+            f"{r['cqa']} acceptance: {r['acc_low']:g}–{r['acc_high']:g} {r['unit']}.",
+            "Product and process description", "acceptance criteria")
+    return AssertionStore(run_id="gt-PTP-001", assertions=A, rationales=[])
+
+
+def ptp_report_sections():
+    from app.models.summaries import ReportSection, ReportStatement
+
+    def st(i, text, sec, quote):
+        return ReportStatement(statement_id=f"PTP-001-S{i:02d}", statement_text=text,
+                               confidence="high", review_status="accepted",
+                               source_references=[ref("PTP-001", PTP_FILE, "PTP-001_sec", sec, quote)])
+    return [ReportSection(section_id="PTP-001-summary", title="Transfer plan summary", statements=[
+        st(1, "PTP-001 defines the strategy and scope for transferring the A-Mab drug-substance process from the sending site to the receiving site.",
+           "Purpose and scope", "strategy and scope for transferring the A-Mab drug-substance"),
+        st(2, "The transfer is a knowledge transfer of the characterized process understanding, confirmed by site-equivalency analysis, engineering runs and a commercial-scale PPQ campaign.",
+           "Transfer strategy", "knowledge transfer"),
+        st(3, "The commercial process operates at 15,000 L and delivers approximately 54.6 kg of drug substance.",
+           "Product and process description", "kg of drug substance"),
+        st(4, "Of the 37 process parameters, 21 are critical and their commercial-scale control must be confirmed.",
+           "Transfer of the manufacturing process", "are critical"),
+        st(5, "The gap analysis identifies the differences that must be resolved before or during the transfer.",
+           "Gap analysis", "differences that must be resolved"),
+        st(6, "Commercial-scale confirmation is provided by a Stage-2 PPQ campaign and reported in PCMR-001.",
+           "PPQ and batch strategy", "Stage-2 process performance qualification"),
+    ])]
+
+
+def build_transfer_plan():
+    doc, f = "PTP-001", PTP_FILE
+    entities = [
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_sites", sites=ptp_sites()),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_process",
+                                  process_steps=ptp_steps(), quality_attributes=ptp_cqas()),
+    ]
+    return S.GroundTruthAnnex(
+        document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
+        document_class=P.DOC_REGISTRY[doc][0], version=P.VERSION, effective_date=P.EFFECTIVE_DATE,
+        schema_extensions_used=COMMON_EXT,
+        out_of_schema_notes=[
+            "Transfer plan spans the whole process train; entities are the sites, the Step 3-10 process steps and the CQAs preserved across the transfer.",
+            "The distinctive objects are the TransferGap entries (transfer_has_gap assertions).",
+            "CPP/WC-CPP counts and the commercial-scale capability are reported as report_sections statements (no dedicated field).",
+        ],
+        inventory=ptp_inventory(),
+        entities=entities,
+        transfer_gaps=ptp_gaps(),
+        report_sections=ptp_report_sections(),
+        assertions=ptp_assertions(), concepts=ptp_concepts())
+
+
+# =========================================================================== #
+# RA-001 — Pre-Characterization Process Risk Assessment.                        #
+# --------------------------------------------------------------------------- #
+# Corpus-spanning, pre-characterization: the ground truth captures the CQA       #
+# criticality framework, the process parameters as prospective risk subjects     #
+# (parameter_type left 'unclassified' — classification is an OUTPUT of the        #
+# studies), and the parameter -> CQA-at-risk relations that drive the            #
+# study-type assignment. Reuses the curated CONTENT via ra_content.              #
+# =========================================================================== #
+RA_FILE = "RA-001_risk_assessment.docx"
+RA_ATTR_NAME = {r["key"]: r["cqa"] for _, r in P.cqa_reg.iterrows()}
+
+
+def ra_cqa_entities():
+    out = []
+    for r in P.cqa_reg.to_dict("records"):
+        out.append(S.QualityAttribute(
+            attribute_id=f"attr:{r['key']}", attribute_name=r["cqa"], attribute_type="CQA",
+            unit=r["unit"], acceptance_criteria=[f"{r['acc_low']:g}–{r['acc_high']:g} {r['unit']}"],
+            rationale_for_criticality=f"A-Mab Tool #1 = Impact × Uncertainty = {int(r['tool1_score'])}; "
+                                      f"Tool #2 severity = {int(r['tool2_severity'])}.",
+            criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
+            tool2_severity=int(r["tool2_severity"]),
+            source_references=[ref("RA-001", RA_FILE, "RA-001_sec_cqa", "CQA criticality framework",
+                                   r["cqa"], table_title="Drug-substance CQA criticality framework",
+                                   table_id="RA-001_tab_cqa")],
+            metadata=meta()))
+    return out
+
+
+def ra_param_entities(rows):
+    out = []
+    for r in rows:
+        p = P.CFG.unit_op(r["key"]).param(r["pkey"])
+        prio = r["priority"]
+        rationale = (f"Prospective (pre-characterization) risk: could impact {r['cqa_label']} "
+                     f"(severity {r['severity']}); assigned to {r['study']}. "
+                     f"Classification is an output of the study."
+                     if r["quality"] else
+                     f"No credible CQA risk; affects process performance only; assigned to {r['study']}.")
+        out.append(S.ProcessParameter(
+            parameter_id=f"param:{r['key']}_{r['pkey']}", parameter_name=r["param"],
+            parameter_type="unclassified", unit=p.unit, target_value=f"{p.setpoint:g}",
+            NOR=f"{p.nor[0]:g}–{p.nor[1]:g} {p.unit}",
+            PAR=f"{p.prange[0]:g}–{p.prange[1]:g} {p.unit}",
+            associated_step=f"{r['unit_op']} (Step {r['step']})",
+            rationale_for_criticality=rationale,
+            source_references=[ref("RA-001", RA_FILE, "RA-001_sec_rank",
+                                   "Process-parameter risk ranking and study-type assignment",
+                                   r["param"], table_title="Pre-characterization risk ranking",
+                                   table_id="RA-001_tab_rank")],
+            metadata=meta()))
+    return out
+
+
+def ra_concepts(rows):
+    from app.models.concepts import Concept, ConceptStore
+    cs = []
+    for r in rows:
+        cs.append(Concept(concept_id=f"param:{r['key']}_{r['pkey']}",
+                          concept_type="PROCESS_PARAMETER", canonical_name=r["param"],
+                          review_status="human_verified"))
+    for key, name in RA_ATTR_NAME.items():
+        cs.append(Concept(concept_id=f"attr:{key}", concept_type="QUALITY_ATTRIBUTE",
+                          canonical_name=name, aliases=[key], review_status="human_verified"))
+    return ConceptStore(run_id="gt-ra", concepts=cs)
+
+
+def ra_assertions(quality_rows, perf_rows):
+    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    A = []
+    n = [0]
+
+    def add(subj, pred, obj, text, sec, quote):
+        n[0] += 1
+        A.append(EvidenceBackedAssertion(
+            assertion_id=f"RA-001-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
+            assertion_text=text,
+            source_references=[ref("RA-001", RA_FILE, "RA-001_sec", sec, quote)], metadata=meta()))
+
+    for r in quality_rows:
+        pid = f"param:{r['key']}_{r['pkey']}"
+        for cqa_key in r["cqas"]:
+            add(pid, "parameter_impacts_attribute", f"attr:{cqa_key}",
+                f"{r['param']} carries a prospective risk to {RA_ATTR_NAME.get(cqa_key, cqa_key)} "
+                f"(pre-characterization).",
+                "Process-parameter risk ranking and study-type assignment",
+                "carry a credible prospective risk to a CQA")
+    for r in perf_rows:
+        pid = f"param:{r['key']}_{r['pkey']}"
+        add(pid, "parameter_does_not_significantly_impact_attribute", "attr:aggregates_hmw",
+            f"{r['param']} carries no credible CQA risk and affects only process performance.",
+            "Process-parameter risk ranking and study-type assignment",
+            "affect only process performance")
+    return AssertionStore(run_id="gt-RA-001", assertions=A, rationales=[])
+
+
+def ra_report_sections():
+    from app.models.summaries import ReportSection, ReportStatement
+
+    def st(i, text, sec, quote):
+        return ReportStatement(statement_id=f"RA-001-S{i:02d}", statement_text=text,
+                               confidence="high", review_status="accepted",
+                               source_references=[ref("RA-001", RA_FILE, "RA-001_sec", sec, quote)])
+    return [ReportSection(section_id="RA-001-summary", title="Risk assessment summary", statements=[
+        st(1, "RA-001 prioritizes the A-Mab process parameters for characterization and assigns each a study type before the studies are executed.",
+           "Purpose and scope", "prioritizes the A-Mab drug-substance process parameters"),
+        st(2, "It is the first, pre-hoc risk assessment of the A-Mab lifecycle of iterative risk assessments.",
+           "Purpose and scope", "lifecycle of iterative risk assessments"),
+        st(3, "The assessment does not classify parameters as CPP/WC-CPP/KPP/GPP — that is an output of the characterization studies.",
+           "Purpose and scope", "does not classify parameters"),
+        st(4, "Of the 37 parameters, 21 carry a credible prospective risk to a CQA and are prioritized for study.",
+           "Process-parameter risk ranking and study-type assignment", "carry a credible prospective risk to a CQA"),
+        st(5, "Parameters carrying a credible CQA risk are assigned to a multivariate DoE.",
+           "Characterization scope", "assigned to a multivariate DoE"),
+        st(6, "The characterization scope is carried into each Process Characterization Plan.",
+           "Characterization scope", "carried into each Process Characterization Plan"),
+    ])]
+
+
+def ra_inventory():
+    return S.DocumentInventoryItem(
+        document_id="RA-001", file_name=RA_FILE, predicted_document_type="risk_assessment",
+        product_name_candidates=["A-Mab"], process_name_candidates=["A-Mab drug substance"],
+        site_candidates=[P.SENDING_SITE, P.RECEIVING_SITE], date_candidates=[P.EFFECTIVE_DATE],
+        main_topics=["risk assessment", "risk ranking and filtering", "study-type assignment",
+                     "CQA criticality", "process characterization scope", "pre-characterization"],
+        rationale=f"Title block declares document class '{P.DOC_REGISTRY['RA-001'][0]}'.",
+        source_references=[ref("RA-001", RA_FILE, "Title block", "Title block",
+                               P.DOC_REGISTRY["RA-001"][0])],
+        metadata=meta())
+
+
+def build_risk_assessment():
+    import ra_content as RC
+    rows = RC.ra_rows()
+    quality_rows = [r for r in rows if r["quality"]]
+    perf_rows = [r for r in rows if not r["quality"] and r["key"] in ("harvest", "ufdf")]
+    doc = "RA-001"
+    entities = [
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_cqa",
+                                  quality_attributes=ra_cqa_entities()),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_rank",
+                                  parameters=ra_param_entities(quality_rows + perf_rows)),
+    ]
+    return S.GroundTruthAnnex(
+        document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
+        document_class=P.DOC_REGISTRY[doc][0], version=P.VERSION, effective_date=P.EFFECTIVE_DATE,
+        schema_extensions_used=COMMON_EXT,
+        out_of_schema_notes=[
+            "Pre-characterization: parameter_type is left 'unclassified' (CPP/WC-CPP/KPP/GPP is an OUTPUT of the studies, not this assessment).",
+            "The study-type assignment (multivariate DoE / justified univariate / univariate) and the prospective severity/initial-RPN ranking are reported via report_sections and parameter rationales.",
+            "parameter_impacts_attribute here is a PROSPECTIVE (at-risk) relation, not a demonstrated effect.",
+        ],
+        inventory=ra_inventory(),
+        entities=entities,
+        report_sections=ra_report_sections(),
+        assertions=ra_assertions(quality_rows, perf_rows),
+        concepts=ra_concepts(quality_rows + perf_rows))
+
+
+# =========================================================================== #
+# PCMP-001 — Process Characterization Master Plan.                              #
+# --------------------------------------------------------------------------- #
+# Umbrella plan over the per-unit-operation plans. The ground truth captures the #
+# process train (Steps 3-10), the CQA framework and the master-plan narrative.   #
+# =========================================================================== #
+PCMP_FILE = "PCMP-001_master_plan.docx"
+
+
+def _corpus_steps(doc, file, sec_id, sec_title):
+    out = []
+    for key in P.CFG.train_order:
+        uo = P.CFG.unit_op(key)
+        title = P.UNIT_OP_TITLES.get(key, uo.name)
+        out.append(S.ProcessStep(
+            step_id=f"step:{key}", step_name=title, step_number=str(uo.step),
+            unit_operation=title, description=P.UNIT_OP_ROLE.get(key, ""),
+            source_references=[ref(doc, file, sec_id, sec_title, title)], metadata=meta()))
+    return out
+
+
+def _corpus_cqas(doc, file, sec_id, sec_title, table_title, table_id):
+    out = []
+    for r in P.cqa_reg.to_dict("records"):
+        out.append(S.QualityAttribute(
+            attribute_id=f"attr:{r['key']}", attribute_name=r["cqa"], attribute_type="CQA",
+            unit=r["unit"], acceptance_criteria=[f"{r['acc_low']:g}–{r['acc_high']:g} {r['unit']}"],
+            criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
+            tool2_severity=int(r["tool2_severity"]),
+            source_references=[ref(doc, file, sec_id, sec_title, r["cqa"],
+                                   table_title=table_title, table_id=table_id)],
+            metadata=meta()))
+    return out
+
+
+def _corpus_step_concepts():
+    from app.models.concepts import Concept
+    cs = [Concept(concept_id="process:amab_ds", concept_type="PROCESS",
+                  canonical_name="A-Mab drug-substance process",
+                  aliases=["A-Mab DS process", "A-Mab drug substance"], review_status="human_verified")]
+    for key in P.CFG.train_order:
+        uo = P.CFG.unit_op(key)
+        cs.append(Concept(concept_id=f"step:{key}", concept_type="PROCESS_STEP",
+                          canonical_name=P.UNIT_OP_TITLES.get(key, uo.name),
+                          aliases=[key, f"Step {uo.step}"], review_status="human_verified"))
+    for r in P.cqa_reg.to_dict("records"):
+        cs.append(Concept(concept_id=f"attr:{r['key']}", concept_type="QUALITY_ATTRIBUTE",
+                          canonical_name=r["cqa"], aliases=[r["key"]], review_status="human_verified"))
+    return cs
+
+
+def build_master_plan():
+    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    from app.models.concepts import ConceptStore
+    from app.models.summaries import ReportSection, ReportStatement
+    doc, f = "PCMP-001", PCMP_FILE
+    A, n = [], [0]
+
+    def add(subj, pred, obj, text, sec, quote):
+        n[0] += 1
+        A.append(EvidenceBackedAssertion(
+            assertion_id=f"{doc}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
+            assertion_text=text, source_references=[ref(doc, f, f"{doc}_sec", sec, quote)],
+            metadata=meta()))
+    for key in P.CFG.train_order:
+        uo = P.CFG.unit_op(key)
+        title = P.UNIT_OP_TITLES.get(key, uo.name)
+        add("process:amab_ds", "process_has_step", f"step:{key}",
+            f"The A-Mab drug-substance process has the step {title}.",
+            "Overall characterization strategy", title)
+    for key in ["lrv_mvm", "hcp", "aggregates_hmw"]:
+        r = P.cqa_reg[P.cqa_reg.key == key].iloc[0].to_dict()
+        add(f"attr:{key}", "attribute_has_acceptance_criterion", f"lit:{key}_acc",
+            f"{r['cqa']} acceptance: {r['acc_low']:g}–{r['acc_high']:g} {r['unit']}.",
+            "CQA framework", r["cqa"])
+
+    def stx(i, text, sec, quote):
+        return ReportStatement(statement_id=f"{doc}-S{i:02d}", statement_text=text,
+                               confidence="high", review_status="accepted",
+                               source_references=[ref(doc, f, f"{doc}_sec", sec, quote)])
+    report_sections = [ReportSection(section_id=f"{doc}-summary", title="Master plan summary", statements=[
+        stx(1, "PCMP-001 is the umbrella plan governing the Stage 1 process characterization of the A-Mab drug-substance process.",
+            "Purpose and scope", "umbrella plan governing the Stage 1"),
+        stx(2, "The characterization covers 37 process parameters against 10 drug-substance CQAs on qualified scale-down models.",
+            "Purpose and scope", "process parameters against"),
+        stx(3, "The study scope and study-type assignment are set by the Pre-Characterization Process Risk Assessment (RA-001).",
+            "Risk-based prioritization and study scope", "set by the Pre-Characterization Process Risk Assessment"),
+        stx(4, "The response-surface model is the predictive / design-space model.",
+            "Common statistical approach", "response-surface model is the predictive"),
+        stx(5, "The master plan governs the eight per-unit-operation Process Characterization Plans.",
+            "Per-unit-operation plans", "per-unit-operation Process Characterization Plans"),
+        stx(6, "The per-unit-operation reports are consolidated in the Process Characterization Master Report (PCMR-001).",
+            "Schedule", "consolidated in the Process Characterization Master Report"),
+    ])]
+    entities = [
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_strategy",
+                                  process_steps=_corpus_steps(doc, f, f"{doc}_sec_strategy",
+                                                              "Overall characterization strategy")),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_cqa",
+                                  quality_attributes=_corpus_cqas(doc, f, f"{doc}_sec_cqa",
+                                                                  "CQA framework",
+                                                                  "Drug-substance CQA framework",
+                                                                  f"{doc}_tab_cqa")),
+    ]
+    inv = S.DocumentInventoryItem(
+        document_id=doc, file_name=f, predicted_document_type="process_characterization_master_plan",
+        product_name_candidates=["A-Mab"], process_name_candidates=["A-Mab drug substance"],
+        site_candidates=[P.SENDING_SITE, P.RECEIVING_SITE], date_candidates=[P.EFFECTIVE_DATE],
+        main_topics=["process characterization", "master plan", "CQA framework",
+                     "scale-down model", "statistical approach", "design of experiments"],
+        rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc][0]}'.",
+        source_references=[ref(doc, f, "Title block", "Title block", P.DOC_REGISTRY[doc][0])],
+        metadata=meta())
+    return S.GroundTruthAnnex(
+        document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
+        document_class=P.DOC_REGISTRY[doc][0], version=P.VERSION, effective_date=P.EFFECTIVE_DATE,
+        schema_extensions_used=COMMON_EXT,
+        out_of_schema_notes=[
+            "Master plan spans the whole train; entities are the Step 3-10 process steps and the CQA framework.",
+            "The per-unit-operation plan register and the common statistical approach are reported via report_sections.",
+        ],
+        inventory=inv, entities=entities, report_sections=report_sections,
+        assertions=AssertionStore(run_id=f"gt-{doc}", assertions=A, rationales=[]),
+        concepts=ConceptStore(run_id="gt-pcmp", concepts=_corpus_step_concepts()))
+
+
+# =========================================================================== #
+# PCMR-001 — Process Characterization Master Report (roll-up of PCR-003…010).   #
+# --------------------------------------------------------------------------- #
+# Consolidates the per-unit-operation reports. The ground truth captures the     #
+# process train (Steps 3-10) and the CQA outcomes; the parameter-classification  #
+# counts and headline outcomes are report_sections statements (individual        #
+# parameter names do not appear in the rendered text — only the class counts).   #
+# =========================================================================== #
+PCMR_FILE = "PCMR-001_master_report.docx"
+
+
+def build_master_report():
+    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    from app.models.concepts import ConceptStore
+    from app.models.summaries import ReportSection, ReportStatement
+    doc, f = "PCMR-001", PCMR_FILE
+    A, n = [], [0]
+
+    def add(subj, pred, obj, text, sec, quote):
+        n[0] += 1
+        A.append(EvidenceBackedAssertion(
+            assertion_id=f"{doc}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
+            assertion_text=text, source_references=[ref(doc, f, f"{doc}_sec", sec, quote)],
+            metadata=meta()))
+    for key in P.CFG.train_order:
+        uo = P.CFG.unit_op(key)
+        title = P.UNIT_OP_TITLES.get(key, uo.name)
+        add("process:amab_ds", "process_has_step", f"step:{key}",
+            f"The A-Mab drug-substance process has the step {title}.",
+            "Process description and performance", title)
+    # a few consolidated CQA relations (grounded in the CQA-outcomes narrative)
+    add("step:bioreactor", "step_has_quality_attribute", "attr:afucosylation",
+        "The production bioreactor forms and controls the glycan CQAs within its design space.",
+        "Consolidated CQA outcomes", "formed and controlled in the production bioreactor")
+    add("step:cex", "step_has_quality_attribute", "attr:aggregates_hmw",
+        "Cation exchange polishes the aggregate CQA.",
+        "Consolidated CQA outcomes", "polished at cation exchange")
+    add("step:virus_filtration", "step_has_quality_attribute", "attr:lrv_mvm",
+        "Viral clearance is delivered orthogonally across the low-pH inactivation, anion-exchange and virus-filtration steps.",
+        "Consolidated CQA outcomes",
+        "delivered orthogonally across the low-pH inactivation, anion-exchange and virus-filtration steps")
+    for key in ["lrv_mvm", "hcp"]:
+        r = P.cqa_reg[P.cqa_reg.key == key].iloc[0].to_dict()
+        add(f"attr:{key}", "attribute_has_acceptance_criterion", f"lit:{key}_acc",
+            f"{r['cqa']} acceptance: {r['acc_low']:g}–{r['acc_high']:g} {r['unit']}.",
+            "Consolidated CQA outcomes", r["cqa"])
+
+    def stx(i, text, sec, quote):
+        return ReportStatement(statement_id=f"{doc}-S{i:02d}", statement_text=text,
+                               confidence="high", review_status="accepted",
+                               source_references=[ref(doc, f, f"{doc}_sec", sec, quote)])
+    report_sections = [ReportSection(section_id=f"{doc}-summary", title="Master report summary", statements=[
+        stx(1, "PCMR-001 consolidates the Stage 1 characterization of the A-Mab drug-substance process, rolling up the per-unit-operation reports.",
+            "Executive summary", "consolidates the Stage 1"),
+        stx(2, "All 37 process parameters were classified: 1 CPP, 20 WC-CPP, 10 KPP and 6 GPP.",
+            "Executive summary", "1 CPP, 20 WC-CPP"),
+        stx(3, "All 10 drug-substance CQAs meet their acceptance criteria at commercial scale with Cpk >= 1.51.",
+            "Executive summary", "meet their acceptance criteria at commercial scale"),
+        stx(4, "The modular viral clearance meets its requirements with margin (18.87 / 10.03 log10 for XMuLV / MVM).",
+            "Executive summary", "modular viral clearance meets its requirements with margin"),
+        stx(5, "The integrated process delivers an overall drug-substance yield of 83.2% (~54.6 kg).",
+            "Executive summary", "overall DS yield"),
+        stx(6, "The process is ready for Stage 2 (Process Performance Qualification).",
+            "Conclusions and Stage-2 readiness", "ready for Stage 2"),
+    ])]
+    entities = [
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_process",
+                                  process_steps=_corpus_steps(doc, f, f"{doc}_sec_process",
+                                                              "Process description and performance")),
+        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_cqa",
+                                  quality_attributes=_corpus_cqas(doc, f, f"{doc}_sec_cqa",
+                                                                  "Consolidated CQA outcomes",
+                                                                  "Consolidated drug-substance CQA outcomes",
+                                                                  f"{doc}_tab_cqa")),
+    ]
+    inv = S.DocumentInventoryItem(
+        document_id=doc, file_name=f, predicted_document_type="process_characterization_master_report",
+        product_name_candidates=["A-Mab"], process_name_candidates=["A-Mab drug substance"],
+        site_candidates=[P.SENDING_SITE, P.RECEIVING_SITE], date_candidates=[P.EFFECTIVE_DATE],
+        main_topics=["process characterization", "master report", "process capability",
+                     "viral clearance", "parameter classification", "control strategy"],
+        rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc][0]}'.",
+        source_references=[ref(doc, f, "Title block", "Title block", P.DOC_REGISTRY[doc][0])],
+        metadata=meta())
+    return S.GroundTruthAnnex(
+        document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
+        document_class=P.DOC_REGISTRY[doc][0], version=P.VERSION, effective_date=P.EFFECTIVE_DATE,
+        schema_extensions_used=COMMON_EXT,
+        out_of_schema_notes=[
+            "Master report rolls up the per-unit-operation reports; entities are the Step 3-10 process steps and the consolidated CQA outcomes.",
+            "Parameter classification is reported as counts (1 CPP / 20 WC-CPP / 10 KPP / 6 GPP); individual parameter names are in the per-UO reports, not restated here.",
+            "Process-capability (min Cpk 1.51) and cumulative viral clearance (18.87 / 10.03) are report_sections statements (no dedicated field).",
+        ],
+        inventory=inv, entities=entities, report_sections=report_sections,
+        assertions=AssertionStore(run_id=f"gt-{doc}", assertions=A, rationales=[]),
+        concepts=ConceptStore(run_id="gt-pcmr", concepts=_corpus_step_concepts()))
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     for annex in (build_plan(), build_report(), build_plan_harvest(), build_report_harvest(),
                   build_plan_protein_a(), build_report_protein_a(),
                   build_plan_viral_inactivation(), build_report_viral_inactivation(),
                   build_plan_cex(), build_report_cex(),
-                  build_plan_aex(), build_report_aex()):
+                  build_plan_aex(), build_report_aex(),
+                  build_plan_vf(), build_report_vf(),
+                  build_plan_ufdf(), build_report_ufdf(),
+                  build_transfer_plan(), build_risk_assessment(), build_master_plan(),
+                  build_master_report()):
         path = os.path.join(OUT, f"{annex.document_id}.json")
         with open(path, "w") as fh:
             json.dump(annex.model_dump(mode="json"), fh, indent=2, ensure_ascii=False)

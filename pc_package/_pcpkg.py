@@ -28,6 +28,17 @@ DATA = os.path.join(ROOT, "outputs", "data")
 FIG = "../outputs/figures"  # markdown image paths are relative to a doc in pc_package/
 V = json.load(open(os.path.join(ROOT, "outputs", "report_values.json")))
 
+# Seeded deviation / lot / equipment / method scalars (the density-pass "messy
+# campaign" facts). Originate in config/parameters.yaml -> amab_process/deviations.py
+# -> report_values.json (single source of truth). Exposed here as bare module globals
+# so documents can reference them as inline expressions, e.g. `{python} dev_007_02_tmax`
+# or `{python} lot_buf_2287_expiry`. Guarded so a malformed or colliding key can never
+# shadow a helper. Naming rule: scalar = <id>.lower().replace('-','_') + '_' + <field>.
+DEV_SCALARS = V.get("dev_scalars", {})
+for _dev_name, _dev_val in DEV_SCALARS.items():
+    if _dev_name.isidentifier() and _dev_name not in globals():
+        globals()[_dev_name] = _dev_val
+
 # Package-wide document metadata (keep in sync across the set).
 EFFECTIVE_DATE = "2026-07-24"
 VERSION = "1.0"
@@ -313,6 +324,30 @@ def top_effects(key, response, n=6):
 def doe_runs(key, kind):
     """Row count of a DoE design CSV (design structure only, no responses)."""
     return len(csv(f"doe_{key}_{kind}.csv"))
+
+
+# --------------------------------------------------------------------------- #
+# Deviation facts (density-pass narrated-deviation sections).                  #
+# --------------------------------------------------------------------------- #
+def dev_register(doc_id):
+    """Markdown register of a report's seeded deviations (for the table_narration move).
+
+    Columns: Deviation, Summary, Detected during, Disposition — sourced from
+    outputs/data/deviations.csv (built from config/parameters.yaml). Returns an
+    empty string for a document with no seeded deviations."""
+    d = csv("deviations.csv")
+    d = d[d["doc_id"] == doc_id].copy()
+    if d.empty:
+        return ""
+    d = d.rename(columns={"dev_id": "Deviation", "summary": "Summary",
+                          "detected_during": "Detected during", "disposition": "Disposition"})
+    return d[["Deviation", "Summary", "Detected during", "Disposition"]].to_markdown(index=False)
+
+
+def dev_facts(doc_id):
+    """Row(s) of the deviation register for a document (structured access)."""
+    d = csv("deviations.csv")
+    return d[d["doc_id"] == doc_id].reset_index(drop=True)
 
 
 # --------------------------------------------------------------------------- #

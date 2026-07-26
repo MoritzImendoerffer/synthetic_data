@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from amab_process import Process, load_config          # noqa: E402
 from amab_process import studies as st                  # noqa: E402
+from amab_process import deviations as dv               # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "outputs", "data")
@@ -151,6 +152,13 @@ def main() -> None:
                       "tool1_score": c.get("tool1_score"), "tool2_severity": c.get("tool2_severity"),
                       "set_by": c.get("set_by"), "spec_type": st.spec_type(c["key"])})
     save(pd.DataFrame(crows), "cqa_register.csv")
+
+    # -- 10. messy-campaign facts (deviations + supporting records) -----------
+    devbuild = dv.build(cfg)
+    for name, df in devbuild["tables"].items():
+        save(df, name)
+    values["dev_scalars"] = devbuild["scalars"]
+    values["n_deviations"] = int(len(devbuild["tables"]["deviations.csv"]))
 
     # -- write headline values -------------------------------------------------
     with open(os.path.join(ROOT, "outputs", "report_values.json"), "w") as fh:

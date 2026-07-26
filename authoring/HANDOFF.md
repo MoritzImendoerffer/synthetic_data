@@ -134,6 +134,15 @@ access) in the template SETUP hint. Neither blocked authoring.
   ground (the quote exists in the doc) but are labeled `support=unsupported` in the annex.
   Injected/registered by the maintainer, never by the authoring agent; the render/numeral
   gates deliberately don't catch prose overstatement, so the label lives in the annex.
+- **Rhetorical / linguistic-pattern annex layer.** A grounded discourse layer over the
+  report text (`authoring/RHETORICAL_ANNEX.md`, `authoring/build_rhetorical_annex.py`,
+  curated spans in `authoring/rhetorical/<DOC>.spans.yaml` → `authoring/out/<DOC>.rhetorical.json`).
+  Roles: problem_statement, claim, justification, mechanistic_warrant, hedge,
+  bounded_conclusion, cross_step_credit, deviation_disposition, deferral, restatement, and
+  weak_claim (merged). Relations: `supported_by` (claim←evidence), `restates` (coreference),
+  `bounds`. Build-then-annex, curated by an annotator agent and grounded by the builder;
+  merges into the GroundTruthAnnex when `build_ground_truth.py` is extended. PCR-003 layer:
+  37 spans, 11 argument edges, 3 coreference edges.
 
 Section order + scaffold/register/rigor per section: `authoring/section_plan.yaml`
 (the machine-readable form of the CLAUDE.md canonical orders). Length is emergent — the

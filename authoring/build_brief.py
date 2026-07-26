@@ -87,6 +87,12 @@ def _md_table_or_note(md, empty="_(none)_"):
     return md if (md and md.strip()) else empty
 
 
+# Helpers that return a pre-rendered markdown STRING (print() them under `#| output: asis`)
+# rather than a DataFrame (which is emitted with show()). Mixing these up is a common trap.
+STRING_HELPERS = {"title_block", "related_docs_md", "sop_table", "corpus_docs_md",
+                  "dev_register"}
+
+
 def _helper_lines(module, mod_name, prefix=""):
     lines = []
     for name, obj in sorted(vars(module).items()):
@@ -99,8 +105,10 @@ def _helper_lines(module, mod_name, prefix=""):
         except (ValueError, TypeError):
             sig = "(...)"
         doc = (inspect.getdoc(obj) or "").strip().split("\n")[0]
-        lines.append(f"- `{prefix}{name}{sig}` — {doc}" if doc
-                     else f"- `{prefix}{name}{sig}`")
+        tag = ("  ⟶ returns a markdown STRING — `print()` it (NOT `show()`)"
+               if name in STRING_HELPERS else "")
+        lines.append(f"- `{prefix}{name}{sig}` — {doc}{tag}" if doc
+                     else f"- `{prefix}{name}{sig}`{tag}")
     return lines
 
 

@@ -100,16 +100,20 @@ refinements are still worth making: (a) a one-line "which-CQA-is-tightest / σ-m
 for `cap_for` in the brief; (b) an *indexed* frame example (`.set_index(...)`) in the
 template SETUP hint. Neither blocked authoring.
 
+**Also shipped: the full PCR-008 (anion exchange).** `pc_package/PCR-008_aex.qmd`
+authored one-pass from the artifacts (generalization test passed): 19 headings, the PAR
+section, and the DEV-008-01 twice-run-DoE narrative from the real superseded dataset. Hard
+gate clean; real render succeeds. Both PCR-003 and PCR-008 carry the Proven-acceptable-ranges
+section.
+
 **Next**
-- **Rebuild PCR-003's ground-truth annex** from the new full text. The old
-  `pc_package/ground_truth/PCR-003.json` targets the *minimal* version, so `check_grounding`
-  for PCR-003 is stale until `build_ground_truth.py` is re-run for the full report — and the
-  weak-claims (`support=unsupported`) and rhetorical (roles + argument graph) layers should
-  be merged into that annex.
-- **PCR-008** (anion exchange) as the generalization test — the first report to consume the
-  superseded-DoE seed (author the DEV-008-01 twice-run-DoE narrative from the real
-  superseded dataset).
-- Then the remaining reports/plans, each with its weak-claims + rhetorical layers.
+- **Rebuild the ground-truth annexes** for PCR-003 and PCR-008 from the new full text
+  (`build_ground_truth.py`). The committed `ground_truth/PCR-00{3,8}.json` target the *old*
+  versions, so `check_grounding` for them is stale — and merge in the PCR-003 weak-claims
+  (`support=unsupported`) and rhetorical (roles + argument graph) layers, and add the PAR /
+  linguistic layers for PCR-008.
+- **PCR-008 weak-claims + rhetorical layers** (PCR-003 has them; PCR-008 does not yet).
+- Then the remaining reports/plans, each with its PAR + weak-claims + rhetorical layers.
 
 ---
 

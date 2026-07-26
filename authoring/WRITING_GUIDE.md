@@ -186,6 +186,16 @@ in @tbl-x" with no walkthrough is a defect. Emit tables through the helpers
 (`show(...)`, the `doe_report` table builders) so the numbers are the model's;
 never hand-type a table body.
 
+Give every table a caption and label so `@tbl-id` cross-references resolve. The
+corpus convention is a Quarto caption line **immediately after** the code chunk:
+
+```
+: Caption sentence describing the table. {#tbl-id}
+```
+
+(equivalently, `print(": … {#tbl-id}")` as the last line of an `output: asis`
+chunk). Figures carry their caption in the chunk's `#| fig-cap:` option.
+
 ---
 
 ## 6. The numbers rule (absolute)
@@ -226,6 +236,16 @@ is information — it tells the maintainer to extend the generator — not a fai
   figures to the helper's formatting.
 
 ---
+
+## 7a. Weak claims are planted by the maintainer, never by you
+
+The corpus carries a few **deliberately unsupported / overstated** claims as labeled
+benchmark negatives (see `authoring/WEAK_CLAIMS.md`, `authoring/weak_claims.yaml`). These
+are injected and registered by the maintainer, **not** written by the authoring agent. Your
+job is the opposite: ground every claim. If you are tempted to write one of the
+anti-patterns in §7 (an unreferenced "prior experience", a screening result sold as a design
+space, an unbounded robustness claim), stop — that is a defect unless it is a registered
+weak claim, and registering is the maintainer's step, not yours.
 
 ## 8. Before you submit a section
 

@@ -26,10 +26,15 @@ Why the pivot (so you don't re-litigate it):
   and the annexes are **generated** (`pc_package/build_ground_truth.py`), so
   rebuilding them is cheap. The trade favours the simpler one-pass build.
 
-Two things from the two-pass design were **load-bearing, not brittleness** — keep
-them: **section-isolated fresh context** (author each section in its own agent so
-the voice varies — uniform prose is the tell of a synthetic corpus) and
-**numeral enforcement** (every number from the model, never typed).
+Keep two things from the two-pass design (they were load-bearing, not
+brittleness): **numeral enforcement** (every number from the model, never typed),
+and vigilance against **uniform prose** (the tell of a synthetic corpus). But note
+the architecture rule below: **one document is written by one agent**, so
+uniformity is handled by the writing guide's deliberate per-section register
+variation — *not* by isolating section contexts. A single author is also what makes
+the document-scale arc, cross-references and coreference/restatement work at all;
+splitting sections across agents is precisely what forced `ema_docgen`'s brittle
+ledger.
 
 `ema_docgen/` stays in the repo for now; the one-pass system supersedes only its
 *densification layer*. Reused from it / the wider repo: the single source of truth
@@ -45,18 +50,21 @@ content (now folded into `authoring/WRITING_GUIDE.md`).
 ```
 per report <DOC> (e.g. PCR-003):
   1. build_brief.py <DOC>        -> authoring/out/<DOC>.brief.md   (grounded facts + helper inventory)
-  2. for each section in the section plan:
-        fresh subagent, given: WRITING_GUIDE.md + <DOC>.brief.md + the section spec
-                              + PCR-008_aex.qmd as register/helper-usage exemplar
-        -> writes authoring/out/<DOC>/<section_id>.qmd   (Quarto fragment, all numbers = inline exprs)
-  3. assemble.py <DOC>           -> pc_package/<DOC>_<uokey>.qmd   (front matter + setup chunk + sections)
-  4. gate:  check_render.py + lint_numerals.py            (dry gate; render for real if quarto present)
-  5. annex (separate, deliberate step): extend build_ground_truth.py, then validate_annex + check_grounding
+  2. ONE agent authors the whole document, in order, holding it all in one context.
+        inputs: WRITING_GUIDE.md + <DOC>.brief.md + the section plan
+              + PCR-008_aex.qmd as register/helper-usage exemplar
+        writes the body into the standard template scaffold (4d)
+        -> pc_package/<DOC>_<uokey>.qmd   (all numbers = inline exprs)
+  3. gate:  check_render.py + lint_numerals.py            (dry gate; render for real if quarto present)
+  4. annex (separate, deliberate step): extend build_ground_truth.py, then validate_annex + check_grounding
 ```
 
-Section isolation (step 2) is what prevents uniformity. Assemble + gate are
-mechanical. The annex is authored **from the final text** (build-then-annex), which
-is why one-pass makes span-grounding trivially satisfiable.
+**One document = one agent.** A single author is what gives the arc,
+cross-references and coreference/restatement — the whole point of the guide.
+Uniformity is prevented by the guide's deliberate per-section register variation
+(§4/§7 of the guide), not by splitting the document across agents. The annex is
+authored **from the final text** (build-then-annex), which is why one-pass makes
+span-grounding trivially satisfiable.
 
 ---
 
@@ -135,9 +143,12 @@ Then run `ema_docgen/scripts/lint_numerals.py` on the file for bare numerals.
 **If quarto IS present locally**, also `quarto render <doc>.qmd --to docx` and run
 `pc_package/check_grounding.py` for the real grounding gate.
 
-### 4d. `authoring/assemble.py`  →  `pc_package/<DOC>_<uokey>.qmd`
-Concatenate the section fragments in plan order, wrapped in the corpus-standard
-front matter + setup chunk. Copy the exact structure from
+### 4d. `authoring/template.qmd` (the scaffold the single author fills; optional thin `assemble.py`)
+So the one author doesn't retype boilerplate, give it a standard scaffold with the
+corpus-standard front matter + setup chunk + closing; it writes the body sections
+(§4b) between the setup chunk and the References. There are no fragments to stitch —
+`assemble.py`, if you want one at all, only drops the authored body into the
+template and confirms the file is under `pc_package/`. Copy the exact structure from
 `pc_package/PCR-008_aex.qmd`: YAML front matter (docx `reference-doc: reference.docx`
 + pdf `documentclass: scrreprt`, `bibliography: references.bib`, `toc-depth: 3`,
 `number-sections: true`, `execute: echo:false warning:false cache:false`,
@@ -150,10 +161,12 @@ resolve.
 ### 4e. `authoring/RUNNER.md`
 The loop an orchestrating agent follows (mirror the clarity of
 `ema_docgen/RUNNER.md`, minus the splice/ledger machinery): generate brief →
-dispatch one fresh subagent per section (bind WRITING_GUIDE + brief + section spec
-+ PCR-008 exemplar; the subagent writes ONLY its fragment) → assemble → gate →
-report. Section subagents are independent and may run concurrently; assemble is
-serial. Do NOT let a single agent write multiple sections (uniformity).
+**one agent authors the whole document** (bind WRITING_GUIDE + brief + section plan
++ PCR-008 exemplar; it writes every section in order into the template, holding the
+whole document in context so the arc, cross-references and restatement cohere) →
+gate → report. **One document = one agent** — do NOT split a document's sections
+across agents; that breaks coherence and coreference and reintroduces the ledger
+problem. Different *documents* may be authored by different agents in parallel.
 
 ---
 
@@ -216,5 +229,6 @@ compare register + grounding against the committed one.
 
 1. Read `authoring/WRITING_GUIDE.md` and `pc_package/PCR-008_aex.qmd`.
 2. Build `authoring/build_brief.py`; run it for PCR-003; eyeball the brief.
-3. Author 2–3 PCR-003 sections via isolated subagents to validate register +
-   grounding before scaling to the full report. Then assemble + gate.
+3. Have **one agent** author PCR-003 against the guide + brief + section plan —
+   start with a few sections to validate register + grounding, then continue the
+   *same* agent through the full report. Then gate.

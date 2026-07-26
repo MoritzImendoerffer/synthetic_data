@@ -7,14 +7,16 @@ are writing for*, *how to structure an argument at every scale*, and *what rigor
 a regulator expects* — and it expects you to internalise the reasoning, not
 pattern-match a template.
 
-Two companion inputs come with each section task:
+You are the **sole author** of this document — hold the whole report in mind as
+you write, so the arc, cross-references and restatement described below actually
+cohere. Two grounded inputs support you:
 
 - the **report brief** (`authoring/out/<DOC>.brief.md`) — the grounded facts for
   *this* unit operation (its role, CQAs, parameters, DoE structure, results
   helpers, seeded deviations) and the **helper inventory**: the exact inline
   expressions you may call. Every number you write comes from there.
-- the **section spec** — which section you are writing, its rhetorical scaffold,
-  the rigor obligations that apply, and a target length band.
+- the **section plan** — the ordered sections, each with its rhetorical scaffold,
+  the rigor obligations that apply, and a target length band. Write them in order.
 
 ---
 
@@ -165,8 +167,11 @@ lists; several apply everywhere.
   where convention favours the object of study over the actor.
 - Register varies **by section, deliberately** — an administrative sub-section is
   three flat sentences; a design-space justification is dense and defensive. The
-  section spec assigns the register; do not flatten everything to one texture.
-  Uniform paragraph rhythm across a document is the tell of synthetic prose.
+  section plan assigns the register; do not flatten everything to one texture.
+  Uniform paragraph rhythm across a document is the tell of synthetic prose — and
+  because one author writes the whole document, guarding against it is **your**
+  deliberate job, not the tooling's. Vary sentence length, paragraph size and
+  section-opening moves as you go.
 - No bullet lists where the document uses prose. Tables are narrated (see §5),
   never dropped in bare.
 - Cite only from `references.bib` using existing keys.

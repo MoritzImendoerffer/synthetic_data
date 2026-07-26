@@ -89,9 +89,22 @@ def _design(df, factors, quadratic):
     return sm.add_constant(X), names
 
 
-def fit(key, kind, resp):
-    """Fit the coded model (2FI for screening, full quadratic for RSM) + diagnostics."""
-    df = csv(f"doe_{key}_{kind}.csv")
+def has_superseded(key, kind="screening"):
+    """True if a real superseded (re-executed) DoE dataset exists for this step/kind."""
+    import os
+    from _pcpkg import DATA
+    return os.path.exists(os.path.join(DATA, f"doe_{key}_{kind}_superseded.csv"))
+
+
+def fit(key, kind, resp, superseded=False):
+    """Fit the coded model (2FI for screening, full quadratic for RSM) + diagnostics.
+
+    ``superseded=True`` fits the invalidated first-execution dataset
+    (``doe_<key>_<kind>_superseded.csv``) instead of the reported one — used to show that
+    an anomalous interaction present in the superseded data is absent from the requalified
+    data (Deviation root-cause confirmation)."""
+    suffix = "_superseded" if superseded else ""
+    df = csv(f"doe_{key}_{kind}{suffix}.csv")
     factors = rsm_factors(key) if kind == "rsm" else screening_factors(key)
     quad = kind == "rsm"
     Xc, names = _design(df, factors, quad)
@@ -120,9 +133,13 @@ def _sig(p):
     return "***" if p < 0.001 else "**" if p < 0.01 else "*" if p < 0.05 else ""
 
 
-def screening_effects_df(key, resp, top=None):
-    """Effect estimates (effect = 2*coef on coded factors), sorted by |effect|."""
-    r = fit(key, "screening", resp)
+def screening_effects_df(key, resp, top=None, superseded=False):
+    """Effect estimates (effect = 2*coef on coded factors), sorted by |effect|.
+
+    ``superseded=True`` reports the effects from the invalidated first execution — e.g. to
+    show the anomalous protein-load × wash-1-conductivity interaction that appears there and
+    is absent from the requalified data reported in the body."""
+    r = fit(key, "screening", resp, superseded=superseded)
     m, lmap = r["model"], factor_letters(key)
     rows = []
     for name in r["names"]:

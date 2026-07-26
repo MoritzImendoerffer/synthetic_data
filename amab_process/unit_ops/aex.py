@@ -31,6 +31,19 @@ class AEX(BaseUnitOp):
                                                     + m["hcp_cond_coef"] * c.get("wash1_cond", 0))
         hcp_fold = max(hcp_fold, 1.2) * lognormal_noise(rng, m["hcp_cv"])
 
+        # Superseded (non-representative, DEAMIDATED) load — the invalidated first DoE
+        # execution (Deviation DEV-008-01). Elevated acidic charge variants shift the AEX
+        # binding balance so that HCP clearance weakens most when the column is heavily
+        # loaded AND the Equil/Wash-1 conductivity is high: an anomalous protein-load ×
+        # wash-1-conductivity interaction that the representative (requalified) load does
+        # not show. Set only by studies.superseded_doe; nominal runs never set it, so the
+        # committed nominal outputs are byte-identical (default-off).
+        deam = getattr(self, "load_deamidated", None)
+        if deam:
+            load_hi = max(c.get("load", 0.0), 0.0)        # protein load above set-point (factor D)
+            wash_hi = max(c.get("wash1_cond", 0.0), 0.0)  # Equil/Wash-1 conductivity above set-point (B)
+            hcp_fold = hcp_fold * float(np.exp(-deam.get("corner", 0.0) * load_hi * wash_hi))
+
         # viral log-reduction: falls as pH drops and conductivity rises
         lrv_xmulv = (m["lrv_xmulv_base"] + m["lrv_ph_coef"] * c.get("load_ph", 0)
                      + m["lrv_cond_coef"] * c.get("load_cond", 0)) * lognormal_noise(rng, m["lrv_cv"])

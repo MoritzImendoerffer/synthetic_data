@@ -58,7 +58,8 @@ from app.models.summaries import ReportSection, TransferGap  # noqa: E402
 __all__ = [
     "AnalyticalMethod", "Equipment", "ManufacturingSite", "ProcessStep",
     "ProcessParameter", "QualityAttribute", "DocumentInventoryItem",
-    "SectionEntityExtraction", "StudyDesign", "DesignSpace",
+    "SectionEntityExtraction", "StudyDesign", "DesignSpace", "ProvenAcceptableRange",
+    "WeakClaim", "RhetoricalSpan",
     "AssertionStore", "ConceptStore", "ReportSection", "TransferGap",
     "SourceReference", "ExtractionMetadata", "GroundTruthAnnex",
 ]
@@ -160,6 +161,73 @@ class DesignSpace(BaseModel):
     metadata: ExtractionMetadata = Field(default_factory=ExtractionMetadata)
 
 
+class ProvenAcceptableRange(BaseModel):
+    """A computed per-CQA×parameter proven acceptable range (PAR). Local extension.
+
+    Two analyses: ``par_at_setpoint`` (other factors fixed) and ``par_nor_propagated``
+    (other factors varied within NOR by Monte-Carlo of the fitted model). The acceptance
+    basis is the study DS spec, or a back-calculated required step contribution for a
+    cumulative viral-clearance CQA."""
+    model_config = ConfigDict(extra="forbid")
+
+    par_id: str
+    unit_operation: Optional[str] = None
+    quality_attribute: str
+    parameter: str
+    characterization_range: Optional[str] = None
+    par_at_setpoint: Optional[str] = None
+    par_nor_propagated: Optional[str] = None
+    acceptance_basis: Optional[str] = None
+    source_references: list[SourceReference] = Field(default_factory=list)
+    metadata: ExtractionMetadata = Field(default_factory=ExtractionMetadata)
+
+
+# --------------------------------------------------------------------------- #
+# Discourse / benchmark-annotation extensions (no upstream equivalent).        #
+# --------------------------------------------------------------------------- #
+WeaknessType = Literal[
+    "unsupported_prior_knowledge", "overstated_outcome",
+    "unbounded_generalization", "missing_citation",
+]
+
+
+class WeakClaim(BaseModel):
+    """A deliberately planted, LABELED unsupported/overstated claim (benchmark negative).
+    It grounds (the quote exists in the document) but is labeled ``support='unsupported'``."""
+    model_config = ConfigDict(extra="forbid")
+
+    claim_id: str
+    section: Optional[str] = None
+    support: Literal["unsupported"] = "unsupported"
+    weakness_type: WeaknessType
+    source_reference: SourceReference
+    rationale: Optional[str] = None
+    correct_version: Optional[str] = None
+    metadata: ExtractionMetadata = Field(default_factory=ExtractionMetadata)
+
+
+RhetoricalRole = Literal[
+    "problem_statement", "claim", "justification", "mechanistic_warrant", "hedge",
+    "bounded_conclusion", "cross_step_credit", "deviation_disposition", "deferral",
+    "restatement", "weak_claim",
+]
+
+
+class RhetoricalSpan(BaseModel):
+    """A rhetorical-role span over the report text (discourse / argument structure).
+    ``supported_by`` links a claim to its justification spans; ``restates`` links a
+    restatement to the original claim; ``bounds`` links a bound to the claim it bounds."""
+    model_config = ConfigDict(extra="forbid")
+
+    span_id: str
+    section: Optional[str] = None
+    role: RhetoricalRole
+    source_reference: SourceReference
+    supported_by: list[str] = Field(default_factory=list)
+    restates: Optional[str] = None
+    bounds: Optional[str] = None
+
+
 # --------------------------------------------------------------------------- #
 # The composite annex wrapper                                                  #
 # --------------------------------------------------------------------------- #
@@ -194,7 +262,11 @@ class GroundTruthAnnex(BaseModel):
     entities: list[SectionEntityExtraction] = Field(default_factory=list)
     studies: list[StudyDesign] = Field(default_factory=list)
     design_spaces: list[DesignSpace] = Field(default_factory=list)
+    proven_acceptable_ranges: list[ProvenAcceptableRange] = Field(default_factory=list)
     report_sections: list[ReportSection] = Field(default_factory=list)
     transfer_gaps: list[TransferGap] = Field(default_factory=list)
     assertions: Optional[AssertionStore] = None
     concepts: Optional[ConceptStore] = None
+    # discourse / benchmark-annotation layers (local extensions)
+    weak_claims: list[WeakClaim] = Field(default_factory=list)
+    rhetorical_spans: list[RhetoricalSpan] = Field(default_factory=list)

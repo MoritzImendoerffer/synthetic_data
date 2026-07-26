@@ -56,7 +56,7 @@ fully supported.
 ## Build / verify
 
     uv run python authoring/build_weak_claims_annex.py --doc PCR-003 \
-        --file pc_package/PCR-003_bioreactor.DRAFT.qmd
+        --file pc_package/PCR-003_bioreactor.qmd
 
 Exit 0 iff every planted quote is grounded in the document. Extend the registry (not the
 prose alone) when planting more, so the quote and its label never drift apart.

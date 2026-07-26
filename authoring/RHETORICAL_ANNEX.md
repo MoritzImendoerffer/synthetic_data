@@ -77,7 +77,7 @@ deterministic tooling grounds and validates it.
 Run:
 
     uv run python authoring/build_rhetorical_annex.py --doc PCR-003 \
-        --file pc_package/PCR-003_bioreactor.DRAFT.qmd
+        --file pc_package/PCR-003_bioreactor.qmd
 
 Exit 0 iff every span grounds and every relation target resolves.
 

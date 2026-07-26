@@ -90,23 +90,26 @@ inventory** (concept → exact expression). Keep it precise.
 - `RUNNER.md` — the one-pass loop (no splice/ledger).
 - `check_blank_repo.sh` — static guard + functional blank-repo proof.
 
-**Validated (this session)** — a FRESH agent (no report present) authored PCR-003
-Executive summary + Results (4 subsections) from the artifacts alone into
-`pc_package/PCR-003_bioreactor.DRAFT.qmd`; the hard gate is clean (11 chunks, 37 inline
-exprs, no `<<NEEDS:>>`) and a real `quarto render --to docx` succeeds. Register + grounding
-+ rigor obligations all landed. Two small artifact refinements are still worth making from
-that run: (a) add a one-line "which-CQA-is-tightest / σ-margin" recipe for `cap_for` to the
-brief/inventory; (b) show an *indexed* frame example (`.set_index(...)` for inline row
-access) in the template SETUP hint. Neither blocked authoring.
+**Shipped (this session): the full PCR-003 report.** `pc_package/PCR-003_bioreactor.qmd`
+is authored end-to-end (15 sections, ~30–35 pp), replacing the superseded minimal version.
+One agent authored it from the artifacts alone; the hard gate is clean (22 chunks, 105
+inline exprs, no `<<NEEDS:>>`) and a real `quarto render --to docx` succeeds. It hosts the
+three labeled weak claims and the rhetorical layer (both re-grounded against it). The
+`.DRAFT.qmd` was the validation intermediate and has been retired. Two small artifact
+refinements are still worth making: (a) a one-line "which-CQA-is-tightest / σ-margin" recipe
+for `cap_for` in the brief; (b) an *indexed* frame example (`.set_index(...)`) in the
+template SETUP hint. Neither blocked authoring.
 
-**In progress / next**
-- **Superseded-DoE seed (task 9):** where a deviation invalidated + re-executed a DoE
-  (anion exchange), actually seed the first-execution dataset with different settings and
-  move AEX's deviations from hard-coded `.qmd` prose into `config` (single source of truth).
-  `build_brief.py` already auto-detects `doe_<key>_<kind>_superseded.csv`.
-- **Validation (task 10):** one agent authors a couple of PCR-003 sections + gate them.
-- Then: full PCR-003, then PCR-008 (generalization test), then the annexes; then the rest
-  of the corpus.
+**Next**
+- **Rebuild PCR-003's ground-truth annex** from the new full text. The old
+  `pc_package/ground_truth/PCR-003.json` targets the *minimal* version, so `check_grounding`
+  for PCR-003 is stale until `build_ground_truth.py` is re-run for the full report — and the
+  weak-claims (`support=unsupported`) and rhetorical (roles + argument graph) layers should
+  be merged into that annex.
+- **PCR-008** (anion exchange) as the generalization test — the first report to consume the
+  superseded-DoE seed (author the DEV-008-01 twice-run-DoE narrative from the real
+  superseded dataset).
+- Then the remaining reports/plans, each with its weak-claims + rhetorical layers.
 
 ---
 

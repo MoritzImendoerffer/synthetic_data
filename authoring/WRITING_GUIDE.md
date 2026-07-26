@@ -209,7 +209,7 @@ The step raised pool aggregate `{python} f"{agg_ratio:.1f}"`-fold ...
 ```
 
 Identifiers are **not** measurements and are written plainly: document IDs
-(`SOP-2003`, `AMV-3010`, `RA-001`), guidance names (`ICH Q8`, `PDA TR 60`),
+(`SOP-2003`, `AMV-3010`, `RA-001`), guidance names (`ICH Q8`, `FDA 2011`),
 citation keys, cross-reference labels (`@tbl-cqa`, `@fig-contours`), and coded
 factor levels (−1/0/+1).
 

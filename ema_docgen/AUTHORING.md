@@ -17,7 +17,7 @@ estimate, or round from memory.
 
 Exempt from this rule, because they are identifiers rather than measurements:
 document IDs (`SOP-2007`, `AMV-3104`, `PCR-005`, `RA-004`, `DEV-007-02`),
-guidance names (`ICH Q8`, `PDA TR 60`), citation keys, and cross-reference
+guidance names (`ICH Q8`, `the FDA 2011 guidance`), citation keys, and cross-reference
 labels (`@tbl-cqa`, `@fig-contours`).
 
 **C2 — Facts.** Use only facts present in the section's fact pack. Do not invent

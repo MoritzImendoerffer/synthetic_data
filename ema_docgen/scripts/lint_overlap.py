@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Report n-gram overlap between generated prose and source literature.
 
-A-Mab, PDA TR 60 and the ISPE guide are near-certainly in the training data of
+The A-Mab case study and the cited FDA/ICH guidance are near-certainly in the training data of
 any model this corpus is used to evaluate. If the corpus carries their phrasing,
 retrieval and QA scores measure memorisation rather than retrieval — a
 contaminated benchmark, and one that is hard to detect after the fact.

@@ -145,11 +145,11 @@ Cite **only** existing `references.bib` keys. The standard basis, and what each 
 
 - `@amab2009` — the A-Mab case study (CMC Biotech Working Group): the source of the
   process model, CQA framework and risk methodology. Cited in every document.
-- `@fda2011`, `@pdatr60`, `@ispegpg2023` — the lifecycle approach to process validation;
-  the report structure maps to the PDA TR 60 Stage-1 Process Design Report.
+- `@fda2011` — the lifecycle approach to process validation; the report structure maps to
+  its Stage-1 (Process Design) study record.
 - `@ichq8`, `@ichq9`, `@ichq11` — the enhanced/QbD development approach; criticality as a
   continuum (Q9).
-- `@ichq10`, `@ispett2023` — quality system / technology-transfer framing (transfer docs).
+- `@ichq10` — quality system / technology-transfer framing (transfer docs).
 - `@ichq5a` — the viral-safety evaluation framework, for the viral steps (6, 8, 9) and
   their modular clearance claims.
 

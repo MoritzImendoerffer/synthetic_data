@@ -12,7 +12,7 @@ actually appears in its document.
 > All documents are **synthetic** and carry a synthetic banner on the title page.
 > The sponsor (*Novacyte Biologics*), all sites and every SOP/AMV number are
 > fictional. The content follows the A-Mab case study (CMC Biotech Working Group,
-> 2009) and PDA TR 60 / ISPE / ICH guidance.
+> 2009) and FDA / ICH guidance.
 
 ## Status
 

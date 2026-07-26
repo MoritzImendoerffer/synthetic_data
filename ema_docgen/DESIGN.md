@@ -158,7 +158,7 @@ process characterization report. It compresses what would be a standalone
 length and would teach the opposite of the intent.
 
 **Honest gap.** Nothing in `refs/` is an actual PCR. A-Mab is a case study;
-PDA TR 60 and the ISPE GPG are guidance. There is no register anchor for the
+the FDA 2011 guidance and the ICH Q8–Q11 are guidance. There is no register anchor for the
 document class being generated. The move taxonomy is a reconstruction, not a
 transcription — treat it as a hypothesis to refine against real documents if you
 ever get access to one.

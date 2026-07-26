@@ -41,7 +41,7 @@ EXEMPT = [
     re.compile(r"\bIgG\d\b"),
     re.compile(r"\bQ\d{1,2}[A-Z]?\b"),             # ICH Q8, Q9, Q11
     re.compile(r"\bTechnical\s+Report\s+\d+\b"),
-    re.compile(r"\b(?:FDA|EMA|ICH|EU|WHO|CMC|ISPE|PDA)\s+\d{4}\b"),
+    re.compile(r"\b(?:FDA|EMA|ICH|EU|WHO|CMC)\s+\d{4}\b"),
     re.compile(r"\bPhase\s+[I]+[a-z]?\b"),
 ]
 

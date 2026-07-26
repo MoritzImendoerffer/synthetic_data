@@ -24,10 +24,12 @@ Grounded in source documents kept outside the repo (at `$SYNTHETIC_DATA_SOURCES`
 
 - **A-Mab Case Study v2.1** (CMC Biotech Working Group, 2009) — process model, CQAs,
   risk methodology.
-- **PDA Technical Report 60** — Process Validation: A Lifecycle Approach — report
-  structure and Stage-1 expectations.
-- **ISPE Good Practice Guide (2023)** — Practical Implementation of the Lifecycle
-  Approach to Process Validation — Stage-1 statistics, design space, control strategy.
+- **FDA — Process Validation: General Principles and Practices (2011)** — the
+  process-validation lifecycle (Stage 1 Process Design), report structure and Stage-1
+  expectations.
+- **ICH Q8, Q9, Q10, Q11** — pharmaceutical development, quality risk management, quality
+  system and drug-substance development — the QbD framework, design space, and control
+  strategy.
 
 ### Deliverables
 

@@ -113,17 +113,14 @@ Use these to write grounded content quickly. "DoE?" tells you whether to use `do
 ### PTP-001 — Process Transfer Plan
 Tech-transfer plan for moving the A-Mab DS process from the sending site (Cambridge, MA
 Development) to the receiving site (Grafton, WI Commercial).
-- **Grounding:** `refs/text/ispe_tt.txt` (2023 ISPE Tech-Transfer guide), `refs/text/pda_tr60.txt`
-  §6.4 (Table 6.4-1, transfer strategy / site-equivalency / gap analysis),
-  `refs/grounding/PDA_TR_60.json`, A-Mab cross-scale comparability (`refs/text/amab.txt`).
+- **Grounding:** ICH Q10 (technology transfer) and the FDA 2011 lifecycle transfer
+  strategy (site-equivalency / gap analysis); A-Mab cross-scale comparability (`refs/text/amab.txt`).
 - **Structure:** transfer scope & strategy; product/process description; sending & receiving
   sites; site-equivalency analysis; scale-down-model & comparability strategy; transfer of the
   manufacturing process, analytical methods, and control strategy; PPQ/batch strategy; gap
   analysis (`TransferGap`); responsibilities; schedule.
 - **Annex:** `DocumentInventoryItem` type `process_transfer_plan` (already in `schema_ext`);
   entities = sites, process steps, key equipment; `transfer_gaps`; `report_sections`.
-- ☐ **First add** an `ispett2023` entry to `pc_package/references.bib` (the ISPE Tech-Transfer
-  guide is not yet cited); `ispegpg2023` is the PV-lifecycle guide, a different document.
 
 ### RA-001 — Pre-Characterization Process Risk Assessment
 Initial risk assessment (A-Mab RA#1–#2 style) **derived from PTP-001**, prioritising which
@@ -161,7 +158,6 @@ report, but as a summary that cites the `PCR-00N` documents.
 
 ## Cross-cutting TODOs
 
-- ✅ `ispett2023` entry in `pc_package/references.bib` (added for PTP-001; ISPE Technology Transfer GPG).
 - ✅ Config self-consistency (gotcha #8): virus_filtration `filtration_volume` / `pressure`
   `study: univariate → multivariate` (they ARE the 2 DoE factors). Deterministic; headline
   unchanged (min Cpk 1.51, viral 18.87/10.03, class counts WC-CPP 20/KPP 10/GPP 6/CPP 1).

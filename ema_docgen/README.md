@@ -26,7 +26,7 @@ that does not exist:
 
 The technical content follows the **A-Mab case study** (CMC Biotech Working
 Group, 2009), published as a public teaching artifact, and the document
-structure follows PDA TR 60, the ISPE Good Practice Guide, and ICH Q8/Q9/Q11.
+structure follows the FDA 2011 guidance, the ICH Q8–Q11, and ICH Q8/Q9/Q11.
 
 Two properties make it more than a pile of plausible text:
 
@@ -377,8 +377,7 @@ enforced. It needs calibration — domain vocabulary like `wash-1`, `TCID50`,
 the model.
 
 **`lint_overlap.py`** reports 8-gram overlap between the corpus and the source
-literature in `refs/text/`. This protects the benchmark from itself. A-Mab, PDA
-TR 60 and the ISPE guide are near-certainly in the training data of any model you
+literature in `refs/text/`. This protects the benchmark from itself. The A-Mab case study and the cited FDA/ICH guidance are near-certainly in the training data of any model you
 evaluate. If the corpus carries their phrasing, retrieval scores measure
 memorisation rather than retrieval — a contaminated benchmark, and one that is
 very hard to detect afterwards. It also keeps copyrighted text out of a public
@@ -470,8 +469,7 @@ they sit outside the code blocks that generate everything else.
 documents are clean (0–8 overlapping 8-grams against 261,401 reference 8-grams,
 all of it abbreviation-list content). PTP-001 carries 11, and five of them chain
 into a single **~12-word verbatim run** beginning *"a comparability plan
-describes the actions to be taken in the event…"*, carried in from the ISPE
-Technology Transfer guide — the document PTP-001 is the first to cite. Reword
+describes the actions to be taken in the event…"*, carried in from the ICH Q10 — the document PTP-001 is the first to cite. Reword
 before tagging a release.
 
 **Missing: `pc_package/HELPER_API.md`.** `AUTHORING_TASK.md` expects a flat list

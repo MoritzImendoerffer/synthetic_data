@@ -95,9 +95,16 @@ differ only in their `UO` key and unit-specific narrative:
   near-saturated screening fit.
 - **Ground-truth annexes:** always a `GroundTruthAnnex` with `inventory` +
   per-section `entities` + `concepts` + `studies`/`design_spaces` +
-  `report_sections` + `assertions`. Build them in `build_ground_truth.py` from the
-  same CSVs (never hand-write JSON), with doc-specific quotes that exist in that
-  document.
+  `proven_acceptable_ranges` + `report_sections` + `assertions`, plus the discourse
+  layers `weak_claims` and `rhetorical_spans`. Build them in `build_ground_truth.py`
+  from the same CSVs (never hand-write JSON), with doc-specific quotes that exist in
+  that document. **How the annex links to the report — the verbatim span-grounding
+  method, and how it relates to schema-constrained (Pydantic→LLM) generation and other
+  attribution techniques — is documented in [`pc_package/GROUND_TRUTH.md`](pc_package/GROUND_TRUTH.md).**
+  The rule in one line: every `SourceReference.quote` is a verbatim substring of the
+  rendered document (`check_grounding.py` gates it), numeric values are derived from the
+  seeded CSVs, and the whole annex validates against the Pydantic schema
+  (`validate_annex.py`).
 
 ## Which steps have DoE (affects report content)
 

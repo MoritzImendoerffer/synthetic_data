@@ -137,6 +137,16 @@ template SETUP hint. Neither blocked authoring.
   ground (the quote exists in the doc) but are labeled `support=unsupported` in the annex.
   Injected/registered by the maintainer, never by the authoring agent; the render/numeral
   gates deliberately don't catch prose overstatement, so the label lives in the annex.
+- **Proven acceptable ranges (PAR).** `doe_report` computes per-CQA×parameter PARs live
+  from the fitted RSM (no new outputs). Acceptance = study DS specs, except viral-clearance
+  CQAs use a **back-calculated step floor** (cumulative requirement − other steps' credited
+  clearance) — `D.acceptance_for(UO, resp)` returns the right criterion. Two flavours:
+  `D.par_at_setpoint` (others fixed) and `D.par_nor_propagated` (others varied within NOR by
+  seeded Monte-Carlo — the reproducible default; a Bayesian backend can replace
+  `_mc_predictive` later). `D.par_table(UO)`, `D.fig_par(UO, resp, D.governing_factor(...))`
+  (green-shaded acceptable region). New section `proven_acceptable_ranges` in `section_plan`
+  (report_doe + plan). NB: `report_params` "PAR" column is renamed **"Char. range"** — the
+  config range is the characterization/knowledge-space range, not a PAR (the PAR is computed).
 - **Rhetorical / linguistic-pattern annex layer.** A grounded discourse layer over the
   report text (`authoring/RHETORICAL_ANNEX.md`, `authoring/build_rhetorical_annex.py`,
   curated spans in `authoring/rhetorical/<DOC>.spans.yaml` → `authoring/out/<DOC>.rhetorical.json`).

@@ -267,14 +267,18 @@ def plan_params(key):
 
 
 def report_params(key):
-    """Parameters with final classification — for a Report."""
+    """Parameters with final classification — for a Report.
+
+    The range column is the **characterization range** (the DoE / knowledge-space edges),
+    NOT a proven acceptable range: the PAR is a computed, per-CQA quantity (see
+    ``doe_report.par_table`` and the report's Proven-acceptable-ranges section)."""
     uo = CFG.unit_op(key)
     d = param_reg[param_reg.unit_operation == uo.name].copy()
     d["NOR"] = d.apply(lambda r: _rng_str(r.nor_low, r.nor_high), axis=1)
-    d["PAR"] = d.apply(lambda r: _rng_str(r.par_low, r.par_high), axis=1)
+    d["Char. range"] = d.apply(lambda r: _rng_str(r.par_low, r.par_high), axis=1)
     d = d.rename(columns={"parameter": "Parameter", "unit": "Unit", "setpoint": "Set-point",
                           "classification": "Class", "study": "Study"})
-    return d[["Parameter", "Unit", "Set-point", "NOR", "PAR", "Class", "Study"]]
+    return d[["Parameter", "Unit", "Set-point", "NOR", "Char. range", "Class", "Study"]]
 
 
 def cqas_for(key):

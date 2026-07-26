@@ -187,6 +187,26 @@ def build(doc_id: str) -> str:
         w("- **Factor legend (coded A–…):**\n\n")
         w(D.factor_legend_df(key).to_markdown(index=False) + "\n\n")
 
+    # 4b. Proven acceptable ranges (computed live by doe_report) -----------------
+    if key is not None and doe:
+        w("## 4b. Proven acceptable ranges (computed)\n\n")
+        w("Acceptance = the study drug-substance specs (impurities / formed CQAs); a "
+          "viral-clearance CQA uses the back-calculated step floor (cumulative requirement "
+          "minus the other steps' credited clearance). `D.acceptance_for(UO, resp)` returns "
+          "the right criterion. Two flavours per CQA×parameter — at set-point and "
+          "NOR-propagated (Monte-Carlo of the fitted model). Table: `D.par_table(UO)`; plot a "
+          "governed CQA with `D.fig_par(UO, resp, D.governing_factor(UO, resp))` "
+          "(parameter x, response y, acceptable region shaded green, set-point + NOR marked).\n\n")
+        try:
+            w(D.par_table(key).to_markdown(index=False) + "\n\n")
+            gov = {r: D.governing_factor(key, r) for r in D.responses(key)
+                   if D.acceptance_for(key, r) is not None}
+            if gov:
+                w("Governing factor per governed CQA (representative plot): "
+                  + ", ".join(f"`{r}`→`{f}`" for r, f in gov.items()) + "\n\n")
+        except Exception as e:  # noqa: BLE001
+            w(f"_(PAR table unavailable: {e})_\n\n")
+
     # 5. Deviations -------------------------------------------------------------
     w("## 5. Deviations — structured facts (author writes the prose; Option A)\n\n")
     reg_md = P.dev_register(doc_id)

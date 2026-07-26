@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
-from _pcpkg import CFG, csv, st
+from _pcpkg import CFG, cqa_reg, csv, st
 
 RESP_LABEL = {
     "afucosylation": "Afucosylation", "galactosylation": "Galactosylation",
@@ -314,5 +314,259 @@ def fig_diagnostics(key, resp):
     ax[2].set_xlabel("Actual"); ax[2].set_ylabel("Predicted")
     ax[2].set_title("Actual vs predicted", fontsize=10)
     fig.suptitle(f"Model diagnostics — {RESP_LABEL.get(resp, resp)}", fontsize=11)
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    return fig
+
+
+# --------------------------------------------------------------------------- #
+# Proven acceptable ranges (PAR).                                             #
+# --------------------------------------------------------------------------- #
+# For each parameter x CQA the step governs, the PAR is the sub-range of the
+# parameter's CHARACTERIZATION range over which the CQA stays within its (study-
+# provided) acceptance criterion. Two analyses:
+#   1. at-set-point  — the other factors held at set-point (coded 0);
+#   2. NOR-propagated — the other factors varied within their NOR by Monte-Carlo
+#      of the fitted response-surface model (+ residual noise), so the PAR holds
+#      even when the rest of the operating point moves within its normal range.
+# Acceptance criteria come from the A-Mab study (cqa_register.csv, DS-level), so no
+# backward-clearance calculation is needed. Deterministic (fixed PAR_SEED); the MC
+# is the reproducible default and is factored so a Bayesian (bambi/PyMC) posterior-
+# predictive backend could replace `_mc_predictive` later without touching callers.
+PAR_SEED = 20240724
+PAR_MC_N = 2000          # Monte-Carlo draws per grid point
+PAR_GRID = 81            # parameter grid points across the characterization range
+
+# response key -> CQA-register key (for responses not named as a CQA key directly)
+RESP_TO_CQA = {
+    "hcp_out_ng_mg": "hcp", "pool_hcp_ng_mg": "hcp", "xmulv_lrf": "lrv_xmulv",
+    "mvm_lrf": "lrv_mvm", "leached_protein_a_ppm": "leached_protein_a",
+    "aggregate_out_pct": "aggregates_hmw", "residual_dna": "residual_dna",
+}
+
+
+# viral-clearance responses are STEP contributions to a CUMULATIVE requirement, so their
+# step-level acceptance is back-calculated (not the DS spec). Maps a step key to its row in
+# viral_clearance.csv.
+VIRAL_STEP_ROW = {"viral_inactivation": "Low-pH Viral Inactivation",
+                  "aex": "Anion Exchange (AEX)", "virus_filtration": "Virus Filtration"}
+VIRAL_COL = {"mvm_lrf": ("MVM", "lrv_mvm"), "xmulv_lrf": ("XMuLV", "lrv_xmulv")}
+
+
+def acceptance_for(key, resp):
+    """(acc_low, acc_high, spec_type) for a step's response, or None if it maps to no CQA.
+
+    spec_type is 'upper' (impurity ceiling), 'lower' (clearance floor) or 'two_sided'.
+    For impurities and formed CQAs the acceptance is the study-provided DS-level criterion
+    (cqa_register.csv). For a viral-clearance response the criterion is the STEP's required
+    log-reduction, back-calculated from the cumulative requirement minus the other steps'
+    nominal contribution (modular clearance) — the only case needing a backward calculation."""
+    if resp in VIRAL_COL:
+        col, cqa_key = VIRAL_COL[resp]
+        floor = float(cqa_reg[cqa_reg["key"] == cqa_key].iloc[0]["acc_low"])
+        step_row = VIRAL_STEP_ROW.get(key)
+        vc = csv("viral_clearance.csv")
+        if step_row is not None and step_row in set(vc["step"]):
+            cum = float(vc[vc["step"] == "Cumulative"].iloc[0][col])
+            stepv = float(vc[vc["step"] == step_row].iloc[0][col])
+            return max(floor - (cum - stepv), 0.0), float("inf"), "lower"
+        return floor, float("inf"), "lower"
+    cqa_key = resp if resp in set(cqa_reg["key"]) else RESP_TO_CQA.get(resp)
+    if cqa_key is None:
+        return None
+    row = cqa_reg[cqa_reg["key"] == cqa_key]
+    if row.empty:
+        return None
+    row = row.iloc[0]
+    return float(row["acc_low"]), float(row["acc_high"]), str(row["spec_type"])
+
+
+def _to_coded(natural, key, f):
+    p = CFG.unit_op(key).param(f)
+    lo, hi = p.prange
+    return (np.asarray(natural, dtype=float) - (lo + hi) / 2) / ((hi - lo) / 2)
+
+
+def _predict_points(r, coded):
+    """Predict the fitted model at coded factor settings (DataFrame of factor columns)."""
+    X = pd.DataFrame({"const": np.ones(len(coded))}, index=coded.index)
+    for f in r["factors"]:
+        X[f] = np.asarray(coded[f], dtype=float)
+    for a, b in itertools.combinations(r["factors"], 2):
+        X[f"{a}:{b}"] = X[a].values * X[b].values
+    if r["quad"]:
+        for f in r["factors"]:
+            X[f"{f}^2"] = X[f].values ** 2
+    return np.asarray(r["model"].predict(X[["const"] + r["names"]]))
+
+
+def _in_spec(y, lo, hi, stype):
+    if stype == "upper":
+        return y <= hi
+    if stype == "lower":
+        return y >= lo
+    return (y >= lo) & (y <= hi)
+
+
+def _contiguous_range(xs, mask, center=0.0):
+    """The contiguous True interval of `mask` containing the grid point nearest `center`;
+    (xs_lo, xs_hi) or None if the centre itself is not acceptable."""
+    ci = int(np.argmin(np.abs(xs - center)))
+    if not bool(mask[ci]):
+        return None
+    lo = ci
+    while lo > 0 and bool(mask[lo - 1]):
+        lo -= 1
+    hi = ci
+    while hi < len(xs) - 1 and bool(mask[hi + 1]):
+        hi += 1
+    return float(xs[lo]), float(xs[hi])
+
+
+def par_at_setpoint(key, resp, factor, n_grid=201):
+    """PAR of `factor` for `resp` with all other factors at set-point (coded 0)."""
+    acc = acceptance_for(key, resp)
+    if acc is None:
+        return None
+    lo, hi, stype = acc
+    r = fit(key, "rsm", resp)
+    xs = np.linspace(-1, 1, n_grid)
+    coded = pd.DataFrame({f: (xs if f == factor else np.zeros(n_grid)) for f in r["factors"]})
+    yhat = _predict_points(r, coded)
+    par_c = _contiguous_range(xs, _in_spec(yhat, lo, hi, stype))
+    return {"factor": factor, "resp": resp, "acc": acc, "xs_nat": _natural(xs, key, factor),
+            "y": yhat, "par_coded": par_c,
+            "par_nat": None if par_c is None else (_natural(par_c[0], key, factor),
+                                                   _natural(par_c[1], key, factor))}
+
+
+def _mc_predictive(r, key, factor, x_coded, others, rng, n_mc):
+    """Monte-Carlo predictive draws of the response at target `factor`=x_coded with the
+    `others` varied within their NOR (~N(set-point, NOR/6), clipped) + model residual noise.
+    Factored out so a Bayesian posterior-predictive backend can replace it later."""
+    coded = pd.DataFrame({factor: np.full(n_mc, x_coded)})
+    for g in others:
+        p = CFG.unit_op(key).param(g)
+        w = max((p.nor[1] - p.nor[0]) / 6.0, 1e-9)
+        nat = np.clip(rng.normal(p.setpoint, w, n_mc), p.prange[0], p.prange[1])
+        coded[g] = _to_coded(nat, key, g)
+    return _predict_points(r, coded[r["factors"]]) + rng.normal(0.0, r["rmse"], n_mc)
+
+
+def par_nor_propagated(key, resp, factor, n_grid=PAR_GRID, n_mc=PAR_MC_N):
+    """PAR of `factor` for `resp` with the other factors varying within their NOR.
+
+    The PAR is the range of `factor` over which the 95% predictive interval of the CQA
+    (from the NOR Monte-Carlo of the fitted model) stays within acceptance — a robustness
+    criterion, so it is narrower than the at-set-point PAR."""
+    acc = acceptance_for(key, resp)
+    if acc is None:
+        return None
+    lo, hi, stype = acc
+    r = fit(key, "rsm", resp)
+    others = [g for g in r["factors"] if g != factor]
+    rng = np.random.default_rng(PAR_SEED)
+    xs = np.linspace(-1, 1, n_grid)
+    med = np.empty(n_grid); p_lo = np.empty(n_grid); p_hi = np.empty(n_grid); p_in = np.empty(n_grid)
+    for i, x in enumerate(xs):
+        y = _mc_predictive(r, key, factor, x, others, rng, n_mc)
+        med[i] = np.median(y); p_lo[i] = np.percentile(y, 2.5); p_hi[i] = np.percentile(y, 97.5)
+        p_in[i] = _in_spec(y, lo, hi, stype).mean()
+    if stype == "upper":
+        mask = p_hi <= hi
+    elif stype == "lower":
+        mask = p_lo >= lo
+    else:
+        mask = (p_lo >= lo) & (p_hi <= hi)
+    par_c = _contiguous_range(xs, mask)
+    return {"factor": factor, "resp": resp, "acc": acc, "xs_nat": _natural(xs, key, factor),
+            "med": med, "p_lo": p_lo, "p_hi": p_hi, "p_in": p_in, "par_coded": par_c,
+            "par_nat": None if par_c is None else (_natural(par_c[0], key, factor),
+                                                   _natural(par_c[1], key, factor))}
+
+
+def governing_factor(key, resp):
+    """The RSM factor with the largest absolute main effect on `resp` — its governing
+    parameter, used for the representative PAR plot."""
+    lmap = factor_letters(key)
+    letter_to_factor = {lmap[f]: f for f in rsm_factors(key)}
+    for term in screening_effects_df(key, resp)["Term"]:
+        if term in letter_to_factor:
+            return letter_to_factor[term]
+    return rsm_factors(key)[0]
+
+
+def _par_str(par_nat, unit=""):
+    if par_nat is None:
+        return "none (set-point breaches)"
+    lo, hi = par_nat
+    u = f" {unit}" if unit else ""
+    return f"{lo:.3g}–{hi:.3g}{u}"
+
+
+def par_table(key):
+    """PAR table: for each governed CQA x RSM factor, the characterization range and both
+    PARs (at-set-point and NOR-propagated), in natural units."""
+    names = {p.key: p.name for p in CFG.unit_op(key).parameters}
+    units = {p.key: p.unit for p in CFG.unit_op(key).parameters}
+    rows = []
+    for resp in responses(key):
+        if acceptance_for(key, resp) is None:
+            continue
+        for factor in rsm_factors(key):
+            p = CFG.unit_op(key).param(factor)
+            ps = par_at_setpoint(key, resp, factor)
+            pn = par_nor_propagated(key, resp, factor)
+            rows.append([RESP_LABEL.get(resp, resp), names.get(factor, factor),
+                         f"{p.prange[0]:g}–{p.prange[1]:g}", units.get(factor, ""),
+                         _par_str(ps["par_nat"]), _par_str(pn["par_nat"])])
+    return pd.DataFrame(rows, columns=["CQA", "Parameter", "Char. range", "Unit",
+                                       "PAR (set-point)", "PAR (NOR)"])
+
+
+def fig_par(key, resp, factor):
+    """Two-panel PAR figure for one (CQA, parameter): at-set-point (left) and
+    NOR-propagated (right). Parameter on x, response on y, acceptance limits drawn, and the
+    acceptable parameter region shaded green; set-point and NOR marked."""
+    import matplotlib.pyplot as plt
+    ps = par_at_setpoint(key, resp, factor)
+    pn = par_nor_propagated(key, resp, factor)
+    lo, hi, stype = ps["acc"]
+    p = CFG.unit_op(key).param(factor)
+    pname = {pp.key: pp.name for pp in CFG.unit_op(key).parameters}.get(factor, factor)
+    unit = p.unit
+    label = RESP_LABEL.get(resp, resp)
+    fig, ax = plt.subplots(1, 2, figsize=(11, 3.8), sharey=True)
+
+    def _limits(a):
+        if stype in ("upper", "two_sided") and np.isfinite(hi):
+            a.axhline(hi, color="#c0392b", lw=1.0, ls="--", label="acceptance limit")
+        if stype in ("lower", "two_sided") and lo > 0:
+            a.axhline(lo, color="#c0392b", lw=1.0, ls="--",
+                      label=None if stype == "two_sided" else "acceptance limit")
+
+    def _marks(a):
+        a.axvline(p.setpoint, color="grey", lw=0.9, ls=":")
+        a.axvspan(p.nor[0], p.nor[1], color="grey", alpha=0.12, lw=0, label="NOR")
+
+    def _shade(a, par_nat):
+        if par_nat is not None:
+            a.axvspan(par_nat[0], par_nat[1], color="#2ecc71", alpha=0.25, lw=0,
+                      label="PAR (acceptable)")
+
+    ax[0].plot(ps["xs_nat"], ps["y"], color="#2a78d6", lw=1.6)
+    _limits(ax[0]); _shade(ax[0], ps["par_nat"]); _marks(ax[0])
+    ax[0].set_title("At set-point (others fixed)", fontsize=10)
+    ax[0].set_xlabel(f"{pname} ({unit})"); ax[0].set_ylabel(label)
+
+    ax[1].plot(pn["xs_nat"], pn["med"], color="#2a78d6", lw=1.6, label="median")
+    ax[1].fill_between(pn["xs_nat"], pn["p_lo"], pn["p_hi"], color="#2a78d6", alpha=0.18,
+                       lw=0, label="95% predictive")
+    _limits(ax[1]); _shade(ax[1], pn["par_nat"]); _marks(ax[1])
+    ax[1].set_title("Others varying within NOR (Monte-Carlo)", fontsize=10)
+    ax[1].set_xlabel(f"{pname} ({unit})")
+
+    h, l = ax[1].get_legend_handles_labels()
+    ax[1].legend(h, l, fontsize=7, loc="best")
+    fig.suptitle(f"Proven acceptable range — {label} vs {pname}", fontsize=11)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
     return fig

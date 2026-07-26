@@ -4108,15 +4108,13 @@ def build_master_report():
 
 def main():
     os.makedirs(OUT, exist_ok=True)
-    for annex in (build_plan(), build_report(), build_plan_harvest(), build_report_harvest(),
-                  build_plan_protein_a(), build_report_protein_a(),
-                  build_plan_viral_inactivation(), build_report_viral_inactivation(),
-                  build_plan_cex(), build_report_cex(),
-                  build_plan_aex(), build_report_aex(),
-                  build_plan_vf(), build_report_vf(),
-                  build_plan_ufdf(), build_report_ufdf(),
-                  build_transfer_plan(), build_risk_assessment(), build_master_plan(),
-                  build_master_report()):
+    # Only the RETAINED bioreactor (Step 3) and anion-exchange (Step 8) pairs are built.
+    # The other first-pass documents were archived to first_pass/ (their annexes are frozen
+    # under first_pass/ground_truth/); their builder functions remain defined below but are
+    # intentionally not invoked. To rebuild an archived annex, add its builder back here and
+    # point check_grounding at first_pass/ (see first_pass/README.md).
+    for annex in (build_plan(), build_report(),          # PCP-003 / PCR-003 (bioreactor)
+                  build_plan_aex(), build_report_aex()):  # PCP-008 / PCR-008 (anion exchange)
         path = os.path.join(OUT, f"{annex.document_id}.json")
         with open(path, "w") as fh:
             json.dump(annex.model_dump(mode="json"), fh, indent=2, ensure_ascii=False)

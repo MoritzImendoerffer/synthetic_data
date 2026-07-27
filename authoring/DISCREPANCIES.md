@@ -1,0 +1,111 @@
+# Registered discrepancies — real inconsistencies, deliberately preserved
+
+Documents in this corpus contain a small number of **genuine inconsistencies** that a
+competent review should have caught and did not. They are listed here, precisely, so they
+can be scored.
+
+This is not the retired weak-claims feature (`WEAK_CLAIMS.md`). Nothing here was *injected*.
+Each entry arose naturally while the corpus was built, was found afterwards, and was then
+**kept** rather than quietly fixed, because a corpus in which every document agrees with
+every other document is a poor test of anything.
+
+## Why keep them
+
+A real Biologics License Application package is written by many people over months. Protocols
+are approved, then the executed analysis drifts from the approved method; a table label
+outlives the thing it labelled; a value is corrected in one document and not in its sibling.
+Reviewers are supposed to catch this. They sometimes do not.
+
+That is the hard version of document-understanding: not "extract the Cpk from this report",
+but **"does what this report did match what its protocol said it would do?"** — which needs
+two documents read together, a method statement matched against an implementation, and the
+knowledge that a plausible-looking label can be wrong.
+
+## Rules for this file
+
+1. **Every entry is real.** If it is not a defect an auditor would raise, it does not belong.
+2. **Every entry is precise enough to score**: which documents, which spans, what the correct
+   statement would be.
+3. **Do not fix a registered discrepancy without removing its entry**, and do not remove an
+   entry without agreement — that silently deletes a benchmark item.
+4. Conversely, **an unregistered inconsistency is a bug**, not a feature. Fix it.
+
+---
+
+## D-001 · The proven-acceptable-range analysis does not follow its own protocol
+
+**Type:** protocol deviation (executed method departs from the approved method)
+**Severity:** would be a finding in a real review
+**Status:** open, deliberately preserved
+**Detected:** after the corpus was generated, by comparing `doe_report.par_at_design_centre`
+against the plans' stated method. Not caught during authoring or during the annex pass.
+
+### What the protocols commit to
+
+Each affected plan states that the first PAR analysis holds the **other factors at their
+set-points**:
+
+> "The first holds the other parameters at their set-points and scans the parameter of
+> interest across its characterization range."
+> — PCP-006 (low-pH viral inactivation)
+
+> "The first holds the other parameters at their set-points and evaluates the fitted
+> response-surface model across the parameter's characterization range."
+> — PCP-008 (anion exchange)
+
+> "The first holds the other parameter at its set-point and scans the parameter of interest
+> across its characterization range on a grid of 81 points, using the fitted response-surface
+> model."
+> — PCP-009 (small-virus retentive filtration)
+
+PCP-003 makes the same commitment ("The first holds the other factors at their set-points…").
+The authoring guideline in `section_plan.yaml` says the same thing: *"(1) at set-point (other
+factors held at their set-points)"*.
+
+### What the reports actually did
+
+`doe_report.par_at_design_centre` holds the other factors at **coded 0**, which is the
+midpoint of each factor's characterization range. The reports then present the result in a
+column headed **"PAR (set-point)"**.
+
+The midpoint equals the set-point for most factors, so the error is invisible in most of the
+corpus. It bites for six response-surface factors across three steps:
+
+| Step | Factor | Set-point (per protocol) | Design centre (actually used) |
+|---|---|---|---|
+| viral_inactivation | pH | 3.5 | 3.6 |
+| viral_inactivation | hold time | 90 min | 120 min |
+| viral_inactivation | temperature | 21 °C | 20 °C |
+| aex | protein load | 200 g/L resin | 175 g/L resin |
+| virus_filtration | filtration volume | 90 L/m² | 95 L/m² |
+| virus_filtration | pressure | 13 psi | 19 psi |
+
+So every "PAR (set-point)" value in **PCR-006, PCR-008 and PCR-009** was computed with the
+other factors somewhere the process never runs. The pH case is the sharpest: the protocol for
+the only true CPP in the process specifies 3.5, and the analysis used 3.6.
+
+### What makes it a good test
+
+- It is **cross-document**: the plan states the method, the report presents the result. Neither
+  document is internally inconsistent, so reading either alone reveals nothing.
+- It is **partially masked**: the same helper is used at all six DoE steps, and at three of
+  them midpoint and set-point coincide, so a spot check on the wrong step finds nothing wrong.
+- The label is **plausible**. "PAR (set-point)" is exactly what a reader expects to see, and
+  the number beneath it is a real number from a real model.
+- Several authoring agents noticed the coded-0 convention and wrote a careful sentence about
+  it in their own document — but none of them checked it against the *plan*, which is the
+  step that would have turned an observation into a finding.
+
+### The correct position
+
+Either the analysis should hold the other factors at their set-points, matching the protocol,
+or the protocols and the column heading should say "design centre". A real deviation report
+would state which, justify the choice, and assess the impact on the reported ranges.
+
+### Do not fix silently
+
+`doe_report.par_at_design_centre` is named for what it computes, so the **code** is honest.
+`par_table`'s column heading is deliberately left as `"PAR (set-point)"`, and the plans are
+deliberately left as written, so the **documents** carry the discrepancy. Changing either
+erases D-001. The `ProvenAcceptableRange.par_at_setpoint` annex field keeps its name for the
+same reason: it mirrors what the document claims.

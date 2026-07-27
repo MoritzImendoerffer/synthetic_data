@@ -169,6 +169,13 @@ class ProvenAcceptableRange(BaseModel):
     basis is the study DS spec, or a back-calculated required step contribution for a
     cumulative viral-clearance CQA.
 
+    ``par_at_setpoint`` keeps that name because it mirrors what the DOCUMENT claims. The
+    value is in fact computed with the other factors at the design centre (the midpoint of
+    the characterization range), which differs from the set-point for six factors across
+    three steps. That gap is registered discrepancy **D-001** in
+    ``authoring/DISCREPANCIES.md`` and is preserved on purpose. Renaming this field would
+    hide it.
+
     ``quality_attribute`` is optional because a step that governs no CQA still reports
     PARs — they are simply per-parameter rather than per-attribute. At the two non-DoE
     steps (harvest, UF/DF) there is also no fitted model to propagate through, so

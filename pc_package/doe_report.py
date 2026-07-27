@@ -507,8 +507,29 @@ def _contiguous_range(xs, mask, center=0.0):
     return float(xs[lo]), float(xs[hi])
 
 
-def par_at_setpoint(key, resp, factor, n_grid=201):
-    """PAR of `factor` for `resp` with all other factors at set-point (coded 0)."""
+def par_at_design_centre(key, resp, factor, n_grid=201):
+    """PAR of `factor` for `resp` with all other factors at the DESIGN CENTRE (coded 0).
+
+    The design centre is the midpoint of each factor's characterization range. It is **not**
+    the set-point, and for six response-surface factors it differs:
+
+        viral_inactivation  ph 3.5 vs 3.6 · hold_time 90 vs 120 · temperature 21 vs 20
+        aex                 load 200 vs 175
+        virus_filtration    filtration_volume 90 vs 95 · pressure 13 vs 19
+
+    **This is a REGISTERED DISCREPANCY, deliberately preserved — do not "fix" it silently.**
+    The approved protocols commit to the set-point (PCP-006: "The first holds the other
+    parameters at their set-points"; PCP-008 and PCP-009 likewise), so the executed analysis
+    departs from the method its own protocol specifies. The reports then present the result
+    under a column headed "PAR (set-point)". A review should have caught this and did not.
+
+    It is retained as a benchmark item for cross-document consistency checking, and is
+    documented in ``authoring/DISCREPANCIES.md``. Changing the computation, or relabelling
+    ``par_table``'s column, would erase it. Read that file before touching either.
+
+    The function name says design centre because the *code* should be honest about what it
+    computes; the *documents* carry the discrepancy.
+    """
     acc = acceptance_for(key, resp)
     if acc is None:
         return None
@@ -599,7 +620,7 @@ def par_table(key):
             continue
         for factor in rsm_factors(key):
             p = CFG.unit_op(key).param(factor)
-            ps = par_at_setpoint(key, resp, factor)
+            ps = par_at_design_centre(key, resp, factor)
             pn = par_nor_propagated(key, resp, factor)
             rows.append([RESP_LABEL.get(resp, resp), names.get(factor, factor),
                          f"{p.prange[0]:g}–{p.prange[1]:g}", units.get(factor, ""),
@@ -613,7 +634,7 @@ def fig_par(key, resp, factor):
     NOR-propagated (right). Parameter on x, response on y, acceptance limits drawn, and the
     acceptable parameter region shaded green; set-point and NOR marked."""
     import matplotlib.pyplot as plt
-    ps = par_at_setpoint(key, resp, factor)
+    ps = par_at_design_centre(key, resp, factor)
     pn = par_nor_propagated(key, resp, factor)
     lo, hi, stype = ps["acc"]
     p = CFG.unit_op(key).param(factor)

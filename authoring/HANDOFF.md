@@ -161,10 +161,19 @@ ground. Tracked as a gate to add.
 the acidic-variants acceptance range is printed as 18–40 but only the ceiling is enforced
 (making it two-sided would move the headline min Cpk from 1.51 to 1.03); the three equipment
 `cal_due` dates pre-date `EFFECTIVE_DATE`, so calibration reads as overdue while
-`calibration_status` says otherwise; `DEV-005-01` says a buffer was prepared *below* target at
-pH 3.38 but is tied to an RSM run whose design target is 3.20; and `par_at_setpoint` holds the
-other factors at the range **midpoint**, which differs from the set-point for 6 RSM factors
-across 3 steps.
+`calibration_status` says otherwise; and `DEV-005-01` says a buffer was prepared *below* target
+at pH 3.38 but is tied to an RSM run whose design target is 3.20.
+
+**Registered discrepancies (`authoring/DISCREPANCIES.md`).** One finding was promoted from
+"defect to fix" to "benchmark item to keep": the PAR analysis holds the other factors at the
+design centre while all four affected protocols commit to holding them at their set-points, and
+the reports present the result under a column headed "PAR (set-point)". It is a real protocol
+deviation, cross-document, and partially masked because midpoint and set-point coincide at
+three of the six DoE steps. `doe_report.par_at_setpoint` was renamed to `par_at_design_centre`
+so the **code** is honest; the column heading, the plans and the annex field name are left
+alone so the **documents** still carry it. Read `DISCREPANCIES.md` before touching any of
+them — the rule there is that an unregistered inconsistency is a bug, but removing a
+registered one deletes a benchmark item.
 
 **The register correction (important — this is why the reports were rewritten).** The
 first-pass reports read as machine-written, and the cause was a feedback loop in the

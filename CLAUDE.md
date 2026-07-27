@@ -100,6 +100,12 @@ differ only in their `UO` key and unit-specific narrative:
 - **Framing rule:** the screening model identifies effects; the **response-surface
   model is the predictive/design-space model**. State this; don't over-claim the
   near-saturated screening fit.
+- **Registered discrepancies are real and deliberately kept.** A few documents contain
+  genuine inconsistencies a review should have caught — the live one is a PAR analysis
+  that departs from the method its own protocol specifies. They are listed precisely in
+  [`authoring/DISCREPANCIES.md`](authoring/DISCREPANCIES.md) so they can be scored. **Do
+  not "fix" one without removing its entry**; that silently deletes a benchmark item. An
+  *unregistered* inconsistency is a bug — fix it, or register it deliberately.
 - **Nothing is added to a document after authoring.** The document a one-pass author
   produces is the document that ships. Post-authoring steps (annex, rhetorical layer,
   grounding check) build artifacts *around* the text and never change what it claims;

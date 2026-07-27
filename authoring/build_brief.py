@@ -93,6 +93,79 @@ STRING_HELPERS = {"title_block", "related_docs_md", "sop_table", "corpus_docs_md
                   "dev_register"}
 
 
+# Authors look for a capability, not a name. The alphabetical listing below answers
+# "what does `par_nor_propagated` do?" but not "how do I check a worst-case corner?" —
+# and the second question is the one that gets asked. Every helper is still listed in
+# full afterwards; this is an index into it, by the job the author is trying to do.
+HELPERS_BY_JOB = [
+    ("Predict a response where the design did not run — a worst-case corner, a NOR edge, "
+     "an edge-of-failure scan", [
+        ("D.predict(key, resp, coded={..}|natural={..})", "the fitted model at your settings"),
+        ("D.to_coded(key, factor, value)", "natural units to coded, and to_natural back"),
+        ("D.meets_acceptance(key, resp, values)", "does each prediction meet the criterion"),
+     ]),
+    ("State what a response must achieve", [
+        ("D.acceptance_for(key, resp)",
+         "back-calculates the STEP floor for a viral response; never hand-calculate one"),
+     ]),
+    ("Show a design matrix in a PROTOCOL, where no result may appear", [
+        ("D.planned_matrix_df(key, kind, coded=True)", "response columns stripped"),
+     ]),
+    ("Show the design and the effects in a REPORT", [
+        ("D.coded_matrix_df / D.design_matrix_df", "appendix matrices, responses included"),
+        ("D.screening_effects_df / D.rsm_coeff_df", "effects and coefficients"),
+        ("D.fit_summary_df / D.anova_lof_df", "model adequacy and lack of fit"),
+        ("D.center_cv_df(key, kind)", "centre-point reproducibility, the pure-error term"),
+     ]),
+    ("Report proven acceptable ranges", [
+        ("D.par_table(key)", "per CQA x factor, both analyses"),
+        ("D.governing_factor(key, resp)", "the factor with the largest RSM main effect"),
+        ("D.fig_par(key, resp, factor)", "green-shaded acceptable region"),
+        ("D.par_at_design_centre(...)",
+         "holds the OTHER factors at the range MIDPOINT, not the set-point — read "
+         "authoring/DISCREPANCIES.md D-001 before describing it"),
+     ]),
+    ("Parameters, ranges and classification", [
+        ("plan_params(key)", "PROSPECTIVE: no classification, for a PCP"),
+        ("report_params(key)", "includes the outcome classification, for a PCR"),
+        ("CFG.unit_op(key).param(name)", ".setpoint / .nor / .prange"),
+     ]),
+    ("Quality attributes", [
+        ("cqas_for(key)", "only what the step SETS — empty for most downstream steps"),
+        ("cqas_by_keys([..])", "what the step controls or clears; use this downstream"),
+        ("all_cqas()", "the whole register, for a corpus-level document"),
+     ]),
+    ("Capability", [
+        ("cap_for([keys])", "one-sided Cpk per CQA"),
+        ("V['min_cpk']", "a RESULT. No grounded acceptance threshold exists — do not invent one"),
+     ]),
+    ("Deviations", [
+        ("dev_register(doc_id)", "markdown STRING — print() it, do not show() it"),
+        ("dev_facts(doc_id)", "structured rows"),
+        ("dev_* module scalars", "the magnitudes, already grounded"),
+     ]),
+    ("Cross-references and controlled documents", [
+        ("related_docs_md(doc) / corpus_docs_md(doc)", "markdown STRINGs — print() them"),
+        ("sop_table(sops, amvs)", "per step; all_sop_table() for the campaign-wide register"),
+     ]),
+    ("Corpus-level tables, for the parent documents", [
+        ("process_steps_df()", "the train and each step's role"),
+        ("char_scope_df()", "parameters and study-type split per step"),
+        ("equipment_df()", "instrumented scale-down systems"),
+     ]),
+]
+
+
+def _helper_by_job():
+    out = ["**Find a helper by the job you are doing.** The full alphabetical listing "
+           "follows; this is an index into it.\n"]
+    for job, calls in HELPERS_BY_JOB:
+        out.append(f"- **{job}**")
+        for call, note in calls:
+            out.append(f"    - `{call}` — {note}")
+    return "\n".join(out) + "\n\n"
+
+
 def _helper_lines(module, mod_name, prefix=""):
     lines = []
     for name, obj in sorted(vars(module).items()):
@@ -287,6 +360,7 @@ def build(doc_id: str) -> str:
 
     # 7. Helper inventory -------------------------------------------------------
     w("## 7. Helper inventory — pull numbers through these (the menu)\n\n")
+    w(_helper_by_job())
     w("Import in the setup chunk: `from _pcpkg import *` and `import doe_report as D`. "
       "Every measurement is a `` `{python} EXPR` `` inline expression or a helper call "
       "printed under `#| output: asis`. Identifiers (SOP/AMV/doc IDs, ICH names, coded "

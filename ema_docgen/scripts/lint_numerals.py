@@ -51,14 +51,20 @@ DIGIT = re.compile(r"\d")
 
 
 def load_allow(path: Path | None) -> list[re.Pattern]:
-    """Extra exemption regexes, one per line; # comments and blanks ignored."""
+    """Extra exemption regexes, one per line; # comments and blanks ignored.
+
+    Compiled with ``re.MULTILINE`` so that a ``^``-anchored rule (e.g. the ordered-list
+    marker rule ``^\\s*\\d+\\.\\s``) matches at the start of every line rather than only at
+    the start of the whole document — which is what the author of that rule intended, and
+    what the built-in EXEMPT heading pattern already does.
+    """
     if path is None or not path.exists():
         return []
     out = []
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if line and not line.startswith("#"):
-            out.append(re.compile(line))
+            out.append(re.compile(line, re.MULTILINE))
     return out
 
 

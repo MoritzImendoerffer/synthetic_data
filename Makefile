@@ -4,7 +4,7 @@
 PY := python3
 PKG_DIR := pc_package
 
-.PHONY: all data figures fmea corpus test clean env help
+.PHONY: all data figures fmea corpus style test clean env help
 
 help:
 	@echo "Targets:"
@@ -12,6 +12,7 @@ help:
 	@echo "  make data     - generate datasets       -> outputs/data/"
 	@echo "  make figures  - render figures          -> outputs/figures/"
 	@echo "  make corpus   - render pc_package docs + build/validate ground-truth annexes"
+	@echo "  make style    - register gate (plain technical English) over every corpus doc"
 	@echo "  make fmea     - build the post-PC FMEA workbook (content source for RA-001)"
 	@echo "  make test     - run reproducibility tests"
 	@echo "  make env      - install Python dependencies"
@@ -30,6 +31,17 @@ figures: data
 
 fmea:
 	$(PY) risk_assessment/build_fmea.py
+
+# Register gate over every corpus document: plain technical English, measured against the
+# two published human sources (PDA TR 60, A-Mab). --selftest proves the thresholds are ones
+# real human regulatory prose passes; if it ever fails, the threshold is wrong, not the source.
+style:
+	$(PY) authoring/check_style.py --selftest
+	$(PY) authoring/check_exemplar_quotes.py
+	@rc=0; for f in $(PKG_DIR)/*.qmd; do \
+		[ -e "$$f" ] || continue; \
+		$(PY) authoring/check_style.py "$$f" || rc=1; \
+	done; exit $$rc
 
 # Render every corpus document (docx + pdf) then build & validate the ground-truth
 # annexes. All content derives from outputs/, so this stays consistent with the model.

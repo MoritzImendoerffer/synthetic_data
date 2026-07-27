@@ -16,6 +16,12 @@ full-depth, one-pass reports that remain in `pc_package/`:
 
 ## Status / caveats
 
+- **Written in the superseded register, and not a voice reference.** These documents predate
+  the register correction. They average ~34-word sentences, roughly ten em-dashes per 1000
+  words and coined compounds such as "the quality-attribute-richest characterization in the
+  campaign" — the machine idiom that `authoring/check_style.py` now gates against. `make style`
+  deliberately does **not** glob this directory, because these are kept as history, not as
+  material to imitate. Never take voice from them; see `authoring/REGISTER_EXEMPLAR.md`.
 - **Not built or gated by default.** `pc_package/build_ground_truth.py` now builds only the
   retained bioreactor and anion-exchange pairs; the builder functions for these archived
   documents remain defined but are not invoked, and `check_grounding.py` / `validate_annex.py`

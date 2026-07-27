@@ -14,7 +14,10 @@ bound in the setup chunk (and anywhere above it). The gate therefore:
      namespace, with cwd = the document's directory (so ``from _pcpkg import *``,
      ``../outputs/...`` and ``reference.docx`` resolve exactly as under Quarto);
   3. reports any NameError / bad-helper-call / typo, and any ``<<NEEDS:>>`` gap markers;
-  4. runs the bare-numeral lint (``ema_docgen/scripts/lint_numerals.py``).
+  4. runs the bare-numeral lint (``ema_docgen/scripts/lint_numerals.py``, advisory);
+  5. runs the register gate (``authoring/check_style.py``, hard) — sentence-length
+     distribution, punctuation habits and banned tics, with thresholds calibrated so that
+     PDA TR 60 and the A-Mab case study pass them.
 
 With ``--render`` it additionally runs the real ``quarto render --to docx`` when quarto is
 present (the truest gate). Grounding (annex ↔ document) is a SEPARATE, later step
@@ -39,6 +42,7 @@ import traceback
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 LINT = os.path.join(ROOT, "ema_docgen", "scripts", "lint_numerals.py")
+STYLE = os.path.join(HERE, "check_style.py")
 
 INLINE_RE = re.compile(r"`\{python\}\s*(.+?)`")
 NEEDS_RE = re.compile(r"<<NEEDS:[^>]*>>")
@@ -123,6 +127,19 @@ def run_lint(qmd: str) -> int:
     return r.returncode
 
 
+def run_style(qmd: str) -> int:
+    """Register gate — plain technical English, measured against the human sources."""
+    if not os.path.exists(STYLE):
+        print("WARN  style gate not found; skipping")
+        return 0
+    r = subprocess.run([sys.executable, STYLE, os.path.abspath(qmd)],
+                       cwd=ROOT, capture_output=True, text=True)
+    sys.stdout.write(r.stdout)
+    if r.stderr.strip():
+        sys.stderr.write(r.stderr)
+    return r.returncode
+
+
 def run_quarto(qmd: str) -> int:
     if not shutil.which("quarto"):
         print("WARN  --render requested but quarto not on PATH; skipping real render")
@@ -140,7 +157,7 @@ def run_quarto(qmd: str) -> int:
     return r.returncode
 
 
-def check(qmd: str, do_render: bool, strict_numerals: bool) -> int:
+def check(qmd: str, do_render: bool, strict_numerals: bool, lax_style: bool) -> int:
     text = blank_comments(open(qmd, encoding="utf-8").read())
     segments, chunk_errs, inline_errs = dry_run(qmd)
     n_chunk = sum(1 for s in segments if s[0] == "chunk")
@@ -173,9 +190,18 @@ def check(qmd: str, do_render: bool, strict_numerals: bool) -> int:
     # inline expressions; it does not fail the correctness gate unless --strict-numerals.
     print(f"\n=== numeral lint ({'GATE' if strict_numerals else 'advisory'}) ===")
     lint_rc = run_lint(qmd)
+
+    # The register gate IS hard by default: a document in the wrong voice is a defect,
+    # and the thresholds are calibrated so real human regulatory prose passes them
+    # (check_style.py --selftest). --lax-style demotes it while drafting.
+    print(f"\n=== register / style ({'advisory' if lax_style else 'GATE'}) ===")
+    style_rc = run_style(qmd)
+
     render_rc = run_quarto(qmd) if do_render else 0
 
-    hard_ok = ok and render_rc == 0 and (lint_rc == 0 or not strict_numerals)
+    hard_ok = (ok and render_rc == 0
+               and (lint_rc == 0 or not strict_numerals)
+               and (style_rc == 0 or lax_style))
     if lint_rc != 0 and not strict_numerals:
         print("      ^ advisory: convert any TYPED MEASUREMENT above into an inline "
               "expression; statistical conventions (α, p-thresholds, n, CI level) may stay.")
@@ -189,6 +215,8 @@ def main() -> int:
                     help="also run the real `quarto render --to docx` when quarto is present")
     ap.add_argument("--strict-numerals", action="store_true",
                     help="promote the numeral lint to a hard gate (default: advisory)")
+    ap.add_argument("--lax-style", action="store_true",
+                    help="demote the register gate to advisory (default: hard gate)")
     args = ap.parse_args()
     rc = 0
     for q in args.qmd:
@@ -196,7 +224,7 @@ def main() -> int:
             print(f"FAIL  no such file: {q}")
             rc = 1
             continue
-        rc = max(rc, check(q, args.render, args.strict_numerals))
+        rc = max(rc, check(q, args.render, args.strict_numerals, args.lax_style))
     return rc
 
 

@@ -4,9 +4,18 @@ The ground-truth annexes label the corpus's **entities and values** (parameters,
 studies, capability, deviations). This layer adds the corpus's **rhetorical structure** —
 which spans of prose are a *problem statement*, a *claim*, a *justification*, and so on, and
 which justification supports which claim. It turns each report into labeled data for
-discourse / argument-mining NLP: claim–evidence linking, argument-structure parsing,
-hedge and boundary detection, and (with the weak-claims layer) supported-vs-unsupported
-claim classification.
+discourse / argument-mining NLP: claim–evidence linking, argument-structure parsing, and
+hedge and boundary detection.
+
+> **Note.** This layer is *annotation over existing prose*. It never changes what a document
+> says, so it is unaffected by the retirement of the planted weak-claim feature
+> (`authoring/WEAK_CLAIMS.md`) and remains a live part of the corpus. The `weak_claim` role
+> below is currently unused: no document contains a planted claim, so the builder merges none.
+>
+> The curated spans are tied to a specific revision of a document. Re-authoring a report
+> invalidates them wholesale — after the 2026-07 register correction, 34 of PCR-003's 37
+> spans no longer matched and are dropped with a warning. **Re-curate against the current
+> text** before relying on this layer.
 
 The layer is **grounded** exactly like every other annex quote: each span's `quote` must
 appear verbatim (whitespace-collapsed) in the rendered document (`build_rhetorical_annex.py`
@@ -31,7 +40,7 @@ Each span carries exactly one `role`:
 | `deviation_disposition` | the adverse-finding → investigation → disposition move | "was investigated, bounded … and retained" |
 | `deferral` | points to an appendix / paired doc / SOP / AMV instead of "data not shown" | "Appendix C", "given in the deviations section" |
 | `restatement` | a claim restated elsewhere in different words (coreference) — links to the original claim | high mannose restated across subsections |
-| `weak_claim` | an unsupported / overstated claim (merged from `weak_claims.yaml`; `support = unsupported`) | see `WEAK_CLAIMS.md` |
+| `weak_claim` | *(unused — feature retired)* an unsupported / overstated claim merged from `weak_claims.yaml` | see `WEAK_CLAIMS.md` |
 
 ## Relations
 

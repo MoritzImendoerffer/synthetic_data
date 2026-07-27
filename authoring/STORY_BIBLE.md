@@ -80,7 +80,7 @@ whole train with roles from `process_steps_df()`. The canonical narrative of eac
   leached-PA clearance. DoE. Sets **no** CQA of its own (clears only).
 - **Step 8 — Anion Exchange.** Flow-through final polish; **sets the cumulative MVM
   (parvovirus) clearance** — the tightest capability of the drug substance; clears
-  XMuLV/HCP/DNA/leached-PA. DoE. The generalization/register exemplar (PCR-008).
+  XMuLV/HCP/DNA/leached-PA. DoE. This is the step with the twice-run DoE (§9).
 - **Step 9 — Small-Virus Retentive Filtration.** Dedicated size-based small-virus
   removal; principal MVM clearance; orthogonal to steps 6 and 8. DoE.
 - **Step 10 — UF/DF (Formulation).** Concentration + buffer exchange to the DS target;
@@ -211,10 +211,19 @@ expression for the specific step — the "helper inventory".)
 
 ## 11. Voice
 
-Third person; past tense for what was done, present for what holds; passive where the
-object of study outranks the actor. Register **varies by section, deliberately**
-(WRITING_GUIDE §4 and `section_plan.yaml`) — an administrative sub-section is three flat
-sentences, a design-space justification is dense and defensive. The rhetorical moves and
-gold excerpts live in `authoring/REGISTER_EXEMPLAR.md`; the full standard in
-`authoring/WRITING_GUIDE.md`. The narrator is always Novacyte MSAT/PD, writing to a
-skeptical BLA assessor.
+Third person. Past tense for what was done, present for what holds. Passive where the
+object of study outranks the actor.
+
+The register is **plain technical English at about C1 level**, modelled on the two
+published human documents in `refs/text/` (PDA Technical Report No. 60 and the A-Mab case
+study). Verbatim exemplar passages from both are in `authoring/REGISTER_EXEMPLAR.md`, and
+the measurable targets are in `WRITING_GUIDE.md` §4, enforced by `authoring/check_style.py`.
+Short sentences, almost no em-dashes or semicolons, no coined compounds, no commentary on
+your own rhetoric.
+
+Register still varies by section (`section_plan.yaml`): an administrative sub-section is
+three flat sentences, a design-space justification is careful and complete. The narrator is
+always Novacyte MSAT/PD, writing to a skeptical BLA assessor.
+
+**Never** take the voice from an existing document in `pc_package/`. The first-pass corpus
+was written in a machine register, and copying it reintroduces the problem.

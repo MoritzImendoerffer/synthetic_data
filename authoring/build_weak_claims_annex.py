@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
-"""Emit the ground-truth annex fragment for the planted weak claims, and verify each is
+"""RETIRED FEATURE. Emit the annex fragment for planted weak claims and verify grounding.
+
+    Nothing in the shipped pipeline calls this. The planted weak-claim feature was retired
+    because the claims were injected AFTER authoring, which makes them contradict the
+    surrounding prose rather than merely lack support for themselves — see
+    ``authoring/WEAK_CLAIMS.md``. This script is kept as a working record and as the
+    starting point if the feature is revived (in which case the claims must be named in the
+    authoring brief and written in one pass, not injected). Run against a document with no
+    planted claims it correctly exits non-zero.
+
+Emit the ground-truth annex fragment for the planted weak claims, and verify each is
 grounded (its verbatim quote appears in the document it labels).
 
     uv run python authoring/build_weak_claims_annex.py --doc PCR-003 \

@@ -17,11 +17,15 @@ Invoke as:
 - **Model outputs exist:** `uv run python scripts/generate_data.py` has been run and
   `outputs/data/*.csv` + `outputs/report_values.json` are present. (The scientific stack is
   under `uv`; always `uv run python …`, never bare `python3`.)
-- **You do NOT need any `pc_package/*.qmd`.** Authoring depends only on: `config` → the
-  model → `outputs/`, the `_pcpkg` / `doe_report` helpers, and the `authoring/` artifacts
-  (guide, brief, section plan, register exemplar, story bible, template). The corpus
-  reports are prior knowledge, already distilled into `authoring/` — never a runtime input.
-  `authoring/check_blank_repo.sh` proves this.
+- **You must NOT read any `pc_package/*.qmd`.** Authoring depends only on: `config` → the
+  model → `outputs/`, the `_pcpkg` / `doe_report` helpers, the `authoring/` artifacts
+  (guide, brief, section plan, register exemplar, story bible, template), and the published
+  human sources in `refs/text/`. `authoring/check_blank_repo.sh` proves this.
+
+  This is stronger than "not needed". An earlier register exemplar was distilled *from* an
+  AI-written report in `pc_package/`, which closed a loop: the machine voice fed itself and
+  drifted further from human regulatory prose with each pass. The exemplar is now built from
+  the published sources only, and the author must not look at a sibling report for voice.
 - **Working tree:** commit or stash unrelated changes so a document's diff is reviewable.
 
 ---
@@ -52,6 +56,10 @@ Invoke as:
 4. gate:       uv run python authoring/check_render.py pc_package/<DOC>_<uokey>.qmd --render
                  - HARD: every chunk execs, every inline expr evals, no <<NEEDS:>>,
                    quarto render --to docx succeeds.
+                 - HARD: the register gate (authoring/check_style.py) — sentence-length
+                   distribution, em-dash/semicolon/compound density, banned tics. Its
+                   thresholds are calibrated so PDA TR 60 and the A-Mab case study pass
+                   (`--selftest`). Use --lax-style to demote it while drafting.
                  - ADVISORY: the numeral lint (flags typed measurements to convert to
                    inline exprs; statistical conventions α/p/n/CI may stay).
                On a HARD failure, re-invoke the SAME agent to fix in place (or extend a

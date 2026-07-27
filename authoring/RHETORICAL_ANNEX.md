@@ -12,10 +12,21 @@ hedge and boundary detection.
 > (`authoring/WEAK_CLAIMS.md`) and remains a live part of the corpus. The `weak_claim` role
 > below is currently unused: no document contains a planted claim, so the builder merges none.
 >
-> The curated spans are tied to a specific revision of a document. Re-authoring a report
-> invalidates them wholesale — after the 2026-07 register correction, 34 of PCR-003's 37
-> spans no longer matched and are dropped with a warning. **Re-curate against the current
-> text** before relying on this layer.
+> **Coverage is complete**: all eight `PCR-00N` reports plus `PCMR-001` carry a layer,
+> 315 spans in total. Only `PCR-003`'s live in an external
+> `authoring/rhetorical/PCR-003.spans.yaml`; every other layer is a Python constant inside
+> `pc_package/build_ground_truth.py` (see `AX_RHET_SPANS`).
+>
+> **Put new layers in the builder, not in a YAML file.** That is not a style preference. The
+> external YAML went stale and shipped an *empty* layer, because the agents re-grounding the
+> annexes fixed every quote they could see in the file they were editing and never opened a
+> registry that sat outside it. Co-location is what keeps a layer current. The builder now
+> hard-fails if any span in a `.spans.yaml` stops matching, which closes the silent-degradation
+> path for the one file that remains.
+>
+> The spans are tied to a specific revision of a document, so **re-authoring a report
+> invalidates them wholesale** — after the 2026-07 register correction, 34 of PCR-003's 37
+> spans no longer matched. Re-curate as part of the annex step, not as a later task.
 
 The layer is **grounded** exactly like every other annex quote: each span's `quote` must
 appear verbatim (whitespace-collapsed) in the rendered document (`build_rhetorical_annex.py`

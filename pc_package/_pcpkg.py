@@ -241,9 +241,41 @@ def pct(x):
     return f"{100 * x:.1f}%"
 
 
+def _auto_floatfmt(df):
+    """Per-column float formats: keep plain magnitudes plain, leave everything else at .3g.
+
+    The default ``.3g`` renders a 9000 g set-point as ``9e+03`` and a 500,000 ng/mg burden
+    as ``5e+05`` — a measurement disguised as a machine artifact. It is right for the rest
+    of the corpus, though: a p-value of 1.7e-53 and an F of 3.9e+26 belong in scientific
+    notation, so a blanket change would be worse than the bug.
+
+    A column therefore switches to fixed notation only when it is unambiguously a column of
+    plain magnitudes: every finite non-zero value at least 1, and the largest between 1000
+    and 10 million. p-value and coefficient columns fail the lower bound; the degenerate
+    F-statistics at the viral-inactivation step (order 1e26, which the report itself flags
+    as uninformative) fail the upper one. Both keep ``.3g``, which is what they want.
+    """
+    import numpy as _np
+    import pandas as _pd
+    fmts = []
+    for col in df.columns:
+        s = df[col]
+        fmt = ".3g"
+        if _pd.api.types.is_numeric_dtype(s) and not _pd.api.types.is_bool_dtype(s):
+            v = _np.abs(s.to_numpy(dtype=float))
+            v = v[_np.isfinite(v) & (v != 0)]
+            if v.size and v.min() >= 1 and 1000 <= v.max() < 1e7:
+                whole = _np.allclose(v, _np.round(v))
+                fmt = ",.0f" if whole else ",.1f"
+        fmts.append(fmt)
+    return fmts
+
+
 def show(df, floatfmt=None):
-    """Emit a DataFrame as a GitHub-markdown table (Quarto renders it to docx/pdf)."""
-    print(df.to_markdown(index=False, floatfmt=floatfmt or ".3g"))
+    """Emit a DataFrame as a GitHub-markdown table (Quarto renders it to docx/pdf).
+
+    ``floatfmt`` overrides the automatic per-column choice (see ``_auto_floatfmt``)."""
+    print(df.to_markdown(index=False, floatfmt=floatfmt or _auto_floatfmt(df)))
 
 
 param_reg = csv("parameter_classification.csv")
@@ -432,6 +464,60 @@ def sop_table(sops=None, amvs=None):
 # Corpus-wide helpers (for the transfer / master documents, which span the      #
 # whole document set and the whole process train rather than one unit op).      #
 # --------------------------------------------------------------------------- #
+def all_sop_table():
+    """Every controlled document cited anywhere in the corpus, deduplicated and sorted.
+
+    ``sop_table`` takes explicit lists, which suits a per-step document. The three parent
+    documents (PTP-001, PCMP-001, PCMR-001) need the campaign-wide register instead, and
+    each was building the union in its own SETUP chunk. This is that union."""
+    sops, amvs = {}, {}
+    for name, val in list(globals().items()):
+        if name.endswith("_SOP_REFS") and isinstance(val, list):
+            sops.update(dict(val))
+        elif name.endswith("_AMV_REFS") and isinstance(val, list):
+            amvs.update(dict(val))
+    return sop_table(sorted(sops.items()), sorted(amvs.items()))
+
+
+def all_cqas():
+    """The full drug-substance CQA register, in config order.
+
+    Equivalent to ``cqas_by_keys(list(cqa_reg["key"]))``, which is what the corpus-level
+    documents were each writing out."""
+    return cqas_by_keys(list(cqa_reg["key"]))
+
+
+def char_scope_df():
+    """Characterization scope per step: parameters, study-type split, covering documents.
+
+    The natural parent-document table — it says what the campaign covers and which
+    plan/report pair covers it. Derived from the parameter register and the train order,
+    so a config change flows through."""
+    rows = []
+    for key in CFG.train_order:
+        uo = CFG.unit_op(key)
+        ps = uo.parameters
+        mv = sum(1 for p in ps if p.study == "multivariate")
+        rows.append([uo.step, uo.name, len(ps), mv, len(ps) - mv,
+                     f"PCP-{uo.step:03d} / PCR-{uo.step:03d}"])
+    return pd.DataFrame(rows, columns=["Step", "Unit operation", "Parameters",
+                                       "Multivariate", "Univariate", "Documents"])
+
+
+def equipment_df():
+    """Instrumented scale-down systems under calibration and change control.
+
+    Note ``cal_due`` is the NEXT calibration date and pre-dates the document effective
+    date: the studies were executed before it, which is what ``calibration_status``
+    records. Correct in a report of completed work; think before surfacing it in a
+    prospective document, where a past date reads as overdue."""
+    d = csv("dev_equipment.csv").rename(columns={
+        "id": "Equipment", "description": "Description",
+        "calibration_status": "Calibration status", "cal_due": "Next calibration due"})
+    d["Calibration status"] = d["Calibration status"].str.replace("_", " ")
+    return d
+
+
 def corpus_docs_md(doc_id=None):
     """Cross-reference table of the whole A-Mab document package.
 

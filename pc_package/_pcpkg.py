@@ -330,6 +330,17 @@ def doe_runs(key, kind):
     return len(csv(f"doe_{key}_{kind}.csv"))
 
 
+def doe_centre_points(key, kind):
+    """Number of centre-point replicates in a DoE design.
+
+    Read from the design rather than assumed. The ground-truth annexes previously carried
+    these counts as literals; they happened to be right for every step, which is exactly
+    what makes that pattern dangerous — a reseed or a design change updates the document
+    and leaves the annex asserting the old value, and grounding cannot catch it because
+    the number lives in a StudyDesign field rather than in a quote."""
+    return int((csv(f"doe_{key}_{kind}.csv").run_type == "center").sum())
+
+
 # --------------------------------------------------------------------------- #
 # Deviation facts (density-pass narrated-deviation sections).                  #
 # --------------------------------------------------------------------------- #

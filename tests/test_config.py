@@ -117,6 +117,52 @@ def test_generated_parameter_table_matches_config():
         "intended CSV change:\n  " + "\n  ".join(problems))
 
 
+def test_annex_study_designs_match_the_seeded_designs():
+    """Annex StudyDesign run and centre-point counts must come from the designs.
+
+    These live in schema fields rather than in quote strings, so ``check_grounding`` never
+    looks at them: an annex can assert a run count the design contradicts and still report
+    every quote grounded. The counts were literals until they were derived; this test is
+    what stops them drifting back.
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    gt = os.path.join(root, "pc_package", "ground_truth")
+    data = os.path.join(root, "outputs", "data")
+    if not os.path.isdir(gt):
+        pytest.skip("annexes not built; run pc_package/build_ground_truth.py")
+
+    import csv as _csv
+    import glob
+    import json
+
+    def design(key, kind):
+        path = os.path.join(data, f"doe_{key}_{kind}.csv")
+        if not os.path.exists(path):
+            return None
+        with open(path) as fh:
+            rows = list(_csv.DictReader(fh))
+        return len(rows), sum(1 for r in rows if r["run_type"] == "center")
+
+    keys = [k for k in CFG.train_order if st.DOE_FACTORS.get(k)]
+    problems = []
+    for path in sorted(glob.glob(os.path.join(gt, "*.json"))):
+        annex = json.load(open(path))
+        doc = annex["document_id"]
+        for sd in annex.get("studies") or []:
+            n_runs, n_cp = sd.get("n_runs"), sd.get("n_center_points")
+            if n_runs is None and n_cp is None:
+                continue
+            # match against any seeded design of any DoE step; the annex names its own
+            # unit operation, so a mismatch everywhere means the numbers are invented.
+            if not any(design(k, kind) == (n_runs, n_cp)
+                       for k in keys for kind in ("screening", "rsm")
+                       if design(k, kind) is not None):
+                problems.append(f"{doc} {sd.get('study_id', '?')}: "
+                                f"n_runs={n_runs}, n_center_points={n_cp} matches no seeded design")
+    assert not problems, ("annex StudyDesign counts disagree with the seeded designs:\n  "
+                          + "\n  ".join(problems))
+
+
 def test_ranges_contain_nor_and_setpoint():
     """The NOR sits inside the characterization range, and the set-point inside the NOR."""
     problems = []

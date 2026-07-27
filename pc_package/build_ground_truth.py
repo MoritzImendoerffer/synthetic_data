@@ -274,7 +274,7 @@ def build_studies(doc_id, file_name, report):
                      "Osmolality", "Culture duration"],
             responses=["afucosylation", "galactosylation", "high_mannose",
                        "acidic_variants", "aggregates_hmw"],
-            n_runs=n_scr, n_center_points=3, scale_down_model=SDM,
+            n_runs=n_scr, n_center_points=P.doe_centre_points(UO, "screening"), scale_down_model=SDM,
             associated_parameters=[PARAM_CONCEPT[f] for f in
                                    ["Culture pH", "Culture temperature", "Dissolved CO2 (pCO2)",
                                     "Osmolality", "Culture duration"]],
@@ -290,7 +290,7 @@ def build_studies(doc_id, file_name, report):
             factors=["Culture pH", "Culture temperature", "Culture duration", "Dissolved CO2 (pCO2)"],
             responses=["afucosylation", "galactosylation", "high_mannose",
                        "acidic_variants", "aggregates_hmw"],
-            n_runs=n_rsm, n_center_points=4, scale_down_model=SDM,
+            n_runs=n_rsm, n_center_points=P.doe_centre_points(UO, "rsm"), scale_down_model=SDM,
             associated_parameters=[PARAM_CONCEPT[f] for f in
                                    ["Culture pH", "Culture temperature", "Culture duration",
                                     "Dissolved CO2 (pCO2)"]],
@@ -1561,7 +1561,7 @@ def pa_studies(doc_id, file_name, report):
             study_id="study:pa_screening", study_type="screening_doe",
             design_name="two-level full factorial", unit_operation=PAUO_NAME,
             factors=PA_MULTIVARIATE, responses=responses,
-            n_runs=n_scr, n_center_points=3, scale_down_model="scale-down chromatography column",
+            n_runs=n_scr, n_center_points=P.doe_centre_points(PAUO, "screening"), scale_down_model="scale-down chromatography column",
             associated_parameters=[PAPARAM_CONCEPT[f] for f in PA_MULTIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Screening design",
                                    "was a two-level full factorial in the four multivariate factors"
@@ -1573,7 +1573,7 @@ def pa_studies(doc_id, file_name, report):
             study_id="study:pa_rsm", study_type="response_surface_doe",
             design_name="face-centred central composite design", unit_operation=PAUO_NAME,
             factors=PA_MULTIVARIATE, responses=responses,
-            n_runs=n_rsm, n_center_points=4, scale_down_model="scale-down chromatography column",
+            n_runs=n_rsm, n_center_points=P.doe_centre_points(PAUO, "rsm"), scale_down_model="scale-down chromatography column",
             associated_parameters=[PAPARAM_CONCEPT[f] for f in PA_MULTIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Response-surface design",
                                    "a face-centred central composite design in the same four factors"
@@ -2182,7 +2182,7 @@ def vi_studies(doc_id, file_name, report):
             design_name="two-level full factorial", unit_operation=VIUO_NAME,
             factors=VI_MULTIVARIATE,
             responses=["xmulv_lrf", "aggregate_out_pct", "acidic_variants"],
-            n_runs=n_scr, n_center_points=3, scale_down_model="scale-down inactivation model",
+            n_runs=n_scr, n_center_points=P.doe_centre_points(VIUO, "screening"), scale_down_model="scale-down inactivation model",
             associated_parameters=[VIPARAM_CONCEPT[f] for f in VI_MULTIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Screening design",
                                    "The screening study was a two-level full factorial in the "
@@ -2195,7 +2195,7 @@ def vi_studies(doc_id, file_name, report):
             design_name="face-centred central-composite design", unit_operation=VIUO_NAME,
             factors=VI_MULTIVARIATE,
             responses=["xmulv_lrf", "aggregate_out_pct", "acidic_variants"],
-            n_runs=n_rsm, n_center_points=4, scale_down_model="scale-down inactivation model",
+            n_runs=n_rsm, n_center_points=P.doe_centre_points(VIUO, "rsm"), scale_down_model="scale-down inactivation model",
             associated_parameters=[VIPARAM_CONCEPT[f] for f in VI_MULTIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Response-surface design",
                                    "The response-surface study was a face-centred central "
@@ -2969,7 +2969,7 @@ def cx_studies(doc_id, file_name, report):
             study_id="study:cex_screening", study_type="screening_doe",
             design_name="two-level full factorial", unit_operation=CXUO_NAME,
             factors=CX_MULTIVARIATE, responses=responses,
-            n_runs=n_scr, n_center_points=3, scale_down_model="scale-down chromatography column",
+            n_runs=n_scr, n_center_points=P.doe_centre_points(CXUO, "screening"), scale_down_model="scale-down chromatography column",
             associated_parameters=[CXPARAM_CONCEPT[f] for f in CX_MULTIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Screening design",
                                    "The screening design was a two-level full factorial in the "
@@ -2981,7 +2981,7 @@ def cx_studies(doc_id, file_name, report):
             study_id="study:cex_rsm", study_type="response_surface_doe",
             design_name="face-centred central-composite design", unit_operation=CXUO_NAME,
             factors=CX_MULTIVARIATE, responses=responses,
-            n_runs=n_rsm, n_center_points=4, scale_down_model="scale-down chromatography column",
+            n_runs=n_rsm, n_center_points=P.doe_centre_points(CXUO, "rsm"), scale_down_model="scale-down chromatography column",
             associated_parameters=[CXPARAM_CONCEPT[f] for f in CX_MULTIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Response-surface design",
                                    "The response-surface design was a face-centred central "
@@ -3746,7 +3746,7 @@ def ax_studies(doc_id, file_name, report):
             study_id="study:aex_screening", study_type="screening_doe",
             design_name="two-level full factorial", unit_operation=AXUO_NAME,
             factors=AX_MULTIVARIATE, responses=responses,
-            n_runs=n_scr, n_center_points=3, scale_down_model="scale-down chromatography column",
+            n_runs=n_scr, n_center_points=P.doe_centre_points(AXUO, "screening"), scale_down_model="scale-down chromatography column",
             associated_parameters=[AXPARAM_CONCEPT[f] for f in AX_MULTIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Screening design",
                                    "The design estimates all main effects and all two-factor "
@@ -3757,7 +3757,7 @@ def ax_studies(doc_id, file_name, report):
             study_id="study:aex_rsm", study_type="response_surface_doe",
             design_name="face-centred central-composite design", unit_operation=AXUO_NAME,
             factors=AX_MULTIVARIATE, responses=responses,
-            n_runs=n_rsm, n_center_points=4, scale_down_model="scale-down chromatography column",
+            n_runs=n_rsm, n_center_points=P.doe_centre_points(AXUO, "rsm"), scale_down_model="scale-down chromatography column",
             associated_parameters=[AXPARAM_CONCEPT[f] for f in AX_MULTIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Response-surface design",
                                    "The axial points sit on the faces of the cube, so the design "
@@ -4429,7 +4429,7 @@ def vf_studies(doc_id, file_name, report):
             study_id="study:vf_screening", study_type="screening_doe",
             design_name="two-level full factorial", unit_operation=VFUO_NAME,
             factors=VF_MULTIVARIATE, responses=responses,
-            n_runs=n_scr, n_center_points=3, scale_down_model="scale-down filtration model",
+            n_runs=n_scr, n_center_points=P.doe_centre_points(VFUO, "screening"), scale_down_model="scale-down filtration model",
             associated_parameters=[VFPARAM_CONCEPT[f] for f in VF_MULTIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Screening design",
                                    "The screening study was a two-level full factorial in both "
@@ -4441,7 +4441,7 @@ def vf_studies(doc_id, file_name, report):
             study_id="study:vf_rsm", study_type="response_surface_doe",
             design_name="face-centred central-composite design", unit_operation=VFUO_NAME,
             factors=VF_MULTIVARIATE, responses=responses,
-            n_runs=n_rsm, n_center_points=4, scale_down_model="scale-down filtration model",
+            n_runs=n_rsm, n_center_points=P.doe_centre_points(VFUO, "rsm"), scale_down_model="scale-down filtration model",
             associated_parameters=[VFPARAM_CONCEPT[f] for f in VF_MULTIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Response-surface design",
                                    "a face-centred central composite design in the same two "

@@ -229,7 +229,7 @@ def main():
         ("CPP decision rule", cfg.risk["cpp_rule"]),
         ("Residual-risk note", "The residual-RPN band (>72 High, 48–72 Medium, ≤48 Low) is objective and reflects post-characterization Occurrence/Detection. A high-severity CQA (e.g. viral safety, glycosylation) retains an elevated RPN even when well controlled — which is precisely why it is designated (WC-)CPP and subject to enhanced control. Acceptability is governed by the control strategy, not the RPN band alone."),
         ("Scope", "Drug-substance train Steps 3-10 (bioreactor through UF/DF); process parameters only"),
-        ("Basis", "A-Mab Case Study v2.1 (CMC Biotech Working Group, 2009); ICH Q8/Q9/Q11; PDA TR 60; ISPE PV GPG 2023"),
+        ("Basis", "A-Mab Case Study v2.1 (CMC Biotech Working Group, 2009); ICH Q8/Q9/Q11; FDA 2011"),
         ("Model seed", str(cfg.seed)),
         ("Parameters assessed", str(len(df))),
         ("CPPs / WC-CPPs", str(int(df["Designation"].isin(["CPP", "WC-CPP"]).sum()))),

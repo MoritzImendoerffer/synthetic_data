@@ -4,7 +4,7 @@ Provides coded designs used by the characterization scripts:
 
 * :func:`full_factorial` / :func:`two_level_fractional` — screening designs.
 * :func:`central_composite` — face-centred CCD for response-surface / design-space
-  studies (matches the A-Mab and ISPE GPG case-study approach: screening 2-level
+  studies (matches the A-Mab case-study approach: screening 2-level
   design -> face-centred CCD).
 * :func:`decode` — map a coded design back to natural parameter units.
 

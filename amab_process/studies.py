@@ -121,6 +121,31 @@ def rsm_doe(proc: Process, key: str, feed: Optional[Stream],
     return _run_design(proc, key, design, DOE_RESPONSES[key], feed, rng)
 
 
+def superseded_doe(proc: Process, key: str, feed: Optional[Stream],
+                   rng: np.random.Generator, kind: str, deam: Dict[str, float],
+                   top_factors: Optional[Sequence[str]] = None,
+                   center_points: Optional[int] = None) -> pd.DataFrame:
+    """Run the SAME screening/rsm design as the nominal study, but on a non-representative
+    load (deamidation active) — the invalidated first execution that was re-run.
+
+    A deviation that invalidates a study and forces a full re-execution means the study was
+    *really performed twice*. This regenerates that first execution as a real dataset by
+    setting the unit-op's ``load_deamidated`` context (see the step model) so the responses
+    carry the anomaly, then clearing it. Deterministic given ``rng`` and ``deam``.
+    """
+    uo = _unit(proc, key)
+    setattr(uo, "load_deamidated", dict(deam))
+    try:
+        if kind == "screening":
+            return screening_doe(proc, key, feed, rng,
+                                 center_points=3 if center_points is None else center_points)
+        return rsm_doe(proc, key, feed, rng, top_factors=top_factors,
+                       center_points=4 if center_points is None else center_points)
+    finally:
+        if hasattr(uo, "load_deamidated"):
+            delattr(uo, "load_deamidated")
+
+
 def fit_effects(df: pd.DataFrame, response: str, factors: Sequence[str],
                 quadratic: bool = False) -> Dict[str, object]:
     """Fit an OLS main-effect + 2-way interaction (+ quadratic) model on coded factors."""

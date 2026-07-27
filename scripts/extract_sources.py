@@ -28,9 +28,9 @@ SRC_DIR = os.environ.get(
 )
 SRC = {
     "amab": "A-Mab_Case_Study_Version_2-1.pdf",
-    "pda_tr60": "pda_60_PV.pdf",
-    "ispe_gpg": "2023-ispe-good-practice-guide-practical-implementation-of-the-lifecycle-approach-to-process-validation.pdf",
-    "ispe_tt": "2023-ispe-good-practice-guide-technology-transfer-(third-edition).pdf",
+    # PDA Technical Report No. 60 — the human register reference for the authoring
+    # guide (authoring/REGISTER_EXEMPLAR.md) and the style gate's self-test.
+    "pda60": "pda_60_PV.pdf",
 }
 
 

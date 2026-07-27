@@ -12,7 +12,23 @@ actually appears in its document.
 > All documents are **synthetic** and carry a synthetic banner on the title page.
 > The sponsor (*Novacyte Biologics*), all sites and every SOP/AMV number are
 > fictional. The content follows the A-Mab case study (CMC Biotech Working Group,
-> 2009) and PDA TR 60 / ISPE / ICH guidance.
+> 2009) and FDA / ICH guidance.
+
+## Register
+
+The documents are written in **plain technical English at about C1 level**, modelled on the
+two published human sources in `refs/text/` (the A-Mab case study and PDA Technical Report
+No. 60). Verbatim exemplar passages are in
+[`authoring/REGISTER_EXEMPLAR.md`](../authoring/REGISTER_EXEMPLAR.md); the measurable targets
+are in [`authoring/WRITING_GUIDE.md`](../authoring/WRITING_GUIDE.md) §4.
+
+This is enforced, not aspirational. `authoring/check_style.py` (run by `make style` and by
+the authoring gate) measures sentence-length distribution, em-dash / semicolon / coined-compound
+density and a list of banned tics. Its thresholds are calibrated so that **both human sources
+pass** (`check_style.py --selftest`) — if a threshold ever fails the self-test, the threshold
+is wrong, not the source. No document in this directory is a voice reference for authoring a
+new one; the exemplar is built only from the published sources, so the corpus cannot drift by
+imitating itself.
 
 ## Status
 

@@ -62,8 +62,8 @@ Everything flows in one direction: source facts → configuration → model → 
 flowchart TD
     subgraph SRC["Source material (read once)"]
       P1["A-Mab Case Study PDF"]
-      P2["PDA TR 60 PDF"]
-      P3["ISPE GPG PDF"]
+      P2["FDA PV Guidance PDF"]
+      P3["ICH Q8–Q11 PDFs"]
     end
     P1 & P2 & P3 --> G["Grounding<br/>(extract facts)"]
     G --> CFG["config/parameters.yaml<br/><b>single source of truth</b>"]
@@ -315,8 +315,8 @@ flowchart LR
 - The Python inside each `.qmd` reads the data and renders tables as it goes, so **you never
   copy-paste numbers**.
 - Every document follows a fixed section template (see `CLAUDE.md`) so the set is consistent
-  across unit operations; structure follows PDA TR 60 §3.11 and the ISPE Good Practice Guide.
-- `pc_package/references.bib` supplies the citations (ICH, PDA, ISPE, FDA);
+  across unit operations; structure follows the FDA process-validation lifecycle (Stage 1 Process Design).
+- `pc_package/references.bib` supplies the citations (ICH, FDA);
   `pc_package/reference.docx` controls the Word look. Build with `make corpus`.
 
 ---
@@ -570,4 +570,4 @@ across unit operations and across re-runs.
 
 **In one sentence:** edit numbers in `config/parameters.yaml`, run `make all`, and a seeded
 Python model regenerates the data, charts, Word/PDF report and Excel FMEA — all traceable
-back to the A-Mab case study and the PDA/ISPE guidelines.
+back to the A-Mab case study and the FDA/ICH guidelines.

@@ -88,16 +88,43 @@ differ only in their `UO` key and unit-specific narrative:
   References · Appendices (planned design matrices).
 - **Depth targets:** report ~30–35 pp; plan (protocol) ~15–22 pp. Achieve depth with
   grounded tables/analysis and full appendices, never filler.
-- **Voice:** a PhD-level process scientist writing material suitable to support a BLA —
-  precise, complete, mechanistically reasoned, and traceable.
+- **Voice (gated):** a process scientist writing material to support a BLA: precise,
+  complete, mechanistically reasoned, traceable — and written in **plain technical
+  English at about C1 level**, modelled on the published human sources in `refs/text/`
+  (PDA TR 60; the A-Mab case study), *never* on an existing document in `pc_package/`.
+  Short sentences, almost no em-dashes or semicolons, no coined compounds
+  ("host cell protein", not "host-cell-protein"), no commentary on your own rhetoric.
+  Measurable targets and worked corrections: `authoring/WRITING_GUIDE.md` §4; verbatim
+  exemplars: `authoring/REGISTER_EXEMPLAR.md`. Enforced by `authoring/check_style.py`,
+  whose thresholds are calibrated so both human sources pass (`--selftest`).
 - **Framing rule:** the screening model identifies effects; the **response-surface
   model is the predictive/design-space model**. State this; don't over-claim the
   near-saturated screening fit.
+- **Registered discrepancies are real and deliberately kept.** A few documents contain
+  genuine inconsistencies a review should have caught — the live one is a PAR analysis
+  that departs from the method its own protocol specifies. They are listed precisely in
+  [`authoring/DISCREPANCIES.md`](authoring/DISCREPANCIES.md) so they can be scored. **Do
+  not "fix" one without removing its entry**; that silently deletes a benchmark item. An
+  *unregistered* inconsistency is a bug — fix it, or register it deliberately.
+- **Nothing is added to a document after authoring.** The document a one-pass author
+  produces is the document that ships. Post-authoring steps (annex, rhetorical layer,
+  grounding check) build artifacts *around* the text and never change what it claims;
+  when `check_grounding` fails, the annex quote is re-anchored to the document, never the
+  reverse. The planted weak-claim feature is **retired** for exactly this reason — see
+  [`authoring/WEAK_CLAIMS.md`](authoring/WEAK_CLAIMS.md) for the failure it caused and the
+  condition for reviving it.
 - **Ground-truth annexes:** always a `GroundTruthAnnex` with `inventory` +
   per-section `entities` + `concepts` + `studies`/`design_spaces` +
-  `report_sections` + `assertions`. Build them in `build_ground_truth.py` from the
-  same CSVs (never hand-write JSON), with doc-specific quotes that exist in that
-  document.
+  `proven_acceptable_ranges` + `report_sections` + `assertions`, plus the discourse
+  layer `rhetorical_spans` (and `weak_claims`, currently empty — see above). Build them in `build_ground_truth.py`
+  from the same CSVs (never hand-write JSON), with doc-specific quotes that exist in
+  that document. **How the annex links to the report — the verbatim span-grounding
+  method, and how it relates to schema-constrained (Pydantic→LLM) generation and other
+  attribution techniques — is documented in [`pc_package/GROUND_TRUTH.md`](pc_package/GROUND_TRUTH.md).**
+  The rule in one line: every `SourceReference.quote` is a verbatim substring of the
+  rendered document (`check_grounding.py` gates it), numeric values are derived from the
+  seeded CSVs, and the whole annex validates against the Pydantic schema
+  (`validate_annex.py`).
 
 ## Which steps have DoE (affects report content)
 
@@ -129,6 +156,8 @@ fabricate a DoE for them.
 
 - `make data figures` current for the active seed.
 - `quarto render <doc>.qmd --to docx` and `--to pdf` succeed with no errors.
+- `uv run python authoring/check_style.py <doc>.qmd` passes (the register gate; see the
+  Voice rule above). `check_render.py` runs it automatically as a hard gate.
 - `python build_ground_truth.py && python validate_annex.py` → all annexes valid.
 - Grounding: every annex `quote` appears verbatim in the rendered text.
 - Depth target met; section structure matches the canonical order above.

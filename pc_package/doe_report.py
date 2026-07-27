@@ -216,6 +216,21 @@ def coded_matrix_df(key, kind):
     return d
 
 
+def planned_matrix_df(key, kind, coded=True):
+    """Design matrix with the RESPONSE COLUMNS REMOVED — the form a protocol may show.
+
+    A `PCP-00N` protocol is prospective: it states the design that will be executed, and
+    must not display measured results. `design_matrix_df` / `coded_matrix_df` both append
+    the responses, so a plan needs this stripped variant. Both plan documents had
+    re-implemented it locally; use this instead.
+
+    coded=True gives the letter-coded ±1/0 matrix, coded=False the natural-unit one.
+    """
+    df = coded_matrix_df(key, kind) if coded else design_matrix_df(key, kind)
+    labels = {RESP_LABEL.get(r, r) for r in responses(key)}
+    return df[[c for c in df.columns if c not in labels]]
+
+
 def center_cv_df(key, kind):
     """Center-point mean / SD / %CV per response (reproducibility / pure error)."""
     df = csv(f"doe_{key}_{kind}.csv")
@@ -378,6 +393,76 @@ def acceptance_for(key, resp):
         return None
     row = row.iloc[0]
     return float(row["acc_low"]), float(row["acc_high"]), str(row["spec_type"])
+
+
+# --------------------------------------------------------------------------------------
+# Public prediction API.
+#
+# Documents need to evaluate a fitted response-surface model at settings of their own
+# choosing — a worst-case corner, the edges of the NOR box, a 1-D scan for an edge of
+# failure. Before these wrappers existed the only route was the private `_predict_points`
+# / `_to_coded` / `_natural` / `_in_spec`, and every authored report reached for them. That
+# is a missing public API, not an author error: use these instead.
+# --------------------------------------------------------------------------------------
+def to_coded(key, f, natural):
+    """Natural units -> coded (-1..+1 over the characterization range) for one factor."""
+    return _to_coded(natural, key, f)
+
+
+def to_natural(key, f, coded):
+    """Coded (-1..+1) -> natural units for one factor."""
+    return _natural(np.asarray(coded, dtype=float), key, f)
+
+
+def predict(key, resp, kind="rsm", coded=None, natural=None, superseded=False):
+    """Predict `resp` at given factor settings. Returns a numpy array.
+
+    Give exactly one of ``coded`` or ``natural``, each a mapping factor -> value (scalars or
+    equal-length sequences). Factors you omit are held at the design centre (coded 0), which
+    is the characterization-range midpoint and is NOT necessarily the set-point — check
+    ``CFG.unit_op(key).param(f).setpoint`` if the distinction matters for your claim.
+
+        D.predict("bioreactor", "galactosylation",
+                  natural={"pH": 6.60, "temperature": 35.8, "duration": 15})
+
+    The prediction is the fitted model's mean response. It carries no interval, so do not
+    present it as an assurance statement without one (see `par_nor_propagated` for the
+    NOR-propagated form used in the PAR analysis).
+    """
+    if (coded is None) == (natural is None):
+        raise ValueError("give exactly one of coded= or natural=")
+    r = fit(key, kind, resp, superseded=superseded)
+    settings = {}
+    if natural is not None:
+        for f, v in natural.items():
+            if f not in r["factors"]:
+                raise KeyError(f"{f!r} is not a factor of the {key} {kind} model "
+                               f"(factors: {r['factors']})")
+            settings[f] = np.atleast_1d(_to_coded(v, key, f))
+    else:
+        for f, v in coded.items():
+            if f not in r["factors"]:
+                raise KeyError(f"{f!r} is not a factor of the {key} {kind} model "
+                               f"(factors: {r['factors']})")
+            settings[f] = np.atleast_1d(np.asarray(v, dtype=float))
+    n = max((len(v) for v in settings.values()), default=1)
+    grid = pd.DataFrame({f: np.full(n, 0.0) for f in r["factors"]})
+    for f, v in settings.items():
+        grid[f] = v if len(v) == n else np.full(n, v[0])
+    return _predict_points(r, grid)
+
+
+def meets_acceptance(key, resp, values):
+    """Boolean array: does each predicted value meet this response's acceptance criterion?
+
+    Uses `acceptance_for(key, resp)`, so viral-clearance responses are judged against the
+    back-calculated STEP floor rather than the cumulative requirement. Returns None when the
+    response maps to no acceptance criterion (e.g. step yield)."""
+    acc = acceptance_for(key, resp)
+    if acc is None:
+        return None
+    lo, hi, stype = acc
+    return _in_spec(np.asarray(values, dtype=float), lo, hi, stype)
 
 
 def _to_coded(natural, key, f):

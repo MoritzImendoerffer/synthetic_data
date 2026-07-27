@@ -71,6 +71,17 @@ Invoke as:
                  uv run python pc_package/validate_annex.py
                  uv run python pc_package/check_grounding.py      (needs the rendered .docx)
                Grounding is NOT part of step 4 — no annex exists at authoring time.
+
+               THE DISCOURSE LAYER IS PART OF THIS STEP, not an afterthought. Everything
+               in the annex that quotes the document — entity/assertion source references,
+               report-section statements, AND the rhetorical spans
+               (authoring/rhetorical/<DOC>.spans.yaml) — is tied to one revision of one
+               document and is invalidated wholesale when that document is re-authored.
+               Re-anchor all of it in the same pass. Splitting the discourse layer off into
+               a later "annotation" task is how PCR-003 shipped with an empty
+               rhetorical_spans layer while PCR-008 had 25 spans: the annex rebuild owned
+               the quotes it could see in build_ground_truth.py and forgot the external
+               YAML. If a spans file exists, it must match the current text.
 ```
 
 ---
@@ -121,6 +132,10 @@ Halt and report:
 
 - after the first document authored against any new/changed artifact (register + grounding
   check by a human before scaling);
+- if re-authoring an existing document: **before** you start, list every artifact that
+  quotes it (its annex builder region, its rhetorical spans file, any registry keyed on its
+  prose). All of them go stale the moment the text changes, and each one that is missed
+  degrades silently rather than failing loudly;
 - on a HARD gate failure that a same-agent fix does not resolve in a couple of passes
   (likely a missing helper — extend `_pcpkg`/`doe_report`, then continue);
 - before committing any `outputs/` change whose `git diff` is not obviously intended.

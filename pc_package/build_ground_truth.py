@@ -521,6 +521,27 @@ def build_proven_acceptable_ranges(doc_id, file_name):
     return out
 
 
+def _document_text(file_name):
+    """Whitespace-collapsed text of the RENDERED document, for presence checks.
+
+    Must be the ``.docx``, not the ``.qmd``: ``check_grounding.py`` is the authority and it
+    reads the rendered file. A quote carrying a number exists only in the rendered text (the
+    source has a ``{python}`` inline expression there), so matching against the ``.qmd``
+    would silently drop exactly the quotes that ground perfectly well. Falls back to the
+    source only when nothing has been rendered yet, and says so.
+    """
+    docx = os.path.join(HERE, file_name)
+    if os.path.exists(docx):
+        from check_grounding import docx_text
+        return re.sub(r"\s+", " ", docx_text(docx))
+    qmd = os.path.join(HERE, os.path.splitext(file_name)[0] + ".qmd")
+    if os.path.exists(qmd):
+        print(f"note  {file_name} not rendered yet; presence checks fall back to the .qmd, "
+              f"which will under-count any quote containing a rendered number.")
+        return re.sub(r"\s+", " ", open(qmd, encoding="utf-8").read())
+    return ""
+
+
 def build_weak_claims(doc_id, file_name):
     """Labeled unsupported/overstated claims from ``authoring/weak_claims.yaml``.
 
@@ -540,10 +561,7 @@ def build_weak_claims(doc_id, file_name):
     path = os.path.join(HERE, "..", "authoring", "weak_claims.yaml")
     with open(path) as fh:
         data = yaml.safe_load(fh)
-    qmd = os.path.join(HERE, os.path.splitext(file_name)[0] + ".qmd")
-    prose = ""
-    if os.path.exists(qmd):
-        prose = re.sub(r"\s+", " ", open(qmd, encoding="utf-8").read())
+    prose = _document_text(file_name)
     sec_title = {"results": "Results", "exec_summary": "Executive summary"}
     out, skipped = [], []
     for c in data.get("claims", {}).get(doc_id, []):
@@ -561,7 +579,7 @@ def build_weak_claims(doc_id, file_name):
             metadata=meta(basis="explicit", conf="high")))
     if skipped:
         print(f"note  {doc_id}: {len(skipped)} registered weak claim(s) are not in "
-              f"{os.path.basename(qmd)} and so are not in the annex "
+              f"{file_name} and so are not in the annex "
               f"({', '.join(skipped)}). This is EXPECTED: the planted weak-claim feature is "
               f"retired (see authoring/WEAK_CLAIMS.md). No action needed.")
     return out
@@ -582,10 +600,7 @@ def build_rhetorical_spans(doc_id, file_name):
         return []
     with open(path) as fh:
         data = yaml.safe_load(fh)
-    qmd = os.path.join(HERE, os.path.splitext(file_name)[0] + ".qmd")
-    prose = ""
-    if os.path.exists(qmd):
-        prose = re.sub(r"\s+", " ", open(qmd, encoding="utf-8").read())
+    prose = _document_text(file_name)
     out, skipped = [], 0
     for s in data.get("spans", []):
         sec = s.get("section")
@@ -599,9 +614,19 @@ def build_rhetorical_spans(doc_id, file_name):
             supported_by=s.get("supported_by") or [],
             restates=s.get("restates"), bounds=s.get("bounds")))
     if skipped:
-        print(f"WARN  {doc_id}: {skipped} rhetorical span(s) no longer match the document "
-              f"and were dropped. Re-curate authoring/rhetorical/{doc_id}.spans.yaml "
-              f"against the current text.")
+        # Hard failure, not a warning. A curated span layer that no longer matches its
+        # document degrades SILENTLY: the build still succeeds, check_grounding still
+        # reports 0 ungrounded (a dropped span contributes no quote to check), and the
+        # annex simply ships thinner than intended. PCR-003 shipped with an entirely
+        # empty rhetorical layer that way. If a spans file exists it must match the
+        # current text, so make the mismatch stop the build.
+        raise SystemExit(
+            f"FAIL  {doc_id}: {skipped} of {len(data.get('spans', []))} rhetorical span(s) "
+            f"do not appear in {file_name}.\n"
+            f"      The document has been re-authored or re-rendered since the layer was "
+            f"curated.\n"
+            f"      Re-curate authoring/rhetorical/{doc_id}.spans.yaml against the current "
+            f"rendered text, or delete it to drop the layer deliberately.")
     return out
 
 

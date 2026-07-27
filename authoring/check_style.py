@@ -130,6 +130,10 @@ def prose_from_qmd(path: str) -> str:
     text = re.sub(r"^\s*```.*?^\s*```", " ", text, flags=re.S | re.M)   # fenced chunks
     text = re.sub(r"`\{python\}[^`]*`", "NUM", text)                    # inline expressions
     text = re.sub(r"\{\{<[^>]*>\}\}", " ", text)                        # shortcodes
+    # Markdown images are a caption plus a path, not prose. Left in, the caption fuses
+    # with the preceding sentence (its "!" is not a sentence boundary) and inflates the
+    # measured length of both, which is a measurement artifact rather than a style fault.
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)(\{[^}]*\})?", " ", text)
 
     kept, skipping = [], False
     for line in text.splitlines():

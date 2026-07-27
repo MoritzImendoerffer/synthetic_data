@@ -87,10 +87,84 @@ inventory** (concept → exact expression). Keep it precise.
 - `RUNNER.md` — the one-pass loop (no splice/ledger).
 - `check_blank_repo.sh` — static guard + functional blank-repo proof.
 
-**Shipped: PCR-003 (bioreactor) and PCR-008 (anion exchange), full depth, one pass each.**
-Both are authored end-to-end from the `authoring/` artifacts alone, with the PAR section and
-(for PCR-008) the DEV-008-01 twice-run-DoE narrative from the real superseded dataset. Hard
-gate clean; real `quarto render --to docx` succeeds for both.
+**Shipped: the full 20-document corpus, one pass per document.** Every `PCP-00N` / `PCR-00N`
+for Steps 3–10, plus `PTP-001`, `RA-001`, `PCMP-001` and `PCMR-001`. Each was authored
+end-to-end from the `authoring/` artifacts alone by a single agent, with **every existing
+`.qmd` physically moved off disk during generation** so no author could copy a sibling's
+voice. All pass the authoring gate and the register gate.
+
+---
+
+## 3a. Perturbations applied to the model and tooling during the corpus build
+
+Everything below changed the corpus or the machinery *outside* the authoring loop. Recorded
+here because each one alters what documents say or how they are checked, and because several
+were found by authors refusing to write something incoherent — which is the grounding rule
+working as intended.
+
+**Model / world-canon changes (change what documents state).**
+
+| Change | Effect |
+|---|---|
+| `config`: bioreactor `do`, `medium_conc`, `feed_vol` `study: multivariate` → `univariate` | They are factors of no design. Bioreactor now reads 5 multivariate / 4 univariate; campaign totals 22 / 15 (were 25 / 12). |
+| `outputs/data/parameter_classification.csv` regenerated | Was stale against the config above. See the post-mortem below. |
+
+**Tooling changes (change what is checked or how it renders).**
+
+| Change | Why |
+|---|---|
+| Unicode font block (`mainfont`/`sansfont`/`monofont`/`mathfont`: DejaVu) added to every document and to `template.qmd` | The LaTeX default font had no glyph for `≥`, `≤` or Unicode sub/superscripts, so PDFs carried **398 missing-glyph boxes across 8 documents**. `≥ 4.93` rendered as `␀ 4.93`, turning a clearance *floor* into a point value. |
+| `check_render.py`: new `check_pdf_glyphs` hard gate | Nothing had ever inspected the PDF after rendering, which is why the above shipped unnoticed. |
+| `check_style.py`: strip markdown images before measuring | An image caption fused with the preceding sentence (its `!` is not a sentence boundary) and inflated the measured length of both. |
+| `check_style.py`: sentence-length and parenthesis bands made **two-sided** | One-sided caps let the first regeneration over-correct into staccato: 17-word mean, 41 % of sentences under 15 words, parentheses near zero. |
+| `doe_report`: public `predict` / `to_coded` / `to_natural` / `meets_acceptance` / `planned_matrix_df` | Authors were reaching into `_predict_points` and re-implementing the responses-stripped design matrix. Missing API, not author error. |
+| `ema_docgen/scripts/lint_numerals.py`: allow-file compiled with `re.MULTILINE` | The `^`-anchored ordered-list rule never matched, so every numbered list was flagged. |
+| `tests/test_config.py`: new file, 11 tests | Config↔DoE invariants, plus **CSV↔config agreement** (see post-mortem). |
+| `build_ground_truth.py`: weak claims and rhetorical spans skip/fail on mismatch | A stale curated layer used to degrade silently; a dropped rhetorical span is now a hard failure. |
+
+**Post-mortem: the stale-CSV bug (worth reading before touching `config`).** Commit
+`641d19a` asserted that `study` is display-only metadata and therefore did not require
+regenerating `outputs/`. That was **wrong**: `plan_params()` / `report_params()` render
+`parameter_classification.csv`, not `CFG`. The config said `univariate`, the CSV still said
+`multivariate`, and the prose was edited to match the config — so the shipped PCP-003 read
+"…are assessed univariately (Table 6)" while Table 6 said `multivariate`. The prose edit made
+it *worse*: before it, prose and table at least agreed. `tests/test_config.py` passed
+throughout, because it read `CFG` directly and never compared against the generated artifact.
+The lesson is general: **a config invariant that never looks at the generated file cannot
+catch drift into the rendered corpus.** `test_generated_parameter_table_matches_config` now
+closes it.
+
+**Annex-layer findings from the re-grounding pass.** All 20 annexes were re-grounded against
+the new text (1338/1338 quotes). Re-anchoring surfaced records that were not merely
+*unanchored* but **false** — ground truth asserting the opposite of its document, which is
+worse than a missing record:
+
+- `PCR-004` asserted turbidity stays within its NOR; the report records DEV-004-02, an
+  excursion that exceeded it.
+- `PCR-005` asserted the step-yield model is "adequate and predictive" (predicted R² 0.586,
+  used descriptively) and that `end_of_pool_collect` does *not* affect pool HCP (it does).
+- `PTP-001`, a prospective plan, asserted a drug-substance yield and a parameter
+  classification — both characterization outcomes that cannot exist when it is written.
+- `PCP-007` asserted a design space over pool aggregate *and* HCP; HCP does not bound it.
+
+**Generic quotes ground while attesting nothing.** Found independently by three agents.
+`check_grounding` verifies a quote *exists*, not that it is *specific*: `RA-001` used one
+placeholder sentence to anchor 41 separate assertions, and bare spans like "acceptance
+criteria" passed trivially. The convention the agents converged on, now the corpus standard:
+anchor each per-record assertion on the **rendered table row** carrying the relation, built
+from the same DataFrame the document renders, so the span contains both ends. `PCMR-001`'s
+`_md_rows` / `_grid_rows` helpers are the reference implementation — note they must reproduce
+tabulate's cell wrapping, or a row containing a hyphen-broken cell (`re- assayed`) will not
+ground. Tracked as a gate to add.
+
+**Seeded-data defects found but NOT changed** (each is a tracked decision, not an oversight):
+the acidic-variants acceptance range is printed as 18–40 but only the ceiling is enforced
+(making it two-sided would move the headline min Cpk from 1.51 to 1.03); the three equipment
+`cal_due` dates pre-date `EFFECTIVE_DATE`, so calibration reads as overdue while
+`calibration_status` says otherwise; `DEV-005-01` says a buffer was prepared *below* target at
+pH 3.38 but is tied to an RSM run whose design target is 3.20; and `par_at_setpoint` holds the
+other factors at the range **midpoint**, which differs from the set-point for 6 RSM factors
+across 3 steps.
 
 **The register correction (important — this is why the reports were rewritten).** The
 first-pass reports read as machine-written, and the cause was a feedback loop in the

@@ -2,8 +2,17 @@
 
 Work list for continuing the `pc_package/` document corpus. Written so a fresh Claude
 (or engineer) on any machine can pick up. **Read [`../CLAUDE.md`](../CLAUDE.md) first**
-(conventions), then this file. The bioreactor pair `PCP-003` / `PCR-003` is the
-reference implementation — copy its structure exactly.
+(conventions), then this file.
+
+> **Do not copy an existing document.** Earlier revisions of this file said to copy
+> `PCP-003` / `PCR-003` as a reference implementation. That is exactly how the machine
+> register propagated through the corpus: each document inherited the previous one's voice,
+> and the writing guide was then distilled from the result. Authoring is now **one pass from
+> the `authoring/` artifacts alone** — `WRITING_GUIDE.md`, `REGISTER_EXEMPLAR.md` (verbatim
+> passages from the published human sources), `section_plan.yaml`, `STORY_BIBLE.md` and the
+> document's brief. The canonical *structure* lives in `section_plan.yaml`; the canonical
+> *voice* lives in `REGISTER_EXEMPLAR.md`. Neither lives in a sibling `.qmd`. See
+> [`../authoring/RUNNER.md`](../authoring/RUNNER.md) for the loop.
 
 Golden rules (full detail in `CLAUDE.md`): every number comes from the seeded model
 (`config/parameters.yaml` → `outputs/`), never hard-coded; reuse `_pcpkg.py`,
@@ -13,13 +22,25 @@ the verification checklist before marking a document done.
 
 ## Status
 
+> **All 20 documents were re-authored in the 2026-07 register correction.** Every one is a
+> fresh one-pass document written from the `authoring/` artifacts alone, with all existing
+> `.qmd` moved off disk during generation so no author could copy a sibling's voice. The
+> superseded first-pass versions are archived under `first_pass/`. Read
+> [`../authoring/HANDOFF.md`](../authoring/HANDOFF.md) §3a before changing `config/` or the
+> render pipeline — it records every perturbation applied during the build, including a
+> post-mortem on a config change that never reached the rendered tables.
+>
+> **Annexes are the outstanding phase.** `build_ground_truth.py` builds only the four
+> 003/008 annexes; the other 16 builder functions exist but are not invoked and their quotes
+> target the superseded text.
+
 | Document | Class | Step / key | State |
 |---|---|---|---|
-| `PCP-003` / `PCR-003` | Plan / Report | 3 · bioreactor | ✅ done (reference pair) |
-| `PCP-004` / `PCR-004` | Plan / Report | 4 · harvest | ✅ done (no DoE) |
-| `PCP-005` / `PCR-005` | Plan / Report | 5 · protein_a | ✅ done (DoE) |
-| `PCP-006` / `PCR-006` | Plan / Report | 6 · viral_inactivation | ✅ done (DoE) |
-| `PCP-007` / `PCR-007` | Plan / Report | 7 · cex | ✅ done (DoE) |
+| `PCP-003` / `PCR-003` | Plan / Report | 3 · bioreactor | ✅ re-authored (design-space step; report carries a galactosylation edge of failure excluded from the design space) |
+| `PCP-004` / `PCR-004` | Plan / Report | 4 · harvest | ✅ re-authored (no DoE; sets no CQA — written around what it carries forward) |
+| `PCP-005` / `PCR-005` | Plan / Report | 5 · protein_a | ✅ re-authored (DoE; leached Protein A reported as a robustness finding, predicted R² −0.71) |
+| `PCP-006` / `PCR-006` | Plan / Report | 6 · viral_inactivation | ✅ re-authored (DoE; pH is the only CPP, two-sided edge argued from data) |
+| `PCP-007` / `PCR-007` | Plan / Report | 7 · cex | ✅ re-authored (DoE; sets no CQA; pool HCP is in-process, DS limit met only after AEX) |
 | `PCP-008` / `PCR-008` | Plan / Report | 8 · aex | ✅ done (DoE; report includes DEV-01 deamidated-load re-run + DEV-02 UV pool-stop by modelling) |
 | `PCP-009` / `PCR-009` | Plan / Report | 9 · virus_filtration | ✅ done (DoE; compact 2-factor small design — MVM modelled/load-limited, XMuLV+yield robust; ICH Q5A worst-case framing) |
 | `PCP-010` / `PCR-010` | Plan / Report | 10 · ufdf | ✅ done (no DoE; formulation/mass-balance, formulation characterization deferred to DP) |
@@ -51,12 +72,18 @@ the reports it summarises.
 
 ## Building one Plan/Report pair (the loop)
 
-1. Copy `PCP-003_bioreactor.qmd` → `PCP-00N_<key>.qmd` and `PCR-003_bioreactor.qmd` →
-   `PCR-00N_<key>.qmd`. Set `DOC`, `UO`, `UO_TITLE` in the setup chunk. Keep the section
-   order identical (see `CLAUDE.md`).
-2. Rewrite only the unit-specific narrative (the step's role, the CQAs it controls, the
+**Superseded — see [`../authoring/RUNNER.md`](../authoring/RUNNER.md).** The copy-and-adapt
+loop below is retained only to explain what the archived `first_pass/` documents were built
+from. Do not follow it.
+
+1. ~~Copy `PCP-003_bioreactor.qmd`~~ → instantiate `authoring/template.qmd` instead, and have
+   **one agent** author the whole document in `section_plan.yaml` order from the artifacts.
+   Never open a sibling `.qmd`: that is how the machine register spread.
+2. Write the unit-specific narrative (the step's role, the CQAs it controls or clears, the
    mechanistic interpretation). Pull all numbers via `report_params(UO)`, `plan_params(UO)`,
-   `cap_for([...])`, and `doe_report.*` — never type them.
+   `cap_for([...])`, and the **public** `doe_report` API (`predict`, `to_coded`,
+   `to_natural`, `meets_acceptance`, `planned_matrix_df`, `acceptance_for`) — never type
+   them, and never call a `_private` helper.
 3. Add the pair's entities/assertions to `build_ground_truth.py` (mirror the bioreactor
    `build_plan`/`build_report`); use quotes that appear in the new document.
 4. Verify (see checklist at the bottom).

@@ -74,6 +74,49 @@ def test_every_doe_factor_is_a_config_parameter(key):
     assert not missing, f"{key}: DoE factor(s) with no config parameter: {missing}"
 
 
+def test_generated_parameter_table_matches_config():
+    """The generated CSV must agree with the config it was derived from.
+
+    This is the test that was missing. ``study`` was corrected in the config, and
+    ``test_multivariate_matches_doe_factors`` passed immediately — because it reads
+    ``CFG`` directly. But ``plan_params()`` / ``report_params()`` render
+    ``outputs/data/parameter_classification.csv``, which had not been regenerated, so
+    every rendered parameter table still showed the old value while the config, the
+    prose and the test all said otherwise. A config invariant that never looks at the
+    generated artifact cannot catch that class of drift.
+    """
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "outputs", "data", "parameter_classification.csv")
+    if not os.path.exists(path):
+        pytest.skip("outputs/ not generated; run scripts/generate_data.py")
+    import csv as _csv
+    with open(path) as fh:
+        rows = list(_csv.DictReader(fh))
+
+    want = {}
+    for key in CFG.train_order:
+        for p in _params(key):
+            want[(CFG.unit_op(key).name, p.name)] = (p.study, p.classification)
+
+    problems = []
+    for r in rows:
+        k = (r["unit_operation"], r["parameter"])
+        if k not in want:
+            problems.append(f"{k}: in the CSV but not in the config")
+            continue
+        study, classification = want[k]
+        if r["study"] != study:
+            problems.append(f"{k[1]} ({k[0]}): CSV study={r['study']!r} "
+                            f"but config says {study!r}")
+        if r["classification"] != classification:
+            problems.append(f"{k[1]} ({k[0]}): CSV classification={r['classification']!r} "
+                            f"but config says {classification!r}")
+    assert not problems, (
+        "outputs/data/parameter_classification.csv is stale relative to "
+        "config/parameters.yaml — re-run scripts/generate_data.py and commit ONLY the "
+        "intended CSV change:\n  " + "\n  ".join(problems))
+
+
 def test_ranges_contain_nor_and_setpoint():
     """The NOR sits inside the characterization range, and the set-point inside the NOR."""
     problems = []

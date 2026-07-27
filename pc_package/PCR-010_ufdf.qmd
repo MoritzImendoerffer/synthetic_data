@@ -1,0 +1,789 @@
+---
+title: "Process Characterization Report"
+subtitle: "A-Mab Drug Substance — Ultrafiltration / Diafiltration (Step 10) — PCR-010"
+author: "Process Development / Manufacturing Science & Technology (MSAT)"
+date: 2026-07-24
+format:
+  docx:
+    reference-doc: reference.docx
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    fig-cap-location: bottom
+    tbl-cap-location: top
+  pdf:
+    documentclass: scrreprt
+    mainfont: "DejaVu Serif"
+    sansfont: "DejaVu Sans"
+    monofont: "DejaVu Sans Mono"
+    mathfont: "DejaVu Math TeX Gyre"
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    colorlinks: true
+    geometry: margin=1in
+    fig-pos: 'H'
+    fig-cap-location: bottom
+    tbl-cap-location: top
+bibliography: references.bib
+execute:
+  echo: false
+  warning: false
+  cache: false
+jupyter: python3
+---
+
+```{python}
+#| tags: [setup]
+import sys, os
+sys.path.insert(0, os.path.abspath("."))
+from _pcpkg import *  # noqa: F401,F403
+import doe_report as D
+import math
+
+DOC = "PCR-010"
+UO = "ufdf"
+UO_TITLE = "Ultrafiltration / Diafiltration (Step 10)"
+
+# --- unit-operation configuration: set-points, NOR edges, characterization ranges ----
+UOC = CFG.unit_op(UO)
+p_dv, p_tmp, p_conc = UOC.param("diavolumes"), UOC.param("tmp"), UOC.param("final_conc")
+dv_sp, (dv_nor_lo, dv_nor_hi), (dv_lo, dv_hi) = p_dv.setpoint, p_dv.nor, p_dv.prange
+tmp_sp, (tmp_nor_lo, tmp_nor_hi), (tmp_lo, tmp_hi) = p_tmp.setpoint, p_tmp.nor, p_tmp.prange
+conc_sp, (conc_nor_lo, conc_nor_hi), (conc_lo, conc_hi) = p_conc.setpoint, p_conc.nor, p_conc.prange
+n_params = len(report_params(UO))
+tmp_par_over_nor = tmp_hi - tmp_nor_hi
+dv_par_over_nor = dv_hi - dv_nor_hi
+
+# --- process mass balance (the seeded model is the single source of truth) ----------
+ps = csv("process_summary.csv")
+yw = csv("yield_waterfall.csv")
+row_in = ps[ps["step"] == UOC.step - 1].iloc[0]
+row_out = ps[ps["step"] == UOC.step].iloc[0]
+yw_row = yw[yw["step"] == UOC.step].iloc[0]
+mass_in_kg = row_in["product_mass_g"] / 1000.0
+mass_out_kg = row_out["product_mass_g"] / 1000.0
+mass_loss_kg = mass_in_kg - mass_out_kg
+step_yield_pct = 100.0 * yw_row["step_yield"]
+step_loss_pct = 100.0 * (1.0 - yw_row["step_yield"])
+cum_yield_pct = 100.0 * yw_row["cumulative_yield"]
+ds_conc = V["ds_conc_g_per_l"]
+ds_mass_kg = V["ds_mass_kg"]
+ds_volume_l = row_out["product_mass_g"] / ds_conc
+scale_l = V["commercial_scale_l"]
+n_mc = V["n_monte_carlo"]
+min_cpk = V["min_cpk"]
+
+# rank of this step's loss among the recovery / purification steps (4-10)
+_losses = (yw[yw["step"] > 3]
+           .assign(loss=lambda d: 1.0 - d["step_yield"])
+           .sort_values("loss", ascending=False))
+loss_rank = int(list(_losses["step"]).index(UOC.step)) + 1
+n_purif_steps = len(_losses)
+max_loss_pct = 100.0 * _losses.iloc[0]["loss"]
+_ORD = {1: "largest", 2: "second largest", 3: "third largest", 4: "fourth largest",
+        5: "fifth largest", 6: "sixth largest", 7: "seventh largest"}
+loss_rank_word = _ORD[loss_rank]
+
+# --- buffer exchange: ideal constant-volume diafiltration leaves exp(-N) ------------
+resid_sp = math.exp(-dv_sp)
+resid_lo = math.exp(-dv_lo)
+resid_hi = math.exp(-dv_hi)
+
+# --- attributes carried through the step into the drug substance --------------------
+cq = csv("cqa_register.csv").set_index("key")
+cap_df = csv("capability.csv").set_index("key")
+cex_step = CFG.unit_op("cex").step
+agg_cex_pct = ps[ps["step"] == cex_step].iloc[0]["aggregate_out_pct"]
+agg_limit = cq.loc["aggregates_hmw", "acc_high"]
+acid_limit_lo = cq.loc["acidic_variants", "acc_low"]
+acid_limit_hi = cq.loc["acidic_variants", "acc_high"]
+dna_ds = row_out["residual_dna_ng_per_dose"]
+dna_limit = cq.loc["residual_dna", "acc_high"]
+cpk_agg = cap_df.loc["aggregates_hmw", "Cpk"]
+cpk_acid = cap_df.loc["acidic_variants", "Cpk"]
+agg_ds_mean = cap_df.loc["aggregates_hmw", "mean"]
+
+# --- deviations (scalars come from the seeded register) -----------------------------
+n_dev = len(dev_facts(DOC))
+tmp_max = dev_010_01_tmp_max_psi
+tmp_over_nor = tmp_max - tmp_nor_hi
+tmp_margin_par = tmp_hi - tmp_max
+conc_pre = dev_010_02_conc_pre_g_per_l
+conc_deficit = conc_sp - conc_pre
+conc_deficit_pct = 100.0 * conc_deficit / conc_sp
+conc_precision_g = conc_sp * amv_3019_precision / 100.0
+conc_deficit_ratio = conc_deficit / conc_precision_g
+
+# --- parameter-classification counts across the whole train -------------------------
+cc = class_counts()
+n_kpp_train = cc["KPP"]
+n_qlinked = cc.get("CPP", 0) + cc.get("WC-CPP", 0)
+
+# --- Appendix A display frame -------------------------------------------------------
+yw_disp = yw.rename(columns={"step": "Step", "unit_operation": "Unit operation",
+                             "step_yield": "Step yield (%)",
+                             "cumulative_yield": "Cumulative yield (%)"})
+yw_disp["Step yield (%)"] = (100.0 * yw["step_yield"]).round(2)
+yw_disp["Cumulative yield (%)"] = (100.0 * yw["cumulative_yield"]).round(2)
+```
+
+```{python}
+#| output: asis
+print(title_block(DOC, UO_TITLE))
+print()
+print(SYN_BANNER)
+```
+
+## Approvals {.unnumbered}
+
+| Role | Function | Name (synthetic) | Signature | Date |
+|---|---|---|---|---|
+| Author | Process Development / MSAT | — | — | — |
+| Reviewer | Analytical Development | — | — | — |
+| Reviewer | Manufacturing Science | — | — | — |
+| Reviewer | Statistics | — | — | — |
+| Approver | Quality Assurance | — | — | — |
+
+: Approval record (synthetic; signatures not applied). {#tbl-appr}
+
+## Abbreviations {.unnumbered}
+
+A280, absorbance at 280 nm; AMV, analytical method validation; BLA, Biologics License
+Application; CPP, critical process parameter; CQA, critical quality attribute; DNA,
+deoxyribonucleic acid; DS, drug substance; DV, diavolume; GPP, general process parameter;
+HCP, host cell protein; icIEF, imaged capillary isoelectric focusing; IgG1, immunoglobulin
+G subclass 1; KPP, key process parameter; MSAT, Manufacturing Science and Technology; MVM,
+minute virus of mice; NOR, normal operating range; PAR, proven acceptable range; QbD,
+quality by design; SD, standard deviation; SEC-HPLC, size-exclusion high-performance liquid
+chromatography; SOP, standard operating procedure; TFF, tangential-flow filtration; TMP,
+transmembrane pressure; UF/DF, ultrafiltration / diafiltration; WC-CPP, well-controlled
+critical process parameter; XMuLV, xenotropic murine leukaemia virus.
+
+{{< pagebreak >}}
+
+# Executive summary {.unnumbered}
+
+Ultrafiltration and diafiltration is the last unit operation of the A-Mab drug substance
+process. The step concentrates the pool from small-virus retentive filtration (Step 9),
+exchanges it into the formulation buffer by constant-volume diafiltration, and then adjusts
+it to the target drug substance concentration, which is the state in which the material
+passes to the drug product process. It forms no quality attribute and clears no impurity, so
+all `{python} n_params` of its parameters are key process parameters and none of them is
+linked to a critical quality attribute. This report presents the characterization executed
+under PCP-010 on a qualified scale-down model (§3.1), within the risk scope set by RA-001.
+
+The step delivered `{python} f"{ds_mass_kg:.1f}"` kg of A-Mab at
+`{python} f"{ds_conc:.0f}"` g/L, which is the target concentration for the drug substance.
+Step yield was `{python} f"{step_yield_pct:.1f}"` %, and the cumulative yield of the drug
+substance train is `{python} f"{cum_yield_pct:.1f}"` % of the mass produced in the
+production bioreactor (@fig-yield). The loss across the step is attributed to product held
+in the membrane system and released only in part by the recovery flush. Buffer exchange is
+governed by the number of diavolumes, and under an ideal constant-volume model the set-point
+of `{python} f"{dv_sp:.0f}"` diavolumes leaves `{python} f"{100*resid_sp:.3f}"` % of a
+freely permeating feed species in the retentate, against
+`{python} f"{100*resid_lo:.3f}"` % at the low edge of the characterization range (§5.1).
+
+Aggregate and charge variants were monitored across the operation, because the second
+concentration phase brings the product to the most concentrated state it reaches anywhere in
+the process. No formation or clearance of either attribute is attributed to this step. The
+aggregate content of the cation exchange pool is `{python} f"{agg_cex_pct:.2f}"` % by
+SEC-HPLC against a drug substance limit of `{python} f"{agg_limit:.0f}"` %, and the
+simulated drug substance mean of `{python} f"{agg_ds_mean:.2f}"` % is the same level within
+the batch-to-batch variation of the attribute (@tbl-cap).
+
+The campaign recorded `{python} f"{n_dev:.0f}"` deviations at this step, and both were
+investigated and retained (§12). A
+transmembrane-pressure excursion reached `{python} f"{tmp_max:.1f}"` psi against a normal
+operating range top of `{python} f"{tmp_nor_hi:.0f}"` psi, and one run finished
+`{python} f"{conc_deficit:.1f}"` g/L below the target concentration before being
+concentrated further and released. Both values sit inside the characterization ranges of the
+parameters concerned, and neither event changed a parameter classification or an operating
+range.
+
+Three claims are deliberately not made for this step. It takes no viral clearance credit, it
+takes no impurity clearance credit, and it does not characterize the formulation.
+Formulation composition and the stability of A-Mab in it are established in the drug product
+programme, outside the drug substance transfer scope defined in PTP-001. What the step
+establishes is the delivery of the drug substance at its target concentration in the
+formulation buffer, carrying the product quality it received from the purification train
+(§5.3). The outcome rolls up into PCMR-001.
+
+{{< pagebreak >}}
+
+# Introduction
+
+## Product and unit operation
+
+A-Mab is a humanized IgG1 monoclonal antibody whose primary mechanism of action is
+antibody-dependent cellular cytotoxicity. It is produced by fed-batch mammalian cell culture
+and purified on a platform train of Protein A capture, low-pH viral inactivation, cation
+exchange, anion exchange, small-virus retentive filtration and ultrafiltration /
+diafiltration. The steps and their roles are listed in @tbl-train.
+
+```{python}
+#| output: asis
+show(process_steps_df())
+```
+
+: The A-Mab drug substance process train and each step's principal role in the control strategy. {#tbl-train}
+
+Ultrafiltration and diafiltration is Step 10 and the last operation before the drug
+substance is filled. It is a tangential-flow filtration operation on a membrane whose
+nominal molecular weight cut-off retains the antibody and passes buffer species, and it runs
+in three phases. The pool from small-virus retentive filtration is first concentrated, then
+diafiltered at constant volume against the formulation buffer, and then concentrated a
+second time to the target drug substance concentration, after which a recovery flush
+displaces part of the retentate hold-up into the pool.
+
+The step changes the concentration and the buffer of the product. It does not change the
+molecule. The membrane retains monomer and aggregated forms alike, so no size variant is
+separated, and no charge-based or affinity-based mechanism operates, so no charge variant
+and no glycosylation variant is separated either. The step accordingly forms no critical
+quality attribute and takes no clearance credit in the control strategy, and its parameters
+govern process performance only, which is the reason all of them are classified as key
+process parameters (§8).
+
+## Objectives
+
+The objectives of the characterization were as follows.
+
+- Confirm that the operation delivers the drug substance at its target concentration over the ranges assessed.
+- Quantify step yield and close the product mass balance for the drug substance train.
+- Establish that buffer exchange is complete at the low edge of the diavolume range.
+- Confirm that the quality attributes carried into the step are preserved across it.
+- Justify the classification of each parameter and the operating ranges that pass into the control strategy.
+
+## Regulatory and scientific basis
+
+This report is a Stage 1 process design record in the sense of the lifecycle approach to
+process validation [@fda2011], and its structure follows that guidance. The enhanced
+development approach of ICH Q8 and the quality risk management framework of ICH Q9 apply
+[@ichq8; @ichq9], with criticality treated as a continuum and not as a binary label. ICH Q11
+provides the development and manufacture framework for the drug substance [@ichq11]. The
+A-Mab case study is the source of the process model, the quality attribute framework and the
+risk methodology used across the package [@amab2009]. No viral clearance is claimed for this
+step, so the viral safety framework of ICH Q5A is not applied here [@ichq5a]. The modular
+clearance claims are made at Steps 6, 8 and 9 and are consolidated in PCMR-001.
+
+## Related documents
+
+The package documents that scope, plan and consume this report are listed in @tbl-related.
+
+```{python}
+#| output: asis
+print(related_docs_md(DOC))
+```
+
+: Cross-references to the sibling documents in the characterization package. {#tbl-related}
+
+# Prior knowledge and quality risk basis
+
+## Platform and prior-product knowledge
+
+Ultrafiltration and diafiltration on this platform is established from three prior humanized
+IgG1 products (X-Mab, Y-Mab and Z-Mab) and from the A-Mab clinical and engineering
+campaigns. The membrane chemistry, the nominal cut-off and the three-phase operating
+strategy (concentrate, diafilter, concentrate) are common to all four products. What differs
+between products is the target concentration and the composition of the formulation buffer,
+and both of those are set by the drug product programme. The platform history is therefore
+transferable to A-Mab for the operation itself, and it is not transferable for the
+formulation, which is why this report characterizes the first and defers the second (§10).
+
+The mechanistic expectation for each parameter was fixed before the study, and it is what
+sets the ranges assessed. Transmembrane pressure drives permeate flux, and it also drives
+concentration polarization at the membrane surface, so that above a product-specific
+pressure the flux stops rising with pressure and a gel layer forms, which lengthens the
+operation and raises the pressure needed to hold a given flux. The number of diavolumes sets
+the completeness of buffer exchange, and for a species that passes the membrane freely the
+residual fraction falls exponentially with the diavolume count. The final concentration sets
+the viscosity of the retentate, the mass recoverable from a fixed hold-up volume, and the
+degree of self-association available to the product.
+
+These expectations account for the characterization ranges in @tbl-params. The diavolume
+range extends `{python} f"{dv_par_over_nor:.0f}"` diavolume above the normal operating
+range, so that the yield cost of over-processing could be observed, and its low edge is the
+platform value at which complete exchange has been demonstrated for the three prior
+products. The transmembrane pressure range extends
+`{python} f"{tmp_par_over_nor:.0f}"` psi above the normal operating range, because a
+transient pressure rise during a concentration phase is the most common excursion at this
+step, and the deviation recorded during execution (DEV-010-01) was of exactly that kind. The
+concentration range extends on both sides of target, because the low side tests the
+recoverable mass and the high side tests the product in its most concentrated state.
+
+## Quality attributes in scope
+
+No critical quality attribute is assigned to this step in the register. The attributes at
+risk from a concentration operation are the size variants, and, over the duration of the
+operation, the charge variants. Both were monitored across the step, and both are given in
+@tbl-cqa with their acceptance criteria and criticality.
+
+```{python}
+#| output: asis
+show(cqas_by_keys(["aggregates_hmw", "acidic_variants"]))
+```
+
+: Quality attributes monitored across the ultrafiltration / diafiltration step. Neither is formed nor cleared here; both are monitored for preservation. {#tbl-cqa}
+
+Aggregates are formed in the production bioreactor and reduced at cation exchange, which is
+the only aggregate polishing step in the train (PCR-003 and PCR-007). Acidic charge variants
+are formed in the production bioreactor and are not cleared downstream (PCR-003). This step
+is credited with neither the formation nor the clearance of either attribute, and it is
+monitored against both so that a change would be detected if one occurred.
+
+Host cell protein, residual DNA and leached Protein A pass through the step. Their levels in
+the drug substance are the levels delivered by the chromatographic steps, so the credit for
+them belongs to PCR-005, PCR-007 and PCR-008, and the viral clearance claims belong to
+PCR-006, PCR-008 and PCR-009. All of these contributions are consolidated in PCMR-001, which
+is the document that states the drug substance position for each attribute.
+
+## Risk-based prioritization and parameter selection
+
+RA-001 assigned every parameter of this step to univariate assessment, and no multivariate
+design was planned or executed. The assignment follows from the severity axis of the risk
+ranking. A parameter whose failure mode cannot reach a critical quality attribute scores at
+the bottom of the severity scale, and the combined score then falls below the threshold at
+which a multivariate design is required. The three failure modes at this step are a low step
+yield, an incomplete buffer exchange and a concentration away from target, and each of them
+is detected in process, is correctable within the batch, and leaves the molecule itself
+unchanged.
+
+One consequence of that assignment is carried through this report. No interaction between
+the three parameters has been quantified, so the ranges in §6 are single-parameter ranges
+and not a multivariate region. How that limitation is managed is stated in §10.
+
+# Materials and methods
+
+## Scale-down model and its qualification
+
+The scale-down model is a tangential-flow filtration system operated at the same membrane
+loading as the commercial skid, expressed as grams of protein per square metre of membrane
+area. Membrane chemistry, nominal cut-off and channel geometry are the same at both scales.
+Crossflow is set to match channel shear, transmembrane pressure is matched directly, and the
+diavolume count is dimensionless and transfers between scales unchanged. Qualification
+compared step yield and final concentration on the model against the commercial skid
+operated at set-point conditions, under SOP-1001 and SOP-2013.
+
+The model has one known limitation, and it bears on the yield claim and not on the
+concentration and exchange claims. Hold-up volume does not scale in proportion to membrane
+area, and hold-up is the dominant term in the step loss, so the model reproduces the
+commercial recovery less faithfully than it reproduces the other two outcomes. The
+consequence is stated in §10 and is managed by confirmation at commercial scale in Stage 2.
+
+The scale-down system used for the characterization was the TFF skid EQ-TFF-142. It was
+within its calibration interval throughout execution, with calibration next due on
+`{python} eq_tff_142_cal_due`.
+
+## Operation
+
+Operation follows SOP-2013. The feed is the filtrate pool from small-virus retentive
+filtration, which is transferred to the retentate vessel and recirculated across the
+membrane at the set-point crossflow. The first concentration phase raises the protein
+concentration to the diafiltration concentration. Constant-volume diafiltration then
+replaces the feed buffer with the formulation buffer, with permeate removal balanced by
+addition of formulation buffer, until the set diavolume count is reached. A second
+concentration phase brings the retentate to the target drug substance concentration, and a
+recovery flush of formulation buffer displaces part of the hold-up volume into the pool. The
+pooled retentate and flush are the drug substance.
+
+Inputs to the step are controlled to specification and were not characterized. The
+formulation buffer is a material input, prepared to the composition fixed by the drug
+product programme and released against its own specification, so its identity and quality
+are controlled but its composition is not a subject of this study. The membrane is qualified
+by lot and by normalized water permeability before use, and its reuse is controlled under
+the life-cycle provisions of SOP-2013.
+
+## Analytical methods
+
+The procedures and validated methods used at this step are listed in @tbl-methods in
+Appendix B. Protein concentration is measured by absorbance at 280 nm (AMV-3019), and that
+assay is used in process at the end of each concentration phase and again on the final pool,
+where it is the measurement on which the batch is dispositioned. Size variants are measured
+by SEC-HPLC (AMV-3011) and charge variants by imaged capillary isoelectric focusing
+(AMV-3013). The intermediate precision of the concentration assay is
+`{python} f"{amv_3019_precision:.1f}"` % relative standard deviation, which is
+`{python} f"{conc_precision_g:.1f}"` g/L at the target concentration, and its limit of
+quantitation is `{python} f"{amv_3019_loq:.1f}"` g/L. That precision is the reference
+against which the concentration deviation in §12 is judged.
+
+## Sampling plan
+
+Samples were taken from the feed to the step, from the retentate at the end of
+diafiltration, and from the final pool after the recovery flush. Concentration was measured
+on every sample. Size variants and charge variants were measured on the feed and on the
+final pool, because the feed-to-pool comparison is the measurement that answers whether the
+operation changes the product. Buffer exchange is followed in process by conductivity and pH
+of the retentate at the end of diafiltration, which is the routine batch control under
+SOP-2013.
+
+## Statistical methods
+
+No statistical model was fitted for this step. Each parameter was assessed over its
+characterization range with the other two held at their set-points, so the data support a
+range statement per parameter and not a response surface, which is why §6 reports proven
+acceptable ranges instead of a design space.
+
+Commercial-scale capability is estimated by Monte-Carlo simulation of
+`{python} f"{n_mc:,}"` batches with every process parameter varying inside its normal
+operating range, and is reported as a one-sided Cpk against the acceptance criterion for
+each attribute. Because this step neither forms nor clears an attribute, its contribution to
+capability is the preservation of the values delivered to it, so the capability figures in
+§7 are drug substance figures whose credit lies with the steps named there.
+
+# Study design
+
+The design is univariate and it follows RA-001 and PCP-010. Each parameter was assessed at
+the edges of its characterization range with the other two at their set-points, and
+verification runs were executed at the set-point condition. The parameters, their
+set-points, their normal operating ranges, their characterization ranges and their final
+classification are given in @tbl-params.
+
+```{python}
+#| output: asis
+show(report_params(UO))
+```
+
+: Parameters of the ultrafiltration / diafiltration step, with set-points, normal operating ranges, characterization ranges, final classification and study type. {#tbl-params}
+
+Every characterization range is wider than the corresponding normal operating range on at
+least one side, and that margin is what the range claims in §6 rest on. Diavolumes were
+assessed from `{python} f"{dv_lo:.0f}"` to `{python} f"{dv_hi:.0f}"`, where the low edge is
+the condition at which buffer exchange is least complete and is therefore the worst case for
+the exchange claim, and the high edge tests whether extended processing costs product.
+Transmembrane pressure was assessed to `{python} f"{tmp_hi:.0f}"` psi. The final
+concentration was assessed from `{python} f"{conc_lo:.0f}"` to
+`{python} f"{conc_hi:.0f}"` g/L against a normal operating range of
+`{python} f"{conc_nor_lo:.0f}"` to `{python} f"{conc_nor_hi:.0f}"` g/L.
+
+The responses recorded for each condition were the step yield, the final concentration by
+A280, the conductivity and pH of the retentate at the end of diafiltration, and the size and
+charge variant profiles of the final pool (§3.4). No screening design and no response-surface
+design was run at this step, and none was required by RA-001.
+
+# Results
+
+## Concentration and buffer exchange
+
+The operation delivered the drug substance at `{python} f"{ds_conc:.0f}"` g/L, which is the
+target concentration and the centre of the normal operating range of
+`{python} f"{conc_nor_lo:.0f}"` to `{python} f"{conc_nor_hi:.0f}"` g/L. Concentration is
+measured by A280 at the end of the final concentration phase, and the batch is adjusted
+before the pool is released. One run finished below target and is described in §12.
+
+Buffer exchange is complete at the low edge of the diavolume range. Under an ideal
+constant-volume diafiltration, in which the retentate is fully mixed and the species passes
+the membrane freely, the residual fraction of a feed buffer species is the exponential of
+the negative diavolume count. At the set-point of `{python} f"{dv_sp:.0f}"` diavolumes that
+fraction is `{python} f"{100*resid_sp:.3f}"` % of the starting concentration, at
+`{python} f"{dv_lo:.0f}"` diavolumes it is `{python} f"{100*resid_lo:.3f}"` %, and at
+`{python} f"{dv_hi:.0f}"` diavolumes it is `{python} f"{100*resid_hi:.4f}"` %.
+
+Two bounds apply to that calculation, and neither of them is removed by the data. The first
+is that the calculation is the design basis for the diavolume set-point and is not the batch
+acceptance test, which is the conductivity and pH of the retentate at the end of
+diafiltration (SOP-2013). The second is that it applies only to species that pass the
+membrane freely, because a species that associates with the product is not removed by
+diafiltration at all, and clearance of that kind is credited to the chromatographic steps
+(PCR-005, PCR-007 and PCR-008) and not to this one.
+
+## Step yield and the process mass balance
+
+The step recovered `{python} f"{mass_out_kg:.1f}"` kg of the
+`{python} f"{mass_in_kg:.1f}"` kg delivered to it, which is a step yield of
+`{python} f"{step_yield_pct:.1f}"` % and a loss of `{python} f"{mass_loss_kg:.1f}"` kg, and
+the recovered mass corresponds to `{python} f"{ds_volume_l:.0f}"` L of drug substance at the
+target concentration. The loss is attributed to product held in the membrane system and the
+transfer lines after the recovery flush, and that attribution is supported by the
+investigation of DEV-010-02, whose root cause was residual hold-up volume (§12). At
+`{python} f"{step_loss_pct:.1f}"` %, the loss is the `{python} loss_rank_word` of the
+`{python} f"{n_purif_steps:.0f}"` recovery and purification steps in the train.
+
+This is the last step of the drug substance train, so the mass balance closes here.
+Cumulative yield from the production bioreactor to the formulated drug substance is
+`{python} f"{cum_yield_pct:.1f}"` %, from a nominal batch of `{python} f"{scale_l:,}"` L of
+culture, and the delivered mass is `{python} f"{ds_mass_kg:.1f}"` kg. The step-by-step
+profile is shown in @fig-yield and tabulated in @tbl-massbal in Appendix A. The largest
+single step loss anywhere in the train is `{python} f"{max_loss_pct:.1f}"` %, so the
+recovery burden is spread across the recovery and chromatographic steps instead of being
+concentrated in any one of them.
+
+```{python}
+#| output: asis
+print("![Cumulative product yield across the A-Mab drug substance train, from the "
+      "production bioreactor to the formulated drug substance.]"
+      "(../outputs/figures/fig_yield_waterfall.png){#fig-yield width=95%}")
+```
+
+## Product quality across the operation
+
+The quality attributes of the drug substance are the attributes delivered to this step. The
+aggregate content of the cation exchange pool is `{python} f"{agg_cex_pct:.2f}"` % of the
+total by SEC-HPLC, against a drug substance acceptance limit of
+`{python} f"{agg_limit:.0f}"` %, and no formation or clearance of aggregate is attributed to
+anion exchange, to small-virus retentive filtration or to this step. The simulated drug
+substance mean is `{python} f"{agg_ds_mean:.2f}"` % (@tbl-cap), which is the cation exchange
+pool level within the batch-to-batch variation of the attribute. Acidic charge variants
+behave the same way, and their acceptance interval of
+`{python} f"{acid_limit_lo:.0f}"` to `{python} f"{acid_limit_hi:.0f}"` % is met at drug
+substance.
+
+Concentration to `{python} f"{ds_conc:.0f}"` g/L is the most concentrated state the product
+reaches in the process, and it is the condition under which self-association is most likely.
+The comparison of feed and final pool by SEC-HPLC and icIEF is the evidence that the
+operation preserves what it receives, and it is the reason both assays sit in the sampling
+plan (§3.4) and in the control strategy (§9). That comparison covers the concentrations
+assessed in this study and does not extend above `{python} f"{conc_hi:.0f}"` g/L.
+
+Residual DNA in the drug substance is `{python} f"{dna_ds:.4f}"` ng per dose against a limit
+of `{python} f"{dna_limit:.3f}"` ng per dose. Host cell protein, leached Protein A and
+residual DNA are cleared upstream and are carried across this step unchanged, so their
+capability is reported in PCR-005, PCR-007 and PCR-008, and the drug substance position for
+each is consolidated in PCMR-001.
+
+# Operating ranges and proven acceptable ranges
+
+This step has no design space. The characterization was univariate, so what the data support
+is a proven acceptable range for each parameter and not a multivariate region in three
+parameters, and this section accordingly replaces the design-space section used for the
+characterized steps. The substitution follows from the risk-based study assignment in
+RA-001 (§2.3), and it does not follow from an incomplete study.
+
+The proven acceptable range of each parameter is its characterization range in @tbl-params,
+and the normal operating range sits inside it in every case. Diavolumes are proven
+acceptable from `{python} f"{dv_lo:.0f}"` to `{python} f"{dv_hi:.0f}"`, and the binding
+condition is the low edge, at which buffer exchange is least complete (§5.1). Transmembrane
+pressure is proven acceptable from `{python} f"{tmp_lo:.0f}"` to
+`{python} f"{tmp_hi:.0f}"` psi, and the excursion recorded in DEV-010-01 fell inside that
+range. Final concentration is proven acceptable from
+`{python} f"{conc_lo:.0f}"` to `{python} f"{conc_hi:.0f}"` g/L, which is the range over
+which the size and charge variant profiles of the pool were compared with those of the feed
+(§5.3).
+
+The worst-case condition for the step is the low edge of the diavolume range combined with
+the high edge of the concentration range, because that combination gives the least complete
+buffer exchange at the highest retentate viscosity. It was not executed as a single run,
+since the study was univariate, so it is identified here and it is not claimed as
+characterized.
+
+Three bounds apply to these ranges. They hold over the values assessed and on the scale-down
+model described in §3.1, and they do not extend beyond the characterization ranges. They are
+single-parameter ranges, so simultaneous movement of two parameters to opposite edges is not
+covered by them. Because there is no design space for this step, the ICH Q8 provision that
+movement within a design space is not a change does not apply here [@ichq8]: movement inside
+the normal operating range is routine operation, and movement outside it but inside the
+proven acceptable range is assessed under the pharmaceutical quality system before execution
+[@ichq10].
+
+# Process capability and robustness
+
+The drug substance meets every acceptance criterion at commercial scale, and none of that
+capability is earned at this step. Capability was estimated by Monte-Carlo simulation of
+`{python} f"{n_mc:,}"` batches with all process parameters varying inside their normal
+operating ranges. The two attributes monitored across this operation are given in @tbl-cap.
+
+```{python}
+#| output: asis
+show(cap_for(["aggregates_hmw", "acidic_variants"]))
+```
+
+: Commercial-scale capability of the attributes monitored across the ultrafiltration / diafiltration step, from a Monte-Carlo simulation of the whole process. {#tbl-cap}
+
+Aggregates carry a one-sided Cpk of `{python} f"{cpk_agg:.1f}"` against the upper limit of
+`{python} f"{agg_limit:.0f}"` %, with a simulated mean of
+`{python} f"{agg_ds_mean:.2f}"` %, and the margin is that large because the aggregate limit
+sits well above the level the cation exchange step delivers (PCR-007). Acidic charge
+variants carry a Cpk of `{python} f"{cpk_acid:.2f}"`, which is the tighter of the two, and
+that figure is a property of the attribute's acceptance interval and of the variation
+introduced upstream at the production bioreactor (PCR-003). Neither figure is evidence about
+this step beyond the absence of a contribution from it.
+
+The tightest capability in the drug substance is neither of these. The minimum one-sided Cpk
+across all attributes is `{python} f"{min_cpk:.2f}"`, and it belongs to the cumulative
+parvovirus clearance, which is credited to anion exchange and small-virus retentive
+filtration (PCR-008 and PCR-009). The consolidated capability position is given in PCMR-001.
+
+Two bounds apply to the figures above. They assume every parameter inside its normal
+operating range, and they rest on the scale-down models qualified for each step of the
+train, so they are model estimates and are confirmed at commercial scale during Stage 2.
+
+# Parameter classification
+
+All `{python} n_params` parameters of the step are key process parameters. None is critical
+and none is well-controlled critical, because no failure mode at this step reaches a
+critical quality attribute. The reason for each classification is given below, and the
+classification rule is the one in SOP-4001.
+
+- The number of diavolumes is a key process parameter, because it sets the completeness of buffer exchange, which is a performance attribute of the formulated pool and not a property of the molecule. It is fixed in the batch record and counted automatically during the phase, so the risk of operating outside its range is low.
+- Transmembrane pressure is a key process parameter. It governs flux, and therefore the duration of the operation, and at the top of its range it also governs the risk of a fouling transient of the kind recorded in DEV-010-01, but it is monitored continuously and any excursion is correctable within the batch.
+- The final drug substance concentration is a key process parameter, and it is the deliverable of the step, so a value away from target is a process performance failure and not a quality failure. It is verified by A280 before the pool is released, and a low result is corrected by further concentration, as DEV-010-02 shows.
+
+This step contributes `{python} f"{n_params:.0f}"` of the
+`{python} f"{n_kpp_train:.0f}"` key process parameters in the drug substance process, and
+none of the `{python} f"{n_qlinked:.0f}"` quality-linked parameters (CPP and WC-CPP). The
+classification counts across the whole train are consolidated in PCMR-001.
+
+# Contribution to the control strategy
+
+The step contributes four elements to the control strategy for the drug substance. The three
+parameters are held inside the normal operating ranges in @tbl-params, and the set-points
+are carried in the batch record. Buffer exchange is verified in process by the conductivity
+and pH of the retentate at the end of diafiltration. The concentration of the final pool is
+verified by A280 (AMV-3019) before the pool is released, with the provision for further
+concentration that DEV-010-02 exercised. Product quality across the step is verified by
+SEC-HPLC and icIEF on the feed and on the final pool.
+
+Two life-cycle controls attach to the step and not to a single batch. Membrane reuse is
+controlled by normalized water permeability and by a maximum cycle count under SOP-2013, and
+the formulation buffer is a controlled material input released against the specification set
+by the drug product programme.
+
+What the step does not control matters as much to the assessor as what it does. It clears no
+impurity and no clearance credit is taken for it, so the impurity levels in the drug
+substance are those established at Steps 5, 7 and 8, and it makes no viral clearance claim,
+so the modular claim rests entirely on Steps 6, 8 and 9. It does not establish the
+formulation and it does not establish the stability of the drug substance in that
+formulation. Those studies are reported with the drug product and are outside the transfer
+scope in PTP-001.
+
+# Discussion
+
+Two limitations bound what this report establishes, and the first is the absence of a
+multivariate design. Only single-parameter ranges are supported, so a simultaneous excursion
+in two parameters is not covered by the data and is handled under change control. The
+residual risk is small, because the three parameters act on different outcomes: diavolumes
+act on exchange completeness, transmembrane pressure acts on flux, and concentration acts on
+recoverable mass. The risk is not zero, because all three act on the duration of the
+operation and therefore on the time the product spends at high concentration, and that
+coupling is the reason the worst-case condition in §6 is identified even though it was not
+executed as a run.
+
+The second limitation is the scale-down model. Hold-up volume does not scale in proportion
+with membrane area, and hold-up is the dominant term in the step loss, so the model predicts
+commercial step yield with less confidence than it predicts concentration and buffer
+exchange. The step yield reported in §5.2 is the model value, and it is confirmed against
+the commercial skid during Stage 2. The concentration and exchange claims do not depend on
+hold-up and are unaffected by this limitation.
+
+The `{python} f"{n_dev:.0f}"` recorded deviations were transient and both were retained. The
+pressure excursion
+reached `{python} f"{tmp_max:.1f}"` psi, which is `{python} f"{tmp_over_nor:.1f}"` psi above
+the normal operating range and `{python} f"{tmp_margin_par:.1f}"` psi below the top of the
+characterization range, and the concentration shortfall was
+`{python} f"{conc_deficit:.1f}"` g/L on one run and was corrected before release. Neither
+event changed a classification or a range, and both are described in §12.
+
+Formulation characterization is deferred and not omitted. The composition of the formulation
+buffer, the stability of A-Mab in it, and the drug substance hold, freeze and thaw
+conditions are established in the drug product development programme, and that programme is
+where an assessor reading for the formulation argument should look. This report covers the
+delivery of the drug substance into that buffer at the target concentration, which is where
+the drug substance transfer scope defined in PTP-001 ends.
+
+No parameter at this step required the most stringent class of control. That outcome follows
+from the mechanism of the operation and not from a wide operating margin, and it would not
+change if the ranges were narrowed, because a step that neither forms nor clears a quality
+attribute cannot hold a critical process parameter under the classification rule in
+SOP-4001.
+
+# Conclusions
+
+The ultrafiltration and diafiltration step is well understood and its operation is under
+control. It delivered `{python} f"{ds_mass_kg:.1f}"` kg of A-Mab at
+`{python} f"{ds_conc:.0f}"` g/L in the formulation buffer, at a step yield of
+`{python} f"{step_yield_pct:.1f}"` % and a cumulative train yield of
+`{python} f"{cum_yield_pct:.1f}"` %. Buffer exchange is complete at the low edge of the
+diavolume range. The quality attributes carried into the step are preserved across it, and
+the drug substance meets every acceptance criterion at commercial scale, with a minimum
+one-sided Cpk of `{python} f"{min_cpk:.2f}"` that belongs to the cumulative parvovirus
+clearance credited to Steps 8 and 9.
+
+All `{python} n_params` parameters are classified as key process parameters, with the proven
+acceptable ranges in @tbl-params. The `{python} f"{n_dev:.0f}"` recorded deviations were
+investigated and retained, and neither altered a classification or a range. No design space,
+no clearance credit and no viral clearance claim is made for this step, and the formulation
+itself is characterized in the drug product programme. These conclusions hold over the
+ranges assessed and on the qualified scale-down model, and they roll up into PCMR-001.
+
+# Deviations from the plan
+
+Execution of PCP-010 recorded `{python} f"{n_dev:.0f}"` deviations. Both were investigated,
+impact assessed and retained, and neither changed a parameter classification or an operating
+range. The register is given in @tbl-dev.
+
+```{python}
+#| output: asis
+print(dev_register(DOC))
+```
+
+: Register of deviations recorded during execution of the ultrafiltration / diafiltration characterization. {#tbl-dev}
+
+## DEV-010-01 Transmembrane-pressure excursion during concentration
+
+Transmembrane pressure reached `{python} f"{tmp_max:.1f}"` psi during a concentration phase,
+which is `{python} f"{tmp_over_nor:.1f}"` psi above the top of the normal operating range of
+`{python} f"{tmp_nor_hi:.0f}"` psi. The excursion was detected by in-process monitoring on
+the TFF skid (EQ-TFF-142), after which crossflow was reduced and the phase was completed at
+the set-point pressure.
+
+The investigation attributed the excursion to a transient fouling of the membrane during
+concentration, which raised the pressure needed to hold the set flux. The membrane passed
+its normalized water permeability check after cleaning, and that result is consistent with a
+transient and reversible event and not with membrane damage.
+
+The value reached is inside the characterization range of the parameter, whose upper edge is
+`{python} f"{tmp_hi:.0f}"` psi, so the run was executed inside the conditions the study
+covers, with a margin of `{python} f"{tmp_margin_par:.1f}"` psi to the top of that range.
+The run was retained and its data were used as recorded. The event is one of the reasons
+transmembrane pressure is monitored continuously in the control strategy (§9).
+
+## DEV-010-02 Final concentration below target on one run
+
+The final concentration of one run was `{python} f"{conc_pre:.1f}"` g/L, which is
+`{python} f"{conc_deficit:.1f}"` g/L below the target of `{python} f"{conc_sp:.0f}"` g/L, or
+`{python} f"{conc_deficit_pct:.1f}"` % low. The value is inside the normal operating range,
+whose lower edge is `{python} f"{conc_nor_lo:.0f}"` g/L, so no material was outside a
+studied condition at any point. The shortfall is `{python} f"{conc_deficit_ratio:.1f}"` times
+the intermediate precision of the concentration assay, so it is a real shortfall and not an
+analytical artefact.
+
+The investigation attributed the shortfall to residual hold-up volume in the membrane
+system, which retained product that the recovery flush did not displace. The pool was
+concentrated further to the target and re-assayed by A280 (AMV-3019) before release, and the
+batch was dispositioned as conforming.
+
+The run was retained. This event is the basis for the in-process concentration check in §9,
+and it is the observation that supports the statement in §10 that the scale-down model
+predicts step yield with less confidence than it predicts concentration.
+
+{{< pagebreak >}}
+
+# Appendix A — Drug substance mass balance across the process train {.unnumbered}
+
+The step and cumulative yields of every unit operation in the drug substance train are given
+in @tbl-massbal. The values are those of the seeded process model and are the source of the
+figures quoted in §5.2.
+
+```{python}
+#| output: asis
+show(yw_disp)
+```
+
+: Step and cumulative product yield for each unit operation of the A-Mab drug substance process. {#tbl-massbal}
+
+# Appendix B — Analytical methods summary {.unnumbered}
+
+The controlled procedures and validated analytical methods referenced by this report are
+listed in @tbl-methods. Method performance for the concentration assay is quoted in §3.3;
+full validation summaries are held in the referenced validation reports.
+
+```{python}
+#| output: asis
+print(sop_table(sops=UFDF_SOP_REFS, amvs=UFDF_AMV_REFS))
+```
+
+: Standard operating procedures and validated analytical methods for the ultrafiltration / diafiltration step. {#tbl-methods}
+
+# References {.unnumbered}
+
+::: {#refs}
+:::

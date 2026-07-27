@@ -140,6 +140,38 @@ def run_style(qmd: str) -> int:
     return r.returncode
 
 
+def check_pdf_glyphs(qmd: str) -> int:
+    """Fail if the rendered PDF contains missing-glyph boxes.
+
+    The LaTeX text font has no glyph for several characters the corpus uses — the maths
+    operators and the Unicode sub/superscripts in things like ``log₁₀`` and ``pCO₂``. They
+    render as NULL, so ``≥ 4.93`` becomes ``␀ 4.93``: a clearance *floor* silently reads as
+    a point value, which inverts an acceptance criterion. The docx pipeline is unaffected,
+    which is why this shipped unnoticed across eight documents — nothing ever looked at the
+    PDF after rendering. The fix is the Unicode font block in the document's pdf format
+    (mainfont/sansfont/monofont/mathfont); this check makes its absence loud.
+    """
+    pdf = os.path.splitext(os.path.abspath(qmd))[0] + ".pdf"
+    if not os.path.exists(pdf):
+        return 0
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        print("WARN  PyMuPDF not available; skipping PDF glyph check")
+        return 0
+    doc = fitz.open(pdf)
+    text = "".join(page.get_text() for page in doc)
+    doc.close()
+    n = text.count("\x00")
+    if n:
+        print(f"FAIL  {os.path.basename(pdf)}: {n} missing glyph(s) in the rendered PDF.")
+        print("      Add the Unicode font block to the pdf: format "
+              "(mainfont/sansfont/monofont/mathfont: DejaVu …) and re-render.")
+        return 1
+    print(f"OK    {os.path.basename(pdf)}: no missing glyphs")
+    return 0
+
+
 def run_quarto(qmd: str) -> int:
     if not shutil.which("quarto"):
         print("WARN  --render requested but quarto not on PATH; skipping real render")
@@ -198,6 +230,8 @@ def check(qmd: str, do_render: bool, strict_numerals: bool, lax_style: bool) -> 
     style_rc = run_style(qmd)
 
     render_rc = run_quarto(qmd) if do_render else 0
+    if render_rc == 0:
+        render_rc = check_pdf_glyphs(qmd)
 
     hard_ok = (ok and render_rc == 0
                and (lint_rc == 0 or not strict_numerals)

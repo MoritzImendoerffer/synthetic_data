@@ -1,0 +1,1437 @@
+---
+title: "Process Characterization Report"
+subtitle: "A-Mab Drug Substance — Low-pH Viral Inactivation (Step 6) — PCR-006"
+author: "Process Development / Manufacturing Science & Technology (MSAT)"
+date: 2026-07-24
+format:
+  docx:
+    reference-doc: reference.docx
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    fig-cap-location: bottom
+    tbl-cap-location: top
+  pdf:
+    documentclass: scrreprt
+    mainfont: "DejaVu Serif"
+    sansfont: "DejaVu Sans"
+    monofont: "DejaVu Sans Mono"
+    mathfont: "DejaVu Math TeX Gyre"
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    colorlinks: true
+    geometry: margin=1in
+    fig-pos: 'H'
+    fig-cap-location: bottom
+    tbl-cap-location: top
+bibliography: references.bib
+execute:
+  echo: false
+  warning: false
+  cache: false
+jupyter: python3
+---
+
+```{python}
+#| tags: [setup]
+import sys, os
+sys.path.insert(0, os.path.abspath("."))
+from _pcpkg import *  # noqa: F401,F403
+import doe_report as D
+import matplotlib.pyplot as plt
+import scipy.stats as sstat
+
+DOC = "PCR-006"
+UO = "viral_inactivation"
+UO_TITLE = "Low-pH Viral Inactivation (Step 6)"
+
+# Display only: the Unicode subscript carried by the shared response labels has no glyph in
+# the PDF font, and matplotlib and pandoc take different subscript syntaxes, so the two viral
+# labels are written out plainly here for both.
+D.RESP_LABEL = {**D.RESP_LABEL, "xmulv_lrf": "XMuLV LRF (log10)",
+                "mvm_lrf": "MVM LRF (log10)"}
+
+# --- design structure -----------------------------------------------------------
+n_scr = doe_runs(UO, "screening")
+n_rsm = doe_runs(UO, "rsm")
+RESP = D.responses(UO)
+FACT = D.rsm_factors(UO)
+P = {p.key: p for p in CFG.unit_op(UO).parameters}
+
+_cm_scr = D.coded_matrix_df(UO, "screening")
+_cm_rsm = D.coded_matrix_df(UO, "rsm")
+n_cen_scr = int((_cm_scr["Type"] == "center").sum())
+n_cen_rsm = int((_cm_rsm["Type"] == "center").sum())
+n_fac_scr = int((_cm_scr["Type"] == "factorial").sum())
+n_fac_rsm = int((_cm_rsm["Type"] == "factorial").sum())
+n_ax_rsm = int((_cm_rsm["Type"] == "axial").sum())
+
+# --- fitted models (shared namespace; reused throughout) ------------------------
+fs = {r: D.fit(UO, "screening", r) for r in RESP}
+fr = {r: D.fit(UO, "rsm", r) for r in RESP}
+scr_df_resid = int(fs["xmulv_lrf"]["model"].df_resid)
+rsm_df_resid = int(fr["xmulv_lrf"]["model"].df_resid)
+df_pe_scr = int(fs["xmulv_lrf"]["df_pe"])
+df_pe_rsm = int(fr["xmulv_lrf"]["df_pe"])
+rmse_lrf = fr["xmulv_lrf"]["rmse"]
+
+# --- acceptance criteria --------------------------------------------------------
+lrf_floor = D.acceptance_for(UO, "xmulv_lrf")[0]
+agg_limit = D.acceptance_for(UO, "aggregate_out_pct")[1]
+acid_limit = D.acceptance_for(UO, "acidic_variants")[1]
+
+# --- named factor settings, all read from the config ----------------------------
+nat_sp = {f: P[f].setpoint for f in FACT}
+nat_norw = {"ph": P["ph"].nor[1], "hold_time": P["hold_time"].nor[0],
+            "temperature": P["temperature"].nor[0]}
+nat_chw = {"ph": P["ph"].prange[1], "hold_time": P["hold_time"].prange[0],
+           "temperature": P["temperature"].prange[0]}
+nat_chb = {"ph": P["ph"].prange[1], "hold_time": P["hold_time"].prange[1],
+           "temperature": P["temperature"].prange[1]}
+nat_aggw = dict(nat_sp, hold_time=P["hold_time"].prange[1],
+                temperature=P["temperature"].prange[1])
+nat_hold_lo = dict(nat_sp, hold_time=P["hold_time"].prange[0])
+nat_hold_hi = dict(nat_sp, hold_time=P["hold_time"].prange[1])
+nat_ph_lo = dict(nat_sp, ph=P["ph"].prange[0])
+nat_ph_hi = dict(nat_sp, ph=P["ph"].prange[1])
+
+
+def pv(resp, nat):
+    return float(D.predict(UO, resp, natural=nat)[0])
+
+
+def nor_s(f):
+    return f"{P[f].nor[0]:g}–{P[f].nor[1]:g}"
+
+
+def pr_s(f):
+    return f"{P[f].prange[0]:g}–{P[f].prange[1]:g}"
+
+
+def wid(f):
+    return P[f].prange[1] - P[f].prange[0]
+
+
+def wnor(f):
+    return P[f].nor[1] - P[f].nor[0]
+
+
+range_mult = {f: wid(f) / wnor(f) for f in FACT}
+
+# --- predictions ----------------------------------------------------------------
+lrf_sp = pv("xmulv_lrf", nat_sp)
+lrf_norw = pv("xmulv_lrf", nat_norw)
+lrf_chw = pv("xmulv_lrf", nat_chw)
+lrf_chb = pv("xmulv_lrf", nat_chb)
+lrf_ph_lo = pv("xmulv_lrf", nat_ph_lo)
+lrf_ph_hi = pv("xmulv_lrf", nat_ph_hi)
+lrf_marg_sp = lrf_sp - lrf_floor
+lrf_marg_norw = lrf_norw - lrf_floor
+lrf_short_chw = lrf_floor - lrf_chw
+d_ph_low = abs(lrf_ph_lo - lrf_sp)
+d_ph_high = lrf_sp - lrf_ph_hi
+
+agg_sp = pv("aggregate_out_pct", nat_sp)
+agg_aggw = pv("aggregate_out_pct", nat_aggw)
+agg_hold_lo = pv("aggregate_out_pct", nat_hold_lo)
+agg_hold_hi = pv("aggregate_out_pct", nat_hold_hi)
+acid_hold_lo = pv("acidic_variants", nat_hold_lo)
+acid_hold_hi = pv("acidic_variants", nat_hold_hi)
+acid_rise = acid_hold_hi - acid_hold_lo
+
+# turnover of the fitted pH quadratic below the set-point (a model artefact, bounded)
+_phg = np.linspace(P["ph"].prange[0], P["ph"].setpoint, 121)
+_lrfg = D.predict(UO, "xmulv_lrf", natural={
+    "ph": _phg,
+    "hold_time": np.full(_phg.size, P["hold_time"].setpoint),
+    "temperature": np.full(_phg.size, P["temperature"].setpoint)})
+ph_turn = float(_lrfg.max() - _lrfg[0])
+ph_turn_ratio = rmse_lrf / ph_turn
+
+# extent of the sub-acceptance set over the characterized cube
+_g = np.linspace(-1, 1, 41)
+_X, _Y, _Z = np.meshgrid(_g, _g, _g, indexing="ij")
+_pred = D.predict(UO, "xmulv_lrf", coded={"ph": _X.ravel(), "hold_time": _Y.ravel(),
+                                          "temperature": _Z.ravel()})
+_fail = ~D.meets_acceptance(UO, "xmulv_lrf", _pred)
+fail_frac = 100.0 * float(_fail.mean())
+fail_ph_lo = float(D.to_natural(UO, "ph", _X.ravel())[_fail].min())
+fail_ht_hi = float(D.to_natural(UO, "hold_time", _Y.ravel())[_fail].max())
+fail_tp_hi = float(D.to_natural(UO, "temperature", _Z.ravel())[_fail].max())
+
+# --- screening effect estimates -------------------------------------------------
+se_lrf = D.screening_effects_df(UO, "xmulv_lrf").set_index("Term")
+se_agg = D.screening_effects_df(UO, "aggregate_out_pct").set_index("Term")
+se_acd = D.screening_effects_df(UO, "acidic_variants").set_index("Term")
+LM = D.factor_letters(UO)
+eff_lrf_ph = float(se_lrf.loc[LM["ph"], "Effect"])
+eff_lrf_ht = float(se_lrf.loc[LM["hold_time"], "Effect"])
+eff_lrf_tp = float(se_lrf.loc[LM["temperature"], "Effect"])
+eff_agg_ht = float(se_agg.loc[LM["hold_time"], "Effect"])
+eff_agg_tp = float(se_agg.loc[LM["temperature"], "Effect"])
+eff_agg_ph = float(se_agg.loc[LM["ph"], "Effect"])
+p_agg_ph = float(se_agg.loc[LM["ph"], "p-value"])
+eff_acd_ht = float(se_acd.loc[LM["hold_time"], "Effect"])
+_int_terms = [t for t in se_lrf.index if len(t) == 2]
+_imax = se_lrf.loc[_int_terms, "Effect"].abs().idxmax()
+int_max_eff = float(se_lrf.loc[_imax, "Effect"])
+int_max_p = float(se_lrf.loc[_imax, "p-value"])
+
+# --- response-surface coefficients ----------------------------------------------
+rc_lrf = D.rsm_coeff_df(UO, "xmulv_lrf").set_index("Term")
+p_ph_quad = float(rc_lrf.loc[LM["ph"] + "²", "p-value"])
+coef_ht_lrf = float(rc_lrf.loc[LM["hold_time"], "Coef."])
+coef_ht_agg = float(D.rsm_coeff_df(UO, "aggregate_out_pct")
+                    .set_index("Term").loc[LM["hold_time"], "Coef."])
+
+# --- diagnostics ----------------------------------------------------------------
+_res_lrf = fr["xmulv_lrf"]["model"].resid.values
+_res_agg = fr["aggregate_out_pct"]["model"].resid.values
+sw_p_lrf = float(sstat.shapiro(_res_lrf).pvalue)
+max_sres_lrf = float(np.max(np.abs(_res_lrf / rmse_lrf)))
+max_sres_agg = float(np.max(np.abs(_res_agg / fr["aggregate_out_pct"]["rmse"])))
+
+# --- centre-point reproducibility -----------------------------------------------
+cc = D.center_cv_df(UO, "rsm").set_index("Response")
+L_LRF = D.RESP_LABEL["xmulv_lrf"]
+L_AGG = D.RESP_LABEL["aggregate_out_pct"]
+L_ACD = D.RESP_LABEL["acidic_variants"]
+cv_lrf = float(cc.loc[L_LRF, "%CV"])
+sd_lrf = float(cc.loc[L_LRF, "SD"])
+cv_agg = float(cc.loc[L_AGG, "%CV"])
+sd_acd = float(cc.loc[L_ACD, "SD"])
+
+# --- proven acceptable ranges ---------------------------------------------------
+par_ph_sp = D.par_at_setpoint(UO, "xmulv_lrf", "ph")["par_nat"]
+par_ph_nor = D.par_nor_propagated(UO, "xmulv_lrf", "ph")["par_nat"]
+par_ph_nor_s = f"{par_ph_nor[0]:g}–{par_ph_nor[1]:.2f}"
+par_ph_gap = P["ph"].prange[1] - par_ph_nor[1]
+gov_lrf = D.governing_factor(UO, "xmulv_lrf")
+gov_agg = D.governing_factor(UO, "aggregate_out_pct")
+
+# --- modular viral-clearance ledger ---------------------------------------------
+vc = csv("viral_clearance.csv").set_index("step")
+lrf_credit = float(vc.loc["Low-pH Viral Inactivation", "XMuLV"])
+lrf_aex = float(vc.loc["Anion Exchange (AEX)", "XMuLV"])
+lrf_vf = float(vc.loc["Virus Filtration", "XMuLV"])
+lrf_cum = float(vc.loc["Cumulative", "XMuLV"])
+mvm_step = float(vc.loc["Low-pH Viral Inactivation", "MVM"])
+lrf_req = float(cqa_reg[cqa_reg.key == "lrv_xmulv"].iloc[0]["acc_low"])
+lrf_cum_margin = lrf_cum - lrf_req
+lrf_recon = lrf_credit - lrf_sp
+
+# --- commercial-scale capability ------------------------------------------------
+_cx = cap[cap.key == "lrv_xmulv"].iloc[0]
+cpk_lrf = float(_cx["Cpk"])
+mean_lrf_ds = float(_cx["mean"])
+sd_lrf_ds = float(_cx["sd"])
+marg_lrf_ds = mean_lrf_ds - lrf_req
+sigma_lrf_ds = marg_lrf_ds / sd_lrf_ds
+cpk_agg = float(cap[cap.key == "aggregates_hmw"].iloc[0]["Cpk"])
+cpk_acd = float(cap[cap.key == "acidic_variants"].iloc[0]["Cpk"])
+CLS = class_counts()
+
+# --- deviation-linked scalars ---------------------------------------------------
+lrf_per_min = coef_ht_lrf / (wid("hold_time") / 2)
+agg_per_min = coef_ht_agg / (wid("hold_time") / 2)
+dev1_lrf = lrf_per_min * dev_006_01_time_discrepancy_min
+dev1_agg = agg_per_min * dev_006_01_time_discrepancy_min
+dev1_pct = 100.0 * dev_006_01_time_discrepancy_min / wid("hold_time")
+```
+
+```{python}
+#| output: asis
+print(title_block(DOC, UO_TITLE))
+print()
+print(SYN_BANNER)
+```
+
+## Approvals {.unnumbered}
+
+| Role | Function | Name (synthetic) | Signature | Date |
+|---|---|---|---|---|
+| Author | Process Development / MSAT | — | — | — |
+| Reviewer | Analytical Development | — | — | — |
+| Reviewer | Manufacturing Science | — | — | — |
+| Reviewer | Statistics | — | — | — |
+| Approver | Quality Assurance | — | — | — |
+
+: Approval record (synthetic; signatures not applied). {#tbl-appr}
+
+## Abbreviations {.unnumbered}
+
+AMV, analytical method validation; ANOVA, analysis of variance; BLA, Biologics License
+Application; CCD, central composite design; CPP, critical process parameter; Cpk, process
+capability index; CQA, critical quality attribute; DoE, design of experiments; DS, drug
+substance; GPP, general process parameter; HCP, host cell protein; HMW, high molecular
+weight; ICH, International Council for Harmonisation; icIEF, imaged capillary isoelectric
+focusing; IgG1, immunoglobulin G subclass 1; KPP, key process parameter; LOQ, limit of
+quantitation; LRF, log reduction factor; MSAT, Manufacturing Science and Technology; MVM,
+minute virus of mice; NOR, normal operating range; PAR, proven acceptable range; PRESS,
+predicted residual error sum of squares; RSM, response-surface methodology; SDM, scale-down
+model; SEC-HPLC, size-exclusion high-performance liquid chromatography; SOP, standard
+operating procedure; TCID50, fifty-percent tissue-culture infectious dose; WC-CPP,
+well-controlled critical process parameter; XMuLV, xenotropic murine leukaemia virus.
+
+{{< pagebreak >}}
+
+# Executive summary {.unnumbered}
+
+Low-pH viral inactivation is a hold step, and it is the operation on which the
+enveloped-virus clearance claim for A-Mab drug substance principally rests. The Protein A
+eluate is titrated into an acidic hold, held for a defined time under temperature control,
+and neutralized before it is loaded onto cation exchange. This report presents the
+characterization executed under PCP-006 on a qualified small-scale spiking model, with the
+scope set by the risk assessment in RA-001. The work follows the lifecycle approach to
+process validation [@fda2011] and the enhanced development principles of ICH Q8 and ICH Q11
+[@ichq8; @ichq11], and the clearance claim is framed as a modular claim under ICH Q5A(R2)
+[@ichq5a] in the manner of the case study on which the process is modelled [@amab2009].
+
+Four parameters were characterized. Inactivation pH, hold time and temperature were studied
+together in a multivariate design of `{python} n_scr` screening runs and `{python} n_rsm`
+response-surface runs. A-Mab concentration was assessed one factor at a time. The screening
+design identified all three multivariate parameters as active on the XMuLV log reduction
+factor and found no significant interaction among them. The response-surface model is the
+predictive model, and at the set-point it predicts a step log reduction factor of
+`{python} f"{lrf_sp:.2f}"` log~10~ against a required step contribution of
+`{python} f"{lrf_floor:.2f}"` log~10~.
+
+Inactivation pH is classified as a critical process parameter, and it is the only parameter
+in the drug substance process to carry that classification. Its characterized range fails in
+both directions. Toward the top, clearance falls: the model predicts a decline of
+`{python} f"{d_ph_high:.2f}"` log~10~ between the set-point and the top of the range, and at
+the corner formed by the highest pH, the shortest hold and the lowest temperature the
+prediction falls `{python} f"{lrf_short_chw:.2f}"` log~10~ short of the required
+contribution. Toward the bottom, the range stops where platform data place the onset of
+acid-induced aggregation, and no run was executed below that pH. Hold time and temperature
+are classified as well-controlled critical process parameters and A-Mab concentration as a
+general process parameter.
+
+The step raises aggregate instead of reducing it, and the increase is governed by hold time.
+Predicted pool aggregate rises from `{python} f"{agg_hold_lo:.2f}"` % to
+`{python} f"{agg_hold_hi:.2f}"` % across the characterized hold-time range at set-point pH
+and temperature, against a drug substance limit of `{python} f"{agg_limit:.0f}"` %. Acidic
+variants rise by `{python} f"{acid_rise:.1f}"` percentage points over the same interval.
+Neither attribute approaches its limit anywhere in the characterized ranges. Commercial-scale
+capability was estimated by Monte-Carlo simulation of
+`{python} f"{V['n_monte_carlo']:,}"` batches operated within their normal operating ranges.
+Cumulative XMuLV clearance is the tightest of the three, with a one-sided Cpk of
+`{python} f"{cpk_lrf:.2f}"` and a mean of `{python} f"{mean_lrf_ds:.2f}"` log~10~ against a
+requirement of `{python} f"{lrf_req:.1f}"` log~10~.
+
+Two deviations were recorded, investigated and closed. Both were retained, and neither
+altered a fitted effect, the operating region or a classification. Two claims are explicitly
+not made here. No clearance of non-enveloped virus is claimed, and the credited MVM
+contribution of this step is `{python} f"{mvm_step:.2f}"` log~10~, so parvovirus clearance
+rests on anion exchange (PCR-008) and virus filtration (PCR-009). No host cell protein
+clearance is claimed either, because HCP was not measured across this step. The step is
+understood over the ranges studied, its operating region is defined in @sec-designspace, and the outcome
+rolls up into PCMR-001.
+
+# Introduction {#sec-intro}
+
+## Product and unit operation {#sec-uo}
+
+A-Mab is a humanized IgG1 monoclonal antibody produced by fed-batch cell culture and purified
+by a platform train that has been used for three earlier antibodies (@sec-platform). The train runs from
+harvest and clarification through Protein A capture, low-pH viral inactivation, cation
+exchange, anion exchange, small-virus retentive filtration and ultrafiltration with
+diafiltration. @tbl-train lists the steps in order with the role each plays in the control
+strategy.
+
+```{python}
+#| output: asis
+show(process_steps_df())
+print()
+print(": The A-Mab drug substance process train and the principal role of each step. {#tbl-train}")
+```
+
+Low-pH viral inactivation is Step 6 and the first of the three operations that carry a viral
+clearance claim (Steps 6, 8 and 9). The Protein A eluate arrives acidic from the elution buffer, and the step
+titrates it to the target inactivation pH, holds it for a defined time under temperature
+control, and then neutralizes the pool for the cation exchange load. The mechanism is
+chemical and not physical, in that protonation at low pH disrupts the lipid envelope and the envelope
+glycoproteins of an enveloped virus, and the resulting loss of infectivity is not reversed on
+neutralization. A non-enveloped virus has no envelope to disrupt, which is why the step is
+credited for XMuLV and not for MVM.
+
+The step forms no product quality attribute, in that no glycan, charge or size attribute is
+created here and the pool that leaves the step contains the same molecule that entered it. What the
+step does set is the cumulative enveloped-virus clearance of the drug substance, an attribute
+of very high criticality (@tbl-cqa), and it acts on two attributes formed upstream at the bioreactor (PCR-003).
+The acid hold raises soluble aggregate and acidic charge variants slightly, and both were
+measured as responses of this study alongside the log reduction factor.
+
+## Objectives {#sec-objectives}
+
+The study had five objectives.
+
+(i) Quantify the relationship between the operating parameters of the step and the XMuLV log
+reduction factor, pool aggregate and acidic charge variants, over ranges wider than those
+intended for routine operation.
+
+(ii) Define a multivariate operating region within which the step delivers its required
+contribution to enveloped-virus clearance.
+
+(iii) Establish proven acceptable ranges for each parameter against each quality attribute it
+governs.
+
+(iv) Classify every parameter of the step under SOP-4001 (CPP, WC-CPP, KPP or GPP).
+
+(v) Justify the normal operating ranges and the elements of the control strategy that this
+step contributes for Stage 2 operation at the receiving site.
+
+## Regulatory and scientific basis {#sec-reg}
+
+This report is the Stage 1 process design record for the step in the sense of the lifecycle
+guidance on process validation [@fda2011]. Criticality is treated as a continuum and not as a
+binary classification, following the quality risk management principles of ICH Q9 [@ichq9],
+and the enhanced development approach of ICH Q8 and ICH Q11 supplies the design space and
+control strategy framework [@ichq8; @ichq11]. Viral clearance is evaluated under ICH Q5A(R2)
+[@ichq5a] as a modular claim, in which each clearance step is spiked and studied on its own
+and the step contributions are summed. The process description, the quality attribute
+framework and the risk methodology follow the published A-Mab case study [@amab2009].
+
+Two features of the viral-safety framework shape what this report is able to claim. Clearance
+studies are performed at small scale with deliberately spiked virus, because live virus may
+not be introduced into a manufacturing facility, so the claim rests on the qualification of
+the scale-down model and never on a manufacturing measurement. Clearance is also credited
+only where the mechanism is understood and the step is operated inside a range that has been
+studied, which is why the operating region in @sec-designspace is expressed in the same three parameters as
+the clearance claim itself.
+
+## Related documents {#sec-related}
+
+@tbl-rel lists the documents that scope this study and the documents into which it feeds.
+
+```{python}
+#| output: asis
+print(related_docs_md(DOC))
+print()
+print(": Related documents in the A-Mab characterization package. {#tbl-rel}")
+```
+
+# Prior knowledge and quality risk basis {#sec-prior}
+
+## Platform and prior-product knowledge {#sec-platform}
+
+The low-pH hold is the most stable operation in the platform. It has been used essentially
+unchanged for three earlier humanized IgG1 products (X-Mab, Y-Mab and Z-Mab) and through
+A-Mab clinical and engineering manufacture at the sending site. The buffer system, the hold
+configuration and the parameter set have not changed across those products. Platform
+experience therefore establishes the mechanism and the direction of every effect this study
+expected to see, and the purpose of the characterization was to bound those effects for
+A-Mab and not to discover them.
+
+The mechanistic expectations were recorded in PCP-006 before execution. Inactivation of an
+enveloped virus by acid is a kinetic process, so the log reduction factor was expected to rise
+with hold time and to fall as pH rises toward neutrality. Rate constants for chemical
+denaturation rise with temperature, so a warmer hold was expected to inactivate faster.
+Unfolding of an IgG1 at low pH exposes hydrophobic surface and promotes association, so
+aggregate was expected to rise with hold time and with temperature, and to rise sharply once
+pH falls below the stability edge of the molecule. Asparagine deamidation is only weakly
+acid-catalysed at these pH values, so acidic variants were expected to drift upward slowly
+across the hold and to be insensitive to pH over a range this narrow.
+
+Two of these expectations set the edges of the characterization range directly. Univariate
+platform work indicated that A-Mab begins to aggregate on prolonged exposure below pH
+`{python} f"{P['ph'].prange[0]:.1f}"`, so that value was taken as the lowest pH studied and
+no run was executed below it. At the other edge, platform experience did not support complete
+inactivation within a normal hold at pH values approaching neutrality, and the upper edge was
+set at pH `{python} f"{P['ph'].prange[1]:.1f}"` in order to place the expected edge of
+failure inside the studied range instead of outside it.
+
+## Quality attributes in scope {#sec-cqas}
+
+Three quality attributes were measured across the step. @tbl-cqa gives their acceptance
+criteria, their criticality and their Tool #1 scores.
+
+```{python}
+#| output: asis
+show(cqas_by_keys(["lrv_xmulv", "aggregates_hmw", "acidic_variants"]))
+print()
+print(": Quality attributes measured across the low-pH viral inactivation step. {#tbl-cqa}")
+```
+
+Enveloped-virus clearance is the attribute the step sets, and it is the only attribute in the
+table whose acceptance criterion is cumulative across the process, and it is not a property
+of the pool leaving this step. It is assigned very high criticality. Its Tool #1 score of
+`{python} f"{int(cqa_reg[cqa_reg.key == 'lrv_xmulv'].iloc[0]['tool1_score'])}"` is lower than
+the score carried by aggregate, because Tool #1 combines the impact of an attribute with the
+uncertainty attached to that impact, and the consequence of insufficient viral clearance is
+understood with very little uncertainty. The Tool #2 severity of
+`{python} f"{int(cqa_reg[cqa_reg.key == 'lrv_xmulv'].iloc[0]['tool2_severity'])}"` is the
+highest assigned to any attribute of the drug substance.
+
+Aggregate and acidic variants are formed at the bioreactor and are carried into this step by
+the Protein A pool. Neither is set here. Both were measured because the acid hold is a
+recognized source of both, and because a hold long enough to guarantee clearance must be
+shown not to damage the product. Aggregate is of high criticality and acidic variants of very
+low criticality, which is why the discussion of the two in @sec-results is asymmetric.
+
+## Risk-based prioritization and parameter selection {#sec-risk}
+
+RA-001 ranked every parameter of the step twice, once for its potential impact on quality
+attributes and once for its potential to interact with other parameters, and assigned a study
+type from the combined score. Three parameters ranked high enough to require multivariate
+study and one was assigned to univariate assessment. @tbl-params gives the outcome together
+with the ranges used, and the reasoning behind each range is in @sec-factors.
+
+The ranges were widened well beyond the intended operating ranges, so that the study would
+locate the edges of acceptable performance instead of confirming the centre. The
+characterized ranges are between `{python} f"{min(range_mult.values()):.1f}"` and
+`{python} f"{max(range_mult.values()):.1f}"` times as wide as the corresponding normal
+operating ranges. That choice is what makes the parameter classification in @sec-classification an argument
+from data, because a range that does not reach an edge of failure
+cannot distinguish a critical parameter from a well-controlled one.
+
+# Materials and methods {#sec-mm}
+
+## Scale-down model and its qualification {#sec-sdm}
+
+Viral clearance cannot be measured on a manufacturing batch, so the entire claim rests on a
+small-scale model and on the evidence that the model represents the commercial step, which for
+this study is a scaled hold vessel operated under SOP-2009 and qualified under SOP-1001.
+Spiking, sampling and titration were performed under the same procedures (SOP-2009) for every
+run of both designs.
+
+The model is a chemical replica of the step and not a geometric one. Titration uses the same
+acid and the same buffer system at the same molar ratio, the
+target pH is reached over a comparable ramp, and the hold is thermostatted to its set-point
+throughout. Inactivation pH, hold time and temperature are scale-independent quantities and
+were operated at the values that commercial manufacture will use. Mixing time and titration
+ramp are scale-dependent, and the small-scale conditions were set to match the ramp achieved
+at manufacturing scale, not an impeller speed.
+
+Qualification compared the model with the at-scale step on input and output attributes
+measured by the same validated methods, including pool aggregate (AMV-3011), acidic variants
+(AMV-3013) and the pH achieved at the end of titration. No difference was found that would alter the effects fitted
+in this report. The qualification record is held under SOP-1001, and this report cites its
+conclusion without restating its data.
+
+One boundary of the scale-down warrant is stated here because it limits @sec-designspace. The model
+reproduces the chemistry of the hold and the clearance that the chemistry delivers. It does
+not reproduce the geometry of the commercial hold vessel, so it carries no information about
+mixing homogeneity during titration at scale. That question is addressed by the equipment
+qualification and comparability work described in PTP-001.
+
+## Operation {#sec-operation}
+
+The step receives the Protein A eluate directly and without adjustment of protein
+concentration. Acid is added under pH control until the target inactivation pH (@tbl-params) is reached, the
+pH is confirmed by an independent measurement, and only then does the hold clock start.
+The hold proceeds without further addition. At the end of the hold the pool is titrated to the
+cation exchange load pH and filtered, and neutralization is treated as the end of the
+inactivation for the purpose of the log reduction calculation.
+
+A-Mab concentration in the hold is set by the Protein A elution and is not adjusted at this
+step. It was therefore treated as an input attribute spanning the range that Protein A can
+deliver, which is why it appears in @tbl-params with a normal operating range equal to its
+characterized range.
+
+Materials entering the step are controlled to platform specifications and were not
+characterized. Acid and neutralization buffers were prepared and released under SOP-2103
+before use, and their identity, concentration and expiry are quality controlled, and none of
+them was studied as a parameter.
+
+## Analytical methods {#sec-analytical}
+
+@tbl-sop lists the controlled procedures and validated methods used in the study.
+
+```{python}
+#| output: asis
+print(sop_table(sops=VIRAL_INACT_SOP_REFS, amvs=VIRAL_INACT_AMV_REFS))
+print()
+print(": Controlled procedures and validated analytical methods for the step. {#tbl-sop}")
+```
+
+XMuLV infectivity was measured as a TCID50 titre under AMV-3017, and the log reduction factor
+is the difference between the titre of the spiked load and the titre of the neutralized hold
+pool. Aggregate was measured by SEC-HPLC under AMV-3011 and charge variants by icIEF under
+AMV-3013. Each assay was run with the cytotoxicity and interference controls that ICH Q5A(R2)
+requires for a clearance study [@ichq5a].
+
+The infectivity assay is the least precise of the three and it is the method that carries the
+claim, so two of its properties are stated here and used in @sec-results. Its quantitation limit is
+`{python} f"{amv_3017_loq:.1f}"` log~10~ TCID50/mL, and
+`{python} f"{100 * amv_3017_var_frac:.0f}"` % of the variance observed in the reported log
+reduction factor is attributable to the method itself. Method performance is summarized in
+Appendix D and reported in full in the validation record for AMV-3017.
+
+## Sampling plan {#sec-sampling}
+
+Each run was sampled twice. The load sample was taken after the virus spike had been added
+and after the target pH had been reached, and it establishes the input titre. The pool sample
+was taken at the end of the hold, neutralized immediately to stop further inactivation, and
+assayed for infectivity, aggregate and charge variants. Sampling volumes were small enough
+that the hold volume was not materially changed.
+
+Replication was placed at the centre point of each design. The screening design carried
+`{python} n_cen_scr` centre-point runs and the response-surface design carried
+`{python} n_cen_rsm`, giving `{python} df_pe_scr` and `{python} df_pe_rsm` degrees of freedom
+for pure error respectively. Those replicates are the only estimate of reproducibility between
+runs in the study, and every lack-of-fit test in @sec-results is made against them.
+
+## Statistical methods {#sec-stats}
+
+Factors were coded to the edges of their characterized ranges, with the coded values −1 and
++1 at the range limits and 0 at the range midpoint. The midpoint is not the process set-point
+for any of the three multivariate factors (@tbl-params), so every prediction quoted at the
+set-point in this report was computed from the fitted model at the set-point values and not
+read off the design centre. Analyses were performed under SOP-1002.
+
+The screening analysis fitted all main effects and all two-factor interactions by ordinary
+least squares. An effect is reported as twice the coded coefficient, so it is the change in
+the response across the full characterized range of that factor. The response-surface
+analysis fitted the full quadratic model in the same three factors. Significance is assessed
+at the 5 % level throughout, and coefficients are reported with their standard errors.
+
+Model adequacy was judged on the coefficient of determination and its adjusted form, on the
+predicted coefficient of determination computed from PRESS, on the overall F test, and on an
+analysis of variance that partitions the residual sum of squares into lack of fit and pure
+error. A model is treated as adequate when its lack-of-fit term is not significant against
+the centre-point pure error. A response for which no factor is active is reported as robust
+over the ranges studied and is not modelled further.
+
+Commercial-scale capability was estimated by Monte-Carlo simulation of
+`{python} f"{V['n_monte_carlo']:,}"` batches, with every process parameter drawn within its
+normal operating range and propagated through the whole process model. Capability is reported
+as a one-sided Cpk, because each attribute this step influences has a single binding limit.
+Proven acceptable ranges were computed in the two forms described in @sec-par.
+
+# Study design {#sec-studydesign}
+
+## Factors, ranges and the knowledge space {#sec-factors}
+
+@tbl-params gives the four parameters of the step with their set-points, normal operating
+ranges, characterized ranges and final classifications. @tbl-legend gives the letter codes
+used for the design factors in the effect and coefficient tables that follow.
+
+```{python}
+#| output: asis
+show(report_params(UO))
+print()
+print(": Parameters of the low-pH viral inactivation step, with set-points, normal operating ranges, characterization ranges and final classification. {#tbl-params}")
+```
+
+```{python}
+#| output: asis
+show(D.factor_legend_df(UO))
+print()
+print(": Coded factor legend for the screening and response-surface designs. {#tbl-legend}")
+```
+
+The characterized ranges are the knowledge space of the step. The normal operating ranges lie
+inside them, and the operating region defined in @sec-designspace lies between the two. Each range was set
+for a stated reason, and no uniform multiple of the operating range was applied.
+
+The pH range is not centred on the set-point, and it extends
+`{python} f"{P['ph'].setpoint - P['ph'].prange[0]:.1f}"` pH units below the set-point and
+`{python} f"{P['ph'].prange[1] - P['ph'].setpoint:.1f}"` units above it, because the edge of
+failure that the study needed to locate is the upper one. The lower edge was placed at the pH
+below which platform data indicate aggregation, and no run went below it.
+
+The hold-time range extends to `{python} f"{P['hold_time'].prange[1]:.0f}"` minutes, which is
+`{python} f"{P['hold_time'].prange[1] / P['hold_time'].setpoint:.0f}"` times the set-point
+hold. A hold can be extended in manufacture but cannot be shortened once it has run, so the
+practical risk lies at the long end and the range was widened in that direction. Its lower
+edge coincides with the lower edge of the normal operating range, because a hold shorter than
+that is a batch deviation and not an operating condition. The temperature range spans the
+ambient control capability of the receiving suite (Grafton, WI), which is
+`{python} f"{wid('temperature'):.0f}"` °C wide against a normal operating range of
+`{python} f"{wnor('temperature'):.0f}"` °C.
+
+## Screening design {#sec-scrdesign}
+
+The screening study was a two-level full factorial in the three multivariate parameters with
+`{python} n_cen_scr` centre points, `{python} n_scr` runs in total. A full factorial in three
+factors estimates all three main effects and all three two-factor interactions without
+aliasing, so no resolution compromise applies and no effect in @tbl-scr-lrf is confounded
+with another. Runs were randomized and executed under SOP-1002 on the qualified scale-down
+model. The coded design matrix and the measured responses are in Appendix A.
+
+The screening model leaves `{python} scr_df_resid` residual degrees of freedom, and it
+contains no quadratic term. It identifies which factors are active and estimates their
+magnitude approximately, and it cannot detect curvature. It is not used as a predictive model
+anywhere in this report.
+
+## Response-surface design {#sec-rsmdesign}
+
+The response-surface study was a face-centred central composite design in the same three
+factors, with `{python} n_fac_rsm` factorial runs, `{python} n_ax_rsm` axial runs at the face
+centres and `{python} n_cen_rsm` centre points, `{python} n_rsm` runs in total. Placing the
+axial points on the faces of the cube, instead of outside it, keeps every run inside the
+characterized ranges, which matters here because the ranges were chosen to reach an edge of
+failure and an extrapolated axial point would have crossed it. The design supports the full
+quadratic model in three factors. That model is the predictive model of this report and the
+basis of the operating region in @sec-designspace, the proven acceptable ranges in @sec-par and the capability
+assessment in @sec-capability. The coded matrix and responses are in Appendix B.
+
+All three factors were carried into the response-surface design, because with only three
+multivariate parameters there was no subset to select and curvature in the pH response was the specific
+question the design was built to answer.
+
+## Univariate assessment {#sec-univariate}
+
+A-Mab concentration was assessed one factor at a time and was not carried into the
+multivariate design. Acid-mediated inactivation of an enveloped virus is a reaction between
+protons and the viral envelope, and the antibody is not a reactant in it, so no mechanism
+links antibody concentration to the inactivation rate. RA-001 ranked the parameter on that
+basis and assigned it to univariate assessment.
+
+@tbl-params records the outcome. The normal operating range for A-Mab concentration is its
+entire characterized range, and that equality is the record that no restriction on the
+parameter was found to be necessary. The range covers the concentrations that the Protein A
+step can deliver, so this step imposes no additional control on the eluate it receives.
+
+# Results {#sec-results}
+
+## Centre-point performance and reproducibility {#sec-centre}
+
+Reproducibility differs sharply between the three responses, and it sets how far each result
+can be pushed. @tbl-cv gives the mean, standard deviation and coefficient of variation of the
+`{python} n_cen_rsm` centre-point runs of the response-surface design.
+
+```{python}
+#| output: asis
+show(D.center_cv_df(UO, "rsm"), floatfmt=".4g")
+print()
+print(": Centre-point reproducibility of the response-surface design (pure-error basis for the lack-of-fit tests). {#tbl-cv}")
+```
+
+Aggregate reproduced to `{python} f"{cv_agg:.1f}"` %, which is comfortably inside the
+precision of the SEC method. The XMuLV log reduction factor reproduced to
+`{python} f"{cv_lrf:.1f}"` %, a standard deviation of `{python} f"{sd_lrf:.2f}"` log~10~ on a
+centre-point mean of `{python} f"{float(cc.loc[L_LRF, 'Mean']):.2f}"` log~10~. That figure is
+the largest source of imprecision in the study, and it is consistent with the infectivity
+assay accounting for `{python} f"{100 * amv_3017_var_frac:.0f}"` % of the variance in the
+reported log reduction factor (@sec-analytical). Acidic variants returned an identical value on every
+centre-point run, giving a standard deviation of `{python} f"{sd_acd:.2f}"` and no usable
+pure-error term.
+
+The practical consequence is that lack of fit can be tested for aggregate and for the log
+reduction factor but not for acidic variants. The screening centre points behave the same way
+(Appendix A), so the pattern belongs to the responses and not to one design.
+
+## Screening: factor effects {#sec-screffects}
+
+The screening study identified the three active factors that platform knowledge predicted,
+and it found no significant interaction among them for any response. @tbl-scrfit gives the
+fit statistics for the three responses, and @tbl-scr-lrf and @tbl-scr-agg give the effect
+estimates for the log reduction factor and for aggregate.
+
+```{python}
+#| output: asis
+show(D.fit_summary_df(UO, "screening"), floatfmt=".4g")
+print()
+print(": Screening model fit statistics for the three measured responses. {#tbl-scrfit}")
+```
+
+```{python}
+#| output: asis
+show(D.screening_effects_df(UO, "xmulv_lrf"), floatfmt=".4g")
+print()
+print(": Screening effect estimates for the XMuLV log reduction factor. {#tbl-scr-lrf}")
+```
+
+Inactivation pH is the largest effect on the log reduction factor. Raising pH across its
+characterized range lowers the log reduction factor by
+`{python} f"{abs(eff_lrf_ph):.2f}"` log~10~ (p < 0.001). Hold time is the second largest and
+acts in the opposite direction, raising it by `{python} f"{eff_lrf_ht:.2f}"` log~10~ across
+its range (p < 0.001). Temperature raises it by `{python} f"{eff_lrf_tp:.2f}"` log~10~
+(p < 0.05). None of the three two-factor interactions reaches significance, and the largest
+of them is `{python} f"{abs(int_max_eff):.2f}"` log~10~ with p =
+`{python} f"{int_max_p:.2f}"`.
+
+```{python}
+#| output: asis
+show(D.screening_effects_df(UO, "aggregate_out_pct"), floatfmt=".4g")
+print()
+print(": Screening effect estimates for pool aggregate. {#tbl-scr-agg}")
+```
+
+Aggregate is governed by hold time and temperature, and pH has no detectable effect on it
+within the characterized range. Hold time raises pool aggregate by
+`{python} f"{eff_agg_ht:.2f}"` percentage points across its range (p < 0.001) and temperature
+raises it by `{python} f"{eff_agg_tp:.2f}"` points (p < 0.001). The pH effect is
+`{python} f"{eff_agg_ph:.3f}"` points and does not reach significance (p =
+`{python} f"{p_agg_ph:.2f}"`). That null result carries information, because the study
+extended pH `{python} f"{P['ph'].setpoint - P['ph'].prange[0]:.1f}"` units below the
+set-point specifically in order to detect the onset of acid-induced aggregation. Over the
+range studied the onset was not reached, and pH is retained in the knowledge space for
+aggregate as evidence that the attribute is robust to it down to pH
+`{python} f"{P['ph'].prange[0]:.1f}"`.
+
+Acidic variants responded to hold time alone. The estimated effect is
+`{python} f"{eff_acd_ht:.1f}"` percentage points across the characterized hold-time range,
+against an upper limit of `{python} f"{acid_limit:.0f}"` %, and no other term is
+distinguishable from zero. Because this response carries no replicate variation (@sec-centre), its
+fit statistics in @tbl-scrfit are not informative about the quality of the fit and the full
+effect table is given in Appendix C for completeness.
+
+The screening study is used for identification and for nothing else. It estimates all main
+effects and all two-factor interactions in `{python} n_scr` runs, leaves
+`{python} scr_df_resid` residual degrees of freedom, and contains no term that could detect
+curvature. Effect magnitudes are refined, and curvature is tested, by the response-surface
+models below.
+
+## Response-surface models {#sec-rsmmodels}
+
+The response-surface models are adequate for aggregate and for the XMuLV log reduction
+factor, and they are the models used for the operating region, the proven acceptable ranges
+and the capability assessment. @tbl-rsmfit gives the fit statistics.
+
+```{python}
+#| output: asis
+show(D.fit_summary_df(UO, "rsm"), floatfmt=".4g")
+print()
+print(": Response-surface model fit statistics. {#tbl-rsmfit}")
+```
+
+Aggregate is modelled closely, with an R² of
+`{python} f"{fr['aggregate_out_pct']['R2']:.3f}"`, an adjusted R² of
+`{python} f"{fr['aggregate_out_pct']['adjR2']:.3f}"` and a predicted R² of
+`{python} f"{fr['aggregate_out_pct']['predR2']:.3f}"`. The log reduction factor is modelled
+less closely, with an R² of `{python} f"{fr['xmulv_lrf']['R2']:.3f}"` and a predicted R² of
+`{python} f"{fr['xmulv_lrf']['predR2']:.3f}"`. The gap between the two responses is
+analytical in origin. The residual standard error of the log reduction factor
+model is `{python} f"{rmse_lrf:.2f}"` log~10~, and the centre-point standard deviation
+reported in @sec-centre is `{python} f"{sd_lrf:.2f}"` log~10~. The model is therefore fitting to the
+limit of what the infectivity assay can resolve, and a higher R² would not be attainable with
+this method.
+
+Lack of fit is not significant for either response. @tbl-anova-lrf and @tbl-anova-agg
+partition the residual sum of squares into lack of fit and pure error. For the log reduction
+factor the lack-of-fit F is
+`{python} f"{fr['xmulv_lrf']['F_lof']:.2f}"` with p =
+`{python} f"{fr['xmulv_lrf']['p_lof']:.2f}"`, and for aggregate it is
+`{python} f"{fr['aggregate_out_pct']['F_lof']:.2f}"` with p =
+`{python} f"{fr['aggregate_out_pct']['p_lof']:.2f}"`. Neither model departs from the data by
+more than the reproducibility of the scale-down system itself.
+
+```{python}
+#| output: asis
+show(D.anova_lof_df(UO, "xmulv_lrf").replace({np.nan: ""}), floatfmt=".4g")
+print()
+print(": Analysis of variance for the XMuLV log reduction factor model, with the residual partitioned into lack of fit and pure error. {#tbl-anova-lrf}")
+```
+
+```{python}
+#| output: asis
+show(D.anova_lof_df(UO, "aggregate_out_pct").replace({np.nan: ""}), floatfmt=".4g")
+print()
+print(": Analysis of variance for the pool aggregate model. {#tbl-anova-agg}")
+```
+
+@tbl-coef-lrf gives the coefficients of the log reduction factor model. The three main
+effects keep the signs and the ordering found in screening. The quadratic term in pH is
+negative and falls just short of significance at the 5 % level (p =
+`{python} f"{p_ph_quad:.3f}"`). Its sign and size suggest that the surface is not linear in pH
+and that the decline in clearance steepens as pH rises toward the top of the range. The full
+quadratic model is retained for prediction, because dropping a marginal term would remove that
+curvature from the operating region. No other quadratic term and no interaction approaches
+significance.
+
+```{python}
+#| output: asis
+show(D.rsm_coeff_df(UO, "xmulv_lrf"), floatfmt=".4g")
+print()
+print(": Full quadratic coefficients of the XMuLV log reduction factor model, on coded factors. {#tbl-coef-lrf}")
+```
+
+The same quadratic term also turns the fitted surface over near the bottom of the pH range,
+where the model predicts a marginal decline in clearance at the lowest pH studied. That
+feature is `{python} f"{ph_turn:.2f}"` log~10~ in size, smaller than the residual standard
+error of the model by a factor of about `{python} f"{ph_turn_ratio:.0f}"`, and it has no
+mechanistic support. It is not interpreted here and the operating region in @sec-designspace does not rely
+on the model below the set-point.
+
+The aggregate model is dominated by its two linear terms and contains no significant
+curvature and no significant interaction (Appendix C). Over the characterized ranges its
+surface is effectively a plane in hold time and temperature.
+
+```{python}
+#| label: fig-contours
+#| fig-cap: "Fitted response surfaces over inactivation pH and hold time, with temperature held at the centre of its characterized range."
+fig = D.fig_rsm_contours(UO, "ph", "hold_time")
+plt.show()
+```
+
+@fig-contours shows the fitted surfaces over pH and hold time. The clearance surface falls
+steadily from the low-pH, long-hold corner to the high-pH, short-hold corner, and the
+aggregate surface is almost independent of pH and rises only with hold time. The acidic
+variant panel shows the same hold-time dependence with no pH structure at all.
+
+```{python}
+#| label: fig-diag-lrf
+#| fig-cap: "Model diagnostics for the XMuLV log reduction factor response-surface model."
+fig = D.fig_diagnostics(UO, "xmulv_lrf")
+plt.show()
+```
+
+@fig-diag-lrf gives the diagnostics for the clearance model, and one of them deserves comment
+before the model is used. The residuals show no structure against the predicted values, and
+the actual values lie about the identity line without a systematic offset at either end. The
+normal quantile plot, however, shows a mild departure from normality, and a Shapiro-Wilk test
+on the residuals returns p = `{python} f"{sw_p_lrf:.3f}"`. With `{python} n_rsm` runs and a
+response whose reproducibility is limited by the assay, that result is not a reason to reject
+the model. It is a reason to treat the p-values of the marginal terms, and the pH quadratic in
+particular, as approximate. The largest standardized residual is
+`{python} f"{max_sres_lrf:.1f}"`, so no single run is influential enough to drive the fit. The
+corresponding figure for the aggregate model has a largest standardized residual of
+`{python} f"{max_sres_agg:.1f}"`.
+
+## Mechanistic interpretation {#sec-mechanism}
+
+The surfaces behave as acid denaturation kinetics predict, and that agreement is the main
+evidence that the models describe chemistry and not noise. Inactivation follows kinetics in
+which the rate constant depends on proton concentration and on temperature, and the log
+reduction achieved is that rate constant multiplied by the hold time. Clearance should
+therefore be linear in time, should fall as pH rises, and should rise with temperature. All
+three hold in the fitted models, and the response-surface analysis finds no significant
+quadratic term in hold time, which is what a first-order process requires.
+
+The pH dependence is strongly asymmetric about the set-point, and that asymmetry is the most
+important single result of the study. Between the lower edge of the characterized range and
+the set-point the predicted log reduction factor changes by
+`{python} f"{d_ph_low:.2f}"` log~10~. Between the set-point and the upper edge it falls by
+`{python} f"{d_ph_high:.2f}"` log~10~. Almost all of the sensitivity of the step to pH lies
+above the set-point. This is consistent with acid inactivation being effectively complete
+within the hold once the proton concentration is high enough, and with the rate falling below
+what the hold can deliver as pH approaches `{python} f"{P['ph'].prange[1]:.1f}"`.
+
+Temperature acts on the rate constant in the ordinary way and its effect is the smallest of
+the three, because the characterized range is only `{python} f"{wid('temperature'):.0f}"` °C
+wide. Hold time acts linearly, which is why extending a hold is an effective remedy for a
+pH that has drifted upward within the range, and why @sec-designspace treats the two parameters
+together.
+
+Aggregate rises with hold time and with temperature and is insensitive to pH over the range
+studied. Acid-induced aggregation of an IgG1 requires the molecule to be destabilized enough
+to expose hydrophobic surface, and the characterized range stays above the pH at which A-Mab
+is destabilized. What remains is a slow thermally driven association during the hold, which
+is why time and temperature are active and pH is not. The acidic variant response follows the
+same hold-time dependence, which is consistent with weak acid catalysis of asparagine
+deamidation over a period of hours.
+
+The two mechanisms pull in opposite directions on hold time, and this is why the step needs a
+multivariate region rather than three independent ranges. A longer hold delivers more
+clearance and more aggregate. A hold at the top of the pH range meets the required
+contribution when it is long and warm, and fails it when it is short and cold: the model
+predicts `{python} f"{lrf_chb:.2f}"` log~10~ at the long, warm corner of that pH and
+`{python} f"{lrf_chw:.2f}"` log~10~ at the short, cold corner. No single acceptable range for
+pH can express that, which is what @sec-designspace addresses.
+
+# Design space {#sec-designspace}
+
+The operating region of the step is the set of combinations of inactivation pH, hold time and
+temperature at which the response-surface model predicts a step log reduction factor at or
+above `{python} f"{lrf_floor:.2f}"` log~10~ and pool aggregate at or below
+`{python} f"{agg_limit:.0f}"` %. Within the characterized ranges the aggregate constraint is
+never binding, because the highest aggregate the model predicts anywhere in the knowledge
+space is `{python} f"{agg_aggw:.2f}"` %. The region is therefore defined by the clearance
+constraint alone, and its principal plane is pH against hold time (@fig-contours).
+
+The normal operating ranges sit inside the region and the region sits inside the
+characterized ranges, and at the set-point the model predicts `{python} f"{lrf_sp:.2f}"` log~10~,
+which is `{python} f"{lrf_marg_sp:.2f}"` log~10~ above the required contribution. The
+worst-case corner of the normal operating ranges is the highest pH, the shortest hold and the
+lowest temperature within them, namely pH `{python} f"{nat_norw['ph']:g}"`,
+`{python} f"{nat_norw['hold_time']:g}"` minutes and
+`{python} f"{nat_norw['temperature']:g}"` °C. At that corner the prediction is
+`{python} f"{lrf_norw:.2f}"` log~10~, still `{python} f"{lrf_marg_norw:.2f}"` log~10~ above
+the requirement.
+
+The corresponding corner of the characterized ranges is the one place in the knowledge space
+where the step does not deliver its contribution. At pH `{python} f"{nat_chw['ph']:g}"` with
+a `{python} f"{nat_chw['hold_time']:g}"` minute hold at
+`{python} f"{nat_chw['temperature']:g}"` °C the model predicts
+`{python} f"{lrf_chw:.2f}"` log~10~, which is `{python} f"{lrf_short_chw:.2f}"` log~10~ below
+the floor. On a grid across the three characterized ranges, predictions below the required
+contribution occupy `{python} f"{fail_frac:.2f}"` % of the knowledge space and occur only at
+pH `{python} f"{fail_ph_lo:g}"`, at holds no longer than
+`{python} f"{fail_ht_hi:g}"` minutes and at temperatures no higher than
+`{python} f"{fail_tp_hi:.1f}"` °C. The shortfall at that corner is smaller than the residual
+standard error of the model, so the corner is not shown to fail so much as shown to provide
+no assurance of passing, and it lies outside the operating region for that reason.
+
+Three statements bound the region, and each is a limit on what the assessor should read into
+it.
+
+The region is defined by a model fitted over the characterized ranges in @tbl-params and does
+not extend beyond them. Nothing in this report supports operation below pH
+`{python} f"{P['ph'].prange[0]:.1f}"`. That lower edge is a stability boundary taken from
+platform data (@sec-platform) and was not demonstrated in this study, because no run approached it.
+
+The model predicts mean responses. A condition at the edge of the region carries roughly even
+odds of meeting the limit on any individual batch if variability is symmetric about the mean,
+so the region is not the range within which the process is run. That range is the normal
+operating range, and the margin between the two is quantified in @sec-capability.
+
+The region rests on a scale-down model qualified under SOP-1001 and is not confirmed at
+manufacturing scale at its edges. Confirmation at scale is limited to operation at the
+set-point, which is addressed by the comparability strategy in PTP-001.
+
+Operation anywhere within the region is not a change in the regulatory sense [@ichq8].
+Planned movement within it still requires a prospective assessment under the pharmaceutical
+quality system before the move is made [@ichq10]. Operation outside the region is a change
+that requires prior approval, and for this step it additionally requires re-assessment of the
+clearance claim under ICH Q5A(R2) [@ichq5a].
+
+# Proven acceptable ranges {#sec-par}
+
+The acceptance criterion applied to each attribute is stated before the ranges, because it
+differs between them. For aggregate and for acidic variants the criterion is the drug
+substance specification given in @tbl-cqa. For enveloped-virus clearance it is not, because
+that specification is cumulative across the process. The criterion applied to this step is the
+required step contribution, obtained by subtracting the clearance credited to anion exchange
+and virus filtration from the cumulative requirement of
+`{python} f"{lrf_req:.1f}"` log~10~. That leaves `{python} f"{lrf_floor:.2f}"` log~10~ for
+this step, and every proven acceptable range reported for the log reduction factor is
+computed against that floor.
+
+@tbl-par gives, for each governed attribute and each multivariate parameter, the
+characterized range and two proven acceptable ranges. The first holds the other parameters fixed. The second varies them within their normal operating ranges by Monte-Carlo
+of the fitted model and requires the 95 % predictive interval of the attribute to remain
+within acceptance, so it is a robustness criterion and is the narrower of the two by
+construction.
+
+One convention is stated here because it matters at this step. The fixed-parameter analysis
+holds the other factors at the coded origin of the design, which is the midpoint of each
+characterized range, and the same convention applies to the left-hand panels of @fig-par-lrf
+and @fig-par-agg and to @fig-contours. At this step the midpoint and the process set-point
+differ slightly for all three multivariate parameters (@tbl-params). The difference changes no
+range in @tbl-par, because at the process set-point values the lowest clearance predicted
+anywhere along the pH range is `{python} f"{lrf_ph_hi:.2f}"` log~10~, which is still above the
+floor of `{python} f"{lrf_floor:.2f}"` log~10~.
+
+```{python}
+#| output: asis
+show(D.par_table(UO))
+print()
+print(": Proven acceptable ranges for each governed quality attribute and each multivariate parameter, at set-point and with the other parameters propagated across their normal operating ranges. {#tbl-par}")
+```
+
+Eight of the nine entries span the whole characterized range under both analyses. For
+aggregate and for acidic variants no parameter is restricted at all, which follows directly
+from @sec-results: both attributes stay far below their limits everywhere in the knowledge space, and
+the highest aggregate predicted anywhere is `{python} f"{agg_aggw:.2f}"` % against a limit of
+`{python} f"{agg_limit:.0f}"` %.
+
+One entry is narrower than its characterized range. The proven acceptable range for
+inactivation pH against the log reduction factor is the full characterized range at
+set-point, but `{python} par_ph_nor_s` when the other two parameters vary within their normal
+operating ranges. The upper end falls `{python} f"{par_ph_gap:.2f}"` pH units short of the
+top of the characterized range. The binding attribute is enveloped-virus clearance and the
+mechanism is the one described in @sec-mechanism, which is that the clearance surface steepens as pH
+rises while the predictive interval widens with it.
+
+```{python}
+#| label: fig-par-lrf
+#| fig-cap: "Proven acceptable range for the XMuLV log reduction factor against inactivation pH, at set-point (left) and with the other parameters propagated across their normal operating ranges (right). The acceptable region is shaded green and the normal operating range is shaded grey."
+fig = D.fig_par(UO, "xmulv_lrf", gov_lrf)
+plt.show()
+```
+
+@fig-par-lrf shows the analysis for pH, the governing parameter for clearance. The left panel
+is the fixed-parameter curve and the right panel the Monte-Carlo predictive band, with the
+acceptance floor drawn, the acceptable region shaded and the normal operating range marked.
+The set-point sits well inside the acceptable region in both panels, and the right panel shows
+the lower edge of the predictive band crossing the floor before the curve itself does.
+
+```{python}
+#| label: fig-par-agg
+#| fig-cap: "Proven acceptable range for pool aggregate against hold time, at set-point (left) and with the other parameters propagated across their normal operating ranges (right)."
+fig = D.fig_par(UO, "aggregate_out_pct", gov_agg)
+plt.show()
+```
+
+@fig-par-agg shows the same analysis for aggregate against hold time, the parameter that
+governs it. The whole characterized hold-time range is acceptable under both analyses, and even at the
+longest hold combined with the highest temperature the model predicts
+`{python} f"{agg_aggw:.2f}"` % against a limit of `{python} f"{agg_limit:.0f}"` %.
+
+These ranges are univariate statements and the design space is not, and the two must not be
+read as alternatives. Where a parameter's proven acceptable range covers its whole
+characterized range, the binding constraint on operation is the multivariate corner
+identified in @sec-designspace and not the univariate range. The one place where the two agree is the upper
+end of the pH range, where the robustness analysis and the multivariate worst-case corner
+point at the same edge for the same reason. Both analyses are computed from the fitted
+response-surface model over the characterized ranges and inherit its bounds, and neither
+extends outside those ranges.
+
+# Process capability and robustness {#sec-capability}
+
+Capability was assessed for the three attributes this step influences, by simulating
+`{python} f"{V['n_monte_carlo']:,}"` commercial batches with every process parameter drawn
+within its normal operating range. @tbl-cap gives the result at drug substance.
+
+```{python}
+#| output: asis
+show(cap_for(["lrv_xmulv", "aggregates_hmw", "acidic_variants"]))
+print()
+print(": Commercial-scale capability for the attributes influenced by the low-pH viral inactivation step. {#tbl-cap}")
+```
+
+Enveloped-virus clearance is the tightest of the three by a wide margin. Its one-sided Cpk is
+`{python} f"{cpk_lrf:.2f}"` against the cumulative requirement of
+`{python} f"{lrf_req:.1f}"` log~10~, with a simulated mean of
+`{python} f"{mean_lrf_ds:.2f}"` log~10~ and a standard deviation of
+`{python} f"{sd_lrf_ds:.2f}"`. The margin between the mean and the requirement is
+`{python} f"{marg_lrf_ds:.2f}"` log~10~, or `{python} f"{sigma_lrf_ds:.1f}"` standard
+deviations. Aggregate and acidic variants sit far from their limits at drug substance, with
+Cpk values of `{python} f"{cpk_agg:.1f}"` and `{python} f"{cpk_acd:.1f}"` respectively, but
+those two figures describe the whole process and not this step alone, and the aggregate figure
+in particular is set by cation exchange, which is the polishing step that removes aggregate
+(PCR-007).
+
+The clearance figure is likewise cumulative, and this step supplies part of it. @tbl-vc gives
+the modular ledger for the two model viruses.
+
+```{python}
+#| output: asis
+show(csv("viral_clearance.csv"))
+print()
+print(": Modular viral clearance by step for XMuLV and MVM, in log10 reduction. {#tbl-vc}")
+```
+
+This step is credited with `{python} f"{lrf_credit:.2f}"` log~10~ of XMuLV clearance, anion
+exchange with `{python} f"{lrf_aex:.2f}"` (PCR-008) and virus filtration with
+`{python} f"{lrf_vf:.2f}"` (PCR-009), a cumulative `{python} f"{lrf_cum:.2f}"` log~10~
+against the requirement of `{python} f"{lrf_req:.1f}"`. The low-pH hold supplies the largest
+single contribution to enveloped-virus clearance and none of the parvovirus clearance. The
+three mechanisms are orthogonal, which is what allows the contributions to be added under
+ICH Q5A(R2) [@ichq5a]: chemical inactivation here, charge-based adsorption at anion exchange
+and size-based retention at virus filtration.
+
+One reconciliation is needed between @tbl-vc and @sec-results. The credited contribution of
+`{python} f"{lrf_credit:.2f}"` log~10~ is the nominal value from the process model at
+set-point conditions, whereas the response-surface model of this study predicts
+`{python} f"{lrf_sp:.2f}"` log~10~ at the same conditions. The two differ by
+`{python} f"{lrf_recon:.2f}"` log~10~, which is smaller than the residual standard error of
+the response-surface model, so the credited value and the characterization data agree within
+the precision of the study.
+
+Capability is conditioned on operation within the normal operating ranges and on the
+scale-down model. It carries no allowance for a parameter excursion outside the normal
+operating range, and any such excursion is assessed against the operating region in @sec-designspace rather
+than against @tbl-cap.
+
+# Parameter classification {#sec-classification}
+
+Every parameter of the step was classified under SOP-4001 from its demonstrated effect on
+quality attributes and from the risk that it leaves the operating region in routine
+manufacture. @tbl-params gives the outcome and the reasoning follows.
+
+- Inactivation pH is a critical process parameter. It has the largest effect on
+  enveloped-virus clearance (@tbl-scr-lrf), its normal operating range is only
+  `{python} f"{wnor('ph'):.1f}"` pH units wide, and @sec-par shows that robustness to co-variation
+  of the other parameters is lost before the top of the characterized range is reached.
+  Unlike hold time, a pH excursion cannot be corrected once the hold has begun. It is the only
+  parameter in the A-Mab drug substance process classified as a critical process parameter.
+
+- Hold time is a well-controlled critical process parameter. It has the second largest effect
+  on clearance and it governs both aggregate and acidic variants (@sec-screffects), so it is linked to critical
+  quality attributes and cannot be classified below this level. It is set by a timer,
+  recorded automatically by the process control system, and a hold that has run short can be
+  extended before neutralization. Its proven acceptable range covers the whole characterized
+  range under both analyses in @sec-par.
+
+- Temperature is a well-controlled critical process parameter. Its effect on clearance is
+  real but the smallest of the three, and it also raises aggregate. The hold is thermostatted
+  and the range that supports the claim is `{python} f"{wid('temperature'):.0f}"` °C wide
+  against a normal operating range of `{python} f"{wnor('temperature'):.0f}"` °C, so the risk
+  of leaving the operating region through temperature alone is low.
+
+- A-Mab concentration is a general process parameter. No mechanism links it to acid-mediated
+  inactivation (@sec-univariate), and its normal operating range is its entire characterized range, so
+  it places no constraint on the eluate delivered by Protein A.
+
+No parameter of this step is a key process parameter. The step neither concentrates nor
+separates the product, so it has no yield or throughput parameter to control for process
+consistency alone. Across the whole drug substance process
+`{python} f"{CLS['CPP']}"` parameter is classified as a critical process parameter,
+`{python} f"{CLS['WC-CPP']}"` as well-controlled critical process parameters,
+`{python} f"{CLS['KPP']}"` as key process parameters and `{python} f"{CLS['GPP']}"` as
+general process parameters, and the single critical process parameter is the pH of this step.
+
+The absence of significant interactions is retained in the knowledge space and not
+discarded. No two-factor interaction reached significance for any response (@sec-screffects), so within
+the ranges studied the three multivariate parameters can be controlled independently, and each
+proven acceptable range in @sec-par can be read without reference to the others except at the corner
+identified in @sec-designspace.
+
+# Contribution to the control strategy {#sec-control}
+
+The step contributes a small number of controls, and they are all parameter controls rather
+than tests on the pool. Inactivation pH is controlled to `{python} nor_s('ph')` and is
+verified by an independent measurement before the hold clock starts. Hold time is controlled
+to `{python} nor_s('hold_time')` minutes and is recorded by the process control system.
+Temperature is controlled to `{python} nor_s('temperature')` °C for the duration of the hold
+(SOP-2009).
+A-Mab concentration is monitored across `{python} nor_s('protein_conc')` g/L and is not
+restricted.
+
+The pH before the hold and the hold duration are in-process controls with acceptance at the
+normal operating range. A result outside the normal operating range but inside the operating
+region of @sec-designspace is dispositioned against that region and does not by itself invalidate the
+clearance claim, whereas a result outside the region does. This is the practical value of
+having characterized ranges that are between
+`{python} f"{min(range_mult.values()):.1f}"` and
+`{python} f"{max(range_mult.values()):.1f}"` times as wide as the operating ranges.
+
+Two life-cycle controls follow from the nature of the claim. Because the clearance rests on a
+spiked small-scale model, any change to the acid or buffer system, to the hold configuration
+or to the neutralization target requires re-assessment against ICH Q5A(R2) before the credit
+can be retained [@ichq5a]. Because the claim is cumulative, a change at anion exchange or
+virus filtration that reduces their credited contributions raises the floor required of this
+step, and the floor in @sec-par would have to be recomputed.
+
+Release testing does not measure viral clearance and no release test can confirm it on a
+batch, so the claim is a process claim. That is why the parameter control described above is
+the control, and why the pH of this step carries the only critical process parameter classification
+in the process.
+
+The step does not control on its own any attribute it influences. Enveloped-virus clearance is
+a cumulative claim across three orthogonal steps and this report supplies one of them, with
+the others in PCR-008 and PCR-009. Aggregate is reduced downstream at cation exchange
+(PCR-007). Acidic variants are formed at the bioreactor (PCR-003) and are of very low
+criticality. The consolidated position across all steps is given in PCMR-001.
+
+# Discussion {#sec-discussion}
+
+The step is well understood over the ranges studied, and the understanding is narrower than
+the volume of data might suggest. Three parameters govern a single clearance response, no
+interaction among them was detected, and the surfaces match the mechanism that platform
+experience predicted. What the study adds to that platform position is quantitative: the
+location of the upper pH edge of failure, the size of the margin at the set-point, and the
+demonstration that the product-quality cost of a long hold is small.
+
+Confidence in the scale-down model is high for the chemistry and limited for the equipment,
+because the model reproduces titration, hold and neutralization with the same reagents and the
+same pH trajectory, and the centre-point reproducibility in @sec-centre shows it to be as repeatable as
+the assay allows (@tbl-cv). It says nothing about mixing homogeneity in the commercial hold vessel, and that gap is closed
+by equipment qualification at the receiving site under PTP-001, not by this report.
+
+Two deviations occurred and both were retained (@sec-deviations). Neither is a protocol excursion in the
+sense of a design point executed at the wrong setting. One was a record discrepancy of
+`{python} f"{dev_006_01_time_discrepancy_min:g}"` minutes on a hold-time entry, worth
+`{python} f"{abs(dev1_lrf):.3f}"` log~10~ of clearance on the fitted model. The other raised
+the working quantitation limit of the infectivity assay for a subset of samples, which makes
+the affected log reduction factors lower bounds and therefore makes the fitted model
+conservative. Neither changed a classification or the operating region.
+
+Four limitations bound what has been shown, and they are stated together because they
+compound. The clearance claim rests on a spiked small-scale model and will never be confirmed
+on a manufacturing batch. The response-surface model predicts mean responses, so a condition
+at the edge of the operating region provides no assurance for an individual batch. The
+operating region is not confirmed at scale at its edges. The lower edge of the pH range is a
+platform boundary rather than a demonstrated one, so the two-sided character of the pH
+constraint is demonstrated on one side and inherited on the other.
+
+A fifth limitation is analytical and it sets the resolution of everything above. The
+infectivity assay contributes `{python} f"{100 * amv_3017_var_frac:.0f}"` % of the variance in
+the reported log reduction factor, and the residual standard error of the fitted model,
+`{python} f"{rmse_lrf:.2f}"` log~10~, is close to the centre-point standard deviation of
+`{python} f"{sd_lrf:.2f}"` log~10~. The step's clearance is therefore known to a few tenths of
+a log, which is comfortable against a set-point margin of
+`{python} f"{lrf_marg_sp:.2f}"` log~10~ and uncomfortable against the
+`{python} f"{lrf_short_chw:.2f}"` log~10~ shortfall at the worst characterized corner. The
+report treats the first as a real margin and the second as an absence of assurance rather than
+a demonstrated failure.
+
+The classification of pH as a critical process parameter was necessary, and the study is what
+makes it necessary. Hold time and temperature have real effects on a critical quality
+attribute, so they are critical parameters in the sense of ICH Q8, but each is measured
+continuously, each can be corrected before neutralization, and each retains its full
+characterized range as a proven acceptable range under co-variation. pH satisfies none of
+those three conditions. That difference, and not the size of the effect, is what separates the
+two classes at this step.
+
+# Conclusions {#sec-conclusions}
+
+The low-pH viral inactivation step is well characterized over the ranges studied and is robust
+within its normal operating ranges. A response-surface model in inactivation pH, hold time and
+temperature predicts the XMuLV log reduction factor with a residual standard error of
+`{python} f"{rmse_lrf:.2f}"` log~10~ and no significant lack of fit, and it defines an
+operating region in which the step delivers at least its required contribution of
+`{python} f"{lrf_floor:.2f}"` log~10~. At the set-point the predicted contribution is
+`{python} f"{lrf_sp:.2f}"` log~10~.
+
+Proven acceptable ranges cover the whole characterized range for every parameter and attribute
+except inactivation pH against clearance, which is restricted to
+`{python} par_ph_nor_s` under co-variation of the other parameters within their normal
+operating ranges. At commercial scale the cumulative enveloped-virus clearance has a one-sided
+Cpk of `{python} f"{cpk_lrf:.2f}"` against a requirement of
+`{python} f"{lrf_req:.1f}"` log~10~, which is the tightest of the three capabilities this step
+influences. Aggregate and acidic variants remain far from their limits throughout the
+knowledge space.
+
+Inactivation pH is a critical process parameter and the only one in the drug substance
+process. Hold time and temperature are well-controlled critical process parameters, and A-Mab
+concentration is a general process parameter. Two deviations were recorded and both were
+retained without effect on the models, the operating region or the classifications.
+
+The step supplies enveloped-virus clearance and nothing else. It is credited with no
+parvovirus clearance and no host cell protein clearance, and the cumulative viral safety of
+the drug substance depends equally on anion exchange (PCR-008) and virus filtration (PCR-009).
+The results of this report roll up into PCMR-001 and support Stage 2 operation at the
+receiving site within the ranges given in @tbl-params.
+
+# Deviations from the plan {#sec-deviations}
+
+Two deviations were recorded during execution of PCP-006. Each was investigated to root cause,
+impact-assessed against the fitted models and closed, and both were retained. @tbl-dev is the
+register.
+
+```{python}
+#| output: asis
+print(dev_register(DOC))
+print()
+print(": Register of deviations recorded during execution of PCP-006. {#tbl-dev}")
+```
+
+Neither deviation invalidated a run, and no design point was re-executed. The two entries
+differ in kind: the first concerns a record and the second concerns an assay, and neither
+concerns the process itself.
+
+## DEV-006-01 — hold-time record discrepancy
+
+The hold duration recorded for one run by the process control system differed from the
+duration entered in the manual batch log by
+`{python} f"{dev_006_01_time_discrepancy_min:g}"` minutes. The discrepancy was found during
+batch-record reconciliation after execution and not during the run, so the run itself
+proceeded to its programmed end point.
+
+The investigation traced the difference to a clock synchronisation offset between the process
+control system and the manual recording station. The offset was constant across the campaign
+and was corrected before any further execution, and the control system record was taken as the
+source of truth because it is the timed record referenced by SOP-2009 and it is the record
+that drives the hold.
+
+The impact is bounded by the design of the study. The discrepancy is
+`{python} f"{dev1_pct:.1f}"` % of the characterized hold-time range. On the fitted
+response-surface model it corresponds to `{python} f"{abs(dev1_lrf):.3f}"` log~10~ of
+clearance and `{python} f"{abs(dev1_agg):.3f}"` percentage points of aggregate, both an order
+of magnitude below the residual standard error of the respective model and far below the
+centre-point reproducibility in @tbl-cv. The run was retained with its control system
+duration, and re-fitting is not warranted because a change of that size cannot move a
+coefficient beyond its standard error.
+
+## DEV-006-02 — infectivity assay cytotoxicity at low dilution
+
+Cytotoxicity was observed in the indicator cell monolayer at the lowest dilutions of the
+neutralized hold pool samples, which prevented the titre being read at those dilutions. The
+finding came out of analytical review of the assay plates, and it applied to the pool samples
+but not to the spiked load samples.
+
+The investigation attributed the cytotoxicity to the sample matrix. The neutralized hold
+buffer is the most concentrated matrix presented to the assay in this study, and the effect
+was absent in the load samples, which are read at a higher dilution because their titre is
+higher. The virus preparation and the cell bank were excluded as causes by the assay controls required
+under AMV-3017 (back-titration, cell control and positive control).
+
+The disposition was to report titres from a dilution of
+`{python} f"{dev_006_02_cytotox_dilution:g}"` and above, at which no cytotoxicity was
+observed. Doing so raises the working quantitation limit of the assay for the affected
+samples above the validated limit of `{python} f"{amv_3017_loq:.1f}"` log~10~ TCID50/mL. The
+consequence for the study is a floor on the measurable pool titre and not a bias in it. A pool
+titre reported at a raised floor understates the clearance achieved, so the affected log
+reduction factors are lower bounds and the fitted model is conservative in that direction.
+
+No run was excluded from the analysis and no titre was replaced by a substituted value. The
+cytotoxicity control is a standing part of the method and its performance is summarized in
+Appendix D. The finding is recorded here because it is a limitation on the resolution of the clearance
+measurement, and because it is one of the reasons the study reports a margin at the set-point
+and does not report a maximum achievable clearance.
+
+# Appendices
+
+The appendices carry the full design matrices, the complete effect and coefficient tables for
+every response, and the analytical method summary. They are the record behind the tables in
+@sec-results and are not summarized again here.
+
+## Appendix A — Screening design matrix and responses {.unnumbered}
+
+The coded screening matrix and its measured responses, in run order. Coded −1 and +1 are the
+edges of each characterized range and 0 is the range midpoint.
+
+```{python}
+#| output: asis
+show(D.coded_matrix_df(UO, "screening"), floatfmt=".4g")
+print()
+print(": Screening design matrix in coded factors, with measured responses. {#tbl-appa}")
+```
+
+```{python}
+#| output: asis
+show(D.center_cv_df(UO, "screening"), floatfmt=".4g")
+print()
+print(": Centre-point reproducibility of the screening design. {#tbl-appa2}")
+```
+
+## Appendix B — Response-surface design matrix and responses {.unnumbered}
+
+The coded face-centred central composite matrix and its measured responses. Axial runs sit at
+the face centres, so no run leaves the characterized ranges.
+
+```{python}
+#| output: asis
+show(D.coded_matrix_df(UO, "rsm"), floatfmt=".4g")
+print()
+print(": Response-surface design matrix in coded factors, with measured responses. {#tbl-appb}")
+```
+
+## Appendix C — Full effect and coefficient tables {.unnumbered}
+
+Screening effect estimates for the response not tabulated in @sec-screffects, followed by the full
+quadratic coefficients for the two responses not tabulated there.
+
+```{python}
+#| output: asis
+show(D.screening_effects_df(UO, "acidic_variants"), floatfmt=".3g")
+print()
+print(": Screening effect estimates for acidic variants. {#tbl-appc1}")
+```
+
+```{python}
+#| output: asis
+show(D.rsm_coeff_df(UO, "aggregate_out_pct"), floatfmt=".4g")
+print()
+print(": Full quadratic coefficients of the pool aggregate model. {#tbl-appc2}")
+```
+
+```{python}
+#| output: asis
+show(D.rsm_coeff_df(UO, "acidic_variants"), floatfmt=".3g")
+print()
+print(": Full quadratic coefficients of the acidic variant model. {#tbl-appc3}")
+```
+
+## Appendix D — Analytical methods summary {.unnumbered}
+
+Validated methods used for the study responses, and the reported performance of the
+infectivity assay that carries the clearance claim.
+
+```{python}
+#| output: asis
+_amv = [a for a, _ in VIRAL_INACT_AMV_REFS]
+_m = csv("dev_methods.csv")
+_m = _m[_m["id"].isin(_amv)].rename(columns={
+    "id": "Method", "name": "Title", "precision_pct": "Precision",
+    "loq": "LOQ", "loq_unit": "LOQ unit", "accuracy_pct": "Accuracy (%)",
+    "variance_fraction": "Variance fraction"})
+show(_m)
+print()
+print(": Reported performance of the XMuLV infectivity assay (AMV-3017). {#tbl-appd}")
+```
+
+The remaining methods listed in @tbl-sop are the corpus-wide size-variant and charge-variant
+assays, and their validation records are cited there. Aggregate is the reportable result of
+SEC-HPLC under AMV-3011 and acidic variants the reportable result of icIEF under AMV-3013.
+
+# References {.unnumbered}
+
+::: {#refs}
+:::

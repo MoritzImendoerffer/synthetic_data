@@ -167,12 +167,19 @@ class ProvenAcceptableRange(BaseModel):
     Two analyses: ``par_at_setpoint`` (other factors fixed) and ``par_nor_propagated``
     (other factors varied within NOR by Monte-Carlo of the fitted model). The acceptance
     basis is the study DS spec, or a back-calculated required step contribution for a
-    cumulative viral-clearance CQA."""
+    cumulative viral-clearance CQA.
+
+    ``quality_attribute`` is optional because a step that governs no CQA still reports
+    PARs — they are simply per-parameter rather than per-attribute. At the two non-DoE
+    steps (harvest, UF/DF) there is also no fitted model to propagate through, so
+    ``par_nor_propagated`` is None and ``par_at_setpoint`` is the full characterized
+    range. Leave the field unset in that case; do not put an explanatory sentence in it,
+    or a consumer keying on the attribute id will read prose."""
     model_config = ConfigDict(extra="forbid")
 
     par_id: str
     unit_operation: Optional[str] = None
-    quality_attribute: str
+    quality_attribute: Optional[str] = None
     parameter: str
     characterization_range: Optional[str] = None
     par_at_setpoint: Optional[str] = None

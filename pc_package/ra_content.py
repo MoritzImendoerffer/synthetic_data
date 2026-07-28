@@ -98,6 +98,23 @@ def ra_scope_df():
                  "Sev.", "Init. RPN", "Study type", "Priority"])
 
 
+def cqa_table():
+    """The attribute (severity) register RA-001 renders in "Quality attributes at risk".
+
+    Lives here rather than in the ``.qmd`` so that the document and the ground-truth annex
+    build the same table from one definition. The annex anchors each ``QualityAttribute``
+    record on its rendered row, which only works while the two agree exactly.
+    """
+    d = cqa_reg.copy()
+    d["Acceptance"] = d.apply(lambda r: f"{r.acc_low:g}–{r.acc_high:g} {r.unit}", axis=1)
+    d["Set by"] = d["set_by"].map(lambda k: UNIT_OP_TITLES.get(k, k))
+    d["Severity"] = d["key"].map(lambda k: CQA_SEVERITY.get(k, 4))
+    return d.rename(columns={"cqa": "Quality attribute", "category": "Category",
+                             "criticality": "Criticality", "tool1_score": "Tool #1"})[
+        ["Quality attribute", "Category", "Acceptance", "Criticality", "Tool #1",
+         "Severity", "Set by"]]
+
+
 def ra_detail_df():
     """Prospective failure-mode / effect table per parameter (for the appendix)."""
     rows = ra_rows()

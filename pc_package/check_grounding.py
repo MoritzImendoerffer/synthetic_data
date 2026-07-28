@@ -89,6 +89,10 @@ def main() -> int:
         return 1
     total_q = 0
     total_miss = 0
+    total_weak = 0
+    # The corpus is at zero weak anchors. Set GROUNDING_STRICT_ANCHORS=1 to keep it there;
+    # the check stays advisory by default so a work-in-progress annex is not blocked.
+    strict = bool(os.environ.get("GROUNDING_STRICT_ANCHORS"))
     for path in annexes:
         annex = json.load(open(path))
         doc_id = annex["document_id"]
@@ -104,15 +108,22 @@ def main() -> int:
         total_q += len(quotes)
         total_miss += len(miss)
         weak = specificity_report(annex, text)
+        total_weak += len(weak)
         status = "OK  " if not miss else "FAIL"
         note = f", {len(weak)} weak anchor(s)" if weak else ""
         print(f"{status} {doc_id}: {len(quotes)} quotes, {len(miss)} ungrounded{note}")
         for q in miss:
             print(f"       ungrounded quote: {q!r}")
-        if weak and os.environ.get("GROUNDING_VERBOSE"):
+        if weak and (strict or os.environ.get("GROUNDING_VERBOSE")):
             for w in weak:
                 print(f"       weak anchor: {w}")
     print(f"\n{total_q - total_miss}/{total_q} quotes grounded across {len(annexes)} annexes.")
+    if total_weak:
+        print(f"{total_weak} weak anchor(s); GROUNDING_VERBOSE=1 lists them.")
+        if strict:
+            print("FAIL  GROUNDING_STRICT_ANCHORS is set and the corpus is not at zero. "
+                  "Anchor each record on its own table row (build_ground_truth.row_quotes).")
+            return 1
     return 0 if total_miss == 0 else 1
 
 

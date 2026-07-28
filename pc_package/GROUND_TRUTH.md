@@ -36,6 +36,33 @@ The cost of the quote approach is that a quote must be chosen to be unique-enoug
 be updated if the prose changes — which is why re-authoring a report forces its annex to be
 rebuilt (a stale quote simply stops grounding, and the gate catches it).
 
+### Grounding is necessary but not sufficient: the quote must also *attest*
+
+A quote can ground perfectly and still be useless. A table caption exists in the document, so
+it passes the gate — but if fourteen records all quote the same caption, the reference says
+"somewhere in this document" rather than naming the evidence. The same is true of a bare
+label: `"Production Bioreactor"` appears fourteen times in the master plan as a heading and a
+table cell, so quoting it identifies nothing.
+
+`check_grounding.specificity_report` therefore applies a second, weaker test for
+**non-distinctiveness**, and reports what it finds as *weak anchors*:
+
+| Signal | Threshold | What it means |
+|---|---|---|
+| one quote reused across many records | more than 8 | the span stands in for records it cannot all attest |
+| the quote occurs many times in the document | more than 3 | the reference is ambiguous |
+
+It is deliberately **not** a length rule. The corpus convention is to anchor a per-record
+assertion on the **rendered table row** carrying the relation, and those rows are short.
+`"Production Bioreactor Culture pH 6.9 6.8–7.0 …"` names both ends of what it asserts, which
+makes it a far better anchor than a long sentence that merely discusses the topic. An earlier
+word-count version of this check flagged 135 false positives, nearly all of them good rows.
+
+`build_ground_truth.row_quotes` rebuilds those rows from the same DataFrame the document
+renders, so the anchor stays verbatim and stays correct when the seed changes. The corpus is
+at **zero** weak anchors; `GROUNDING_VERBOSE=1` lists any that appear, and
+`GROUNDING_STRICT_ANCHORS=1` turns the advisory into a gate.
+
 ---
 
 ## 2. Build-then-annex: the answer key is written *from* the finished report

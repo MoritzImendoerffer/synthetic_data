@@ -72,6 +72,15 @@ Invoke as:
                  uv run python pc_package/check_grounding.py      (needs the rendered .docx)
                Grounding is NOT part of step 4 — no annex exists at authoring time.
 
+               ANCHOR EACH RECORD ON ITS OWN TABLE ROW, via row_quotes() in
+               build_ground_truth.py — not on the table caption and not on a bare label.
+               A caption grounds while attesting nothing: one span then stands in for every
+               row of the table. The rendered row carries both ends of the relation (the
+               parameter and its set-point, the attribute and its acceptance criterion),
+               which is what makes the annex usable for attribution. check_grounding reports
+               quotes that fail this; GROUNDING_STRICT_ANCHORS=1 makes it a gate, and the
+               corpus is at zero. See pc_package/GROUND_TRUTH.md §1.
+
                THE DISCOURSE LAYER IS PART OF THIS STEP, not an afterthought. Everything
                in the annex that quotes the document — entity/assertion source references,
                report-section statements, AND the rhetorical spans

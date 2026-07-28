@@ -102,10 +102,96 @@ Either the analysis should hold the other factors at their set-points, matching 
 or the protocols and the column heading should say "design centre". A real deviation report
 would state which, justify the choice, and assess the impact on the reported ranges.
 
+### The same mistake shows up in three places
+
+| Surface | What it says | What it does |
+|---|---|---|
+| `par_table`'s column heading | "PAR (set-point)" | other factors at the design centre |
+| the plans' method statements | "holds the other parameters at their set-points" | — |
+| the response-surface contour figure title | "remaining factors held at set-point" | `_predict_grid` holds them at coded 0 |
+
+All three come from one decision — coded 0 was treated as the set-point — so a reviewer who
+finds one has a thread to pull. The figure is the easiest to overlook, because its title is
+drawn into the image rather than written in the prose.
+
 ### Do not fix silently
 
-`doe_report.par_at_design_centre` is named for what it computes, so the **code** is honest.
-`par_table`'s column heading is deliberately left as `"PAR (set-point)"`, and the plans are
-deliberately left as written, so the **documents** carry the discrepancy. Changing either
-erases D-001. The `ProvenAcceptableRange.par_at_setpoint` annex field keeps its name for the
-same reason: it mirrors what the document claims.
+`doe_report.par_at_design_centre` is named for what it computes and `_predict_grid` says in
+its docstring that it uses the design centre, so the **code** is honest. `par_table`'s column
+heading, the contour figure's title and the plans' method statements are all deliberately
+left as written, so the **documents** carry the discrepancy. Changing any of them erases part
+of D-001. The `ProvenAcceptableRange.par_at_setpoint` annex field keeps its name for the same
+reason: it mirrors what the document claims.
+
+---
+
+## D-002 · PCR-003 claims the bioreactor is the only step that forms a quality attribute
+
+**Type:** unsupported absolute claim, contradicted by the corpus's own register
+**Severity:** would be a finding in a real review
+**Status:** open, deliberately preserved
+**Detected:** after the corpus was generated, while re-grounding the PCR-003 annex. Not
+caught during authoring, during the annex pass, or by any gate.
+
+### What the report says
+
+PCR-003 §1.1 opens its account of the step's role with an absolute:
+
+> "This is the only step of the drug substance process at which product quality attributes
+> are formed."
+
+### What the data says
+
+`outputs/data/cqa_register.csv` carries a `set_by` column, which is the model's own statement
+of which step establishes each critical quality attribute:
+
+| `set_by` | attributes |
+|---|---|
+| `bioreactor` | afucosylation, galactosylation, high mannose, acidic variants, aggregates |
+| `protein_a` | **leached Protein A** |
+| `viral_inactivation` | viral clearance — XMuLV |
+| `aex` | viral clearance — MVM |
+
+Leached Protein A is the sharp counterexample. It is not merely *reduced* downstream, it is
+**formed** at the capture step — it leaches off the resin — and PCR-005 characterizes the
+parameters that govern how much of it appears. The two viral-clearance attributes are weaker
+counterexamples, since clearance is achieved rather than formed.
+
+### The defence, and why it still fails
+
+The register categorises leached Protein A as a *process impurity*, so a reader could argue
+"product quality attribute" was meant to exclude it. The sentence does not say that. It says
+"product quality attributes" without qualification, in a document whose own §2 lists leached
+Protein A among the attributes the process must control, and the register assigns it an
+acceptance criterion like any other CQA.
+
+### What makes it a good test
+
+- It is **document ↔ data**, not document ↔ document. Catching it means reading PCR-003
+  against the register or against PCR-005 — neither the bioreactor plan nor the bioreactor
+  report is internally inconsistent, so reading either alone reveals nothing.
+- **The next sentence is true**, and narrower: "The glycosylation and charge variant
+  distributions are established inside the cell and in the culture fluid, and neither is
+  modified by the platform purification train." A reader who checks only the elaboration finds
+  a supported statement and moves on. The overreach is in the sentence above it.
+- **The annex repeats the claim.** `ProcessStep.description` for `step:production_bioreactor`
+  says the same thing in `PCR-003.json` and `PCP-003.json`. So this is the one item in the
+  corpus where the *ground truth itself* asserts something false, which makes it a test of
+  whether a system can find an error in its own supervision rather than only in the prose.
+- It shows a **real gap in the gates**: `check_grounding` only inspects
+  `SourceReference.quote`. A free-prose `description` field is never checked against anything,
+  so an annex can state whatever it likes there and every gate stays green.
+
+### The correct position
+
+The claim should be narrowed to what the data supports — the step at which A-Mab acquires its
+glycan, charge-variant and aggregate quality attributes — with leached Protein A attributed to
+the capture step (PCR-005). A real review would raise the absolute and ask for the
+qualification.
+
+### Do not fix silently
+
+Both the PCR-003 prose and the two `ProcessStep.description` fields are deliberately left as
+written. Correcting either erases D-002. Note that the branch `feature/weak-claims-via-brief`
+carries a narrowed annex description; if that branch is ever rebased onto a `main` that still
+registers D-002, keep `main`'s wording.

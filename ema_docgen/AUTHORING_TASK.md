@@ -1,5 +1,9 @@
 # Section authoring task
 
+> **SUPERSEDED.** Part of the retired two-pass densification workflow — see
+> [`README.md`](README.md). Authoring is now one pass, one agent, one context:
+> [`../authoring/RUNNER.md`](../authoring/RUNNER.md). Kept as history.
+
 Executed once per section, in a fresh subagent. Placeholders in `<ANGLE
 BRACKETS>` are bound by the runner from the docspec.
 

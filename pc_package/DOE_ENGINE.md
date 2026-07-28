@@ -97,8 +97,30 @@ to print with `_pcpkg.show(...)`.
 | `design_matrix_df(key, kind)` | Run, Type, natural factor columns + responses | design matrix in natural units |
 | `fig_rsm_contours(key, xf="pH", yf="duration")` | matplotlib `Figure` (2×3 response-surface panel) | design-space / surface figure |
 | `fig_diagnostics(key, resp)` | matplotlib `Figure` (residuals, Q–Q, actual-vs-predicted) | model-validation figure |
+| `planned_matrix_df(key, kind, coded=True)` | the design matrix **without** responses | a plan's appendix: the design as proposed |
 | `fit(key, kind, resp)` | dict of the raw model + all statistics | for custom needs |
 | `responses(key)` / `screening_factors(key)` / `rsm_factors(key)` | lists | to loop over responses/factors |
+| `has_superseded(key, kind)` | bool | whether a first, superseded execution exists (AEX) |
+
+### Prediction, acceptance and proven acceptable ranges
+
+| Function | Returns | Use in the report |
+|---|---|---|
+| `predict(key, resp, kind="rsm", coded=…, natural=…)` | predicted response at a point | "the model predicts X at the set-point" |
+| `to_coded(key, f, natural)` / `to_natural(key, f, coded)` | scalar | convert between coded and natural units |
+| `acceptance_for(key, resp)` | `(low, high)` or one-sided | the criterion the response is judged against |
+| `meets_acceptance(key, resp, values)` | bool / array | whether a prediction clears its criterion |
+| `par_at_design_centre(key, resp, factor)` | `(low, high)` | the PAR scan with other factors at coded 0 |
+| `par_nor_propagated(key, resp, factor)` | `(low, high)` | the PAR with the other factors varied over their NORs |
+| `governing_factor(key, resp)` | factor key | which factor binds the range for that response |
+| `par_table(key)` | the PAR table as rendered | the report's PAR section |
+| `fig_par(key, resp, factor)` | matplotlib `Figure` | the PAR scan figure |
+
+**Read [`../authoring/DISCREPANCIES.md`](../authoring/DISCREPANCIES.md) before touching the PAR
+helpers.** `par_at_design_centre` holds the other factors at the design centre, while the
+plans commit to the set-point and the rendered column is headed "PAR (set-point)". That gap
+is deliberate and registered as D-001. The function name says what it really does; the
+document names are what the discrepancy consists of.
 
 Module constant `RESP_LABEL` maps response keys to display names.
 
@@ -116,9 +138,12 @@ D.anova_lof_df("bioreactor", "afucosylation")# ANOVA with lack-of-fit
 Both figure functions build the plot from the fitted model and return a matplotlib
 `Figure`:
 
-- `fig_rsm_contours(key, xf, yf)` — a 2×3 grid of filled contour plots showing each
-  response over two chosen factors (the others held at their set-point). Good for
-  visualising the design space.
+- `fig_rsm_contours(key, xf, yf)` — a grid of filled contour plots showing each response
+  over two chosen factors, with the others held at the **design centre** (coded 0). Good for
+  visualising the design space. The figure's own title says "set-point", which for six
+  factors across three steps is not the same point — a deliberate, registered discrepancy
+  (D-001 in [`../authoring/DISCREPANCIES.md`](../authoring/DISCREPANCIES.md)). Do not correct
+  the title without removing that entry.
 - `fig_diagnostics(key, resp)` — residuals-vs-predicted, a normal Q–Q plot and
   actual-vs-predicted, the standard checks that a model is trustworthy.
 

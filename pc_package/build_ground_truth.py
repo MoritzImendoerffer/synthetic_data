@@ -87,6 +87,33 @@ def ref(doc_id, file_name, section_id, section_title, quote, table_title=None, t
     )
 
 
+def row_quotes(df, keys, floatfmt=None):
+    """``{key -> rendered table row}`` for a table the document renders.
+
+    A quote has two jobs, and grounding is only the first. A table caption or a bare label
+    grounds perfectly well while attesting nothing: one span then stands in for every row of
+    the table, so the reference says "somewhere in this document" instead of naming the
+    evidence. Anchoring each record on **its own row** gives a span that carries both ends of
+    the relation — the parameter and its set-point, the attribute and its acceptance
+    criterion — which is what makes the annex usable for attribution and evidence retrieval.
+
+    ``_md_rows`` reproduces the rendered row from the same DataFrame the document renders, so
+    the quote stays verbatim and stays correct when the seed changes.
+    ``check_grounding.specificity_report`` flags the alternative.
+    """
+    return dict(zip(list(keys), _md_rows(df, floatfmt)))
+
+
+def title_block_quote(doc_id):
+    """The title-block row that declares this document's identity.
+
+    ``"Process Characterization Plan"`` alone appears in the title, the title-block table and
+    the abbreviation list, so it cannot say *which* document is meant. The document ID and the
+    declared class together are unique in every document of the corpus.
+    """
+    return f"Document ID {doc_id} Document class {P.DOC_REGISTRY[doc_id][0]}"
+
+
 # --------------------------------------------------------------------------- #
 # Entity builders (shared shape; source references differ per document).       #
 # --------------------------------------------------------------------------- #
@@ -159,6 +186,8 @@ def build_params(doc_id, file_name, sec, classified):
                if classified else
                "Process parameters in scope, with set-points, ranges to be studied, normal "
                "operating ranges and the type of study each will receive.")
+    # Each parameter anchors on its own row of that table, not on the shared caption.
+    rows = param_row_quotes(classified)
     out = []
     for r in PARAM_ROWS:
         name = r["parameter"]
@@ -180,19 +209,41 @@ def build_params(doc_id, file_name, sec, classified):
             source_references=[ref(doc_id, file_name, sec,
                                    "Factors, ranges and the knowledge space" if classified
                                    else "Factors, ranges and study type",
-                                   caption, table_title=caption,
+                                   rows[name], table_title=caption,
                                    table_id=f"{doc_id}_tab_params")],
             metadata=meta()))
     return out
 
 
+def param_row_quotes(classified):
+    """Rendered ``@tbl-params`` rows of the bioreactor pair, keyed by parameter name.
+
+    The report table carries the final classification and the report's ranges; the plan table
+    carries the ranges to be studied. Each document therefore gets its own row text.
+    """
+    df = P.report_params(UO) if classified else P.plan_params(UO)
+    return row_quotes(df, df["Parameter"])
+
+
+def cqa_row_quotes(report):
+    """Rendered ``@tbl-cqa`` rows of the bioreactor pair, keyed by attribute key.
+
+    The report renders the same table with ``floatfmt=".0f"``, so the Tool #1 score prints
+    without a decimal and the two documents need different row text.
+    """
+    df = P.cqas_for(UO)
+    keys = P.cqa_reg[P.cqa_reg.set_by == UO]["key"]
+    return row_quotes(df, keys, ".0f" if report else None)
+
+
 def build_cqas(doc_id, file_name, sec, report):
     sec_title = "Quality attributes in scope"
     if report:
-        quote = table_title = "Quality attributes set or generated at the production bioreactor."
+        table_title = "Quality attributes set or generated at the production bioreactor."
     else:
-        quote = table_title = ("Quality attributes formed at the production bioreactor, with drug "
-                               "substance acceptance criteria and criticality.")
+        table_title = ("Quality attributes formed at the production bioreactor, with drug "
+                       "substance acceptance criteria and criticality.")
+    rows = cqa_row_quotes(report)
     out = []
     for r in CQA_ROWS:
         key = r["key"]
@@ -205,7 +256,7 @@ def build_cqas(doc_id, file_name, sec, report):
             rationale_for_criticality=f"A-Mab Tool #1 Risk Score = Impact × Uncertainty = {r['tool1_score']}.",
             criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
             tool2_severity=int(r["tool2_severity"]),
-            source_references=[ref(doc_id, file_name, sec, sec_title, quote,
+            source_references=[ref(doc_id, file_name, sec, sec_title, rows[key],
                                    table_title=table_title, table_id=f"{doc_id}_tab_cqa")],
             metadata=meta()))
     return out
@@ -339,35 +390,33 @@ def build_assertions(doc_id, file_name, report):
             assertion_text=text,
             source_references=[ref(doc_id, file_name, sec, sec, quote)], metadata=meta()))
 
-    # step -> parameters and step -> quality attributes (both docs)
+    # step -> parameters and step -> quality attributes (both docs). Each assertion anchors on
+    # the table row naming the parameter or the attribute, so the span carries both ends of the
+    # relation rather than a caption shared by every row.
+    param_rows = param_row_quotes(report)
+    cqa_rows = cqa_row_quotes(report)
     for name, cid in PARAM_CONCEPT.items():
         add("step:production_bioreactor", "step_has_parameter", cid,
             f"{UO_NAME} has process parameter {name}.",
             "Factors, ranges and the knowledge space" if report else "Factors, ranges and study type",
-            "gives every parameter of the step with its set-point, its normal operating range, its "
-            "characterized range, its final classification and the study that supports it" if report
-            else "with their set-points, the ranges to be studied, the normal operating ranges and "
-                 "the type of study each will receive")
-    cqa_quote = ("Quality attributes set or generated at the production bioreactor." if report else
-                 "Quality attributes formed at the production bioreactor, with drug substance "
-                 "acceptance criteria and criticality.")
+            param_rows[name])
     for r in CQA_ROWS:
         add("step:production_bioreactor", "step_has_quality_attribute", CQA_CONCEPT[r["key"]],
-            f"{UO_NAME} sets/controls {r['cqa']}.", "Quality attributes in scope", cqa_quote)
+            f"{UO_NAME} sets/controls {r['cqa']}.", "Quality attributes in scope",
+            cqa_rows[r["key"]])
     # attribute -> method (anchored in the plan, which names the method per attribute)
     if not report:
         for r in CQA_ROWS:
             add(CQA_CONCEPT[r["key"]], "attribute_measured_by_method", f"method:{CQA_METHOD[r['key']]}",
                 f"{r['cqa']} is measured by {CQA_METHOD[r['key']]}.", "Analytical methods",
                 CQA_METHOD_QUOTE[r["key"]])
-    # attribute -> acceptance criterion (both docs state acceptance criteria)
-    acc_quote = ("with their acceptance criterion, criticality level and Tool #1 score" if report
-                 else "Table 4 gives their drug substance acceptance criteria together with the "
-                      "criticality assigned to each")
+    # attribute -> acceptance criterion (both docs state acceptance criteria). The row carries
+    # the criterion next to the attribute it belongs to, which a sentence about the table
+    # cannot do.
     for r in CQA_ROWS:
         add(CQA_CONCEPT[r["key"]], "attribute_has_acceptance_criterion",
             f"lit:{r['key']}_acc", f"{r['cqa']} acceptance: {r['acc_low']:g}–{r['acc_high']:g} {r['unit']}.",
-            "Quality attributes in scope", acc_quote)
+            "Quality attributes in scope", cqa_rows[r["key"]])
     # results only in the report: parameter impacts / non-impacts. Each classification
     # sentence of §9 is quoted against the parameter it classifies.
     if report:
@@ -650,7 +699,7 @@ def inventory(doc_id, file_name, dtype):
                      "critical quality attributes", "design space", "parameter classification"],
         rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc_id][0]}'.",
         source_references=[ref(doc_id, file_name, "Title block", "Title block",
-                               P.DOC_REGISTRY[doc_id][0])],
+                               title_block_quote(doc_id))],
         metadata=meta())
 
 
@@ -1346,7 +1395,7 @@ def h_inventory(doc_id, file_name, dtype):
                      "parameter classification"],
         rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc_id][0]}'.",
         source_references=[ref(doc_id, file_name, "Title block", "Title block",
-                               P.DOC_REGISTRY[doc_id][0])],
+                               title_block_quote(doc_id))],
         metadata=meta())
 
 
@@ -2167,7 +2216,7 @@ def pa_inventory(doc_id, file_name, dtype):
                      "host-cell protein clearance", "design of experiments", "parameter classification"],
         rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc_id][0]}'.",
         source_references=[ref(doc_id, file_name, "Title block", "Title block",
-                               P.DOC_REGISTRY[doc_id][0])],
+                               title_block_quote(doc_id))],
         metadata=meta())
 
 
@@ -2956,7 +3005,7 @@ def vi_inventory(doc_id, file_name, dtype):
                      "XMuLV log-reduction", "design of experiments", "parameter classification"],
         rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc_id][0]}'.",
         source_references=[ref(doc_id, file_name, "Title block", "Title block",
-                               P.DOC_REGISTRY[doc_id][0])],
+                               title_block_quote(doc_id))],
         metadata=meta())
 
 
@@ -3756,7 +3805,7 @@ def cx_inventory(doc_id, file_name, dtype):
                      "host-cell protein clearance", "design of experiments", "parameter classification"],
         rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc_id][0]}'.",
         source_references=[ref(doc_id, file_name, "Title block", "Title block",
-                               P.DOC_REGISTRY[doc_id][0])],
+                               title_block_quote(doc_id))],
         metadata=meta())
 
 
@@ -4465,7 +4514,7 @@ def ax_inventory(doc_id, file_name, dtype):
                      "host-cell protein clearance", "design of experiments", "parameter classification"],
         rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc_id][0]}'.",
         source_references=[ref(doc_id, file_name, "Title block", "Title block",
-                               P.DOC_REGISTRY[doc_id][0])],
+                               title_block_quote(doc_id))],
         metadata=meta())
 
 
@@ -5168,7 +5217,7 @@ def vf_inventory(doc_id, file_name, dtype):
                      "small-virus retention", "design of experiments", "parameter classification"],
         rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc_id][0]}'.",
         source_references=[ref(doc_id, file_name, "Title block", "Title block",
-                               P.DOC_REGISTRY[doc_id][0])],
+                               title_block_quote(doc_id))],
         metadata=meta())
 
 
@@ -5757,7 +5806,7 @@ def uf_inventory(doc_id, file_name, dtype):
                      "formulation", "tangential-flow filtration", "parameter classification"],
         rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc_id][0]}'.",
         source_references=[ref(doc_id, file_name, "Title block", "Title block",
-                               P.DOC_REGISTRY[doc_id][0])],
+                               title_block_quote(doc_id))],
         metadata=meta())
 
 
@@ -5954,7 +6003,7 @@ def ptp_inventory():
                      "gap analysis", "PPQ", "control strategy"],
         rationale=f"Title block declares document class '{P.DOC_REGISTRY['PTP-001'][0]}'.",
         source_references=[ref("PTP-001", PTP_FILE, "Title block", "Title block",
-                               P.DOC_REGISTRY["PTP-001"][0])],
+                               title_block_quote("PTP-001"))],
         metadata=meta())
 
 
@@ -5974,6 +6023,7 @@ def ptp_sites():
 
 
 def ptp_steps():
+    rows = train_row_quotes()
     out = []
     for key in PTP_STEP_KEYS:
         uo = P.CFG.unit_op(key)
@@ -5982,7 +6032,7 @@ def ptp_steps():
             step_id=f"step:{key}", step_name=title, step_number=str(uo.step),
             unit_operation=title, description=P.UNIT_OP_ROLE.get(key, ""),
             source_references=[ref("PTP-001", PTP_FILE, "PTP-001_sec_process",
-                                   "Product and process description", title,
+                                   "Product and process description", rows[key],
                                    table_title="The A-Mab drug substance process train and the "
                                                "principal role of each step",
                                    table_id="PTP-001_tab_train")],
@@ -6057,12 +6107,13 @@ def ptp_assertions():
                                    table_title=table_title, table_id=table_id)],
             metadata=meta()))
 
+    train_rows = train_row_quotes()
     for key in PTP_STEP_KEYS:
         uo = P.CFG.unit_op(key)
         title = P.UNIT_OP_TITLES.get(key, uo.name)
         add("process:amab_ds", "process_has_step", f"step:{key}",
             f"The A-Mab drug-substance process has the step {title}.",
-            "Product and process description", title,
+            "Product and process description", train_rows[key],
             table_title="The A-Mab drug substance process train and the principal role of each step",
             table_id="PTP-001_tab_train")
     # transfer -> gap, anchored on the closing action recorded for the gap in Table 10.
@@ -6178,6 +6229,11 @@ RA_PERF_STEP_QUOTE = {
 
 
 def ra_cqa_entities():
+    # One strong anchor beats two weak ones: the rendered register row names the attribute,
+    # its acceptance criterion, its criticality, the Tool #1 score, the severity it confers
+    # and the step that sets it — every field this record carries.
+    import ra_content as RC
+    rows = row_quotes(RC.cqa_table(), P.cqa_reg["key"])
     out = []
     for r in P.cqa_reg.to_dict("records"):
         out.append(S.QualityAttribute(
@@ -6188,12 +6244,8 @@ def ra_cqa_entities():
             criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
             tool2_severity=int(r["tool2_severity"]),
             source_references=[
-                ref("RA-001", RA_FILE, "RA-001_sec_cqa", "Quality attributes at risk", r["cqa"],
-                    table_title="Quality attributes, criticality and the severity each confers",
-                    table_id="RA-001_tab_cqa"),
-                # the attribute's own row of the register: name, category and the severity it confers
                 ref("RA-001", RA_FILE, "RA-001_sec_cqa", "Quality attributes at risk",
-                    f"{r['cqa']} {r['category']}",
+                    rows[r["key"]],
                     table_title="Quality attributes, criticality and the severity each confers",
                     table_id="RA-001_tab_cqa"),
             ],
@@ -6397,7 +6449,7 @@ def ra_inventory():
                      "CQA criticality", "process characterization scope", "pre-characterization"],
         rationale=f"Title block declares document class '{P.DOC_REGISTRY['RA-001'][0]}'.",
         source_references=[ref("RA-001", RA_FILE, "Title block", "Title block",
-                               P.DOC_REGISTRY["RA-001"][0])],
+                               title_block_quote("RA-001"))],
         metadata=meta())
 
 
@@ -6439,7 +6491,19 @@ def build_risk_assessment():
 PCMP_FILE = "PCMP-001_master_plan.docx"
 
 
+def train_row_quotes():
+    """Rendered rows of the process-train table, keyed by step.
+
+    PCMP-001, PTP-001 and PCMR-001 all render ``process_steps_df()``, so one set of rows
+    serves all three. The row carries the step number, the unit operation and its principal
+    role; the bare unit-operation title carries none of that and recurs throughout each
+    document as a heading.
+    """
+    return row_quotes(P.process_steps_df(), P.CFG.train_order)
+
+
 def _corpus_steps(doc, file, sec_id, sec_title):
+    rows = train_row_quotes()
     out = []
     for key in P.CFG.train_order:
         uo = P.CFG.unit_op(key)
@@ -6447,7 +6511,7 @@ def _corpus_steps(doc, file, sec_id, sec_title):
         out.append(S.ProcessStep(
             step_id=f"step:{key}", step_name=title, step_number=str(uo.step),
             unit_operation=title, description=P.UNIT_OP_ROLE.get(key, ""),
-            source_references=[ref(doc, file, sec_id, sec_title, title)], metadata=meta()))
+            source_references=[ref(doc, file, sec_id, sec_title, rows[key])], metadata=meta()))
     return out
 
 
@@ -6499,12 +6563,13 @@ def build_master_plan():
             assertion_id=f"{doc}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
             assertion_text=text, source_references=[ref(doc, f, f"{doc}_sec", sec, quote)],
             metadata=meta()))
+    train_rows = train_row_quotes()
     for key in P.CFG.train_order:
         uo = P.CFG.unit_op(key)
         title = P.UNIT_OP_TITLES.get(key, uo.name)
         add("process:amab_ds", "process_has_step", f"step:{key}",
             f"The A-Mab drug-substance process has the step {title}.",
-            "Purpose and scope", title)
+            "Purpose and scope", train_rows[key])
     for key in ["lrv_mvm", "hcp", "aggregates_hmw"]:
         r = P.cqa_reg[P.cqa_reg.key == key].iloc[0].to_dict()
         add(f"attr:{key}", "attribute_has_acceptance_criterion", f"lit:{key}_acc",
@@ -6569,7 +6634,7 @@ def build_master_plan():
         main_topics=["process characterization", "master plan", "CQA framework",
                      "scale-down model", "statistical approach", "design of experiments"],
         rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc][0]}'.",
-        source_references=[ref(doc, f, "Title block", "Title block", P.DOC_REGISTRY[doc][0])],
+        source_references=[ref(doc, f, "Title block", "Title block", title_block_quote(doc))],
         metadata=meta())
     return S.GroundTruthAnnex(
         document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
@@ -6678,7 +6743,7 @@ def _grid_rows(df, maxcolwidths):
 
 def _pcmr_registers():
     """The six registers PCMR-001 renders, as {record key -> rendered row text}."""
-    train = dict(zip(P.CFG.train_order, _md_rows(P.process_steps_df())))
+    train = train_row_quotes()          # the same rows PCMP-001 and PTP-001 anchor on
 
     out = P.cqa_reg.merge(P.cap[["key", "mean", "sd", "Cpk"]], on="key")
     out["Acceptance"] = out.apply(lambda r: f"{r.acc_low:g}–{r.acc_high:g} {r.unit}", axis=1)
@@ -7123,7 +7188,7 @@ def build_master_report():
                      "viral clearance", "parameter classification", "control strategy",
                      "deviations"],
         rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc][0]}'.",
-        source_references=[ref(doc, f, "Title block", "Title block", P.DOC_REGISTRY[doc][0])],
+        source_references=[ref(doc, f, "Title block", "Title block", title_block_quote(doc))],
         metadata=meta())
     return S.GroundTruthAnnex(
         document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",

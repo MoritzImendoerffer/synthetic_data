@@ -1,5 +1,12 @@
 # Design rationale
 
+> **SUPERSEDED workflow — see [`README.md`](README.md).** `ema_docgen`'s two-pass
+> densification was replaced by one-pass authoring (`../authoring/`). This file is kept
+> because several of its decisions carried over: the corpus as a versioned release rather
+> than a build artifact, numeral enforcement, and the insistence that the ground truth must
+> never be broken by a text change. Read it as the reasoning the current system inherited,
+> not as instructions.
+
 Decisions behind `ema_docgen`, including the ones that changed during design.
 Recorded so the reasoning survives, and so you can overrule it knowingly.
 

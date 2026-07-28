@@ -1,5 +1,9 @@
 # Runner
 
+> **SUPERSEDED.** Part of the retired two-pass densification workflow — see
+> [`README.md`](README.md). Authoring is now one pass, one agent, one context:
+> [`../authoring/RUNNER.md`](../authoring/RUNNER.md). Kept as history.
+
 The loop an orchestrating agent executes. Invoke as:
 
 > Execute `ema_docgen/RUNNER.md` for `ema_docgen/docspec/PCR-007.yaml`, tier 1.

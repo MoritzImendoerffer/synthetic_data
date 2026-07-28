@@ -1,7 +1,9 @@
 # A-Mab Process Characterization — reproducible build
 # `make all` regenerates every artifact from the seeded model.
 
-PY := python3
+# The interpreter every target runs. Override it for an environment that is not on PATH:
+#   make test PY="uv run python"
+PY ?= python3
 PKG_DIR := pc_package
 
 .PHONY: all data figures fmea corpus style test clean env help
@@ -67,7 +69,10 @@ clean:
 	@echo "cleaned."
 
 # ---------------------------------------------------------------------------
-# ema_docgen — append to synthetic_data/Makefile
+# ema_docgen — SUPERSEDED. These targets belong to the retired two-pass
+# densification workflow (see ema_docgen/README.md); authoring is now one pass
+# via authoring/RUNNER.md. Kept because lint_numerals.py is still used as an
+# advisory gate by authoring/check_render.py.
 #
 #   make docgen-verify DOC=PCR-007   # blocking correctness gate (revert on fail)
 #   make docgen-report DOC=PCR-007   # advisory metrics (never fails)

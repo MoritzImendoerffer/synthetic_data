@@ -1,7 +1,12 @@
 # One-pass authoring — handoff
 
-Pick-up notes for a fresh Claude Code session. Assume no prior conversation
-context; everything needed is here or linked. Branch: `claude/pharma-corpus-expansion-plan-jh2i13`.
+Pick-up notes for a fresh Claude Code session. Assume no prior conversation context;
+everything needed is here or linked.
+
+**Status: the corpus is finished.** All 20 documents are authored, rendered, annexed and
+grounded, on `main`. This file explains how it was built and what to respect when changing
+it. It is not a build list — do not follow it top to bottom and re-author a document that
+already exists.
 
 ---
 
@@ -297,9 +302,14 @@ band is a lint hint, never a target to pad toward.
 
 ---
 
-## 6. Grounding facts for the two test targets
+## 6. Grounding facts for the two documents the method was proved on
 
-**PCR-003 — Production Bioreactor (USP; first target).** key `bioreactor`, step 3. Params:
+These two were the test targets when one-pass authoring was being validated, and they are
+still the ones to read first: PCR-003 for structure and depth, PCR-008 for the hardest
+narrative in the corpus. Both are built; the facts below are here as orientation, not as a
+work order.
+
+**PCR-003 — Production Bioreactor (USP).** key `bioreactor`, step 3. Params:
 pH, temperature, co2, osmolality, duration (WC-CPP); do, ivcc, feed_vol (KPP); medium_conc
 (GPP). CQAs it SETS: afucosylation, galactosylation, high_mannose, aggregates_hmw,
 acidic_variants, hcp, residual_dna. DoE step — 5 CQA responses; the design-space step.
@@ -307,7 +317,7 @@ Seeded deviations: DEV-003-01 (pCO2 probe drift; `EQ-BRX-205`; **retained**) and
 (feed-1 under-delivery; `LOT-FED-3120`; **retained**) — both minor, a bounded-impact
 argument, *not* a re-executed DoE. See `authoring/out/PCR-003.brief.md`.
 
-**PCR-008 — Anion Exchange (generalization test).** key `aex`, step 8. Flow-through polish:
+**PCR-008 — Anion Exchange.** key `aex`, step 8. Flow-through polish:
 SETS the MVM viral-clearance CQA (tightest Cpk); clears XMuLV/HCP/DNA/leached-PA. This is
 the step with the **twice-run DoE** (deamidated-load first execution → re-executed on
 requalified load) + the UV pool-stop correction. The superseded dataset is seeded and these
@@ -332,10 +342,27 @@ deviations live in `config`.
 
 ## 8. First action for a fresh session
 
-1. Read `authoring/WRITING_GUIDE.md`, `authoring/STORY_BIBLE.md`,
-   `authoring/REGISTER_EXEMPLAR.md`, `authoring/section_plan.yaml`.
-2. `uv run python authoring/build_brief.py PCR-003`; eyeball `authoring/out/PCR-003.brief.md`.
-3. Instantiate `authoring/template.qmd` → `pc_package/PCR-003_bioreactor.qmd`; have **one
-   agent** author it in section order, bound with the artifacts above. Gate with
-   `uv run python authoring/check_render.py pc_package/PCR-003_bioreactor.qmd --render`.
-4. Prove independence any time: `bash authoring/check_blank_repo.sh`.
+Every document already exists. What you do first depends on what you are here to do.
+
+**Just orienting.** Read `authoring/WRITING_GUIDE.md`, `authoring/STORY_BIBLE.md`,
+`authoring/REGISTER_EXEMPLAR.md` and `authoring/section_plan.yaml`, then read PCR-003 as a
+finished example. Confirm the corpus is intact:
+
+```bash
+cd pc_package && uv run python build_ground_truth.py && uv run python validate_annex.py \
+  && uv run python check_grounding.py
+```
+
+**Changing what a document says.** Change `config/parameters.yaml`, run
+`make data figures`, and let every document and annex follow. If the *prose* has to change,
+re-author the whole document in one pass — never patch a paragraph, because the register gate
+measures the document as a whole and a stale annex quote will strand. Then rebuild the annex
+and re-anchor any quote the change broke.
+
+**Adding a document.** `uv run python authoring/build_brief.py <DOC>`, instantiate
+`authoring/template.qmd`, and have **one agent** author it in section order bound only to the
+artifacts above — never to a sibling `.qmd`. Gate with
+`uv run python authoring/check_render.py <path> --render`.
+
+**Any time:** `bash authoring/check_blank_repo.sh` proves authoring does not depend on an
+existing document.

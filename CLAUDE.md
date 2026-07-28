@@ -115,13 +115,17 @@ differ only in their `UO` key and unit-specific narrative:
   produces is the document that ships. Post-authoring steps (annex, rhetorical layer,
   grounding check) build artifacts *around* the text and never change what it claims;
   when `check_grounding` fails, the annex quote is re-anchored to the document, never the
-  reverse. The planted weak-claim feature is **retired** for exactly this reason — see
-  [`authoring/WEAK_CLAIMS.md`](authoring/WEAK_CLAIMS.md) for the failure it caused and the
-  condition for reviving it.
+  reverse. The one exception is narrow and deliberate: a document may carry **labeled weak
+  claims**, and those are *assigned in its brief before it is written* so the author writes
+  them into the argument in one pass. Injecting them afterwards was tried and failed — see
+  [`authoring/WEAK_CLAIMS.md`](authoring/WEAK_CLAIMS.md). Recording an author's wording in
+  the registry afterwards reads the document; it does not edit it. **That exception lives
+  only on `feature/weak-claims-via-brief`, never on `main`** — on `main` every claim is
+  grounded, without exception.
 - **Ground-truth annexes:** always a `GroundTruthAnnex` with `inventory` +
   per-section `entities` + `concepts` + `studies`/`design_spaces` +
   `proven_acceptable_ranges` + `report_sections` + `assertions`, plus the discourse
-  layer `rhetorical_spans` (and `weak_claims`, currently empty — see above). Build them in `build_ground_truth.py`
+  layer `rhetorical_spans` (and `weak_claims`, empty on `main` — see above). Build them in `build_ground_truth.py`
   from the same CSVs (never hand-write JSON), with doc-specific quotes that exist in
   that document. **How the annex links to the report — the verbatim span-grounding
   method, and how it relates to schema-constrained (Pydantic→LLM) generation and other

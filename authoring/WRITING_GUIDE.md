@@ -368,28 +368,53 @@ extend the generator; it is information, not a failure.
 
 ---
 
-## 7a. Ground every claim. Nothing is added to your document afterwards.
+## 7a. Ground every claim, except the ones your brief assigns you
 
-Every claim in the document is yours and every claim must be supported. If you are tempted to
-write one of the anti-patterns in §7 — an unreferenced appeal to prior experience, a screening
-result sold as a design space, an unbounded robustness claim — that is a defect in your text.
+Every claim in the document is yours and every claim must be supported — with exactly one
+exception, and only if your brief contains it.
 
-There is no later step that adds, weakens or corrects a claim. The corpus once carried a few
-deliberately unsupported claims as labelled benchmark negatives, planted by the maintainer
-after authoring. That failed: a claim written against a finished document contradicts the
-prose around it instead of merely lacking support for itself. On a separate branch the idea
-was rebuilt so that such a claim is **assigned in the author's brief before writing**, which
-is the only way it can be part of the argument rather than an attack on it. Either way,
-nothing is added to your document afterwards.
+**If your brief has no "Assigned weak claims" section, ground everything.** If you are
+tempted to write one of the anti-patterns in §7 — an unreferenced appeal to prior
+experience, a screening result sold as a design space, an unbounded robustness claim — that
+is a defect in your text.
 
-If your brief has no §5b, every claim you write must be grounded. The reasoning is in
-`authoring/WEAK_CLAIMS.md`, and it is worth reading once: it is the clearest example in this
-project of a defect that every automated gate passed.
+There is also no later step that adds, weakens or corrects a claim. These claims were once
+planted by the maintainer *after* authoring, and that failed: a claim written against a
+finished document contradicts the prose around it instead of merely lacking support for
+itself. Assigning it in your brief beforehand is the only way it can be part of the argument
+rather than an attack on it. The reasoning is in `authoring/WEAK_CLAIMS.md`, and it is worth
+reading once: it is the clearest example in this project of a defect that every automated
+gate passed.
 
-What follows for you is simple. The document you produce is the document that ships. Steps
-that run after you — the ground-truth annex, the rhetorical layer, the grounding check — only
-build artifacts *around* your text and never change what it says. If a later grounding check
-fails, the annex quote is re-anchored to your document, not the other way round.
+**If your brief does assign weak claims (§5b), write those and nothing else ungrounded.**
+They are labeled benchmark negatives: a grounding corpus needs known-bad examples, or it
+only ever tests recognition of good prose. Your brief gives, for each one, the grounded fact
+it distorts, what to assert instead, and where to put it.
+
+Three things decide whether such a claim is worth anything:
+
+- **Unsupported, not contradicted.** It must overreach beyond the evidence, not collide with
+  a sentence three lines away. If a neighbour rebuts it, move the claim. Never weaken the
+  neighbour and never delete a grounded statement to make room — that would trade a real
+  finding for a fake one.
+- **In register.** It must read like the rest of your document. A negative a reader spots by
+  style rather than by checking the evidence tests nothing.
+- **Unmarked.** Do not flag it, hedge it apologetically, or leave a comment. The label lives
+  in the annex, not the text.
+
+This is a deliberate reversal of an earlier rule, and the reason is instructive. These claims
+used to be *planted after* authoring, and it failed: a claim written against a finished
+document lands in prose that has already settled the question, so it reads as a
+contradiction rather than an overreach, which is a much easier thing to detect. Writing them
+into the argument in one pass is what keeps them honest negatives.
+`authoring/WEAK_CLAIMS.md` has the full reasoning.
+
+Otherwise the principle stands: the document you produce is the document that ships. Steps
+that run after you — the ground-truth annex, the rhetorical layer, the grounding check —
+build artifacts *around* your text and never change what it says. The maintainer will record
+your exact wording for an assigned claim so the annex can label it; that step reads the
+document, it does not edit it. If a later grounding check fails, the annex quote is
+re-anchored to your document, not the other way round.
 
 ---
 

@@ -101,8 +101,9 @@ differ only in their `UO` key and unit-specific narrative:
   model is the predictive/design-space model**. State this; don't over-claim the
   near-saturated screening fit.
 - **Registered discrepancies are real and deliberately kept.** A few documents contain
-  genuine inconsistencies a review should have caught — the live one is a PAR analysis
-  that departs from the method its own protocol specifies. They are listed precisely in
+  genuine inconsistencies a review should have caught — a PAR analysis that departs from
+  the method its own protocol specifies (D-001), and an absolute claim in PCR-003 that the
+  corpus's own CQA register contradicts (D-002). They are listed precisely in
   [`authoring/DISCREPANCIES.md`](authoring/DISCREPANCIES.md) so they can be scored. **Do
   not "fix" one without removing its entry**; that silently deletes a benchmark item. An
   *unregistered* inconsistency is a bug — fix it, or register it deliberately.

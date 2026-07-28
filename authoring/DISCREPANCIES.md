@@ -102,13 +102,26 @@ Either the analysis should hold the other factors at their set-points, matching 
 or the protocols and the column heading should say "design centre". A real deviation report
 would state which, justify the choice, and assess the impact on the reported ranges.
 
+### The same mistake shows up in three places
+
+| Surface | What it says | What it does |
+|---|---|---|
+| `par_table`'s column heading | "PAR (set-point)" | other factors at the design centre |
+| the plans' method statements | "holds the other parameters at their set-points" | — |
+| the response-surface contour figure title | "remaining factors held at set-point" | `_predict_grid` holds them at coded 0 |
+
+All three come from one decision — coded 0 was treated as the set-point — so a reviewer who
+finds one has a thread to pull. The figure is the easiest to overlook, because its title is
+drawn into the image rather than written in the prose.
+
 ### Do not fix silently
 
-`doe_report.par_at_design_centre` is named for what it computes, so the **code** is honest.
-`par_table`'s column heading is deliberately left as `"PAR (set-point)"`, and the plans are
-deliberately left as written, so the **documents** carry the discrepancy. Changing either
-erases D-001. The `ProvenAcceptableRange.par_at_setpoint` annex field keeps its name for the
-same reason: it mirrors what the document claims.
+`doe_report.par_at_design_centre` is named for what it computes and `_predict_grid` says in
+its docstring that it uses the design centre, so the **code** is honest. `par_table`'s column
+heading, the contour figure's title and the plans' method statements are all deliberately
+left as written, so the **documents** carry the discrepancy. Changing any of them erases part
+of D-001. The `ProvenAcceptableRange.par_at_setpoint` annex field keeps its name for the same
+reason: it mirrors what the document claims.
 
 ---
 

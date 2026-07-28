@@ -1,5 +1,9 @@
 # Authoring contract
 
+> **SUPERSEDED.** Part of the retired two-pass densification workflow — see
+> [`README.md`](README.md). Authoring is now one pass, one agent, one context:
+> [`../authoring/RUNNER.md`](../authoring/RUNNER.md). Kept as history.
+
 Stable reference. Read in full on every section task.
 
 Defines: the rhetorical moves available, the constraints that always apply, and

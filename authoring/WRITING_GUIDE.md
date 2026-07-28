@@ -375,11 +375,16 @@ write one of the anti-patterns in §7 — an unreferenced appeal to prior experi
 result sold as a design space, an unbounded robustness claim — that is a defect in your text.
 
 There is no later step that adds, weakens or corrects a claim. The corpus once carried a few
-deliberately unsupported claims as labeled benchmark negatives, planted by the maintainer
-after authoring; that feature has been **retired**, because a claim written against a finished
-document contradicts the prose around it instead of merely lacking support for itself. The
-reasoning is in `authoring/WEAK_CLAIMS.md`, and it is worth reading once: it is the clearest
-example in this project of a defect that every automated gate passed.
+deliberately unsupported claims as labelled benchmark negatives, planted by the maintainer
+after authoring. That failed: a claim written against a finished document contradicts the
+prose around it instead of merely lacking support for itself. On a separate branch the idea
+was rebuilt so that such a claim is **assigned in the author's brief before writing**, which
+is the only way it can be part of the argument rather than an attack on it. Either way,
+nothing is added to your document afterwards.
+
+If your brief has no §5b, every claim you write must be grounded. The reasoning is in
+`authoring/WEAK_CLAIMS.md`, and it is worth reading once: it is the clearest example in this
+project of a defect that every automated gate passed.
 
 What follows for you is simple. The document you produce is the document that ships. Steps
 that run after you — the ground-truth annex, the rhetorical layer, the grounding check — only

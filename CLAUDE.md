@@ -20,10 +20,12 @@ the corpus; recoverable from git history if needed.) Full workflow:
 [`pc_package/README.md`](pc_package/README.md); DoE engine:
 [`pc_package/DOE_ENGINE.md`](pc_package/DOE_ENGINE.md).
 
-**Continuing the corpus?** The remaining documents (per-unit-operation plans/reports for
-Steps 4–10, plus PTP-001 / RA-001 / PCMP-001 / PCMR-001) and how to build each are listed
-in **[`pc_package/TASKS.md`](pc_package/TASKS.md)** — start there. The bioreactor pair
-`PCP-003` / `PCR-003` is the reference implementation.
+**The corpus is complete**: 20 documents, all one-pass authored, all annexed and grounded.
+To change one, add a unit operation, or re-run the set, start at
+**[`pc_package/TASKS.md`](pc_package/TASKS.md)** — it covers what to touch, what to rebuild
+afterwards, and the traps. The bioreactor pair `PCP-003` / `PCR-003` is the reference for
+structure and depth, but **never** for voice: read the register rule below before writing
+anything.
 
 ## Golden rules (do not violate)
 
@@ -86,8 +88,10 @@ differ only in their `UO` key and unit-specific narrative:
   design · Acceptance & decision criteria · Data management & integrity · Roles &
   responsibilities · Deliverables & schedule · Risks & assumptions · Approvals ·
   References · Appendices (planned design matrices).
-- **Depth targets:** report ~30–35 pp; plan (protocol) ~15–22 pp. Achieve depth with
-  grounded tables/analysis and full appendices, never filler.
+- **Depth follows the design, not a page target.** As built: reports with a DoE run 41–55 pp,
+  reports without one 26–28 pp, plans 23–31 pp. Achieve depth with grounded tables, analysis
+  and full appendices — never with filler, and never by inventing a DoE for a step that has
+  none.
 - **Voice (gated):** a process scientist writing material to support a BLA: precise,
   complete, mechanistically reasoned, traceable — and written in **plain technical
   English at about C1 level**, modelled on the published human sources in `refs/text/`
@@ -137,13 +141,20 @@ fabricate a DoE for them.
 
 ## Adding a unit-operation Plan/Report pair
 
-1. Copy `PCP-003_bioreactor.qmd` / `PCR-003_bioreactor.qmd`; set `DOC`, `UO`,
-   `UO_TITLE`; keep the section structure identical.
-2. Adjust only the unit-specific narrative (the step's role, which CQAs it sets, the
-   mechanistic interpretation) — pull all numbers via the helpers / `doe_report`.
-3. Add the pair's entities/assertions to `build_ground_truth.py` (mirror the
-   bioreactor pattern); use quotes that appear in the new document.
-4. Run the verification checklist below.
+**Do not copy an existing document.** An earlier version of this section said to copy the
+bioreactor pair, and that is how the machine register propagated through the whole corpus:
+each document inherited the previous one's voice, and the writing guide was then distilled
+from the result. All 20 documents had to be re-authored to break the loop.
+
+1. `python authoring/build_brief.py <DOC>` — the grounded facts and the helper inventory.
+2. Instantiate `authoring/template.qmd`; set `DOC`, `UO`, `UO_TITLE`.
+3. **One agent authors the whole document in one pass**, in `section_plan.yaml` order, from
+   `WRITING_GUIDE.md`, `REGISTER_EXEMPLAR.md`, `STORY_BIBLE.md` and the brief — never from a
+   sibling `.qmd`. Structure comes from `section_plan.yaml`; voice comes from
+   `REGISTER_EXEMPLAR.md`, which is built only from the published human sources.
+4. Add the pair's entities and assertions to `build_ground_truth.py`, anchoring each record
+   on its rendered table row via `row_quotes()` rather than on a caption.
+5. Run the verification checklist below. The full loop is in `authoring/RUNNER.md`.
 
 ## Re-running with different settings
 
@@ -160,14 +171,20 @@ fabricate a DoE for them.
 - `uv run python authoring/check_style.py <doc>.qmd` passes (the register gate; see the
   Voice rule above). `check_render.py` runs it automatically as a hard gate.
 - `python build_ground_truth.py && python validate_annex.py` → all annexes valid.
-- Grounding: every annex `quote` appears verbatim in the rendered text.
-- Depth target met; section structure matches the canonical order above.
+- `python check_grounding.py` → every annex quote verbatim in the rendered text, and no weak
+  anchors. `GROUNDING_STRICT_ANCHORS=1` makes the anchor check a gate; the corpus is at zero.
+- No missing glyphs in the PDF (`check_render.py` gates it — a dropped `≥` once turned a
+  clearance floor into a point value).
+- Section structure matches the canonical order above, at the depth the design supports.
 
 ## Environment
 
 Python ≥ 3.11, Quarto 1.7+ with a LaTeX engine (PDF), `statsmodels`/`scipy` for the
-DoE engine, `jupyter`/`nbclient` for Quarto's Python engine — all in
-`requirements.txt`. YAML gotcha: scientific notation needs a signed exponent
+DoE engine, `jupyter`/`nbclient` for Quarto's Python engine. Dependencies are declared
+twice and must agree: `pyproject.toml` + `uv.lock` (`uv sync`, the tested path) and
+`requirements.txt` (pip). The Makefile calls `python3`; if your environment is not on
+`PATH`, pass it in: `make test PY="uv run python"`. YAML gotcha: scientific notation
+needs a signed exponent
 (`2.0e+5`, not `2.0e5`). The published source PDFs live **outside** the repo at
 `$SYNTHETIC_DATA_SOURCES` (default
 `/home/moritz/Nextcloud/Datasets/synthetic_data/source_documents/`); their page-marked

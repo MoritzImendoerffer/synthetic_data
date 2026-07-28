@@ -1,9 +1,19 @@
-# Weak claims — a retired feature, and the reason it was retired
+# Weak claims — why injection failed, and where the feature lives now
 
-**Status: NOT APPLIED. No document in the corpus contains a planted weak claim.**
-`authoring/weak_claims.yaml` is retained as a record of the design and as the starting point
-if the feature is ever revived, but nothing reads it into a shipped document. See
-"If you revive this" below for the condition that has to be met first.
+**Status on `main`: NOT APPLIED.** No document on this branch contains a planted weak claim,
+and none should: `main` is the fully grounded corpus. `authoring/weak_claims.yaml` is kept
+here as the record of the design.
+
+**The feature is active on `feature/weak-claims-via-brief`**, rebuilt around the fix this
+document argues for: each claim is assigned in the document's brief *before* it is written,
+so the author writes it into the argument in one pass, and its wording is recorded afterwards
+by reading the rendered document. Four claims across three documents. That branch is
+deliberately never merged here — see its own copy of this file for the procedure and the
+review checklist.
+
+The rest of this file is the failure analysis that produced that design. It is worth reading
+before adding any labelled negative to a corpus, because the mistake was not obvious and no
+gate caught it.
 
 ## What the feature was
 
@@ -64,36 +74,36 @@ annex, the rhetorical layer, the grounding check. Those never modify what the do
 When `check_grounding` fails, the fix direction is always to re-anchor the annex quote to the
 document, never to edit the document to suit the annex.
 
-## If you revive this
+## What replaced it
 
-Do not reinstate the injection step. Instead, specify the intended weak claims to the author
-**up front**, as part of the authoring inputs, so they are written into the narrative in one
-pass:
+The fix is the sequencing, and it lives on `feature/weak-claims-via-brief`:
 
-1. Put the intended claims (id, section, weakness type, and the *fact* they distort) in the
-   brief or the story bible, so the single author sees them before writing.
-2. Have the author write them into the argument, positioned so that no neighbouring sentence
-   directly rebuts them — unsupported, not contradicted.
-3. Keep the labeling exactly as designed: the registry records the verbatim quote, the
-   weakness type, the rationale and the `correct_version`; the annex carries
-   `support = "unsupported"` so the span **grounds** while being **labeled weak**.
-4. Verify with `authoring/build_weak_claims_annex.py`, which hard-fails on an ungrounded
-   claim.
+1. The claim is **assigned before the document is written** — `weak_claims.yaml` records
+   which fact it distorts, what to assert instead, and where to place it.
+2. `build_brief.py` renders that assignment into the author's brief as §5b, so the single
+   author sees it before writing and builds the surrounding argument around it.
+3. The wording is **captured afterwards** by reading the rendered document. That step is
+   post-hoc, but it *reads* the document; it never edits it. That distinction is the whole
+   difference from the retired approach.
 
-This conflicts with WRITING_GUIDE §7a, which currently forbids the author from writing
-ungrounded claims. Reviving the feature means amending that rule to "you write only the
-weak claims named in your brief, and nothing else ungrounded" — deliberately, not by
-accident.
+Two rules the branch learned the hard way. A claim must be **unsupported, not contradicted**
+— if a neighbouring sentence rebuts it, move the claim. And **move the claim, never the
+document**: an author asked to write an unsupported claim will feel the pull to soften
+sentences elsewhere to accommodate it, which converts a local planted negative into a diffuse
+weakening that nothing records.
 
-A separate option worth considering is to keep contradiction as its own labeled category
-(a `contradicted_by_document` weakness type) rather than treating it as a defect. That is a
-benchmark design decision, not a mechanical one, and it should be made explicitly.
+A separate option remains open: treat contradiction as its own labelled category (a
+`contradicted_by_document` weakness type) rather than as a defect to avoid. That is a
+benchmark design decision, not a mechanical one, and it has not been made.
 
-## Current state of the machinery
+## State of the machinery on this branch
 
-- `authoring/weak_claims.yaml` — the three PCR-003 entries, retained as a record. Not applied.
-- `authoring/build_weak_claims_annex.py` — still works; hard-fails because the claims are not
-  in the document. That failure is correct.
-- `pc_package/build_ground_truth.py` `build_weak_claims()` — skips any registered claim whose
-  quote is absent from the document and prints a warning, so a document with no planted
-  claims is a clean, buildable state rather than a guaranteed grounding failure.
+- `authoring/weak_claims.yaml` — the three retired PCR-003 entries, kept as a record. Their
+  wording is not in any document, and that is correct.
+- `pc_package/build_ground_truth.py` `build_weak_claims()` — skips a registered claim whose
+  quote is absent and prints a note, so "no planted claims" is a clean, buildable state
+  rather than a guaranteed grounding failure.
+- `authoring/build_rhetorical_annex.py` — skips them for the same reason. It used to emit
+  them anyway, producing a layer with three spans whose text was nowhere in the document.
+- `authoring/build_weak_claims_annex.py` — the standalone strict check. It hard-fails here,
+  because the claims are not in the document. That failure is correct.

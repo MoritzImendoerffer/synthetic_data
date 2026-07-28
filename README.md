@@ -35,19 +35,32 @@ Grounded in source documents kept outside the repo (at `$SYNTHETIC_DATA_SOURCES`
 
 | Deliverable | Path |
 |---|---|
-| Document corpus (Quarto → Word + PDF) + ground-truth annexes | `pc_package/` (see its README) |
-| First pair built: bioreactor Plan / Report | `pc_package/PCP-003_bioreactor.*`, `pc_package/PCR-003_bioreactor.*` |
+| 20 documents (Quarto → Word + PDF) + their ground-truth annexes | `pc_package/` (see its README) |
+| Reference pair: bioreactor Plan / Report | `pc_package/PCP-003_bioreactor.*`, `pc_package/PCR-003_bioreactor.*` |
 | Per-document ground truth (JSON) | `pc_package/ground_truth/*.json` |
+| Registered inconsistencies, deliberately kept | [`authoring/DISCREPANCIES.md`](authoring/DISCREPANCIES.md) |
+
+The corpus is complete: a transfer plan, a risk assessment, a master plan, a plan and a
+report for each of the eight unit operations, and a master report.
+
+**Two documents contain deliberate defects.** They are real inconsistencies a review should
+have caught, kept rather than fixed so that a benchmark has something to find, and listed
+precisely in `authoring/DISCREPANCIES.md`. Read that file before treating the corpus as
+uniformly correct — and do not "fix" an entry without removing it.
 
 ### Reproduce everything
 
 ```bash
-make env      # install Python dependencies (one time)
+uv sync       # install Python dependencies (one time; or: make env)
 make all      # data -> figures -> corpus (documents + ground-truth annexes)
 ```
 
 Requires **Quarto** (with a LaTeX engine for PDF) and **Python 3.11+**. Individual
-stages: `make data`, `make figures`, `make corpus`, `make test`, `make clean`.
+stages: `make data`, `make figures`, `make corpus`, `make style`, `make test`, `make clean`.
+
+The Makefile calls `python3`. If your environment is not on `PATH` — the usual case with
+`uv` — pass the interpreter in: `make test PY="uv run python"`.
+
 Everything derives from the master seed in `config/parameters.yaml` (`meta.seed`), so
 re-running reproduces byte-identical datasets and a consistent document set.
 
@@ -111,4 +124,14 @@ workbook is gitignored).
 `refs/text/*.txt` and `refs/grounding/*.json` are cached extractions of the source
 PDFs used to parameterize the model, re-creatable with
 `python scripts/extract_sources.py` (PyMuPDF).
-```
+
+### Where to read next
+
+| You want to | Read |
+|---|---|
+| Run or re-run the whole build | [`docs/WORKFLOW.md`](docs/WORKFLOW.md) |
+| Understand the corpus and its documents | [`pc_package/README.md`](pc_package/README.md) |
+| Understand how the annexes attach to the text | [`pc_package/GROUND_TRUTH.md`](pc_package/GROUND_TRUTH.md) |
+| Understand the DoE statistics | [`pc_package/DOE_ENGINE.md`](pc_package/DOE_ENGINE.md) |
+| Write or regenerate a document | [`authoring/RUNNER.md`](authoring/RUNNER.md) and [`authoring/WRITING_GUIDE.md`](authoring/WRITING_GUIDE.md) |
+| Work on this repo as a coding agent | [`CLAUDE.md`](CLAUDE.md) |

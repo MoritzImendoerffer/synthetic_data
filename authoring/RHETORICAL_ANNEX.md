@@ -8,9 +8,10 @@ discourse / argument-mining NLP: claim–evidence linking, argument-structure pa
 hedge and boundary detection.
 
 > **Note.** This layer is *annotation over existing prose*. It never changes what a document
-> says, so it is unaffected by the retirement of the planted weak-claim feature
-> (`authoring/WEAK_CLAIMS.md`) and remains a live part of the corpus. The `weak_claim` role
-> below is currently unused: no document contains a planted claim, so the builder merges none.
+> says, which is why it survived the retirement of the planted weak-claim feature
+> (`authoring/WEAK_CLAIMS.md`) untouched. The `weak_claim` role below is unused on `main`:
+> no document here contains a planted claim, so the builder merges none. It carries spans
+> only on `feature/weak-claims-via-brief`.
 >
 > **Coverage is complete**: all eight `PCR-00N` reports plus `PCMR-001` carry a layer,
 > 315 spans in total. Only `PCR-003`'s live in an external

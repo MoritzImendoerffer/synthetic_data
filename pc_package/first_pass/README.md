@@ -1,41 +1,38 @@
-# first_pass/ — archived first-pass documents
+# first_pass/ — the superseded first-pass documents
 
-These are the **original first-pass** documents of the A-Mab corpus, moved here to keep
-`pc_package/` focused on the current one-pass work. They are **superseded** by the
-full-depth, one-pass reports that remain in `pc_package/`:
+Rendered copies of the **original first-pass** A-Mab documents, kept as history. Every one of
+them has been replaced by a document in `pc_package/`, re-authored in one pass during the
+2026-07 register correction.
 
-- `pc_package/PCR-003_bioreactor.qmd` (+ `PCP-003_bioreactor.qmd`) — bioreactor (Step 3)
-- `pc_package/PCR-008_aex.qmd` (+ `PCP-008_aex.qmd`) — anion exchange (Step 8)
+## What is here
 
-## What's here
+- 16 documents as `.docx` and `.pdf`: unit operations 4–7 and 9–10 (harvest, Protein A, viral
+  inactivation, CEX, virus filtration, UF/DF) and the corpus-level `PTP-001`, `RA-001`,
+  `PCMP-001`, `PCMR-001`.
+- Their ground-truth annexes, frozen, under `ground_truth/`.
 
-- The other 16 documents' `.qmd` / `.docx` / `.pdf`: unit operations 4–7 and 9–10
-  (harvest, Protein A, viral inactivation, CEX, virus filtration, UF/DF), plus the
-  corpus-level documents `PTP-001`, `RA-001`, `PCMP-001`, `PCMR-001`.
-- Their ground-truth annexes under `first_pass/ground_truth/` (frozen snapshots).
+The `.qmd` sources are not kept here — the current ones live in `pc_package/`, and the git
+history has the originals. The bioreactor and anion-exchange pairs have no archived copy
+either; they were the first two re-authored, before this directory existed.
 
-## Status / caveats
+## What it is for
 
-- **Written in the superseded register, and not a voice reference.** These documents predate
-  the register correction. They average ~34-word sentences, roughly ten em-dashes per 1000
-  words and coined compounds such as "the quality-attribute-richest characterization in the
-  campaign" — the machine idiom that `authoring/check_style.py` now gates against. `make style`
-  deliberately does **not** glob this directory, because these are kept as history, not as
-  material to imitate. Never take voice from them; see `authoring/REGISTER_EXEMPLAR.md`.
-- **Not built or gated by default.** `pc_package/build_ground_truth.py` now builds only the
-  retained bioreactor and anion-exchange pairs; the builder functions for these archived
-  documents remain defined but are not invoked, and `check_grounding.py` / `validate_annex.py`
-  only cover `pc_package/ground_truth/`. So these annexes are **not** re-generated or
-  grounding-checked as part of the active gates.
-- **They no longer render in place.** The shared machinery (`_pcpkg.py`, `doe_report.py`,
-  `references.bib`, `reference.docx`, `../outputs/`) lives in `pc_package/`; a `.qmd` here
-  would need its relative paths adjusted (or to be moved back up) to render.
-- **Cross-references still resolve by ID.** The retained documents reference these by
-  document ID (`DOC_REGISTRY`, `related_docs_md`), which is path-independent.
+Comparison, and nothing else. The pair `first_pass/PCR-005_protein_a.pdf` against
+`pc_package/PCR-005_protein_a.pdf` is the clearest before-and-after of the register
+correction, and the annexes under `ground_truth/` show how far a span layer drifts when a
+document is re-authored.
 
-## To revive one under the one-pass pipeline
+## Caveats
 
-Author it fresh with the `authoring/` pipeline (see `authoring/HANDOFF.md` / `RUNNER.md`)
-into `pc_package/`, then rebuild its annex (add its builder back to
-`build_ground_truth.py`'s `main()` loop). Do not simply move the old `.qmd` back — it is a
-first-pass document, not a one-pass full-depth report.
+- **Never take voice from these.** They are written in the superseded machine register:
+  roughly 34-word average sentences, about ten em-dashes per 1000 words, and coined compounds
+  such as "the quality-attribute-richest characterization in the campaign" — precisely what
+  `authoring/check_style.py` now gates against. `make style` deliberately does not glob this
+  directory, because these are history, not material to imitate. The voice reference is
+  `authoring/REGISTER_EXEMPLAR.md`, built only from published human sources.
+- **Not built and not gated.** `build_ground_truth.py`, `validate_annex.py` and
+  `check_grounding.py` cover `pc_package/ground_truth/` only. The annexes here are frozen
+  snapshots and are neither regenerated nor grounding-checked.
+- **The numbers are from an earlier state of the model.** Several config corrections landed
+  after these were rendered, so do not read a value here as current. `authoring/HANDOFF.md`
+  §3a lists what changed.

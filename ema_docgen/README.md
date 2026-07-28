@@ -1,11 +1,21 @@
 # ema_docgen
 
-Tooling for growing the documents in the `synthetic_data` corpus — making them
-denser and more realistic — using an LLM agent, without breaking the ground
-truth that makes the corpus useful.
-
-Drop-in: it lives in a subdirectory of the `synthetic_data` repo and adds a few
-`make` targets. It changes nothing that already exists.
+> **SUPERSEDED. Do not use this to author or change a document.**
+>
+> This directory describes the two-pass **additive densification** workflow: write a minimal
+> document, then have an agent grow it section by section, splicing insertions and tracking
+> them in a ledger. It has been replaced by **one-pass authoring** — one document, one agent,
+> one context — because the splice-and-ledger design coupled its components by string
+> convention rather than by gates, and because per-section fan-out destroys the
+> whole-document arc, the cross-references and the coreference that the corpus depends on.
+>
+> Start at [`../authoring/RUNNER.md`](../authoring/RUNNER.md) instead.
+>
+> **What is still live here:** `scripts/lint_numerals.py` and `numerals.allow`, which
+> `authoring/check_render.py` runs as an advisory bare-numeral lint, and the `docgen-*`
+> targets at the bottom of the root `Makefile`, which only that workflow used. Everything
+> else is history — kept because the design rationale in `DESIGN.md` explains decisions the
+> current system inherited. The text below describes the retired workflow as it was.
 
 ---
 

@@ -247,6 +247,7 @@ def center_cv_df(key, kind):
 # Figures (built with matplotlib; Quarto captures the current figure).        #
 # --------------------------------------------------------------------------- #
 def _predict_grid(r, xf, yf, n=40):
+    """Predict over xf x yf with every other factor at coded 0, the design centre."""
     m = r["model"]
     grid = np.linspace(-1, 1, n)
     XX, YY = np.meshgrid(grid, grid)
@@ -273,10 +274,15 @@ def _natural(coded, key, f):
 
 
 def fig_rsm_contours(key, xf="pH", yf="duration"):
-    """Panel of RSM response surfaces over two factors (others at set-point).
+    """Panel of RSM response surfaces over two factors, the others at the DESIGN CENTRE.
 
     The grid adapts to the number of responses (bioreactor: 5 -> 2x3;
     protein_a / most downstream steps: 3 -> 1x3; aex: 4 -> 2x2).
+
+    Note the figure's own title says "set-point", and the design centre is not the set-point
+    for six factors across three steps. That mismatch is deliberate and registered as D-001
+    in ``authoring/DISCREPANCIES.md`` — the code is honest, the rendered documents carry the
+    discrepancy. Do not "fix" the title without removing the D-001 entry.
     """
     import matplotlib.pyplot as plt
     resps = responses(key)

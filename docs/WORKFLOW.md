@@ -13,8 +13,8 @@ code is assumed.
 5. [The studies engine (DoE, PPQ, Monte-Carlo)](#5-the-studies-engine-doe-ppq-monte-carlo)
 6. [Generating the data](#6-generating-the-data)
 7. [Making the figures](#7-making-the-figures)
-8. [Building the report (Word + PDF)](#8-building-the-report-word--pdf)
-9. [Building the risk assessment (Excel FMEA)](#9-building-the-risk-assessment-excel-fmea)
+8. [Building the documents (Word + PDF)](#8-building-the-documents-word--pdf)
+9. [The risk-assessment content builder (Excel FMEA)](#9-the-risk-assessment-content-builder-excel-fmea)
 10. [How to reproduce everything](#10-how-to-reproduce-everything)
 11. [How to change things (common tasks)](#11-how-to-change-things-common-tasks)
 12. [Where the numbers come from (traceability)](#12-where-the-numbers-come-from-traceability)
@@ -360,9 +360,12 @@ column, designation and residual-risk band are all kept consistent by constructi
 Everything is driven by the `Makefile`. From the repo root:
 
 ```bash
-make env       # one time: install Python dependencies
+uv sync        # one time: install Python dependencies (or: make env, which uses pip)
 make all       # rebuild data → figures → corpus (documents + ground-truth annexes)
 ```
+
+The Makefile calls `python3`. If your environment is not on `PATH` — the usual case with
+`uv` — pass the interpreter in: `make all PY="uv run python"`.
 
 ```mermaid
 flowchart LR
@@ -396,13 +399,14 @@ Almost every change is a one-line edit to `config/parameters.yaml`, then `make a
 | Change a quality limit | Edit the CQA's `acceptance` in `config/parameters.yaml` → `make all` |
 | Make the process more/less robust | Adjust the model coefficients or `noise_cv` in the config → `make all` |
 | Change how strongly a parameter affects a CQA | Edit that step's model coefficients in the config → `make all` |
-| Reword a document | Edit the relevant `pc_package/PCP-00N_*.qmd` / `PCR-00N_*.qmd` → `make corpus` |
+| Reword a document | **Re-author it in one pass** (`authoring/RUNNER.md`), then rebuild its annex. Hand-editing paragraphs is what broke the register once, and it strands every annex quote in the text you changed. |
 | Change FMEA failure modes / controls | Edit the `CONTENT` map in `risk_assessment/build_fmea.py` → `make fmea` |
 | Change the chart look | Edit the palette/style in `amab_process/viz.py` → `make figures` |
 | Use a different random seed | Change `meta.seed` in the config → `make all` |
 
-After any change, run `make test` (8 checks: reproducibility, mass balance, in-spec at
-set-point, viral-clearance margin, capability, and correct effect directions).
+After any change, run `make test` (20 checks: reproducibility, mass balance, in-spec at
+set-point, viral-clearance margin, capability, correct effect directions, and agreement
+between `config/parameters.yaml` and the generated CSVs).
 
 > **One gotcha:** in the YAML, scientific notation needs a signed exponent — write `2.0e+5`,
 > not `2.0e5` (the parser reads the latter as text).
@@ -508,12 +512,12 @@ synthetic_data/
 
 ## 15. Generating the NLP document corpus (`pc_package/`)
 
-Besides the single consolidated PC report, this project also generates a **set** of
-smaller, cross-referenced documents plus machine-readable **ground-truth annexes**,
-for use as a test corpus for the sibling `nlp_reports` document-intelligence pipeline
-(named-entity recognition, entity linking, summarization, long-document QA). Like
-everything else, the documents are computed from the seeded model — no numbers are
-typed by hand — so the corpus regenerates consistently whenever the config changes.
+This is what the project produces: **20 cross-referenced documents** plus a machine-readable
+**ground-truth annex** for each, as a test corpus for the sibling `nlp_reports`
+document-intelligence pipeline (named-entity recognition, entity linking, summarization,
+long-document QA). Like everything else, the documents are computed from the seeded model —
+no numbers are typed by hand — so the corpus regenerates consistently whenever the config
+changes.
 
 ```mermaid
 flowchart TD
@@ -569,5 +573,11 @@ across unit operations and across re-runs.
 ---
 
 **In one sentence:** edit numbers in `config/parameters.yaml`, run `make all`, and a seeded
-Python model regenerates the data, charts, Word/PDF report and Excel FMEA — all traceable
-back to the A-Mab case study and the FDA/ICH guidelines.
+Python model regenerates the data, the charts, all 20 Word/PDF documents and their
+ground-truth annexes — every value traceable back to the A-Mab case study and the FDA/ICH
+guidelines.
+
+> **One caveat about correctness.** Two documents carry *deliberate* defects, kept so a
+> benchmark has something to find. They are listed precisely in
+> [`../authoring/DISCREPANCIES.md`](../authoring/DISCREPANCIES.md). Everything else is
+> grounded in the seeded model.

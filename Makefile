@@ -25,8 +25,16 @@ all: corpus
 env:
 	$(PY) -m pip install -r requirements.txt
 
+# Two scripts, in this order, and both are required. generate_superseded.py produces the
+# invalidated first execution of the AEX study (DEV-008-01 re-executed it), which PCR-008
+# reads, and it patches the dev_scalars / n_deviations entries of report_values.json in
+# place. It stays a separate script on purpose -- re-running generate_data.py in a different
+# library environment drifts the nominal DoE CSVs in the deep decimals, so this one only
+# adds files. It was missing from this target, so `make clean && make data` left
+# outputs/data/doe_aex_*_superseded.csv absent and `make corpus` died on PCR-008.
 data:
 	$(PY) scripts/generate_data.py
+	$(PY) scripts/generate_superseded.py
 
 figures: data
 	$(PY) scripts/make_figures.py
@@ -64,8 +72,14 @@ test:
 clean:
 	rm -rf outputs/data/* outputs/figures/* outputs/report_values.json outputs/figure_manifest.json
 	rm -f risk_assessment/A-Mab_Post-PC_Process_Risk_Assessment.xlsx
-	rm -f $(PKG_DIR)/*.docx $(PKG_DIR)/*.pdf
+	@# reference.docx is a build INPUT, not an output: every .qmd names it as
+	@# `reference-doc:`, and it is not regenerable. A plain `rm -f *.docx` deleted it once
+	@# and left `make corpus` failing on all 20 documents with "File 'reference.docx' not
+	@# found in resource path". Delete rendered documents by name, never by glob.
+	find $(PKG_DIR) -maxdepth 1 -name '*.docx' ! -name 'reference.docx' -delete
+	rm -f $(PKG_DIR)/*.pdf
 	rm -rf $(PKG_DIR)/.quarto $(PKG_DIR)/*_files $(PKG_DIR)/__pycache__
+	@test -f $(PKG_DIR)/reference.docx || { echo "ERROR: clean removed reference.docx"; exit 1; }
 	@echo "cleaned."
 
 # ---------------------------------------------------------------------------

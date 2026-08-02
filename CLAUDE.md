@@ -189,7 +189,16 @@ Python ≥ 3.11, Quarto 1.7+ with a LaTeX engine (PDF), `statsmodels`/`scipy` fo
 DoE engine, `jupyter`/`nbclient` for Quarto's Python engine. Dependencies are declared
 twice and must agree: `pyproject.toml` + `uv.lock` (`uv sync`, the tested path) and
 `requirements.txt` (pip). The Makefile calls `python3`; if your environment is not on
-`PATH`, pass it in: `make test PY="uv run python"`. YAML gotcha: scientific notation
+`PATH`, pass it in: `make test PY="uv run python"`. **`PY=` is not enough for `make
+corpus`.** Quarto starts its own Jupyter kernel and resolves `python3` from `PATH`, not
+from `PY`, so with a conda `python3` first on `PATH` every render dies with "Jupyter is
+not available in this Python installation". Put the venv on `PATH` for the whole build:
+
+```bash
+PATH="$PWD/.venv/bin:$PATH" make corpus PY="uv run python"
+```
+
+YAML gotcha: scientific notation
 needs a signed exponent
 (`2.0e+5`, not `2.0e5`). The published source PDFs live **outside** the repo at
 `$SYNTHETIC_DATA_SOURCES` (default

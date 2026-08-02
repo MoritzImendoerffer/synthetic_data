@@ -7,9 +7,26 @@ here as the record of the design.
 **The feature is active on `feature/weak-claims-via-brief`**, rebuilt around the fix this
 document argues for: each claim is assigned in the document's brief *before* it is written,
 so the author writes it into the argument in one pass, and its wording is recorded afterwards
-by reading the rendered document. Four claims across three documents. That branch is
-deliberately never merged here — see its own copy of this file for the procedure and the
+by reading the rendered document. Four claims across three documents — two in PCR-003, one in
+PCR-009, one in PCP-006. See that branch's own copy of this file for the procedure and the
 review checklist.
+
+**Integration rule: rebase that branch onto `main`; never merge it into `main`.** This is not
+a style preference. The claims are fluent, in register, and indistinguishable from grounded
+prose by inspection — that is the whole point of them — so a leak into `main` is silent and
+no gate catches it. It has happened once: PR #6 merged the branch into `main` on 2026-07-28,
+against the explicit instruction in its own commit message, and put four unsupported claims
+into the fully grounded corpus, where they sat until 2026-08-02 and were then reverted. If
+you are about to integrate this branch, you want `git rebase main` on the branch, not
+`git merge` on `main`.
+
+Two cheap ways to check `main` is clean, since nothing in the text will tell you:
+
+```bash
+# every annex on main must report zero
+python3 -c "import json,glob; print(sum(len(json.load(open(f)).get('weak_claims') or []) for f in glob.glob('pc_package/ground_truth/*.json')))"
+git log --oneline main --merges --grep=weak-claims   # should find nothing unreverted
+```
 
 The rest of this file is the failure analysis that produced that design. It is worth reading
 before adding any labelled negative to a corpus, because the mistake was not obvious and no

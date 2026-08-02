@@ -115,9 +115,15 @@ differ only in their `UO` key and unit-specific narrative:
   produces is the document that ships. Post-authoring steps (annex, rhetorical layer,
   grounding check) build artifacts *around* the text and never change what it claims;
   when `check_grounding` fails, the annex quote is re-anchored to the document, never the
-  reverse. The planted weak-claim feature is **retired** for exactly this reason — see
-  [`authoring/WEAK_CLAIMS.md`](authoring/WEAK_CLAIMS.md) for the failure it caused and the
-  condition for reviving it.
+  reverse. Planting weak claims into a finished document is **retired** for exactly this
+  reason — see [`authoring/WEAK_CLAIMS.md`](authoring/WEAK_CLAIMS.md) for the failure it
+  caused. The feature was rebuilt around assigning each claim in the brief *before* the
+  document is authored, which respects this rule, **but that lives only on
+  `feature/weak-claims-via-brief` and never on `main`.** On `main` every claim is grounded
+  and `weak_claims` is empty in all 20 annexes, without exception. Carry `main` forward onto
+  that branch by **rebasing it; never merge it back.** PR #6 merged it on 2026-07-28 against
+  the instruction in its own commit message and had to be reverted — nothing in a document
+  reveals that four of its sentences are deliberately unsupported, so the leak is silent.
 - **Ground-truth annexes:** always a `GroundTruthAnnex` with `inventory` +
   per-section `entities` + `concepts` + `studies`/`design_spaces` +
   `proven_acceptable_ranges` + `report_sections` + `assertions`, plus the discourse

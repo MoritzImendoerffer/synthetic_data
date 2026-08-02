@@ -48,6 +48,23 @@ have caught, kept rather than fixed so that a benchmark has something to find, a
 precisely in `authoring/DISCREPANCIES.md`. Read that file before treating the corpus as
 uniformly correct — and do not "fix" an entry without removing it.
 
+### Branches
+
+`main` is the corpus. Apart from the two registered discrepancies above, **every claim on
+`main` is grounded**, and `weak_claims` is empty in all 20 annexes. That is the property
+that makes the corpus usable as a positive reference set, so it is not negotiable.
+
+`feature/weak-claims-via-brief` is the one long-lived branch. It carries the same corpus
+plus four **labelled unsupported claims** — benchmark negatives for claim verification and
+overstatement detection, assigned in each document's brief before it is authored. Those
+claims are invisible in the text by design, so a reader cannot tell a branch document from a
+`main` document; that is exactly why the branch must not leak.
+
+> **The branch is rebased onto `main`. It is never merged back.**
+> This has gone wrong once: PR #6 merged it into `main` on 2026-07-28, against the
+> instruction in its own commit message, and put four unsupported claims into the grounded
+> corpus. It was reverted on 2026-08-02. To carry `main` forward onto the branch, rebase.
+
 ### Reproduce everything
 
 ```bash

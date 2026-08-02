@@ -1,11 +1,15 @@
 """Ground-truth annex schema for the A-Mab document package.
 
 The ground-truth JSON annex for every document validates against
-``GroundTruthAnnex`` (bottom of this file). Wherever the ``nlp_reports`` Pydantic
-contract (``app/models`` in the sibling repo) already covers a concept, that model
-is reused **verbatim** — same field names, same types. Where the contract has a
-gap, a *local* extension is defined here, in this project, so that the
-``nlp_reports`` repository is never modified.
+``GroundTruthAnnex`` (bottom of this file). Wherever the annex contract
+(``pc_package/annex_contract/``, vendored into this repo — see its docstring) already
+covers a concept, that model is reused **verbatim** — same field names, same types.
+Where the contract has a gap, a *local* extension is defined here.
+
+This file is the only place the corpus departs from the contract, and every departure
+below says what it is and why. Keep it that way: never edit ``annex_contract/``, so a
+resync against upstream stays a clean copy and the departures stay readable in one
+place.
 
 Extensions added (and why the upstream contract could not express them):
 
@@ -23,8 +27,9 @@ Extensions added (and why the upstream contract could not express them):
     experiment (DoE) or a multivariate design space, which are the central
     objects of a characterization plan/report. New models.
 
-Each of these is a candidate to upstream into ``nlp_reports/app/models`` later;
-that is a change to *that* repo and is intentionally left for its owner.
+"Upstream" above means the contract as vendored in ``annex_contract/``. Each extension
+is a candidate to fold into the contract at its origin later; that is a change to
+*that* project, made by its owner, and it reaches this repo only through a resync.
 """
 from __future__ import annotations
 
@@ -34,25 +39,26 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# Make the nlp_reports contract importable read-only, without modifying it.
-_NLP_REPORTS = os.environ.get("NLP_REPORTS_PATH", "/home/moritz/github_repos/nlp_reports")
-if _NLP_REPORTS not in sys.path:
-    sys.path.insert(0, _NLP_REPORTS)
+# The contract lives in this repository (pc_package/annex_contract/), vendored so that
+# nothing here depends on a sibling checkout. See that package's docstring.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
 
-from app.models.base import ExtractionMetadata, SourceReference  # noqa: E402
-from app.models.pharma_entities import (  # noqa: E402
+from annex_contract.base import ExtractionMetadata, SourceReference  # noqa: E402
+from annex_contract.pharma_entities import (  # noqa: E402
     AnalyticalMethod,
     Equipment,
     ManufacturingSite,
     ProcessStep,
 )
-from app.models.pharma_entities import ProcessParameter as _ProcessParameter  # noqa: E402
-from app.models.pharma_entities import QualityAttribute as _QualityAttribute  # noqa: E402
-from app.models.pharma_entities import SectionEntityExtraction as _SectionEntityExtraction  # noqa: E402
-from app.models.inventory import DocumentInventoryItem as _DocumentInventoryItem  # noqa: E402
-from app.models.assertions import AssertionStore  # noqa: E402
-from app.models.concepts import ConceptStore  # noqa: E402
-from app.models.summaries import ReportSection, TransferGap  # noqa: E402
+from annex_contract.pharma_entities import ProcessParameter as _ProcessParameter  # noqa: E402
+from annex_contract.pharma_entities import QualityAttribute as _QualityAttribute  # noqa: E402
+from annex_contract.pharma_entities import SectionEntityExtraction as _SectionEntityExtraction  # noqa: E402
+from annex_contract.inventory import DocumentInventoryItem as _DocumentInventoryItem  # noqa: E402
+from annex_contract.assertions import AssertionStore  # noqa: E402
+from annex_contract.concepts import ConceptStore  # noqa: E402
+from annex_contract.summaries import ReportSection, TransferGap  # noqa: E402
 
 # Re-export the reused-as-is contracts so annex builders import everything from here.
 __all__ = [

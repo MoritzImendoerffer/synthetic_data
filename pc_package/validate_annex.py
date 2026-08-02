@@ -1,8 +1,8 @@
 """Validate every ground-truth annex JSON against the schema.
 
 Re-loads each ``ground_truth/*.json`` from disk and validates it against
-``schema_ext.GroundTruthAnnex`` (which composes the nlp_reports app/models
-contracts plus this project's local extensions). Exits non-zero on any failure.
+``schema_ext.GroundTruthAnnex`` (which composes the vendored ``annex_contract``
+models plus this project's local extensions). Exits non-zero on any failure.
 
 Run:  python validate_annex.py
 """

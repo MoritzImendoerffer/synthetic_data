@@ -379,7 +379,7 @@ def build_studies(doc_id, file_name, report):
 # Assertions (relations) + rationales.                                         #
 # --------------------------------------------------------------------------- #
 def build_assertions(doc_id, file_name, report):
-    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    from annex_contract.assertions import AssertionStore, EvidenceBackedAssertion
     A = []
     n = [0]
 
@@ -441,7 +441,7 @@ def build_assertions(doc_id, file_name, report):
 # Concepts (entity-linking canonical targets).                                 #
 # --------------------------------------------------------------------------- #
 def build_concepts():
-    from app.models.concepts import Concept, ConceptStore
+    from annex_contract.concepts import Concept, ConceptStore
     cs = [Concept(concept_id="step:production_bioreactor", concept_type="PROCESS_STEP",
                   canonical_name=UO_NAME, aliases=["production bioreactor", "Step 3", "fed-batch culture"],
                   review_status="human_verified")]
@@ -461,7 +461,7 @@ def build_concepts():
 # Report-section (extractive summary) targets.                                 #
 # --------------------------------------------------------------------------- #
 def build_report_sections(doc_id, file_name, report):
-    from app.models.summaries import ReportSection, ReportStatement
+    from annex_contract.summaries import ReportSection, ReportStatement
     def st(i, text, sec, quote):
         return ReportStatement(statement_id=f"{doc_id}-S{i:02d}", statement_text=text,
                                confidence="high", review_status="accepted",
@@ -1050,7 +1050,7 @@ def h_studies(doc_id, file_name, report):
 
 
 def h_concepts():
-    from app.models.concepts import Concept, ConceptStore
+    from annex_contract.concepts import Concept, ConceptStore
     cs = [Concept(concept_id="step:harvest_clarification", concept_type="PROCESS_STEP",
                   canonical_name=HUO_NAME,
                   aliases=["harvest", "clarification", "primary recovery", "Step 4"],
@@ -1069,7 +1069,7 @@ def h_concepts():
 
 
 def h_assertions(doc_id, file_name, report):
-    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    from annex_contract.assertions import AssertionStore, EvidenceBackedAssertion
     A = []
     n = [0]
 
@@ -1113,7 +1113,7 @@ def h_assertions(doc_id, file_name, report):
 
 
 def h_report_sections(doc_id, file_name, report):
-    from app.models.summaries import ReportSection, ReportStatement
+    from annex_contract.summaries import ReportSection, ReportStatement
 
     def st(i, text, sec, quote):
         return ReportStatement(statement_id=f"{doc_id}-S{i:02d}", statement_text=text,
@@ -1810,7 +1810,7 @@ def pa_studies(doc_id, file_name, report):
 
 
 def pa_concepts():
-    from app.models.concepts import Concept, ConceptStore
+    from annex_contract.concepts import Concept, ConceptStore
     cs = [Concept(concept_id="step:protein_a", concept_type="PROCESS_STEP",
                   canonical_name=PAUO_NAME,
                   aliases=["Protein A", "Protein A capture", "affinity capture", "Step 5"],
@@ -1829,7 +1829,7 @@ def pa_concepts():
 
 
 def pa_assertions(doc_id, file_name, report):
-    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    from annex_contract.assertions import AssertionStore, EvidenceBackedAssertion
     A = []
     n = [0]
 
@@ -1922,7 +1922,7 @@ def pa_assertions(doc_id, file_name, report):
 
 
 def pa_report_sections(doc_id, file_name, report):
-    from app.models.summaries import ReportSection, ReportStatement
+    from annex_contract.summaries import ReportSection, ReportStatement
 
     def st(i, text, sec, quote):
         return ReportStatement(statement_id=f"{doc_id}-S{i:02d}", statement_text=text,
@@ -2600,7 +2600,7 @@ def vi_studies(doc_id, file_name, report):
 
 
 def vi_concepts():
-    from app.models.concepts import Concept, ConceptStore
+    from annex_contract.concepts import Concept, ConceptStore
     cs = [Concept(concept_id="step:viral_inactivation", concept_type="PROCESS_STEP",
                   canonical_name=VIUO_NAME,
                   aliases=["viral inactivation", "low-pH hold", "low-pH viral inactivation", "Step 6"],
@@ -2619,7 +2619,7 @@ def vi_concepts():
 
 
 def vi_assertions(doc_id, file_name, report):
-    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    from annex_contract.assertions import AssertionStore, EvidenceBackedAssertion
     A = []
     n = [0]
 
@@ -2711,7 +2711,7 @@ def vi_assertions(doc_id, file_name, report):
 
 
 def vi_report_sections(doc_id, file_name, report):
-    from app.models.summaries import ReportSection, ReportStatement
+    from annex_contract.summaries import ReportSection, ReportStatement
 
     def st(i, text, sec, quote):
         return ReportStatement(statement_id=f"{doc_id}-S{i:02d}", statement_text=text,
@@ -3387,7 +3387,7 @@ def cx_studies(doc_id, file_name, report):
 
 
 def cx_concepts():
-    from app.models.concepts import Concept, ConceptStore
+    from annex_contract.concepts import Concept, ConceptStore
     cs = [Concept(concept_id="step:cex", concept_type="PROCESS_STEP",
                   canonical_name=CXUO_NAME,
                   aliases=["cation exchange", "CEX", "cation-exchange polishing", "Step 7"],
@@ -3406,7 +3406,7 @@ def cx_concepts():
 
 
 def cx_assertions(doc_id, file_name, report):
-    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    from annex_contract.assertions import AssertionStore, EvidenceBackedAssertion
     A = []
     n = [0]
 
@@ -3511,7 +3511,7 @@ def cx_assertions(doc_id, file_name, report):
 
 
 def cx_report_sections(doc_id, file_name, report):
-    from app.models.summaries import ReportSection, ReportStatement
+    from annex_contract.summaries import ReportSection, ReportStatement
 
     def st(i, text, sec, quote):
         return ReportStatement(statement_id=f"{doc_id}-S{i:02d}", statement_text=text,
@@ -4162,7 +4162,7 @@ def ax_studies(doc_id, file_name, report):
 
 
 def ax_concepts():
-    from app.models.concepts import Concept, ConceptStore
+    from annex_contract.concepts import Concept, ConceptStore
     cs = [Concept(concept_id="step:aex", concept_type="PROCESS_STEP",
                   canonical_name=AXUO_NAME,
                   aliases=["anion exchange", "AEX", "anion-exchange polishing",
@@ -4182,7 +4182,7 @@ def ax_concepts():
 
 
 def ax_assertions(doc_id, file_name, report):
-    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    from annex_contract.assertions import AssertionStore, EvidenceBackedAssertion
     A = []
     n = [0]
 
@@ -4277,7 +4277,7 @@ def ax_assertions(doc_id, file_name, report):
 
 
 def ax_report_sections(doc_id, file_name, report):
-    from app.models.summaries import ReportSection, ReportStatement
+    from annex_contract.summaries import ReportSection, ReportStatement
 
     def st(i, text, sec, quote):
         return ReportStatement(statement_id=f"{doc_id}-S{i:02d}", statement_text=text,
@@ -4835,7 +4835,7 @@ def vf_studies(doc_id, file_name, report):
 
 
 def vf_concepts():
-    from app.models.concepts import Concept, ConceptStore
+    from annex_contract.concepts import Concept, ConceptStore
     cs = [Concept(concept_id="step:virus_filtration", concept_type="PROCESS_STEP",
                   canonical_name=VFUO_NAME,
                   aliases=["virus filtration", "small-virus retentive filtration",
@@ -4855,7 +4855,7 @@ def vf_concepts():
 
 
 def vf_assertions(doc_id, file_name, report):
-    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    from annex_contract.assertions import AssertionStore, EvidenceBackedAssertion
     A = []
     n = [0]
 
@@ -4927,7 +4927,7 @@ def vf_assertions(doc_id, file_name, report):
 
 
 def vf_report_sections(doc_id, file_name, report):
-    from app.models.summaries import ReportSection, ReportStatement
+    from annex_contract.summaries import ReportSection, ReportStatement
 
     def st(i, text, sec, quote):
         return ReportStatement(statement_id=f"{doc_id}-S{i:02d}", statement_text=text,
@@ -5522,7 +5522,7 @@ def uf_studies(doc_id, file_name, report):
 
 
 def uf_concepts():
-    from app.models.concepts import Concept, ConceptStore
+    from annex_contract.concepts import Concept, ConceptStore
     cs = [Concept(concept_id="step:ufdf", concept_type="PROCESS_STEP",
                   canonical_name=UFUO_NAME,
                   aliases=["UF/DF", "ultrafiltration", "diafiltration",
@@ -5542,7 +5542,7 @@ def uf_concepts():
 
 
 def uf_assertions(doc_id, file_name, report):
-    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    from annex_contract.assertions import AssertionStore, EvidenceBackedAssertion
     A = []
     n = [0]
 
@@ -5589,7 +5589,7 @@ def uf_assertions(doc_id, file_name, report):
 
 
 def uf_report_sections(doc_id, file_name, report):
-    from app.models.summaries import ReportSection, ReportStatement
+    from annex_contract.summaries import ReportSection, ReportStatement
 
     def st(i, text, sec, quote):
         return ReportStatement(statement_id=f"{doc_id}-S{i:02d}", statement_text=text,
@@ -6075,7 +6075,7 @@ def ptp_gaps():
 
 
 def ptp_concepts():
-    from app.models.concepts import Concept, ConceptStore
+    from annex_contract.concepts import Concept, ConceptStore
     cs = [Concept(concept_id="process:amab_ds", concept_type="PROCESS",
                   canonical_name="A-Mab drug-substance process",
                   aliases=["A-Mab DS process", "A-Mab drug substance"], review_status="human_verified")]
@@ -6094,7 +6094,7 @@ def ptp_concepts():
 
 
 def ptp_assertions():
-    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    from annex_contract.assertions import AssertionStore, EvidenceBackedAssertion
     A = []
     n = [0]
 
@@ -6138,7 +6138,7 @@ def ptp_assertions():
 
 
 def ptp_report_sections():
-    from app.models.summaries import ReportSection, ReportStatement
+    from annex_contract.summaries import ReportSection, ReportStatement
 
     def st(i, text, sec, quote):
         return ReportStatement(statement_id=f"PTP-001-S{i:02d}", statement_text=text,
@@ -6289,7 +6289,7 @@ def ra_param_entities(rows):
 
 
 def ra_concepts(rows):
-    from app.models.concepts import Concept, ConceptStore
+    from annex_contract.concepts import Concept, ConceptStore
     cs = []
     seen_steps = []
     for r in rows:
@@ -6309,7 +6309,7 @@ def ra_concepts(rows):
 
 
 def ra_assertions(quality_rows, perf_rows):
-    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
+    from annex_contract.assertions import AssertionStore, EvidenceBackedAssertion
     A = []
     n = [0]
 
@@ -6373,7 +6373,7 @@ def ra_assertions(quality_rows, perf_rows):
 
 
 def ra_report_sections():
-    from app.models.summaries import ReportSection, ReportStatement
+    from annex_contract.summaries import ReportSection, ReportStatement
 
     def st(i, text, sec, quote):
         return ReportStatement(statement_id=f"RA-001-S{i:02d}", statement_text=text,
@@ -6530,7 +6530,7 @@ def _corpus_cqas(doc, file, sec_id, sec_title, table_title, table_id):
 
 
 def _corpus_step_concepts():
-    from app.models.concepts import Concept
+    from annex_contract.concepts import Concept
     cs = [Concept(concept_id="process:amab_ds", concept_type="PROCESS",
                   canonical_name="A-Mab drug-substance process",
                   aliases=["A-Mab DS process", "A-Mab drug substance"], review_status="human_verified")]
@@ -6546,9 +6546,9 @@ def _corpus_step_concepts():
 
 
 def build_master_plan():
-    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
-    from app.models.concepts import ConceptStore
-    from app.models.summaries import ReportSection, ReportStatement
+    from annex_contract.assertions import AssertionStore, EvidenceBackedAssertion
+    from annex_contract.concepts import ConceptStore
+    from annex_contract.summaries import ReportSection, ReportStatement
     import ra_content as RC
     doc, f = "PCMP-001", PCMP_FILE
     A, n = [], [0]
@@ -6998,7 +6998,7 @@ def pcmr_params(doc, f, rows):
 
 
 def pcmr_concepts(rows):
-    from app.models.concepts import Concept
+    from annex_contract.concepts import Concept
     cs = _corpus_step_concepts()
     for r in rows:
         cs.append(Concept(concept_id=f"param:{r['key']}_{r['pkey']}",
@@ -7008,9 +7008,9 @@ def pcmr_concepts(rows):
 
 
 def build_master_report():
-    from app.models.assertions import AssertionStore, EvidenceBackedAssertion
-    from app.models.concepts import ConceptStore
-    from app.models.summaries import ReportSection, ReportStatement
+    from annex_contract.assertions import AssertionStore, EvidenceBackedAssertion
+    from annex_contract.concepts import ConceptStore
+    from annex_contract.summaries import ReportSection, ReportStatement
     doc, f = "PCMR-001", PCMR_FILE
     A, n = [], [0]
     # Campaign scope, read from the same seeded registers the report renders (never typed).

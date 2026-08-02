@@ -28,6 +28,16 @@ python3 -c "import json,glob; print(sum(len(json.load(open(f)).get('weak_claims'
 git log --oneline main --merges --grep=weak-claims   # should find nothing unreverted
 ```
 
+**And verify the rebase itself; do not trust it.** Reverting the merge left `a0b1f66` an
+ancestor of `main` whose content `main` no longer has, so replaying the branch on top
+resolves hunk by hunk against reverted text. `git rebase main -X theirs` was tried on
+2026-08-02 and silently produced a broken branch: pre-revert prose spliced into `PCR-003`
+and `PCR-009`, and 149 lines of branch work dropped from `build_ground_truth.py`. The annex
+still built and still validated. It only surfaced because the splice referenced a variable
+that exists in neither version and the render crashed. After any rebase of that branch,
+diff every branch-owned source file against the previous tip and expect zero drift; only
+files `main` legitimately changed may differ.
+
 The rest of this file is the failure analysis that produced that design. It is worth reading
 before adding any labelled negative to a corpus, because the mistake was not obvious and no
 gate caught it.

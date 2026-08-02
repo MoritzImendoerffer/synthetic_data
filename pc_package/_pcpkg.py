@@ -15,8 +15,9 @@ import sys
 import numpy as np  # noqa: F401  (re-exported for document chunks)
 import pandas as pd
 
-# Repo root = parent of pc_package/ (independent of the render CWD).
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Package dir and repo root = parent of pc_package/ (independent of the render CWD).
+_HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(_HERE)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
@@ -298,6 +299,22 @@ def plan_params(key):
     return d[["Parameter", "Unit", "Set-point", "Range studied", "NOR", "Study type"]]
 
 
+def univariate_levels(key):
+    """Planned evaluation levels for a step's univariately studied parameters — for a Plan.
+
+    A protocol for a step with no designed experiment still has to show what will be run,
+    and the analogue of a design matrix is the set of levels each parameter is taken to:
+    the two edges of its characterization range, with its set-point as the reference
+    condition and the other parameters held there. Values come from the same parameter
+    register as ``plan_params``, so the schedule and the study-design table cannot
+    disagree. Returns an empty frame for a step whose parameters are all multivariate."""
+    uo = CFG.unit_op(key)
+    rows = [[p.name, p.unit, p.prange[0], p.setpoint, p.prange[1], _rng_str(*p.nor)]
+            for p in uo.parameters if p.study == "univariate"]
+    return pd.DataFrame(rows, columns=["Parameter", "Unit", "Low level",
+                                       "Reference (set-point)", "High level", "NOR"])
+
+
 def report_params(key):
     """Parameters with final classification — for a Report.
 
@@ -464,13 +481,20 @@ def sop_table(sops=None, amvs=None):
 # Corpus-wide helpers (for the transfer / master documents, which span the      #
 # whole document set and the whole process train rather than one unit op).      #
 # --------------------------------------------------------------------------- #
-def all_sop_table():
+def all_sop_table(include_base=False):
     """Every controlled document cited anywhere in the corpus, deduplicated and sorted.
 
     ``sop_table`` takes explicit lists, which suits a per-step document. The three parent
     documents (PTP-001, PCMP-001, PCMR-001) need the campaign-wide register instead, and
-    each was building the union in its own SETUP chunk. This is that union."""
-    sops, amvs = {}, {}
+    each was building the union in its own SETUP chunk. This is that union.
+
+    The union is built from the per-step ``<KEY>_SOP_REFS`` / ``<KEY>_AMV_REFS`` lists, so
+    it omits the shared ``SOP_REFS`` / ``AMV_REFS`` registries — the defaults a step with
+    no named subset draws on, which is how the bioreactor documents cite the culture
+    operation SOPs and the N-glycan method. ``include_base=True`` folds those in, giving
+    the complete register. It is off by default because the parent documents already
+    published this table without them and their annex quotes anchor on those rows."""
+    sops, amvs = ({}, {}) if not include_base else (dict(SOP_REFS), dict(AMV_REFS))
     for name, val in list(globals().items()):
         if name.endswith("_SOP_REFS") and isinstance(val, list):
             sops.update(dict(val))
@@ -498,7 +522,13 @@ def char_scope_df():
         uo = CFG.unit_op(key)
         ps = uo.parameters
         mv = sum(1 for p in ps if p.study == "multivariate")
-        rows.append([uo.step, uo.name, len(ps), mv, len(ps) - mv,
+        # UNIT_OP_TITLES, not uo.name: the config name differs from the corpus title for
+        # three steps ("Harvest / Clarification", "Small Virus Retentive Filtration",
+        # "Ultrafiltration / Diafiltration (formulation)"), and PTP-001, PCMP-001, PCMR-001
+        # and PCR-004 all render this table next to process_steps_df, which uses the titles.
+        # A document naming one unit operation two ways in two tables is an unregistered
+        # inconsistency, and those are bugs rather than benchmark items.
+        rows.append([uo.step, UNIT_OP_TITLES.get(key, uo.name), len(ps), mv, len(ps) - mv,
                      f"PCP-{uo.step:03d} / PCR-{uo.step:03d}"])
     return pd.DataFrame(rows, columns=["Step", "Unit operation", "Parameters",
                                        "Multivariate", "Univariate", "Documents"])
@@ -516,6 +546,158 @@ def equipment_df():
         "calibration_status": "Calibration status", "cal_due": "Next calibration due"})
     d["Calibration status"] = d["Calibration status"].str.replace("_", " ")
     return d
+
+
+def method_perf_df(precision_with_unit=False):
+    """Validated performance of every analytical method the campaign relies on.
+
+    ``dev_methods.csv`` (from ``config/parameters.yaml`` ``deviations.methods``) carries
+    intermediate precision, LOQ, accuracy and the share of observed variance attributable
+    to the method. A per-step report reaches one of these through an ``amv_*`` scalar; a
+    parent document (analytical method transfer, campaign-level assay strategy) needs the
+    whole register as one table, which is what this returns.
+
+    ``precision_pct`` is an intermediate-precision %RSD for every method **except** the two
+    infectivity assays, where the config records a log10 standard deviation. A per-step
+    table that shows only %RSD methods can keep the default heading. A table that shows the
+    whole register must pass ``precision_with_unit=True``, which renders each value with
+    its own unit under the neutral heading "Intermediate precision"; otherwise the two
+    log10 rows are published as %RSD. For the same reason, never rank the register on
+    ``precision_pct`` without first restricting it to one unit — the log10 values are small
+    for a reason that has nothing to do with precision."""
+    d = csv("dev_methods.csv").copy()
+    d["LOQ"] = d.apply(lambda r: f"{r.loq:g} {r.loq_unit}", axis=1)
+    if precision_with_unit:
+        prec = "Intermediate precision"
+        d[prec] = d.apply(
+            lambda r: f"{r.precision_pct:g} log10 SD" if "log10" in str(r.loq_unit)
+            else f"{r.precision_pct:g} %RSD", axis=1)
+    else:
+        prec = "Precision (%RSD)"
+        d = d.rename(columns={"precision_pct": prec})
+    d = d.rename(columns={"id": "Method", "name": "Title",
+                          "accuracy_pct": "Accuracy (%)",
+                          "variance_fraction": "Variance share"})
+    return d[["Method", "Title", prec, "LOQ", "Accuracy (%)", "Variance share"]]
+
+
+def method_perf_for(ids, precision_with_unit=False):
+    """The validated-performance rows for a named subset of analytical methods.
+
+    ``method_perf_df`` returns the whole campaign register, which is what a parent
+    document wants. A per-step report wants only the methods its own step uses, in the
+    order its ``<KEY>_AMV_REFS`` list gives them. Pass either the AMV identifiers or the
+    ``(id, title)`` pairs of such a list.
+
+    ``dev_methods.csv`` carries validated performance for the methods the seeded
+    deviation world needs, which is a subset of the methods a step cites. Identifiers with
+    no performance row are simply absent from the result, so a document that shows this
+    table must say where the remaining methods' performance is recorded."""
+    ids = [x[0] if isinstance(x, (tuple, list)) else x for x in ids]
+    d = method_perf_df(precision_with_unit=precision_with_unit)
+    d = d[d["Method"].isin(ids)].copy()
+    d["__order"] = d["Method"].apply(ids.index)
+    return d.sort_values("__order").drop(columns="__order").reset_index(drop=True)
+
+
+# Display labels (with units) for the nominal-batch metrics in process_summary.csv.
+_STEP_METRIC_LABELS = {
+    "step_yield": "Step yield (fraction of input product mass)",
+    "product_mass_g": "Product mass out (g)",
+    "titer_g_per_l": "Harvest titre (g/L)",
+    "final_viability_pct": "Final culture viability (%)",
+    "peak_vcd_e6": "Peak viable cell concentration (e6 cells/mL)",
+    "turbidity_ntu": "Post-clarification turbidity (NTU)",
+    "pool_hcp_ng_mg": "Pool host cell protein (ng/mg)",
+    "leached_protein_a_ppm": "Leached Protein A (ppm)",
+    "xmulv_lrf": "XMuLV log reduction (log10)",
+    "mvm_lrf": "MVM log reduction (log10)",
+    "aggregate_delta_pct": "Aggregate change across the step (% HMW)",
+    "aggregate_out_pct": "Pool aggregate (% HMW)",
+    "aggregate_clearance_fold": "Aggregate clearance (fold)",
+    "hcp_clearance_fold": "Host cell protein clearance (fold)",
+    "hcp_out_ng_mg": "Pool host cell protein (ng/mg)",
+    "ds_concentration_g_per_l": "Drug substance concentration (g/L)",
+    "residual_dna_ng_per_dose": "Residual DNA (ng/dose)",
+}
+
+
+def step_performance(step):
+    """Nominal-batch performance of one process step, from ``process_summary.csv``.
+
+    The seeded nominal batch is the at-set-point run every per-step report describes, so
+    this is the step's own performance table. Only the columns the step actually populates
+    are returned, which is why the shape differs from step to step.
+
+    Emit it with ``show(step_performance(n), floatfmt=",g")``. One column holds a step yield
+    of order 1 next to a product mass of order 1e4, so the automatic per-column format falls
+    back to ``.3g`` and publishes the mass in scientific notation."""
+    d = csv("process_summary.csv")
+    row = d[d["step"] == int(step)]
+    if row.empty:
+        raise KeyError(f"no process-summary row for step {step!r}")
+    row = row.iloc[0]
+    rows = []
+    for col in d.columns:
+        if col in ("step", "unit_operation"):
+            continue
+        val = row[col]
+        if pd.isna(val):
+            continue
+        rows.append([_STEP_METRIC_LABELS.get(col, col.replace("_", " ")), format(val, ",g")])
+    return pd.DataFrame(rows, columns=["Metric", "Nominal batch"])
+
+
+def harvest_impurity_load(**culture_setpoints):
+    """Impurity burden the clarified harvest carries into Protein A capture.
+
+    Harvest and clarification removes no soluble impurity: ``amab_process/unit_ops/harvest.py``
+    copies the incoming attributes forward unchanged, so the clarified-harvest burden is the
+    bioreactor output, and the culture endpoint sets it. This runs the bioreactor model
+    deterministically (batch noise off) at its set-points, updated by any culture parameter
+    passed as a keyword (e.g. ``harvest_impurity_load(duration=19)``), and returns what that
+    operating point produces.
+
+    Read these values through this helper, never off ``rsm.harvest_centre`` or ``rsm.linear``
+    in the config. Those are coded-model terms and neither is a natural-unit quantity: the
+    centre value omits the final-viability multiplier the model applies, and a linear
+    coefficient is a change per coded unit over the half-range, not a change in ng/mg.
+
+    Returns a dict: ``hcp`` (ng/mg), ``residual_dna`` (relative units, cleared downstream)
+    and ``final_viability_pct``."""
+    if ROOT not in sys.path:
+        sys.path.insert(0, ROOT)
+    from amab_process.unit_ops import Bioreactor  # noqa: PLC0415  (deferred: heavy import)
+    res = Bioreactor(CFG).run(None, None, setpoints=culture_setpoints or None)
+    return {"hcp": float(res.out.cqas["hcp"]),
+            "residual_dna": float(res.out.cqas["residual_dna"]),
+            "final_viability_pct": float(res.metrics["final_viability_pct"])}
+
+
+def ra_scope(key):
+    """RA-001's pre-characterization risk rows for one unit operation.
+
+    The scope decision a PCP/PCR inherits: per parameter, the prospective failure mode and
+    effect, the initial severity / occurrence / detection and RPN, the assigned study type
+    and the priority. Sourced from ``ra_content`` (the curated content source for RA-001),
+    so a step report and RA-001 cannot disagree about why a parameter was studied the way
+    it was. ``ra_content`` imports this module, so the import is deferred to call time."""
+    if _HERE not in sys.path:
+        sys.path.insert(0, _HERE)
+    import ra_content  # noqa: PLC0415  (deferred: ra_content imports _pcpkg)
+    rows = [r for r in ra_content.ra_rows() if r["key"] == key]
+    d = pd.DataFrame(rows)
+    d = d.rename(columns={"param": "Parameter", "fm": "Prospective failure mode",
+                          "eff": "Effect", "severity": "Sev.", "o_init": "Occ.",
+                          "d_init": "Det.", "rpn_init": "Initial RPN",
+                          "study": "Assigned study", "priority": "Priority"})
+    return d[["Parameter", "Prospective failure mode", "Effect", "Sev.", "Occ.", "Det.",
+              "Initial RPN", "Assigned study", "Priority"]]
+
+
+def risk_scale(kind):
+    """A score -> label map from the config risk scales ('severity', 'occurrence', 'detection')."""
+    return {int(s["score"]): s["label"] for s in CFG.risk[f"{kind}_scale"]}
 
 
 def corpus_docs_md(doc_id=None):
@@ -558,6 +740,108 @@ def process_steps_df():
         uo = CFG.unit_op(key)
         rows.append([uo.step, UNIT_OP_TITLES.get(key, uo.name), UNIT_OP_ROLE.get(key, "")])
     return pd.DataFrame(rows, columns=["Step", "Unit operation", "Principal role"])
+
+
+def yield_waterfall_df():
+    """Step and cumulative product yield across the train (Steps 3-10).
+
+    ``process_steps_df`` says what each step is for; this says what each step costs. The
+    master report needs both, and the cumulative column is the one number a reader checks
+    against the drug-substance mass. Emit it with an explicit ``floatfmt`` — the automatic
+    per-column choice sees a step number next to two percentages and falls back to ``.3g``,
+    which prints 97.68 % as 97.7 and 100.0 % as 100."""
+    d = csv("yield_waterfall.csv").copy()
+    d["Step yield (%)"] = 100.0 * d["step_yield"]
+    d["Cumulative yield (%)"] = 100.0 * d["cumulative_yield"]
+    d = d.rename(columns={"step": "Step", "unit_operation": "Unit operation"})
+    return d[["Step", "Unit operation", "Step yield (%)", "Cumulative yield (%)"]]
+
+
+def _criterion_str(row):
+    """A CQA's governing acceptance limit, written the way its spec type applies it.
+
+    ``cqas_for`` / ``cap_for`` render acceptance as ``low–high`` for every attribute, which
+    is right beside a ``Spec`` column and wrong without one: for an impurity with an upper
+    specification the lower figure is not an acceptance limit, and a table that shows a
+    simulated minimum below it invites a reviewer to read a failure that is not there."""
+    if row["spec_type"] == "upper":
+        return f"≤ {row['acc_high']:g} {row['unit']}"
+    if row["spec_type"] == "lower":
+        return f"≥ {row['acc_low']:g} {row['unit']}"
+    return f"{row['acc_low']:g}–{row['acc_high']:g} {row['unit']}"
+
+
+def _meets_criterion(row):
+    """True if the whole simulated distribution sits inside the CQA's acceptance criterion."""
+    if row["spec_type"] == "upper":
+        return bool(row["max"] <= row["acc_high"])
+    if row["spec_type"] == "lower":
+        return bool(row["min"] >= row["acc_low"])
+    return bool(row["min"] >= row["acc_low"] and row["max"] <= row["acc_high"])
+
+
+def cqa_scope_df():
+    """The CQA register with the step that sets each attribute and the report that covers it.
+
+    ``all_cqas`` gives the register as a per-step document needs it. A corpus-level document
+    also needs the ``set_by`` column — the corpus's own statement of which unit operation
+    each attribute belongs to — and the per-step report where its characterization lives."""
+    d = cqa_reg.copy()
+    d["Acceptance"] = d.apply(lambda r: f"{r.acc_low:g}–{r.acc_high:g} {r.unit}", axis=1)
+    d["Set by"] = d["set_by"].map(lambda k: UNIT_OP_TITLES.get(k, k))
+    d["Report"] = d["set_by"].map(lambda k: f"PCR-{CFG.unit_op(k).step:03d}")
+    d = d.rename(columns={"cqa": "CQA", "category": "Category",
+                          "criticality": "Criticality"})
+    return d[["CQA", "Category", "Criticality", "Acceptance", "Set by", "Report"]]
+
+
+def cqa_outcome_df():
+    """Per-CQA outcome across the simulated commercial batches: range, criterion, verdict.
+
+    ``cap_for`` answers "how capable is the process". The question a master report has to
+    answer first is blunter: did any simulated batch miss its criterion. ``capability.csv``
+    carries the minimum and maximum of the distribution, which ``cap_for`` drops, and the
+    verdict is read off those against the spec type rather than against both bounds.
+
+    There is deliberately no ``Spec`` column. ``_criterion_str`` has already applied the
+    spec type, so a raw ``two_sided`` token beside a criterion that reads ``≤ 5`` would only
+    repeat it; ``cap_for`` keeps the column because its acceptance column does not."""
+    d = cap.copy()
+    d["Criterion"] = d.apply(_criterion_str, axis=1)
+    d["Simulated range"] = d.apply(lambda r: f"{r['min']:.4g} – {r['max']:.4g}", axis=1)
+    d["Outcome"] = d.apply(lambda r: "met" if _meets_criterion(r) else "not met", axis=1)
+    d = d.rename(columns={"cqa": "CQA"})
+    return d[["CQA", "Criterion", "Simulated range", "Outcome"]]
+
+
+def viral_clearance_df():
+    """Modular viral clearance by claimed step, with the cumulative total and the requirement.
+
+    ``viral_clearance.csv`` credits only the steps a claim is made for, so the cumulative row
+    is the sum of exactly those. The requirement is the lower acceptance bound of the two
+    viral-safety CQAs in ``cqa_register.csv``; joining it here keeps the comparison out of a
+    document setup chunk. Emit with ``floatfmt=".2f"``: the automatic choice rounds a
+    cumulative 10.03 to 10."""
+    d = csv("viral_clearance.csv").rename(columns={"step": "Step", "XMuLV": "XMuLV LRF",
+                                                   "MVM": "MVM LRF"})
+    req = {"Step": "Requirement (drug substance)"}
+    for col, key in (("XMuLV LRF", "lrv_xmulv"), ("MVM LRF", "lrv_mvm")):
+        req[col] = float(cqa_reg[cqa_reg["key"] == key].iloc[0]["acc_low"])
+    return pd.concat([d, pd.DataFrame([req])], ignore_index=True)
+
+
+def dev_register_all():
+    """Every seeded deviation in the campaign, with the report that investigates it.
+
+    ``dev_register(doc_id)`` is the per-report view, and it is a markdown string because a
+    per-step report prints it and narrates it. The campaign-level register is a DataFrame:
+    the master report groups and counts it before showing it, and the report ID is what
+    makes each row traceable to the investigation."""
+    d = csv("deviations.csv").copy()
+    d["Disposition"] = d["disposition"].str.replace("_", " ")
+    d = d.rename(columns={"dev_id": "Deviation", "doc_id": "Report", "summary": "Summary",
+                          "detected_during": "Detected during"})
+    return d[["Deviation", "Report", "Summary", "Detected during", "Disposition"]]
 
 
 def cpp_params(kinds=("CPP", "WC-CPP")):

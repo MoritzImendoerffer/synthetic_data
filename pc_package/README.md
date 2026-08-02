@@ -22,11 +22,15 @@ should have caught, kept rather than fixed so a benchmark has something to find:
 what the correct statement would be. Do not treat the corpus as uniformly correct, and do not
 fix a registered entry without removing it.
 
-**Every other claim is grounded.** Outside those registered entries, no document states
-anything the seeded data does not support, and `weak_claims` is empty in all 20 annexes.
-Labelled unsupported claims exist only on the branch `feature/weak-claims-via-brief`, never
-here — that branch is **rebased onto `main`, never merged into it**. If you find a non-empty
-`weak_claims` array on `main`, the branch has leaked; see the root `README.md`.
+**This branch also carries four labelled unsupported claims** — two in `PCR-003`, one in
+`PCR-009`, one in `PCP-006` — recorded in each document's `weak_claims[]` array and in
+`authoring/weak_claims.yaml`. They are deliberate benchmark negatives, not defects to fix,
+and they read exactly like the surrounding grounded prose. Every *other* claim is grounded:
+outside those four and the registered discrepancies above, no document states anything the
+seeded data does not support.
+
+On `main` the same corpus has `weak_claims` empty in all 20 annexes. This branch is
+**rebased onto `main`, never merged into it** — see the root `README.md` for why.
 
 ## Document set
 

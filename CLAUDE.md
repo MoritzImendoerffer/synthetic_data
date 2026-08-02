@@ -111,23 +111,31 @@ differ only in their `UO` key and unit-specific narrative:
   [`authoring/DISCREPANCIES.md`](authoring/DISCREPANCIES.md) so they can be scored. **Do
   not "fix" one without removing its entry**; that silently deletes a benchmark item. An
   *unregistered* inconsistency is a bug — fix it, or register it deliberately.
+  Because each one lives in **prose**, it survives only as long as nobody re-authors the
+  document carrying it: D-002 was lost exactly that way, and no gate noticed, because no gate
+  reads that registry. So each is now **assigned in the author's brief before the document is
+  written** (§5c, from [`authoring/discrepancies.yaml`](authoring/discrepancies.yaml)) — the
+  same before-not-after rule the weak claims follow, for the same reason.
 - **Nothing is added to a document after authoring.** The document a one-pass author
   produces is the document that ships. Post-authoring steps (annex, rhetorical layer,
   grounding check) build artifacts *around* the text and never change what it claims;
   when `check_grounding` fails, the annex quote is re-anchored to the document, never the
-  reverse. Planting weak claims into a finished document is **retired** for exactly this
-  reason — see [`authoring/WEAK_CLAIMS.md`](authoring/WEAK_CLAIMS.md) for the failure it
-  caused. The feature was rebuilt around assigning each claim in the brief *before* the
-  document is authored, which respects this rule, **but that lives only on
-  `feature/weak-claims-via-brief` and never on `main`.** On `main` every claim is grounded
-  and `weak_claims` is empty in all 20 annexes, without exception. Carry `main` forward onto
-  that branch by **rebasing it; never merge it back.** PR #6 merged it on 2026-07-28 against
-  the instruction in its own commit message and had to be reverted — nothing in a document
-  reveals that four of its sentences are deliberately unsupported, so the leak is silent.
+  reverse. The one exception is narrow and deliberate: a document may carry **labeled weak
+  claims**, and those are *assigned in its brief before it is written* so the author writes
+  them into the argument in one pass. Injecting them afterwards was tried and failed — see
+  [`authoring/WEAK_CLAIMS.md`](authoring/WEAK_CLAIMS.md). Recording an author's wording in
+  the registry afterwards reads the document; it does not edit it. **Registered
+  discrepancies work the same way** (§5c of the brief): they too are statements a document
+  must make, so they are assigned before authoring and never restored afterwards. **That exception lives
+  only on `feature/weak-claims-via-brief` — this branch — and never on `main`**, where every
+  claim is grounded without exception. Carry `main` forward with `git rebase main` here;
+  **never merge this branch into `main`.** PR #6 did exactly that on 2026-07-28 and put the
+  four claims into the grounded corpus; it was reverted on 2026-08-02. Nothing in a rendered
+  document reveals a weak claim, so the leak is silent and no gate catches it.
 - **Ground-truth annexes:** always a `GroundTruthAnnex` with `inventory` +
   per-section `entities` + `concepts` + `studies`/`design_spaces` +
   `proven_acceptable_ranges` + `report_sections` + `assertions`, plus the discourse
-  layer `rhetorical_spans` (and `weak_claims`, currently empty — see above). Build them in `build_ground_truth.py`
+  layer `rhetorical_spans` (and `weak_claims`, empty on `main` — see above). Build them in `build_ground_truth.py`
   from the same CSVs (never hand-write JSON), with doc-specific quotes that exist in
   that document. **How the annex links to the report — the verbatim span-grounding
   method, and how it relates to schema-constrained (Pydantic→LLM) generation and other

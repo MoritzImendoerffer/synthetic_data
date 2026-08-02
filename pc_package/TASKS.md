@@ -46,7 +46,22 @@ rendered tables and left a document contradicting itself.
 3. **Rebuild the annex afterwards.** Re-authoring invalidates every quote that touched the
    changed text. `check_grounding.py` will tell you which. Re-anchor the annex to the new
    text — never edit the document to suit a stale quote.
-4. **Run the verification checklist** at the bottom.
+
+   While you are there, check each record for **truth**, not only for presence.
+   `check_grounding` verifies that a quote exists; it cannot see a record that exists and is
+   wrong, and every re-grounding pass so far has found several — ground truth asserting a
+   measurement the report only predicts, a design space narrower than the one the report
+   defines, a no-impact edge for a parameter the report reports as significant.
+4. **Check what the document is obliged to say before you re-author it.** Anything the
+   document must claim has to be in the author's brief *before* the pass, never restored
+   after: assigned weak claims (`authoring/weak_claims.yaml` → brief §5b) and registered
+   discrepancies (`authoring/discrepancies.yaml` → brief §5c). Regenerate the brief first.
+   D-002 was silently deleted once by a re-authoring that nobody had told the author about,
+   and no gate caught it.
+5. **Re-capture, do not re-inject.** If the document carried a weak claim, read the newly
+   rendered `.docx` and record the author's wording in `captured.quote`. That step reads the
+   document; it never edits it.
+6. **Run the verification checklist** at the bottom.
 
 ## Adding a unit operation
 

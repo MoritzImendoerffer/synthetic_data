@@ -39,143 +39,79 @@ import sys, os
 sys.path.insert(0, os.path.abspath("."))
 from _pcpkg import *  # noqa: F401,F403
 import doe_report as D
-import pandas as pd
+import matplotlib.pyplot as plt
+import scipy.stats as sstat
 
 DOC = "PCMR-001"
 UO_TITLE = "A-Mab Drug Substance"
 
-# --- campaign-level frames -------------------------------------------------
-summ = csv("process_summary.csv")
-wf = csv("yield_waterfall.csv")
-vc = csv("viral_clearance.csv")
-devs = csv("deviations.csv")
+# --- doc-local derived scalars: every one pulled from the model, never typed ------
+steps_df = process_steps_df()
+scope_df = char_scope_df()
+n_steps = len(steps_df)
+n_doe_steps = int((scope_df["Multivariate"] > 0).sum())
+n_params = int(V["n_parameters"])
+n_multivariate = int(scope_df["Multivariate"].sum())
+n_univariate = int(scope_df["Univariate"].sum())
 
-CLS_ORDER = ["CPP", "WC-CPP", "KPP", "GPP"]
-counts = class_counts()
-
-
-def rng(key, param, which="prange"):
-    """A parameter's range as 'lo to hi' (which = 'prange' or 'nor')."""
-    lo, hi = getattr(CFG.unit_op(key).param(param), which)
-    return f"{lo:g} to {hi:g}"
-
-
-def step_val(step, col):
-    return float(summ.loc[summ.step == step, col].iloc[0])
-
-
-# --- scale, yield and mass -------------------------------------------------
-train = process_steps_df()
-n_steps = len(train)
-step_span = f"{int(train.Step.min())} to {int(train.Step.max())}"
-n_docs = len(DOC_REGISTRY)
-scale_l = V["commercial_scale_l"]
-titer = V["nominal_titer_g_per_l"]
-overall_yield = V["overall_yield"]
-ds_mass_kg = V["ds_mass_kg"]
-ds_conc = V["ds_conc_g_per_l"]
-w_min = wf[wf.step > 3].sort_values("step_yield").iloc[0]
-
-# --- impurity clearance across the train -----------------------------------
-hcp_feed = CFG.unit_op("bioreactor").raw["rsm"]["harvest_centre"]["hcp"]
-hcp_pa = step_val(5, "pool_hcp_ng_mg")
-hcp_cex = step_val(7, "hcp_out_ng_mg")
-hcp_aex = step_val(8, "hcp_out_ng_mg")
-hcp_limit = CFG.cqa("hcp")["acceptance"][1]
-hcp_fold_pa = hcp_feed / hcp_pa
-hcp_fold_cex = step_val(7, "hcp_clearance_fold")
-hcp_fold_aex = step_val(8, "hcp_clearance_fold")
-hcp_fold_all = hcp_feed / hcp_aex
-
-agg_vi = step_val(6, "aggregate_out_pct")
-agg_delta = step_val(6, "aggregate_delta_pct")
-agg_cex = step_val(7, "aggregate_out_pct")
-agg_fold = step_val(7, "aggregate_clearance_fold")
-agg_limit = CFG.cqa("aggregates_hmw")["acceptance"][1]
-
-lpa_pool = step_val(5, "leached_protein_a_ppm")
-lpa_limit = CFG.cqa("leached_protein_a")["acceptance"][1]
-lpa_ds = float(cap.loc[cap.key == "leached_protein_a", "mean"].iloc[0])
-lpa_ratio = lpa_limit / lpa_ds
-dna_ds = step_val(10, "residual_dna_ng_per_dose")
-dna_limit = CFG.cqa("residual_dna")["acceptance"][1]
-
-# --- capability ------------------------------------------------------------
-n_cqa = len(cqa_reg)
-cap_min = cap.loc[cap.Cpk.idxmin()]
-cpk_min = float(cap_min.Cpk)
-cpk_min_mean = float(cap_min["mean"])
-cpk_min_req = float(cap_min.acc_low)
-cpk_min_margin = cpk_min_mean - cpk_min_req
-cap_pq = cap[~cap.key.str.startswith("lrv_")]
-pq_min = cap_pq.loc[cap_pq.Cpk.idxmin()]
-hm_lo, hm_hi = CFG.cqa("high_mannose")["acceptance"]
-
-# --- viral clearance -------------------------------------------------------
-vcs = vc.set_index("step")
-VI_ROW, AEX_ROW, VF_ROW = "Low-pH Viral Inactivation", "Anion Exchange (AEX)", "Virus Filtration"
-lrv_x_req = CFG.cqa("lrv_xmulv")["acceptance"][0]
-lrv_m_req = CFG.cqa("lrv_mvm")["acceptance"][0]
-lrv_x_tot = V["total_lrv_xmulv"]
-lrv_m_tot = V["total_lrv_mvm"]
-lrv_x_marg = lrv_x_tot - lrv_x_req
-lrv_m_marg = lrv_m_tot - lrv_m_req
-vc_steps = vc[vc.step != "Cumulative"]
-n_viral_steps = len(vc_steps)
-n_mvm_steps = int((vc_steps.MVM > 0).sum())
-
-
-def lrv(step, virus):
-    return float(vcs.loc[step, virus])
-
-
-# --- parameters ------------------------------------------------------------
-n_par = len(param_reg)
-n_multi = int((param_reg.study == "multivariate").sum())
-n_uni = int((param_reg.study == "univariate").sum())
-q_par = param_reg[param_reg.classification.isin(["CPP", "WC-CPP"])]
-n_qpar = len(q_par)
-n_qpar_uni = int((q_par.study == "univariate").sum())
+# classification
+cc = class_counts()
+n_cpp, n_wc_cpp, n_kpp, n_gpp = cc["CPP"], cc["WC-CPP"], cc["KPP"], cc["GPP"]
+n_quality_linked = int(V["n_cpp"])          # CPP + WC-CPP
+n_perf_params = n_kpp + n_gpp
 cpp_row = param_reg[param_reg.classification == "CPP"].iloc[0]
+cpp_nor_width = float(cpp_row.nor_high - cpp_row.nor_low)
+cpp_char_width = float(cpp_row.par_high - cpp_row.par_low)
+wc_bounded = param_reg[(param_reg.classification == "WC-CPP")
+                       & (param_reg.study == "univariate")]
+n_wc_bounded = len(wc_bounded)
+n_ql_steps = int(param_reg[param_reg.classification.isin(["CPP", "WC-CPP"])]
+                 .unit_operation.nunique())
 
+# quality attributes and capability
+outcome_df = cqa_outcome_df()
+n_cqa = len(outcome_df)
+n_met = int((outcome_df["Outcome"] == "met").sum())
+n_set_bioreactor = int((cqa_reg.set_by == "bioreactor").sum())
+n_viral_cqa = int((cqa_reg.category == "viral safety").sum())
+n_ds_cqa = n_cqa - n_viral_cqa
+n_glycan = int((cqa_reg.category == "glycosylation").sum())
+capk = cap.set_index("key")
+tightest = cap.loc[cap["Cpk"].idxmin()]
+tightest_margin = float(tightest["mean"] - tightest["acc_low"])
+hm = capk.loc["high_mannose"]
+hm_margin = float(hm["mean"] - hm["acc_low"])
+xm = capk.loc["lrv_xmulv"]
+xm_margin = float(xm["mean"] - xm["acc_low"])
+pa = capk.loc["leached_protein_a"]
 
-def n_q(key):
-    """Quality-linked (CPP or WC-CPP) parameter count for one unit operation."""
-    return int((q_par.unit_operation == CFG.unit_op(key).name).sum())
+# viral clearance
+vc_df = viral_clearance_df()
+vc_cum = vc_df[vc_df["Step"] == "Cumulative"].iloc[0]
+vc_req = vc_df[vc_df["Step"] == "Requirement (drug substance)"].iloc[0]
+n_viral_steps = len(vc_df) - 2
+xmulv_margin = float(vc_cum["XMuLV LRF"] - vc_req["XMuLV LRF"])
+mvm_margin = float(vc_cum["MVM LRF"] - vc_req["MVM LRF"])
 
+# nominal-batch performance
+psum = csv("process_summary.csv").set_index("step")
+wf = yield_waterfall_df()
+min_step_yield = float(wf["Step yield (%)"].min())
+min_step_yield_uo = wf.loc[wf["Step yield (%)"].idxmin(), "Unit operation"]
 
-def cpk(key):
-    return float(cap.loc[cap.key == key, "Cpk"].iloc[0])
-
-# --- study inventory -------------------------------------------------------
-doe_keys = [k for k in CFG.train_order if k in st.DOE_FACTORS]
-n_doe = len(doe_keys)
-n_designs = 2 * n_doe
-n_runs = sum(doe_runs(k, "screening") + doe_runs(k, "rsm") for k in doe_keys)
-n_runs_sup = doe_runs("aex", "screening_superseded") + doe_runs("aex", "rsm_superseded")
-r2_q = {k: v for k, v in V["doe_r2"].items() if D.acceptance_for(*k.split(":")) is not None}
-n_resp = len(V["doe_r2"])
-n_resp_q = len(r2_q)
-r2_robust = min(r2_q, key=r2_q.get)
-r2_robust_v = r2_q[r2_robust]
-r2_rest = {k: v for k, v in r2_q.items() if k != r2_robust}
-r2_lo, r2_hi = min(r2_rest.values()), max(r2_rest.values())
-
-# --- deviations ------------------------------------------------------------
+# deviations
+devs_df = dev_register_all()
 n_dev = int(V["n_deviations"])
-n_dev_docs = int(devs.doc_id.nunique())
-n_dev_ret = int((devs.disposition == "retained").sum())
+n_dev_retained = int((devs_df["Disposition"] == "retained").sum())
+n_dev_reports = int(devs_df["Report"].nunique())
+n_dev_equipment = int(csv("deviations.csv")["equipment"].notna().sum())
 
-# --- controlled-document registers used across the campaign ----------------
-SOP_ALL, AMV_ALL = [], []
-for _lst in (SOP_REFS, HARVEST_SOP_REFS, PROTEIN_A_SOP_REFS, VIRAL_INACT_SOP_REFS,
-             CEX_SOP_REFS, AEX_SOP_REFS, VIRUS_FILT_SOP_REFS, UFDF_SOP_REFS):
-    SOP_ALL += [r for r in _lst if r not in SOP_ALL]
-for _lst in (AMV_REFS, HARVEST_AMV_REFS, PROTEIN_A_AMV_REFS, VIRAL_INACT_AMV_REFS,
-             CEX_AMV_REFS, AEX_AMV_REFS, VIRUS_FILT_AMV_REFS, UFDF_AMV_REFS):
-    AMV_ALL += [r for r in _lst if r not in AMV_ALL]
-SOP_ALL.sort()
-AMV_ALL.sort()
+# analytical methods
+meth = csv("dev_methods.csv")
+n_methods = len(meth)
+meth_rsd = meth[~meth["loq_unit"].str.contains("log10")]
+worst_rsd = meth_rsd.loc[meth_rsd["precision_pct"].idxmax()]
+worst_share = meth.loc[meth["variance_fraction"].idxmax()]
 ```
 
 ```{python}
@@ -199,770 +135,666 @@ print(SYN_BANNER)
 
 ## Abbreviations {.unnumbered}
 
-AEX, anion exchange chromatography; ADCC, antibody-dependent cell-mediated cytotoxicity;
-AMV, analytical method validation; BLA, Biologics License Application; CEX, cation exchange
-chromatography; CPP, critical process parameter; CQA, critical quality attribute; Cpk,
-process capability index (one-sided); DCS, distributed control system; DoE, design of
-experiments; DS, drug substance; ELISA, enzyme-linked immunosorbent assay; GPP, general
-process parameter; HCP, host cell protein; HMW, high molecular weight; ICH, International
-Council for Harmonisation; icIEF, imaged capillary isoelectric focusing; KPP, key process
+AEX, anion exchange chromatography; AMV, analytical method validation; CEX, cation
+exchange chromatography; Cpk, process capability index; CPP, critical process parameter;
+CQA, critical quality attribute; DoE, design of experiments; DS, drug substance; ELISA,
+enzyme-linked immunosorbent assay; GPP, general process parameter; HCP, host cell protein;
+HMW, high molecular weight; icIEF, imaged capillary isoelectric focusing; KPP, key process
 parameter; LRF, log reduction factor; MSAT, Manufacturing Science and Technology; MVM,
-minute virus of mice; NOR, normal operating range; PAR, proven acceptable range; PPQ,
-process performance qualification; qPCR, quantitative polymerase chain reaction; RSM,
-response-surface methodology; SDM, scale-down model; SEC, size-exclusion chromatography;
-SOP, standard operating procedure; TCID50, 50 % tissue-culture infectious dose; TFF,
-tangential-flow filtration; TMP, transmembrane pressure; UF/DF, ultrafiltration and
-diafiltration; WC-CPP, well-controlled critical process parameter; XMuLV, xenotropic murine
-leukaemia virus.
+minute virus of mice; NOR, normal operating range; RSD, relative standard deviation; RSM,
+response surface methodology; SEC, size exclusion chromatography; SOP, standard operating
+procedure; TFF, tangential flow filtration; TMP, transmembrane pressure; UF/DF,
+ultrafiltration and diafiltration; UV, ultraviolet; WC-CPP, well-controlled critical
+process parameter; XMuLV, xenotropic murine leukaemia virus.
 
 {{< pagebreak >}}
 
 # Executive summary {.unnumbered}
 
-Stage 1 characterization of the A-Mab drug substance process is complete and the process is
-ready for Stage 2. The `{python} f"{n_steps}"` unit operations of the train were studied on
-qualified scale-down models under the master plan PCMP-001, with the scope of each study set
-by the pre-characterization risk assessment RA-001. Each step has its own report, PCR-003
-through PCR-010, and this document consolidates those reports without repeating their
-analyses. Each number quoted here is taken from the report named beside it.
+The A-Mab drug substance process is characterized and its control strategy is defined. The
+`{python} n_steps` unit operations of the drug substance train, Steps 3–10, were each
+studied under an approved plan and reported separately, and the work was executed on
+qualified scale-down models at the sending site under the master plan PCMP-001 and the
+pre-characterization risk assessment RA-001. The campaign supports the technology transfer
+planned in PTP-001, and this report consolidates its results. It follows the lifecycle
+approach to process validation [@fda2011] and the enhanced development approach of ICH Q8,
+Q9 and Q11 [@ichq8; @ichq9; @ichq11], and it takes the process model, the quality
+attribute framework and the criticality framework from the A-Mab case study [@amab2009],
+which is also the source of the risk methodology RA-001 applies.
 
-All `{python} f"{n_cqa}"` drug substance quality attributes meet their acceptance criteria at
-commercial scale, where capability was estimated by Monte-Carlo simulation of
-`{python} f"{V['n_monte_carlo']:,}"` batches in which every classified parameter varied
-independently inside its normal operating range and the fitted step models carried that
-variation through to the drug substance. The lowest capability index in the process is
-`{python} f"{cpk_min:.2f}"`, for the cumulative MVM clearance, whose simulated mean of
-`{python} f"{cpk_min_mean:.2f}"` log₁₀ lies `{python} f"{cpk_min_margin:.2f}"` log₁₀ above the
-requirement of `{python} f"{cpk_min_req:g}"` log₁₀. Of the product quality attributes the
-tightest is high mannose, at `{python} f"{float(pq_min.Cpk):.2f}"`. High mannose is formed in
-the production bioreactor and is not modified by any later step (PCR-003).
+The campaign carried `{python} n_params` process parameters into study, of which
+`{python} n_quality_linked` are linked to a critical quality attribute and are held inside
+the design space. Of those, `{python} n_cpp` parameter is classified as a critical process
+parameter and `{python} n_wc_cpp` as well-controlled critical process parameters. The remaining
+`{python} n_perf_params` are key or general process parameters, and they are controlled and
+monitored because a consistent process is part of the control strategy, not because any of
+them was shown to move a quality attribute. The single critical process parameter is the pH
+of the low-pH viral inactivation hold (@sec-classification).
 
-Cumulative viral clearance is `{python} f"{lrv_x_tot:.2f}"` log₁₀ for XMuLV against a
-requirement of `{python} f"{lrv_x_req:g}"` log₁₀, and `{python} f"{lrv_m_tot:.2f}"` log₁₀ for
-MVM against `{python} f"{lrv_m_req:g}"` log₁₀. `{python} f"{n_viral_steps}"` steps carry the
-claim and their mechanisms are independent of one another. They are the low-pH hold (PCR-006),
-anion exchange (PCR-008) and virus filtration (PCR-009). No viral clearance is claimed for
-Protein A capture or for cation exchange, although both steps are known to remove virus.
+All `{python} n_cqa` drug substance quality attributes met their acceptance criteria.
+Capability was estimated by simulating `{python} f"{V['n_monte_carlo']:,}"` commercial
+batches, with every parameter varying about its set-point on a spread set by its normal
+operating range, and no simulated batch produced a value outside a criterion
+(@sec-outcomes). The lowest capability index in the set is
+`{python} f"{V['min_cpk']:.2f}"`, for cumulative MVM clearance, whose simulated mean lies
+`{python} f"{tightest_margin:.2f}"` log₁₀ above the required floor. The tightest of the
+attributes the process itself forms is high mannose at `{python} f"{hm['Cpk']:.2f}"`, with
+`{python} f"{hm_margin:.2f}"` percentage points between its simulated mean and the nearer
+of its two limits.
 
-The campaign classified `{python} f"{n_par}"` process parameters, and only the inactivation pH
-of the low-pH hold is classified as a critical process parameter, because its acceptable range
-is narrow and the consequence of leaving it is severe in both directions (PCR-006).
-`{python} f"{counts['WC-CPP']}"` parameters are well-controlled critical process parameters,
-`{python} f"{counts['KPP']}"` are key process parameters and `{python} f"{counts['GPP']}"` are
-general process parameters.
+Cumulative viral clearance exceeds its requirement for both model viruses.
+The claim rests on `{python} n_viral_steps` steps with independent mechanisms of removal
+or inactivation, and gives `{python} f"{vc_cum['XMuLV LRF']:.2f}"` log₁₀ for XMuLV
+against a requirement of `{python} f"{vc_req['XMuLV LRF']:.2f}"`, and
+`{python} f"{vc_cum['MVM LRF']:.2f}"` log₁₀ for MVM against
+`{python} f"{vc_req['MVM LRF']:.2f}"`. No clearance is claimed for the Protein A step or
+for the cation exchange step, so the cumulative figures are conservative to the extent of
+whatever those two steps deliver.
 
-The campaign recorded `{python} f"{n_dev}"` deviations across `{python} f"{n_dev_docs}"`
-reports, and one of them invalidated a complete designed experiment. The first anion exchange
-execution was run on a non-representative load, so its screening and response-surface designs were
-invalidated and re-executed in full on requalified material (DEV-008-01, PCR-008). A second
-anion exchange deviation was closed by modelling the effect and confirming the correction in
-verification runs (DEV-008-02, PCR-008). The remaining `{python} f"{n_dev_ret}"` deviations
-were retained with a bounded impact assessment. No deviation changed a parameter
-classification, an operating range or a viral clearance claim.
+The campaign recorded `{python} n_dev` deviations. Each was investigated and dispositioned
+in the report for its step, and one of them invalidated a designed experiment. The first anion exchange execution ran on a load that was not representative
+of routine material, so the affected screening and response surface designs were
+re-executed in full on requalified load (PCR-008). Of the rest,
+`{python} n_dev_retained` were retained with a bounded impact argument and one was
+corrected by modelling and verification runs.
 
-Every claim made here is bounded, and none of the bounds is closed by Stage 1. The design
-spaces are not confirmed at commercial scale at the edges of their ranges. Capability
-is a model estimate from qualified scale-down models operated with every parameter inside its
-normal operating range. Viral clearance is measured in small-scale spiking studies and not on
-production material. Stage 2 process performance qualification has not been executed, and
-this report makes no claim about commercial-scale reproducibility.
+Two bounds apply to everything reported here. Capability, proven acceptable ranges and
+viral clearance are estimated from qualified scale-down models with the parameters held
+close to their set-points, so the edges of the design space have not been run at commercial
+scale and nothing in this report describes the behaviour of the process there. Stage 2 has
+not been executed, so this report presents no process performance qualification data and
+makes no claim about the performance of any batch made at commercial scale.
 
-# Introduction
+# Introduction {#sec-intro}
 
-## Purpose and scope
+## The campaign and its documents
 
-This report is the roll-up of the A-Mab drug substance characterization campaign, and its
-purpose is to present the outcome of that campaign as one argument. It summarizes the
-individual reports and cites them, and it does not re-derive their models, their effect
-estimates or their design spaces, so where a conclusion in this report rests on such an
-analysis, the report that carries it is named. The scope is the drug substance process, Steps
-`{python} step_span`, at the `{python} f"{scale_l:,}"` L commercial scale. Drug product
-manufacture, the validation of the analytical methods themselves and the Stage 2
-qualification batches lie outside it.
+The A-Mab drug substance process was characterized in a single campaign covering Steps
+3–10, in which each unit operation was studied over ranges wider than its routine control
+range so that the effect of every parameter on product quality and on process performance
+could be measured and bounded. The scope of the work was fixed before execution by RA-001,
+which assigned every parameter to a multivariate study, to a univariate assessment, or to
+no study at all, and the common methods, the acceptance framework and the criticality
+framework were fixed by PCMP-001. This report consolidates the results and states the
+outcome against each requirement the drug substance has to meet.
 
-The campaign supports the transfer of the process from the sending site to the receiving
-site, which is framed by the transfer plan PTP-001 [@ichq10]. Characterization was executed
-at the sending site on scale-down models qualified against commercial-equivalent operation, so
-the conclusions hold for the commercial process only to the extent that those models represent
-it, and §9.2 states where that assumption carries the most weight.
-
-## The characterization package
-
-The campaign is documented in `{python} f"{n_docs}"` controlled documents, and the dependency
-between them is fixed. RA-001 sets the scope, PCMP-001 sets the common approach, each
-PCP-00N plans one step, each PCR-00N reports it, and this document consolidates the reports.
+The package is listed in @tbl-corpus, and three documents sit above the per-step work.
+PTP-001 defines the transfer from the sending site to the receiving site and is the reason
+the campaign exists, RA-001 sets the study scope, and PCMP-001 is the umbrella plan over
+the `{python} n_steps` characterization plans. Each unit operation then carries a plan and
+a report, numbered by process step. This report rolls those reports up. It does not repeat
+their analyses, and where a figure here comes from one of them, that report is named.
 
 ```{python}
 #| output: asis
 print(corpus_docs_md(DOC))
 ```
 
-: The A-Mab characterization document package, excluding this report. {#tbl-package}
+: The A-Mab drug substance document package. {#tbl-corpus}
 
-PTP-001, RA-001 and PCMP-001 are the parents of the whole set, and PTP-001 states what is
-being transferred and why the package exists. RA-001 was written before any study was executed,
-and its output is the study scope and not a classification. PCMP-001 states once what the
-`{python} f"{n_steps}"` plans would otherwise each repeat, which is the quality attribute framework, the common
-scale-down approach and the shared statistical method.
+## Scope of the characterization
 
-## Study inventory
-
-Multivariate designed experiments were used at `{python} f"{n_doe}"` of the
-`{python} f"{n_steps}"` steps. Harvest and clarification, and ultrafiltration and
-diafiltration, neither form nor clear a product quality attribute, so both were characterized
-univariately. No designed experiment was executed at either step, and none
-is claimed for them.
+`{python} n_params` process parameters were carried into study, of which
+`{python} n_multivariate` were studied in multivariate designs and
+`{python} n_univariate` were assessed one at a time, and @tbl-scope gives the split by step
+together with the plan and report that cover it. Of the `{python} n_steps` steps,
+`{python} n_doe_steps` carried a designed experiment with a screening stage followed by a
+response surface stage. Harvest and clarification (Step 4) and the ultrafiltration and
+diafiltration step (Step 10) carried none, because neither step forms a product quality
+attribute, and both were characterized univariately with reports that are correspondingly
+shorter.
 
 ```{python}
 #| output: asis
-rows = []
-for k in CFG.train_order:
-    uo = CFG.unit_op(k)
-    pcr = f"PCR-{uo.step:03d}"
-    if k in doe_keys:
-        r2s = [v for kk, v in r2_q.items() if kk.split(":")[0] == k]
-        rows.append([uo.step, UNIT_OP_TITLES[k], "Screening + response surface",
-                     doe_runs(k, "screening"), doe_runs(k, "rsm"),
-                     f"{min(r2s):.2f} to {max(r2s):.2f}", pcr])
-    else:
-        rows.append([uo.step, UNIT_OP_TITLES[k], "Univariate", "n/a", "n/a", "n/a", pcr])
-show(pd.DataFrame(rows, columns=["Step", "Unit operation", "Design", "Screening runs",
-                                 "RSM runs", "R² (quality-linked responses)", "Report"]))
+show(scope_df)
 ```
 
-: Characterization studies by unit operation, with the fitted response-surface coefficient of determination for the responses that map to a drug substance quality attribute. {#tbl-studies}
+: Characterization scope by unit operation, with the covering plan and report. {#tbl-scope}
 
-The reported campaign comprises `{python} f"{n_runs}"` characterization runs across
-`{python} f"{n_designs}"` designs, as given in @tbl-studies. A further
-`{python} f"{n_runs_sup}"` runs were executed at anion exchange and then superseded, for the
-reason given in §8.2. Every design used a screening stage followed by a response-surface
-stage. The screening stage identifies which factors matter. The response-surface model is the
-predictive model and the basis of each step's design space, and no design space in this
-package rests on a screening fit, because a near-saturated screening design cannot resolve
-all of the interactions between the parameters it screens.
-
-Response-surface models were fitted for `{python} f"{n_resp}"` responses, of which
-`{python} f"{n_resp_q}"` map to a drug substance quality attribute. One of those responses,
-leached Protein A at the capture step, has no active factor over the ranges studied, so
-PCR-005 reports it as robust and claims no predictive model for it, and its coefficient of
-determination is correspondingly low at `{python} f"{r2_robust_v:.2f}"`. For the remaining
-quality-linked responses the coefficient of determination ranged from `{python} f"{r2_lo:.2f}"` to
-`{python} f"{r2_hi:.2f}"`, and the model adequacy of each is assessed in its own report
-against lack-of-fit and pure error.
+The division of labour between the two design stages is the same at every step that has
+one. The screening design identifies which parameters have an effect on which response,
+and the response surface model is the predictive model, which makes it the basis of the
+design space and of the proven acceptable ranges reported in each unit operation report.
+Nothing in this report rests on a screening fit.
 
 ## Regulatory and scientific basis
 
-The campaign follows the lifecycle approach to process validation, in which characterization
-is the Stage 1 process design activity that produces the commercial control strategy
-[@fda2011]. The enhanced development approach of ICH Q8(R2) and ICH Q11 provides the design
-space and control strategy framework [@ichq8; @ichq11]. Criticality is treated as a continuum
-and not as a binary, following ICH Q9(R1) and the A-Mab case study, so quality attributes
-carry a level of criticality and process parameters carry a class that reflects both the
-demonstrated impact on quality and the risk of leaving the design space [@ichq9; @amab2009]. Viral
-safety is evaluated under ICH Q5A(R2) as a modular claim built from independent steps
-[@ichq5a]. The process model, the attribute framework and the risk method are those of the
-A-Mab case study [@amab2009].
+The campaign follows the lifecycle approach to process validation, in which Stage 1
+establishes the process design and the commercial process is then qualified in Stage 2
+[@fda2011]. The enhanced development approach of ICH Q8 was used throughout, so that prior
+knowledge and risk assessment identify what matters, characterization bounds it, and the
+result is a control strategy [@ichq8]. Criticality is treated as a continuum and not as a
+binary label, following ICH Q9 [@ichq9]. The classification decisions follow the
+development and manufacturing principles of ICH Q11 [@ichq11]. Viral safety is evaluated
+under ICH Q5A, which is the basis of the modular clearance claim in @sec-viral [@ichq5a],
+and the transfer to the receiving site is managed under the pharmaceutical quality system
+of ICH Q10 [@ichq10] and planned in PTP-001.
 
-# Process description and performance
+# Process description and performance {#sec-process}
 
-The A-Mab drug substance process is a fed-batch cell culture followed by a platform
-purification train (capture, low-pH inactivation, two polishing steps, virus filtration and
-formulation). The bioreactor forms the product and its quality attributes. Everything
-downstream recovers the product and removes impurities, and only the low-pH hold and cation
-exchange alter an attribute that the bioreactor formed. @tbl-train gives the train with each
-step's principal role in the control strategy.
+## The process train
 
-```{python}
-#| output: asis
-show(process_steps_df())
-```
-
-: The A-Mab drug substance process train, with each step's principal role in the control strategy. {#tbl-train}
-
-![The A-Mab drug substance process train. The annotation under each step names the attributes it forms or clears.](../outputs/figures/fig_process_flow.png){#fig-flow width=100%}
-
-Two steps in @tbl-train deserve emphasis, because the whole quality argument turns on them.
-The production bioreactor forms the glycan, charge-variant and aggregate attributes, and it
-is the only step at which those attributes are set. Anion exchange is the last purification
-step, so the impurity levels leaving it are the drug substance levels, subject only to the
-concentration change across ultrafiltration and diafiltration, which alters the volume the
-product sits in and not the amount of protein impurity carried with it. The remaining steps
-recover product, clear impurities, or inactivate and remove virus.
-
-## Process performance
-
-Product yield across the train is `{python} pct(overall_yield)`. At the
-`{python} f"{scale_l:,}"` L commercial scale and a nominal harvest titre of
-`{python} f"{titer:.2f}"` g/L, this delivers `{python} f"{ds_mass_kg:.1f}"` kg of drug
-substance at `{python} f"{ds_conc:g}"` g/L. No step yield is unusually low, and the lowest is
-`{python} pct(float(w_min.step_yield))` at `{python} str(w_min.unit_operation)`, which is
-consistent with a bind and elute polishing step operated with a deliberately conservative
-elution collection window (PCR-007).
+A-Mab is a humanized IgG1 monoclonal antibody produced by fed-batch cell culture and
+purified on a platform train. Culture in the production bioreactor is followed by harvest
+and clarification, Protein A capture, a low-pH viral inactivation hold, cation exchange
+polishing, anion exchange polishing in flow-through mode, small-virus retentive filtration,
+and ultrafiltration and diafiltration into the formulation buffer. @tbl-train lists the
+steps with the role
+each has in the control strategy, and @fig-flow shows the same train with the principal
+quality impact of each step.
 
 ```{python}
 #| output: asis
-yld = wf.copy()
-yld["Step yield"] = yld.step_yield.map(lambda v: pct(v))
-yld["Cumulative yield"] = yld.cumulative_yield.map(lambda v: pct(v))
-show(yld.rename(columns={"step": "Step", "unit_operation": "Unit operation"})
-        [["Step", "Unit operation", "Step yield", "Cumulative yield"]])
+show(steps_df)
 ```
 
-: Step and cumulative product yield across the drug substance train. The bioreactor is the basis of the cumulative yield. {#tbl-yield}
+: The A-Mab drug substance process train and the role of each step. {#tbl-train}
+
+![The drug substance process train, with the principal quality impact of each unit operation.](../outputs/figures/fig_process_flow.png){#fig-flow width=100%}
+
+The quality burden is not spread evenly across the train. The production bioreactor sets
+`{python} n_set_bioreactor` of the `{python} n_cqa` quality attributes, which is more than
+any other step (@tbl-cqa-scope). Cation exchange is the principal aggregate polishing step,
+and anion exchange and virus filtration together carry the small-virus clearance claim. The
+low-pH hold sets the enveloped-virus clearance claim (@sec-viral) and carries the only
+critical process parameter in the process (@sec-classification). The remaining steps are
+recovery, capture and formulation operations, and their parameters act on yield, on the
+impurity burden or on the physical condition of the pool. Capture is also the step at which
+leached Protein A enters the pool (@tbl-cqa-scope).
+
+## Nominal batch performance
+
+The nominal batch is the run at set-point that each report describes, and it is the
+reference point for the ranges studied around it. Culture at
+`{python} f"{V['commercial_scale_l']:,} L"` delivers a harvest titre of
+`{python} f"{V['nominal_titer_g_per_l']:.2f}"` g/L at a final viability of
+`{python} f"{V['final_viability_pct']:.1f}"`%, with a peak viable cell concentration of
+`{python} f"{V['peak_vcd_e6']:.1f} e6 cells/mL"`. The drug substance is delivered at
+`{python} f"{V['ds_conc_g_per_l']:.0f}"` g/L, and a batch yields
+`{python} f"{V['ds_mass_kg']:.1f}"` kg at the end of the train.
+
+Product yield across the train is given in @tbl-yield and plotted in @fig-yield. The
+cumulative yield is `{python} pct(V['overall_yield'])` and the lowest single-step yield is
+`{python} f"{min_step_yield:.1f}"`% at the cation exchange step. Yield is a process
+performance attribute and not a quality attribute, so no step yield is an acceptance
+criterion. The parameters that govern it are classified as key process parameters
+(@sec-classification).
+
+```{python}
+#| output: asis
+show(wf, floatfmt=[".0f", "", ".1f", ".1f"])
+```
+
+: Step and cumulative product yield across the drug substance train. {#tbl-yield}
 
 ![Cumulative product yield across the eight modelled unit operations.](../outputs/figures/fig_yield_waterfall.png){#fig-yield width=90%}
 
-Yield is a process performance attribute and not a quality attribute, and no yield value
-constrains a design space in this package. It is reported here because a characterized
-process that cannot meet its mass requirement is not transferable, and because the step
-yields are the basis of the key process parameter classifications at harvest and at
-ultrafiltration and diafiltration (PCR-004, PCR-010).
+The purification train reduces the impurity burden by several orders of magnitude. In the
+nominal batch, host cell protein leaves the capture step at
+`{python} f"{psum.loc[5, 'pool_hcp_ng_mg']:,.0f}"` ng/mg, falls to
+`{python} f"{psum.loc[7, 'hcp_out_ng_mg']:,.0f}"` ng/mg across cation exchange and to
+`{python} f"{psum.loc[8, 'hcp_out_ng_mg']:.1f}"` ng/mg across anion exchange. Leached
+Protein A enters the pool at the capture step at
+`{python} f"{psum.loc[5, 'leached_protein_a_ppm']:.2f}"` ppm and is then cleared by the
+same two ion exchange steps. Aggregate rises across the low-pH hold, by
+`{python} f"{psum.loc[6, 'aggregate_delta_pct']:.2f}"` percentage points in the nominal
+batch, and is reduced `{python} f"{psum.loc[7, 'aggregate_clearance_fold']:.1f}"`-fold at
+cation exchange, which is why that step is described as the principal aggregate polish.
 
-# Consolidated quality attribute outcomes
+# Consolidated quality attribute outcomes {#sec-outcomes}
 
-Every drug substance quality attribute meets its acceptance criterion, and @tbl-cqa gives the
-outcome for each. The table names the step that the attribute register assigns to each
-attribute, which for the impurities and product variants is the step that forms it and for the
-two clearance attributes is the step that completes the cumulative claim. In neither case is
-that necessarily the step that controls the outcome, and the difference is the subject of the
-subsections below.
+## The attributes and where they are set
 
-```{python}
-#| output: asis
-out = cqa_reg.merge(cap[["key", "mean", "sd", "Cpk"]], on="key")
-out["Acceptance"] = out.apply(lambda r: f"{r.acc_low:g}–{r.acc_high:g} {r.unit}", axis=1)
-out["Set by"] = out.set_by.map(UNIT_OP_TITLES)
-out["Drug substance"] = out.apply(lambda r: f"{r['mean']:.3g} ± {r['sd']:.2g}", axis=1)
-out["Cpk"] = out.Cpk.map(lambda v: f"{v:.2f}")
-show(out.rename(columns={"cqa": "CQA", "criticality": "Criticality"})
-        [["CQA", "Criticality", "Acceptance", "Set by", "Drug substance", "Cpk"]],
-     floatfmt=".2f")
-```
-
-: Consolidated drug substance quality attribute outcomes. The drug substance column is the mean and standard deviation of the simulated commercial-scale distribution. {#tbl-cqa}
-
-## Glycan and charge-variant attributes
-
-The three glycan attributes and the acidic charge variants are formed in the production
-bioreactor and are not modified downstream. Afucosylation and galactosylation are linked to
-potency through the antibody-dependent cell-mediated cytotoxicity (ADCC) mechanism, which is
-why both
-carry a high criticality despite comfortable capability. High mannose carries very high
-criticality because it is linked to clearance as well as to potency, and its acceptance range
-of `{python} f"{hm_lo:g}"` to `{python} f"{hm_hi:g}"` % of glycans is the tightest two-sided
-range in the register.
-
-None of the chromatography steps discriminates between glycosylation variants when operated
-under platform conditions, which is the mechanistic reason the downstream process cannot
-correct a glycan excursion [@amab2009]. Control of the glycan attributes therefore rests
-entirely on the bioreactor, on culture pH, temperature, dissolved carbon dioxide, osmolality
-and duration, and PCR-003 defines the multivariate region over which all three glycan
-attributes remain inside their limits across the ranges characterized. Acidic charge variants
-behave in the same way, with one addition. The low-pH hold and the
-neutralized hold that follows it can promote deamidation, and PCR-006 quantified that
-contribution over the characterized hold time.
-
-## Aggregates
-
-Aggregate is formed in the bioreactor, increased slightly by the low-pH hold, and reduced by
-cation exchange. The low-pH hold raises the aggregate content by
-`{python} f"{agg_delta:.2f}"` percentage points to `{python} f"{agg_vi:.2f}"` % at the
-characterized set-point, which is the expected consequence of holding an antibody at pH
-`{python} f"{cpp_row.setpoint:g}"` (PCR-006). Cation exchange then reduces the pool aggregate
-`{python} f"{agg_fold:.2f}"`-fold to `{python} f"{agg_cex:.2f}"` %, against a drug substance
-limit of `{python} f"{agg_limit:g}"` % (PCR-007). Cation exchange is the only aggregate
-clearance step in the train, and there is no step after it that would remove aggregate formed
-later, so its performance is the reason the drug substance capability for aggregate is as
-large as @tbl-cqa shows.
-
-## Host cell protein
-
-Host cell protein (HCP) is cleared to specification only after the last purification step. The
-clarified harvest carries `{python} f"{hcp_feed:,.0f}"` ng/mg, and Protein A capture reduces
-this about `{python} f"{hcp_fold_pa:.0f}"`-fold to `{python} f"{hcp_pa:,.0f}"` ng/mg in the
-capture pool (PCR-005). Cation exchange reduces it a further
-`{python} f"{hcp_fold_cex:.1f}"`-fold to `{python} f"{hcp_cex:.1f}"` ng/mg (PCR-007), and
-anion exchange reduces it `{python} f"{hcp_fold_aex:.2f}"`-fold to
-`{python} f"{hcp_aex:.1f}"` ng/mg (PCR-008). Only the last of these figures is below the drug
-substance limit of `{python} f"{hcp_limit:g}"` ng/mg.
-
-The intermediate values are in-process results and not failed acceptance criteria. No
-acceptance criterion for host cell protein applies to the Protein A pool or to the cation
-exchange pool, because neither is drug substance. Each of those pools carries its own
-in-process limit, defined in the report for that step, and the limits are set from what the
-downstream steps can be relied on to remove. The total clearance across the chromatography
-steps is about `{python} f"{hcp_fold_all:,.0f}"`-fold.
-
-Credit for host cell protein clearance is therefore shared, and no single step can be
-described as the host cell protein control. Protein A does the bulk of the removal in
-absolute terms, cation exchange contributes the largest single fold reduction, and anion
-exchange sets the level that reaches the drug substance. A change to the load conditions of
-any one of them shifts the burden onto the others, which is why the three steps are
-classified together in the control strategy of §7 and why the design space of each is
-defined against an in-process limit and not against the drug substance specification.
-
-## Residual DNA and leached Protein A
-
-Residual DNA and leached Protein A both reach the drug substance far below their limits.
-Residual DNA is `{python} f"{dna_ds:.4f}"` ng per dose against a limit of
-`{python} f"{dna_limit:g}"` ng per dose, and it is cleared by every chromatography step in
-the train. Leached Protein A enters the process at the capture step at
-`{python} f"{lpa_pool:.2f}"` ppm and is cleared by the two polishing steps to
-`{python} f"{lpa_ds:.3f}"` ppm, against a limit of `{python} f"{lpa_limit:g}"` ppm (PCR-005,
-PCR-007, PCR-008).
-
-Leached Protein A is the one attribute in the register whose level depends on a consumable
-rather than on a set-point. It rises with resin age and with elution pH, and PCR-005 found no
-significant effect of any characterized parameter on it over the ranges studied. Its control
-is therefore a life-cycle control on the capture resin and not a parameter range, and §7.4
-describes it.
-
-## Viral clearance
-
-Cumulative XMuLV and MVM clearance are drug substance quality attributes in this register,
-and both are of very high criticality. They are treated separately in §6 because their
-acceptance criteria apply to the sum of several steps and not to an output of any one step.
-
-# Parameter classification summary
-
-All `{python} f"{n_par}"` process parameters carried into the campaign are classified. @tbl-classes gives the counts by class and @tbl-classsteps gives them by unit
-operation. `{python} f"{n_qpar}"` parameters are linked to a quality attribute and are
-controlled within the design space of their step. The remainder are controlled for process
-consistency or are not controlled beyond their normal operating range.
+The drug substance has `{python} n_cqa` critical quality attributes, and every one of them
+met its acceptance criterion in the characterized process. @tbl-cqa-scope lists the
+register with the criticality of each attribute, the step that sets it and the report that
+characterizes it. Of the `{python} n_cqa` attributes, `{python} n_viral_cqa` are cumulative
+viral clearance claims delivered by several steps together, and the remaining
+`{python} n_ds_cqa` are product quality or process impurity attributes measured on the drug
+substance itself.
 
 ```{python}
 #| output: asis
-basis = {
-    "CPP": "Impact on a CQA demonstrated; appreciable risk of leaving the design space",
-    "WC-CPP": "Impact on a CQA demonstrated; low risk of leaving the design space",
-    "KPP": "No CQA impact; controlled to keep process performance consistent",
-    "GPP": "No CQA or performance impact over the ranges studied",
-}
-show(pd.DataFrame([[c, counts.get(c, 0), basis[c]] for c in CLS_ORDER],
-                  columns=["Class", "Parameters", "Basis for the class"]))
+show(cqa_scope_df())
 ```
 
-: Parameter classification across the whole drug substance train. {#tbl-classes}
+: The drug substance quality attribute register, with the step that sets each attribute and the report that characterizes it. {#tbl-cqa-scope}
+
+Setting an attribute and controlling it are different things, and for several attributes
+they happen at different steps. Host cell protein and residual DNA are generated in the
+culture and are cleared by Protein A capture (PCR-005), cation exchange (PCR-007) and anion
+exchange (PCR-008). Aggregate is formed in the bioreactor (PCR-003), rises across the
+low-pH hold (PCR-006) and is reduced at cation exchange (PCR-007), the principal polishing
+step for it. Leached Protein A is formed at the capture step (PCR-005) and is cleared by
+the two ion exchange steps. The `{python} n_glycan` glycan attributes are formed inside the
+cell and in the culture fluid. The platform purification steps do not separate
+glycosylation variants of a monoclonal antibody [@amab2009], so PCR-003 carries them alone.
+Acidic charge variants are also set in the culture, and the low-pH hold reports them as a
+response as well (PCR-006).
+
+## Outcome against the acceptance criteria
+
+@tbl-cqa-outcome gives the outcome of the campaign attribute by attribute, and each row
+compares the simulated commercial-scale distribution with the criterion that governs the
+attribute. For the impurity, size variant and charge variant attributes only the upper
+limit is an acceptance limit, so the criterion is one-sided and the capability index in
+@tbl-cap is one-sided with it. For the viral clearance attributes the criterion is a floor, and for the
+glycan attributes both limits apply. Across `{python} f"{V['n_monte_carlo']:,}"` simulated
+batches, `{python} n_met` attributes met their criterion and none produced a value outside
+it.
 
 ```{python}
 #| output: asis
-ct = (param_reg.pivot_table(index=["step", "unit_operation"], columns="classification",
-                            aggfunc="size", fill_value=0)
-      .reindex(columns=CLS_ORDER, fill_value=0).reset_index())
-ct["Total"] = ct[CLS_ORDER].sum(axis=1)
-show(ct.rename(columns={"step": "Step", "unit_operation": "Unit operation"}))
+show(outcome_df)
 ```
 
-: Parameter classification by unit operation. {#tbl-classsteps}
+: Simulated commercial-scale outcome for every drug substance quality attribute. {#tbl-cqa-outcome}
 
-![Post-characterization classification of process parameters by unit operation.](../outputs/figures/fig_param_classification.png){#fig-class width=95%}
+Two rows repay a second look. The simulated range for acidic charge variants extends below
+the lower figure shown for that attribute in @tbl-cqa-scope, which is not an acceptance
+limit, because the specification for acidic charge variants is one-sided and the risk it
+addresses is an elevated level. The second is leached Protein A, whose simulated
+concentrations lie far below the limit, so its capability index is correspondingly large
+and carries no information beyond that.
 
-The single critical process parameter is the inactivation pH of the low-pH hold, with a
-normal operating range of `{python} rng('viral_inactivation', 'ph', 'nor')` and a
-characterized range of `{python} rng('viral_inactivation', 'ph')`. It is critical and not
-well-controlled critical for the reason PCR-006 gives. The consequence of leaving the range
-is severe in both directions, because inactivation of XMuLV is incomplete above the upper
-edge and the antibody aggregates below the lower edge, and the width of the acceptable range
-is small relative to the control capability of a pH loop on a large hold vessel. Every other
-quality-linked parameter in the process is held in a range wide enough, relative to the
-control capability of its loop, that the risk of leaving the design space is low.
+The margins are not uniform. High mannose and the two viral clearance attributes sit
+closest to their limits, and they are the attributes on which the operating region is
+effectively binding, with the capability figures given in @sec-capability. The impurity
+attributes clear their limits by a wide margin, which is a property of a train in which
+the capture step and both polishing steps remove them, and not a property of any single
+step.
+
+The outcome in each row is a simulated one. The simulation varies the process parameters and
+propagates them through the fitted models of the scale-down studies, so it covers the
+variation those models describe and no other, and it does not cover raw material
+variability beyond what the models carry. It is not a measurement of commercial equipment,
+and the attribute levels are confirmed at scale during Stage 2.
+
+# Parameter classification summary {#sec-classification}
+
+## The classification across the train
+
+Every parameter carried into the campaign has a classification, and the counts are
+`{python} n_cpp` critical process parameter, `{python} n_wc_cpp` well-controlled critical
+process parameters, `{python} n_kpp` key process parameters and `{python} n_gpp` general
+process parameters. @fig-class shows how they fall across the train. @tbl-cpp lists the
+`{python} n_quality_linked` quality-linked parameters with their set-points and normal
+operating ranges, and those ranges are the ranges the commercial process is asked to hold.
+The classification decisions are made in the report for each step, under SOP-4001.
+
+![Post-characterization classification of process parameters by unit operation.](../outputs/figures/fig_param_classification.png){#fig-class width=100%}
 
 ```{python}
 #| output: asis
 show(cpp_params())
 ```
 
-: Parameters linked to a quality attribute, with their set-points and normal operating ranges. {#tbl-cpp}
+: The quality-linked process parameters of the drug substance train, with their set-points and normal operating ranges. {#tbl-cpp}
 
-The parameters that the control strategy must hold inside a design space are listed in
-@tbl-cpp. The production bioreactor and anion exchange contribute `{python} f"{n_q('aex')}"`
-each, more than any other step. At the bioreactor they are culture conditions acting on the
-glycan and charge-variant attributes (PCR-003). At anion exchange the flow-through mode makes
-the load and the buffer conditions jointly determine both impurity clearance and virus
-removal, so all `{python} f"{n_q('aex')}"` parameters of the step are quality-linked
-(PCR-008). Cation exchange contributes `{python} f"{n_q('cex')}"` and Protein A capture
-`{python} f"{n_q('protein_a')}"`.
+The distinction between the two quality-linked classes is the risk of leaving the design
+space and not the size of the effect [@amab2009]. A well-controlled critical process
+parameter affects a critical quality attribute and has a low risk of moving outside the
+design space, whereas a critical process parameter carries a high risk of it. The class
+therefore follows from the control capability of the equipment as much as from the result
+of the study. The `{python} n_wc_cpp` well-controlled critical process parameters are spread across
+`{python} n_ql_steps` unit operations, and every one of them is held within a normal
+operating range that lies at or inside the edges of the range characterized for it. The
+characterized range is given parameter by parameter in the report for each step.
 
-One classification in @tbl-cpp rests on a bounding argument rather than on a measured effect.
-The anion exchange operating flow rate was assessed univariately and was not a factor in
-either multivariate design, so no interaction between flow and the buffer conditions was
-estimated. PCR-008 classifies it as well-controlled critical on the basis that residence time
-is mechanistically linked to virus removal in a flow-through step, and that the safe course
-where an interaction has not been estimated is the more stringent class. It is the only
-quality-linked parameter in the campaign assessed this way.
+## The exceptions
 
-Null results account for a large part of @tbl-classes. Several parameters showed no
-significant effect on any response over the ranges characterized, and each of them was
-classified on that evidence and kept in the record, because a factor that does nothing over a
-wide range is evidence of robustness and not an absence of information. Basal medium
-concentration, Protein A
-operating temperature and bed height, cation exchange elution flow rate, harvest
-post-clarification turbidity and the A-Mab concentration at the low-pH hold are all general
-process parameters (GPP) for that reason. Their ranges remain in the knowledge space as evidence
-that the attributes they might have affected are robust to them.
+The process has `{python} n_cpp` critical process parameter, the pH of the low-pH viral
+inactivation hold. Its normal operating range is `{python} f"{cpp_nor_width:.1f}"` pH units
+wide, and the study characterized `{python} f"{cpp_char_width:.1f}"` pH units around it. The
+parameter governs the enveloped-virus clearance claim, an attribute of very high criticality
+(@tbl-cqa-scope), which satisfies the first half of the definition. The second half is a
+judgement about how closely the step can be held to its range, and the assessment behind it
+is in PCR-006, which also records the classification. No other step needed the more
+stringent class.
 
-# Process capability
+The campaign classified `{python} n_wc_bounded` quality-linked parameter on a univariate
+assessment and not on a multivariate effect estimate. It is the operating flow rate of the anion
+exchange step, which RA-001 assigned to a univariate assessment and which PCR-008 then
+classified from the range given in @tbl-cpp, so its classification rests on a bounding
+argument and not on a measured multivariate effect.
 
-Capability at commercial scale was estimated for every drug substance quality attribute by
-Monte-Carlo simulation of `{python} f"{V['n_monte_carlo']:,}"` batches. In each simulated
-batch every classified parameter was drawn independently within its normal operating range
-and propagated through the fitted step models, so the simulated distribution reflects
-parameter variation, the analytical variation of the methods (@tbl-methods) and the residual
-variation of each model. Capability is reported as a one-sided index against the acceptance limit that
-applies, following the practice described in the process validation literature for judging
-whether a process can meet a specification [@fda2011].
+Neither harvest and clarification nor the formulation step carries a quality-linked
+parameter (@fig-class). Neither step sets a critical quality attribute (@tbl-cqa-scope), so
+their parameters are classified for process performance. The ranges they are held to
+protect yield, filter capacity and the concentration of the delivered pool.
+
+## Null results and what they are worth
+
+A parameter that produced no measurable effect over the range studied is still classified,
+and the range over which nothing happened is recorded in the report for its step.
+On that basis `{python} n_gpp` parameters are classified as general process parameters. The absence of an
+effect over a characterized range is evidence that the attribute is robust to the parameter
+over that range, but it is not evidence about conditions outside it. Each report states the
+range it covered.
+
+# Process capability {#sec-capability}
+
+Commercial-scale capability was estimated for every drug substance quality attribute, and
+the lowest capability index in the set is `{python} f"{V['min_cpk']:.2f}"`. The estimate
+comes from simulating `{python} f"{V['n_monte_carlo']:,}"` batches, in which each batch
+draws every process parameter about its set-point, with a spread set by the width of its
+normal operating range and bounded by the range characterized, and propagates the drawn
+operating point through the fitted models of the scale-down studies. Capability is one-sided
+against the governing limit for the impurity, size variant and charge variant attributes
+and for the clearance attributes (@tbl-cap), and two-sided for the glycan attributes.
 
 ```{python}
 #| output: asis
-cap_tbl = cap_for(list(cqa_reg["key"])).copy()
-cap_tbl["Spec"] = cap_tbl["Spec"].str.replace("_", "-", regex=False)
-cap_tbl["Cpk"] = cap_tbl["Cpk"].map(lambda v: f"{v:.2f}")
-show(cap_tbl, floatfmt=".2f")
+show(cap_for(list(cqa_reg["key"])), floatfmt=".2f")
 ```
 
 : Commercial-scale process capability for every drug substance quality attribute. {#tbl-cap}
 
-![Simulated commercial-scale distributions of the product quality attributes against their acceptance limits, annotated with the capability index.](../outputs/figures/fig_capability.png){#fig-cap width=100%}
+![Simulated drug substance attribute distributions against their acceptance limits, annotated with the capability index.](../outputs/figures/fig_capability.png){#fig-cap width=100%}
 
-The tightest capability in the process is the cumulative MVM clearance, at
-`{python} f"{cpk_min:.2f}"`. Its simulated mean of `{python} f"{cpk_min_mean:.2f}"` log₁₀ sits
-`{python} f"{cpk_min_margin:.2f}"` log₁₀ above the requirement of
-`{python} f"{cpk_min_req:g}"` log₁₀, with a standard deviation of
-`{python} f"{float(cap_min['sd']):.2f}"` log₁₀. The cumulative XMuLV clearance is next at
-`{python} f"{cpk('lrv_xmulv'):.2f}"`, and both are lower than any product quality attribute
-because a clearance requirement is a floor and not a window, and because the variation of
-`{python} f"{n_viral_steps}"` independent spiking studies combines in the sum.
+The tightest capability in the process is cumulative MVM clearance, at
+`{python} f"{tightest['Cpk']:.2f}"`, with a simulated mean
+`{python} f"{tightest_margin:.2f}"` log₁₀ above its floor, and cumulative XMuLV clearance
+is next, at `{python} f"{xm['Cpk']:.2f}"` with a margin of
+`{python} f"{xm_margin:.2f}"` log₁₀. Both are governed by more than one step, so neither
+figure is the property of a single unit operation, and the contributions are set out in
+@sec-viral. High mannose is the tightest of the attributes formed in the process, at
+`{python} f"{hm['Cpk']:.2f}"`, and it is governed by the bioreactor alone (PCR-003). The
+remaining attributes clear their limits by a wider margin, and the largest index in
+@tbl-cap, for leached Protein A, reflects a pool concentration far below the limit and
+nothing else.
 
-Of the product quality attributes the tightest is high mannose at
-`{python} f"{float(pq_min.Cpk):.2f}"`, with a simulated mean of
-`{python} f"{float(pq_min['mean']):.2f}"` % of glycans in a range of
-`{python} f"{hm_lo:g}"` to `{python} f"{hm_hi:g}"` %. The binding side is the lower limit, and
-PCR-003 identifies culture pH and temperature as the parameters that move it. Afucosylation
-and galactosylation are next, at `{python} f"{cpk('afucosylation'):.2f}"` and
-`{python} f"{cpk('galactosylation'):.2f}"`. The remaining attributes sit far from their
-limits, and their indices should be read as showing that the attribute does not constrain the
-process, and not as meaningful precision. Leached Protein A is the extreme case, at
-`{python} f"{lpa_ratio:,.0f}"`-fold below its limit, and its index is reported in @tbl-cap
-for completeness only.
+This report sets no acceptance threshold for the capability index, and each index is
+reported with the margin between the simulated mean and the governing limit, which is the
+quantity a control decision acts on.
 
-Two bounds apply to every value in @tbl-cap. The simulation propagates parameter variation
-within the normal operating ranges and does not extrapolate to the edges of the characterized
-ranges, so it describes routine operation and not the whole design space, where the
-reliability of a model that predicts mean levels is lower than it is at the centre. The step
-models it propagates were fitted on qualified scale-down models, so the capability is
-inherited from the scale-down qualification of each step. Commercial-scale capability is
-confirmed in Stage 2, on the `{python} f"{V['n_ppq']}"` process performance qualification
-batches and the continued process verification that follows them.
+The capability estimate is built on qualified scale-down models and
+inherits their assumptions about feed states and about scale independence. It describes the
+process operating near its set-points, so it says nothing about performance at the edges of
+the design space, which have not been run at commercial scale. It is not a
+measurement of the commercial process at all, and it is confirmed during Stage 2, when
+capability is re-estimated from process performance qualification batches and from the data
+of continued process verification.
 
-# Viral clearance summary
+# Viral clearance summary {#sec-viral}
 
-Cumulative clearance exceeds the requirement for both model viruses. XMuLV clearance is
-`{python} f"{lrv_x_tot:.2f}"` log₁₀ against a requirement of `{python} f"{lrv_x_req:g}"`
-log₁₀, a margin of `{python} f"{lrv_x_marg:.2f}"` log₁₀. MVM clearance is
-`{python} f"{lrv_m_tot:.2f}"` log₁₀ against `{python} f"{lrv_m_req:g}"` log₁₀, a margin of
-`{python} f"{lrv_m_marg:.2f}"` log₁₀. The claim is modular in the sense of ICH Q5A(R2), which
-means each step was spiked and assayed independently of the others and the increments are
-summed [@ichq5a].
+## The modular claim
+
+Cumulative viral clearance exceeds its requirement for both model viruses.
+@tbl-viral gives the credited log reduction of each contributing step, the cumulative
+total and the requirement, and @fig-viral shows the same figures against the requirement
+line. The claim is modular in the sense of ICH Q5A, which means that each step was spiked
+and studied independently on a qualified small-scale model and the step increments are then
+added [@ichq5a]. The model viruses are XMuLV (an enveloped retrovirus) and MVM (a small non-enveloped
+parvovirus chosen as the worst case for physical removal).
 
 ```{python}
 #| output: asis
-mech = {VI_ROW: "Chemical inactivation of the viral envelope",
-        AEX_ROW: "Charge-based partition in flow-through mode",
-        VF_ROW: "Size-based retention by the membrane",
-        "Cumulative": ""}
-rep = {VI_ROW: "PCR-006", AEX_ROW: "PCR-008", VF_ROW: "PCR-009", "Cumulative": ""}
-vt = vc.copy()
-vt["Mechanism"] = vt.step.map(mech)
-vt["Report"] = vt.step.map(rep)
-show(vt.rename(columns={"step": "Step", "XMuLV": "XMuLV (log₁₀)", "MVM": "MVM (log₁₀)"})
-       [["Step", "Mechanism", "XMuLV (log₁₀)", "MVM (log₁₀)", "Report"]], floatfmt=".2f")
+show(vc_df, floatfmt=".2f")
 ```
 
-: Modular viral clearance by step, with the mechanism claimed for each and the report that establishes it. {#tbl-viral}
+: Modular viral clearance by credited step, in log10 reduction, against the drug substance requirement. {#tbl-viral}
 
-![Modular viral clearance by step for XMuLV and MVM against the cumulative requirement.](../outputs/figures/fig_viral_clearance.png){#fig-viral width=95%}
+![Modular viral clearance by credited step for both model viruses, against the requirement.](../outputs/figures/fig_viral_clearance.png){#fig-viral width=100%}
 
-The mechanisms in @tbl-viral are orthogonal, which is what allows the increments to be added.
-Low-pH inactivation disrupts the lipid envelope of an enveloped virus, anion exchange
-partitions virus from antibody on charge in flow-through mode, and the virus filter retains
-virus on size, so a condition that defeats one of them does not defeat the others. No single
-step carries the cumulative claim.
+@tbl-viral credits `{python} n_viral_steps` steps. The low-pH hold contributes
+`{python} f"{vc_df.loc[0, 'XMuLV LRF']:.2f}"` log₁₀ of XMuLV clearance and is the largest
+single contribution to the enveloped-virus claim (PCR-006), and it contributes nothing to
+the MVM claim, which @tbl-viral records as zero, because a parvovirus has no lipid envelope
+for low pH to act on. Anion exchange contributes
+`{python} f"{vc_df.loc[1, 'MVM LRF']:.2f}"` log₁₀ of MVM clearance in flow-through mode
+(PCR-008) and virus filtration contributes
+`{python} f"{vc_df.loc[2, 'MVM LRF']:.2f}"` log₁₀ (PCR-009), so the two together carry the
+small-virus claim, and the margins over the requirement are
+`{python} f"{xmulv_margin:.2f}"` log₁₀ for XMuLV and `{python} f"{mvm_margin:.2f}"` log₁₀
+for MVM.
 
-Each step contributes differently to the two viruses, and the difference is mechanistic. The
-low-pH hold gives `{python} f"{lrv(VI_ROW, 'XMuLV'):.2f}"` log₁₀ against XMuLV and nothing at
-all against MVM, because minute virus of mice is a non-enveloped parvovirus with no envelope to
-disrupt (PCR-006). Anion exchange gives `{python} f"{lrv(AEX_ROW, 'XMuLV'):.2f}"` log₁₀ against XMuLV
-and `{python} f"{lrv(AEX_ROW, 'MVM'):.2f}"` log₁₀ against MVM, and PCR-008 shows both to
-depend on load pH and on load conductivity. Virus filtration gives
-`{python} f"{lrv(VF_ROW, 'MVM'):.2f}"` log₁₀ against MVM and
-`{python} f"{lrv(VF_ROW, 'XMuLV'):.2f}"` log₁₀ against XMuLV, and it is the largest single
-contributor to the parvovirus claim (PCR-009).
+## Orthogonality, and what is not claimed
 
-The MVM claim rests on `{python} f"{n_mvm_steps}"` steps only, which is why it carries the
-tightest capability in the process. Anion exchange and virus filtration are both credited, and
-PCR-008 and PCR-009 each define the operating region over which their contribution holds. For
-anion exchange the region validated for viral clearance is wider than the region required for control of the
-other quality attributes, so the narrower region governs routine operation. For virus
-filtration the binding constraint is the volumetric load, and the normal operating range of
-`{python} rng('virus_filtration', 'filtration_volume', 'nor')` L/m² is set inside the
-characterized range of `{python} rng('virus_filtration', 'filtration_volume')` L/m² for that
-reason.
+Adding the step increments is only defensible if the mechanisms are independent, and the
+three mechanisms differ. Low pH inactivates by disrupting the viral envelope, anion exchange
+partitions virus from product by charge in a step where the product flows through and the
+impurities bind, and virus filtration removes by size on a membrane rated for small
+non-enveloped viruses. A condition that reduces one of the three increments is therefore not
+expected to reduce the others. The campaign did not study conditions that act on more than
+one step at once, so that expectation rests on the mechanisms and not on a cross-step
+experiment.
 
-No viral clearance is claimed for Protein A capture or for cation exchange. Both steps are
-expected to remove virus, and platform experience with related antibodies supports that
-expectation, but neither was spiked in this campaign and neither appears in @tbl-viral
-[@amab2009]. The margins quoted above are therefore conservative. Clearance is measured at
-small scale on spiked material, so the claim is bounded by the qualification of the
-small-scale spiking models described in PCR-006, PCR-008 and PCR-009, and by the assumption
-that the model viruses represent the relevant classes of adventitious agent.
+No clearance is claimed for the Protein A step or for the cation exchange step, and
+neither contributes to the totals in @tbl-viral. Neither step was studied for viral
+clearance in this campaign, so the cumulative claim is conservative to the extent of
+whatever those two steps deliver.
 
-# Overall control strategy
+The log reduction values come from spiking
+studies on small-scale models and are not measurements of the commercial process. Each
+step's contribution holds over the ranges that step characterized, and the constraints are
+step specific, covering pH, hold time and temperature at the low-pH hold (PCR-006), load pH
+and conductivity at anion exchange (PCR-008), and volumetric load at virus filtration
+(PCR-009), where clearance falls as the load rises. The clearance attributes in @tbl-cap
+carry a simulated mean that differs from the nominal totals in @tbl-viral, because the
+capability estimate varies the process parameters and the nominal batch does not.
 
-The control strategy has two purposes, and the elements described below serve them.
-Product quality and safety are assured by holding every quality-linked parameter inside the
-design space of its step. Process consistency is assured by holding the key process
-parameters within their established limits and by monitoring the process attributes that
-report on them [@amab2009]. Nothing in the strategy relies on end-product testing to detect a
-quality failure that the process controls should have prevented.
+# Overall control strategy {#sec-control}
+
+## What the control strategy has to do
+
+The control strategy has two purposes. The first is to assure product quality and patient
+safety, and it does that by holding every quality-linked parameter inside the design space
+established by the characterization studies. The second is to assure that the commercial
+process runs consistently, and it does that by controlling the key process parameters and
+by monitoring the process attributes that report on the health of a batch. The two
+purposes need different evidence, which is why a key process parameter is controlled even
+though it was shown not to move a quality attribute [@amab2009].
 
 ## Parameter control
 
-Every parameter in @tbl-cpp is held within the normal operating range given there, each of
-those ranges lies inside the design space or proven acceptable range established by the step's
-report, and the relationship between the ranges is the same at every step. The normal
-operating range is the routine control range, the design space is the multivariate region
-within which the attributes stay in limit, and the characterized range is the wider knowledge
-space over which the models were fitted, so each of the three is nested inside the one that
-follows it. Movement within a design space is not a change in
-the regulatory sense, although it remains subject to the pharmaceutical quality system
-[@ichq8; @ichq10]. Movement outside one is a change and requires the study that supports it.
+The quality-linked parameters and their normal operating ranges are given in @tbl-cpp, each
+is controlled to that range in routine manufacture, and each range sits inside the region
+the characterization studies covered. Movement inside the design space is not a regulatory
+change [@ichq8], but it is still assessed prospectively under the quality system before it
+is made [@ichq10], and movement outside the characterized region is a change and is handled
+through change control.
 
-## In-process control
+The critical process parameter, the pH of the low-pH hold, carries the tightest control
+requirement in the process, and its control is defined in PCR-006. The proven acceptable
+ranges that support each parameter's range are reported per step and per attribute in the
+report for that step, and are not reproduced here.
 
-Each purification step is sampled at its pool and tested by the validated methods listed in
-@tbl-methods. The in-process limits that apply to those pools are defined step by step, and
-the host cell protein limits in particular are set from what the downstream steps are relied
-on to remove, as §3.3 describes. Two in-process controls arose from the campaign itself. The
-charge-variant verification of the anion exchange load introduced during the investigation of
-DEV-008-01 is retained as a routine input control on that step. The trailing-edge collection
-set-point at anion exchange (the ultraviolet absorbance at which pool collection stops) was
-reduced from `{python} f"{dev_008_02_uv_pool_stop_original_mau:g}"` mAU to
-`{python} f"{dev_008_02_uv_pool_stop_corrected_mau:g}"` mAU, and confirmed in
-`{python} f"{dev_008_02_ver_n}"` verification runs (PCR-008).
+## In-process control and monitoring
+
+In-process controls are placed where an attribute can be measured early enough to act on
+it. Post-clarification turbidity is monitored at the harvest step and is one of the
+parameters that step controls (PCR-004). Pool host cell protein is measured after each
+chromatography step (PCR-005, PCR-007 and PCR-008), and pool aggregate after the low-pH
+hold and the cation exchange step,
+which is what makes the clearance chain described in @sec-process auditable batch by batch.
+The pH and the duration of the low-pH hold are recorded against the batch record, and the
+integrity test after virus filtration is a release-relevant control on the small-virus
+claim. The concentration of the final pool is verified before the drug substance is
+dispensed.
+
+## Release testing
+
+Release testing confirms on the batch what process control is designed to deliver. The
+`{python} n_ds_cqa` product quality and process impurity attributes in @tbl-cqa-outcome are
+measured on the drug substance and compared with the criterion given there, so each of them
+is confirmed batch by batch once the process has run. The `{python} n_viral_cqa` viral
+clearance attributes are not confirmed in that way, because no test on the drug substance
+measures them. They are process claims established on spiked small-scale models
+(@sec-viral), and they are held by the operating ranges of the
+`{python} n_viral_steps` credited steps and by the in-process controls above. A release
+result arrives after the batch has been made, so testing at release cannot by itself control
+an attribute [@ichq8]. For this reason the control strategy places the burden on the
+parameter ranges and the in-process controls, and uses release testing to confirm the
+outcome.
+
+## Analytical control
+
+Every attribute in @tbl-cqa-outcome is measured by a validated method. @tbl-methods
+summarises the validated performance of `{python} n_methods` of the methods the campaign
+relies on, most of which measure a drug substance quality attribute. Turbidity and protein
+concentration are in that table for a different reason, because turbidity is an in-process
+control at the harvest step (PCR-004) and protein concentration governs the pool the
+formulation step delivers (PCR-010). Method performance matters to the control strategy for
+two reasons. It sets how much of the observed variation belongs to the process instead of
+to the measurement, and it sets how small a change the process can be held to.
 
 ```{python}
 #| output: asis
-meth = ([[sid, t, "SOP"] for sid, t in SOP_ALL]
-        + [[aid, t, "Method validation"] for aid, t in AMV_ALL])
-print(pd.DataFrame(meth, columns=["Reference", "Title", "Type"])
-        .to_markdown(index=False, tablefmt="grid", maxcolwidths=[12, 52, 18]))
+show(method_perf_df(precision_with_unit=True))
 ```
 
-: Controlled procedures and validated analytical methods referenced across the campaign. All numbers are placeholders. {#tbl-methods}
+: Validated performance of the analytical methods the campaign relies on. {#tbl-methods}
 
-## Release control
+The least precise method of those reported as a relative standard deviation is the host
+cell protein assay, at `{python} f"{worst_rsd['precision_pct']:g}"`% RSD, and the largest
+share of observed variation attributable to a method is
+`{python} f"{worst_share['variance_fraction']:.2f}"`, for the leached Protein A assay.
+Neither limits the control strategy, because both attributes clear their limits by a wide
+margin (@tbl-cqa-outcome). The two infectivity assays are reported as a log10 standard
+deviation and not as a relative standard deviation, so their precision figures are not
+comparable with the rest of the table. Methods that do not appear in @tbl-methods carry
+their validated performance in their own method validation reports. @tbl-sop lists the
+controlled documents the unit operation studies cite from harvest onward, and the culture
+operation and analytical procedures the bioreactor study works to are cited in PCR-003.
 
-The drug substance is released against the acceptance criteria in @tbl-cqa. Release testing
-confirms the outcome of the control strategy and is not the means by which the outcome is
-achieved, which is the distinction the lifecycle approach draws between a controlled process
-and a tested one [@fda2011]. Viral safety is not a release test at all. It is assured by the
-cleared log reduction of §6 together with the testing of the cell banks and the unprocessed
-bulk, and no release assay could substitute for it.
+```{python}
+#| output: asis
+print(all_sop_table())
+```
 
-## Life-cycle control
+: Controlled documents cited by the unit operation studies from harvest onward (Steps 4–10). {#tbl-sop}
 
-Part of the strategy consists of life-cycle controls and not of parameter ranges. The capture
-resin carries a validated life-cycle in cycles, because leached Protein A rises with resin age
-and no set-point controls it (PCR-005). The virus filter is single-use and is
-integrity-tested after every batch, because the clearance claim depends on membrane integrity
-and not on an operating parameter that can be monitored during the run (PCR-009). The
-polishing resins carry sanitization and storage requirements under the same procedure.
+## Life-cycle and feed-input controls
+
+Three life-cycle controls sit behind the ranges in @tbl-cpp. Chromatography resins are
+managed for cycle life, packing and sanitization under SOP-2008. The clearance and
+polishing performance of a column is a function of its history as well as of its operating
+conditions. The virus retentive filter is integrity tested after use under SOP-2012, and
+the analytical methods transfer to the receiving site and are re-qualified there under the
+plan in PTP-001.
+
+One feed-input control follows from a deviation. The first anion exchange execution used a
+load that had been held neutralized for
+`{python} f"{dev_008_01_neutralized_hold_h:.0f}"` hours, which raised its acidic charge
+variant content well above the level of routine material (@sec-deviations). The time the
+neutralized cation exchange pool is held before anion exchange loading is therefore treated
+as a control input for that step, and PCR-008 carries the assessment.
 
 ## What the control strategy does not cover
 
-The strategy covers the drug substance process at the receiving site and nothing beyond it.
-It does not cover drug product manufacture, the shipping and storage of drug substance, or
-the qualification of the commercial equipment train, each of which is addressed in its own
-package. It does not establish commercial-scale reproducibility, which is the object of Stage
-2. It also assumes that the raw materials and the cell bank remain those characterized here,
-and a change to either requires the comparability assessment described in PTP-001.
+The strategy described here covers the drug substance process from Step 3 to Step 10. It
+does not cover the seed train ahead of the production bioreactor, the cell bank, the raw
+material controls or the drug product process. All of those are described elsewhere in the
+application. It does not by itself show that the commercial process is in a state of
+control, which is the purpose of Stage 2 and of the continued process verification that
+follows it.
 
-# Deviations across the campaign
+# Deviations across the campaign {#sec-deviations}
 
-One deviation in this campaign invalidated a complete designed experiment. The first anion
-exchange execution, `{python} f"{n_runs_sup}"` runs across a screening design and a
-response-surface design, was found to have been run on a non-representative load and was
-discarded for the purpose of defining an operating region. The whole study was executed again
-on requalified material, and it is the second execution that PCR-008 reports and that this
-document consolidates. `{python} f"{n_dev}"` deviations were recorded in total across
-`{python} f"{n_dev_docs}"` reports, and each was investigated, dispositioned and
-impact-assessed in the report for its step. None of them is reinvestigated here.
-
-## The register
+The campaign recorded `{python} n_dev` deviations across the `{python} n_dev_reports` unit
+operation studies, and one of them invalidated a designed experiment. @tbl-dev gives the
+register with the route by which each was detected and its disposition. The investigation,
+the root cause and the impact assessment for each are in the report named in the register,
+and are not repeated here.
 
 ```{python}
 #| output: asis
-SHORT = {"bioreactor": "Bioreactor", "harvest": "Harvest", "protein_a": "Protein A",
-         "viral_inactivation": "Low-pH hold", "cex": "CEX", "aex": "AEX",
-         "virus_filtration": "Virus filtration", "ufdf": "UF/DF"}
-dv = devs.copy()
-dv["Deviation"] = dv["dev_id"] + " (" + dv["doc_id"] + ")"
-dv["Step"] = dv["step"].map(SHORT)
-dv["Root cause"] = (dv["root_cause"].str.replace("_", " ", regex=False)
-                    .str.replace("uv ", "UV ", regex=False))
-dv["Disposition"] = (dv["disposition"].str.replace("_", " ", regex=False)
-                     .str.replace("re executed", "re-executed", regex=False))
-print(dv.rename(columns={"summary": "What happened"})
-        [["Deviation", "Step", "What happened", "Root cause", "Disposition"]]
-        .to_markdown(index=False, tablefmt="grid",
-                     maxcolwidths=[20, 16, 30, 24, 18]))
+show(devs_df)
 ```
 
-: The complete deviation register for the characterization campaign. The document named beside each identifier is the report that investigated it. {#tbl-dev}
+: Deviations recorded across the characterization campaign. {#tbl-dev}
 
-The register is given in full in @tbl-dev, because the dispositions are not uniform. `{python} f"{n_dev_ret}"` deviations were retained, which means the affected data
-were used as executed with a documented impact assessment. One was invalidated and
-re-executed, and one was corrected by modelling and verification runs. Both of the latter
-occurred at anion exchange and both are described in §8.2.
+## The deviation that invalidated a study
 
-## The anion exchange deviations
+The most serious deviation is DEV-008-01. The load used in the first anion exchange
+execution carried
+`{python} f"{dev_008_01_acidic_variants_deamidated_pct:.1f}"`% acidic charge variants,
+against `{python} f"{dev_008_01_acidic_variants_requalified_pct:.1f}"`% in the
+requalified load, after the neutralized cation exchange eluate was held for
+`{python} f"{dev_008_01_neutralized_hold_h:.0f}"` hours. A load in that condition is not
+representative of routine material, so the screening and response surface designs executed
+on it were invalidated for the purpose of defining an operating region, and both were
+re-executed in full on requalified load. The analysis reported in PCR-008 is the
+re-execution, and the first execution is retained there as a superseded dataset and
+referenced to confirm the root cause. No part of it is analysed in this report.
 
-The load used for the first anion exchange execution was not representative of a routine
-cation exchange pool. Its acidic charge-variant content was
-`{python} f"{dev_008_01_acidic_variants_deamidated_pct:.1f}"` %, against
-`{python} f"{dev_008_01_acidic_variants_requalified_pct:.1f}"` % in the requalified material
-used for the second execution. The cause was an extended neutralized hold of
-`{python} f"{dev_008_01_neutralized_hold_h:g}"` hours before loading, which promoted
-asparagine deamidation (verified by icIEF under AMV-3013). The deamidated load altered the charge the antibody presented to the
-resin and produced an anomalous interaction between protein load and wash conductivity, and at
-the corner where both were high the flow-through pool left its in-process limit, which is the
-observation that prompted the investigation. PCR-008 documents that investigation and the root
-cause.
-
-Both affected designs were invalidated for the purpose of defining an operating region and
-were re-executed in full. The re-executed screening and response-surface studies are the ones
-analysed in PCR-008 and summarized in @tbl-studies. The first execution is retained as a
-controlled record and is referenced there to confirm the root cause, since the anomalous
-interaction is statistically absent from the requalified data, and it is not analysed further,
-so no conclusion in this package rests on it. The load-material verification introduced during
-the investigation is now a routine input control on the step, as §7.2 records.
-
-The second anion exchange deviation is smaller and was present in both executions. The
-trailing-edge collection set-point was permissive, so pool collection continued further down
-the descending edge of the peak than intended, at
-`{python} f"{dev_008_02_uv_pool_stop_original_mau:g}"` mAU against the
-`{python} f"{dev_008_02_uv_pool_stop_corrected_mau:g}"` mAU the process requires. The effect
-on the pool was quantified from the fitted model and the corrected set-point was confirmed
-experimentally in `{python} f"{dev_008_02_ver_n}"` verification runs (PCR-008). The data were
-not discarded, because the fitted model covers the collection range that was actually used.
+One further deviation at the same step was closed by analysis instead of by re-execution.
+The trailing-edge collection set-point used for the flow-through pool was more permissive
+than intended in both executions, at
+`{python} f"{dev_008_02_uv_pool_stop_original_mau:.0f}"` mAU against a corrected
+`{python} f"{dev_008_02_uv_pool_stop_corrected_mau:.0f}"` mAU. The effect on the pool was
+modelled and then checked against `{python} f"{dev_008_02_ver_n:.0f}"` verification runs,
+and PCR-008 gives the assessment.
 
 ## The retained deviations
 
-The retained deviations divide into parameter excursions, material and buffer findings,
-instrument findings, and analytical or record findings, and none of them changed a conclusion.
-Excursions of a process parameter beyond its normal operating range were recorded at harvest,
-at the cation exchange column, at the virus filter and at the ultrafiltration skid
-(DEV-004-02, DEV-007-02, DEV-009-01, DEV-010-01). Buffer preparation, material expiry and
-consumable variation account for the largest group (DEV-004-01, DEV-005-01, DEV-007-01,
-DEV-008-03, DEV-009-02). Two were instrument findings, a drifting dissolved carbon dioxide
-probe and a feed pump calibration offset (DEV-003-01, DEV-003-02). The remainder were
-analytical or record findings raised after execution (DEV-005-02, DEV-006-01, DEV-006-02,
-DEV-010-02).
+In `{python} n_dev_retained` cases the deviation was retained, which means the affected data
+were kept in the analysis with an argument that bounds the impact. Most fall into three kinds. Some
+are single-run excursions of a controlled parameter that stayed inside the range the study
+itself covered. The pressure excursion at virus filtration (DEV-009-01) and the
+transmembrane pressure excursion at the formulation step (DEV-010-01) are of that kind.
+Some are material events found before or after execution, such as the expired buffer lot at
+cation exchange (DEV-007-01) and the buffer released below its pH acceptance range at anion
+exchange (DEV-008-03). Others are analytical events resolved by re-test or by dilution,
+such as the cytotoxicity seen at low dilution in the XMuLV infectivity assay (DEV-006-02).
+The remainder are single events of other kinds. The dissolved carbon dioxide probe drift
+(DEV-003-01) and the feed under-delivery on a centre-point batch (DEV-003-02) are both
+bioreactor events. The others are the hold-time record discrepancy between the control
+system and the manual log at the low-pH hold (DEV-006-01) and the final pool concentration
+below target at the formulation step (DEV-010-02), which was corrected by topping up.
 
-The parameter excursions share a bounding argument, and it is the same argument in each case.
-The excursion took the parameter outside its normal operating range but left it inside the
-range over which that parameter was characterized, so the fitted model already covers the
-condition that occurred. Filtration pressure reached
-`{python} f"{dev_009_01_pmax_psi:g}"` psi against a normal operating range of
-`{python} rng('virus_filtration', 'pressure', 'nor')` psi and a characterized range of
-`{python} rng('virus_filtration', 'pressure')` psi (DEV-009-01). Transmembrane pressure at
-ultrafiltration reached `{python} f"{dev_010_01_tmp_max_psi:g}"` psi against a normal range of
-`{python} rng('ufdf', 'tmp', 'nor')` psi and a characterized range of
-`{python} rng('ufdf', 'tmp')` psi (DEV-010-01). The Protein A elution buffer prepared below
-target at `{python} f"{dev_005_01_ph_measured:.2f}"` fell below the normal range of
-`{python} rng('protein_a', 'elution_ph', 'nor')` but inside the characterized range of
-`{python} rng('protein_a', 'elution_ph')` (DEV-005-01).
+Most of the deviations in @tbl-dev were found by checks that run independently of the study
+analysis, among them buffer release testing, in-process monitoring, equipment history
+review, pre-use verification and post-execution reconciliation. The exceptions are
+analytical events. The leached Protein A result that fell out of trend at the capture step
+(DEV-005-02) and the assay cytotoxicity at the low-pH hold (DEV-006-02) were both found in
+the review of the study's own results. An instrumented scale-down system is involved in
+`{python} n_dev_equipment` of the deviations. Those systems
+are listed in @tbl-equipment with their calibration status at the time the affected studies
+ran, and each was inside its calibration interval.
 
-Two of the retained deviations produced a result worse than expected before they were
-dispositioned. Post-clarification turbidity reached
-`{python} f"{dev_004_02_turbidity_max_ntu:g}"` NTU on one harvest run, against a normal
-operating range of `{python} rng('harvest', 'turbidity', 'nor')` NTU and a characterized range
-of `{python} rng('harvest', 'turbidity')` NTU, with depth filter loading near its maximum as
-the cause (DEV-004-02, PCR-004). A virus filter membrane lot delivered flux
-`{python} f"{dev_009_02_flux_deficit_pct:g}"` % below the vendor-typical value, and PCR-009
-assessed it against the retention claim before the affected run was retained (DEV-009-02).
-Neither finding moved the associated attribute outside its limit.
+```{python}
+#| output: asis
+show(equipment_df())
+```
 
-## Campaign-level impact
+: Instrumented scale-down systems under calibration and change control. {#tbl-equipment}
 
-No deviation changed a parameter classification, an operating region or a viral clearance
-claim, and the classifications in @tbl-cpp and @tbl-classes are those the re-executed and
-retained data support. No design space was widened or narrowed as a result of a deviation,
-and the clearance increments in @tbl-viral come from studies that no deviation touched.
+# Conclusions and Stage 2 readiness {#sec-conclusions}
 
-One control-strategy element did change. The trailing-edge collection set-point at anion
-exchange was tightened, as §8.2 describes, and the load-material verification became a routine
-input control. Both are improvements to the control strategy and neither reflects a defect in
-the data reported here. The campaign also carries one enduring consequence in its records,
-which is that a complete designed experiment at anion exchange exists in superseded form and
-is retained as such.
+The A-Mab drug substance process is characterized across Steps 3–10 and the campaign
+supports a defined control strategy. Every one of the `{python} n_params` process
+parameters has a classification, `{python} n_quality_linked` of them are quality-linked and
+are controlled to the ranges in @tbl-cpp, and the remaining `{python} n_perf_params` are
+controlled for process consistency. Each unit operation has a plan, a report and an
+operating region. At the `{python} n_doe_steps` steps that carried a designed experiment
+the operating region is derived from that step's response surface models, and at harvest
+and the formulation step it rests on the univariate assessments those reports present.
 
-# Conclusions and Stage 2 readiness
+Every drug substance quality attribute met its acceptance criterion in the simulated
+commercial process. The lowest capability index is `{python} f"{V['min_cpk']:.2f}"`, for
+cumulative MVM clearance, and the tightest of the attributes the process forms is high
+mannose at `{python} f"{hm['Cpk']:.2f}"`. Cumulative viral clearance exceeds the
+requirement by `{python} f"{xmulv_margin:.2f}"` log₁₀ for XMuLV and by
+`{python} f"{mvm_margin:.2f}"` log₁₀ for MVM, on `{python} n_viral_steps` steps with
+independent mechanisms. The campaign recorded `{python} n_dev` deviations, one of which
+forced a study to be re-executed in full, and each was dispositioned in the report for its
+step.
 
-## What the campaign established
+The capability and clearance figures are estimated on qualified scale-down models and are
+not measured on commercial equipment, and they describe the process operating near its
+set-points, so they say nothing about the edges of the design space, which have not been
+run at scale. The viral clearance values come from small-scale spiking studies. Nothing
+here rests on a screening model, and no proven acceptable range extends beyond the range
+its step characterized.
 
-The A-Mab drug substance process is characterized across all `{python} f"{n_steps}"` unit
-operations and its control strategy is defined. Every drug substance quality attribute meets
-its acceptance criterion at commercial scale, with a lowest capability index of
-`{python} f"{cpk_min:.2f}"` on the cumulative MVM clearance. Cumulative viral clearance
-exceeds its requirement by `{python} f"{lrv_x_marg:.2f}"` log₁₀ for XMuLV and
-`{python} f"{lrv_m_marg:.2f}"` log₁₀ for MVM, from `{python} f"{n_viral_steps}"` steps whose
-mechanisms are independent. All `{python} f"{n_par}"` process parameters are classified, and
-only the inactivation pH of the low-pH hold requires the most stringent control.
-
-The process understanding behind those statements is multivariate where it needs to be.
-`{python} f"{n_multi}"` parameters were studied in designed experiments and
-`{python} f"{n_uni}"` univariately, the assignment follows the risk basis in RA-001 and not
-convenience, and interactions were estimated wherever two parameters could plausibly act
-together on the same attribute. The significant interactions are reported in the step reports,
-and the one quality-linked parameter assessed univariately is identified in §4.
-
-## Limitations
-
-Design spaces are not confirmed at commercial scale at the edges of their ranges. The
-response-surface models predict mean levels over the characterized ranges, and the reliability
-of a mean-level model at the edge of its own region is lower than at its centre.
-
-Capability is estimated and not observed. The values in @tbl-cap come from simulation of
-qualified scale-down models with every parameter inside its normal operating range, so they
-describe routine operation of a model of the process and not the process itself.
-
-Viral clearance is measured in small-scale spiking studies. No production material is spiked,
-the model viruses stand in for classes of adventitious agent, and the cumulative figure is a
-sum of independent studies rather than a measurement of the whole train.
-
-The campaign ran a limited number of batches at each condition. A characterization study
-cannot capture the batch-to-batch variability that commercial manufacture will show, and the
-scale-down models cannot reproduce every scale-dependent effect of a
-`{python} f"{scale_l:,}"` L vessel or a commercial column.
-
-One designed experiment exists in superseded form. The anion exchange conclusions rest
-entirely on the re-executed studies, and the superseded dataset is retained as a record and
-referenced only for root-cause confirmation.
-
-## Stage 2 readiness
-
-The characterization package supports entry into Stage 2. The process description, the
-parameter ranges, the in-process controls and the analytical methods are defined, and the
-receiving site can execute the process as described. The deliverables that Stage 2 requires
-from Stage 1 are complete, and the gaps that remain are the ones Stage 2 exists to close.
-
-Stage 2 will qualify the process at commercial scale on `{python} f"{V['n_ppq']}"` process
-performance qualification batches, confirm that the capability estimated here is realised, and
-begin the continued process verification (Stage 3) that carries the control strategy through
-the product life-cycle. Until those batches are executed no claim in this report about
-commercial-scale performance is confirmed. This report should be read as the evidence that
-the process is understood well enough to be qualified, and not as evidence that it has been.
+What remains is Stage 2. The process transfers to the receiving site under PTP-001, process
+performance qualification batches are executed there, capability is re-estimated from those
+batches instead of from simulation, and the analytical methods transfer and are re-qualified
+at the receiving site. Continued process verification then runs for the life of the
+product. This report does not qualify the commercial process, and it makes no claim about
+the performance of any batch made at commercial scale.
 
 # References {.unnumbered}
 

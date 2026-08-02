@@ -48,22 +48,24 @@ have caught, kept rather than fixed so that a benchmark has something to find, a
 precisely in `authoring/DISCREPANCIES.md`. Read that file before treating the corpus as
 uniformly correct — and do not "fix" an entry without removing it.
 
-### Branches
+### Branches — you are on `feature/weak-claims-via-brief`
 
-`main` is the corpus. Apart from the two registered discrepancies above, **every claim on
-`main` is grounded**, and `weak_claims` is empty in all 20 annexes. That is the property
-that makes the corpus usable as a positive reference set, so it is not negotiable.
+**This branch is not the grounded corpus.** It carries four **labelled unsupported
+claims** — two in `PCR-003`, one in `PCR-009`, one in `PCP-006` — as benchmark negatives
+for claim verification and overstatement detection. Each is assigned in its document's
+brief *before* the document is authored, so the author writes it into the argument in one
+pass; `authoring/weak_claims.yaml` is the register and `authoring/WEAK_CLAIMS.md` is the
+procedure. Do not use this branch anywhere a fully grounded corpus is expected.
 
-`feature/weak-claims-via-brief` is the one long-lived branch. It carries the same corpus
-plus four **labelled unsupported claims** — benchmark negatives for claim verification and
-overstatement detection, assigned in each document's brief before it is authored. Those
-claims are invisible in the text by design, so a reader cannot tell a branch document from a
-`main` document; that is exactly why the branch must not leak.
+`main` is that grounded corpus: apart from the two registered discrepancies above, every
+claim on `main` is supported and `weak_claims` is empty in all 20 annexes.
 
-> **The branch is rebased onto `main`. It is never merged back.**
-> This has gone wrong once: PR #6 merged it into `main` on 2026-07-28, against the
+> **This branch is rebased onto `main`. It is never merged back.**
+> The claims are fluent and in register, so a branch document is indistinguishable from a
+> `main` document by reading it — the leak is silent and no gate catches it. It has
+> happened once: PR #6 merged this branch into `main` on 2026-07-28, against the
 > instruction in its own commit message, and put four unsupported claims into the grounded
-> corpus. It was reverted on 2026-08-02. To carry `main` forward onto the branch, rebase.
+> corpus. Reverted 2026-08-02. To carry `main` forward, `git rebase main` here.
 
 ### Reproduce everything
 

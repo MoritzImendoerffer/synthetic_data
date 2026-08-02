@@ -38,61 +38,62 @@ jupyter: python3
 import sys, os
 sys.path.insert(0, os.path.abspath("."))
 from _pcpkg import *  # noqa: F401,F403
-import math
+import doe_report as D
+import matplotlib.pyplot as plt
+import scipy.stats as sstat
 
 DOC = "PCP-010"
 UO = "ufdf"
 UO_TITLE = "Ultrafiltration / Diafiltration (Step 10)"
 
-# --- doc-local derived scalars (pulled from config/model; never typed) ---------------
-UO_CFG = CFG.unit_op(UO)
-P_DV = UO_CFG.param("diavolumes")
-P_TMP = UO_CFG.param("tmp")
-P_CONC = UO_CFG.param("final_conc")
-PARS = [P_DV, P_TMP, P_CONC]
-
-# The two drug-substance attributes monitored across the step (neither is set nor
-# cleared here; see the quality-attributes section).
-MON_CQAS = ["aggregates_hmw", "acidic_variants"]
-
-# Platform step-yield expectation carried in the process-model configuration.
-Y_BASE = UO_CFG.raw["yield"]["base"]
-Y_CV = UO_CFG.raw["yield"]["cv"]
-
-# Ideal constant-volume diafiltration: the residual fraction of a freely permeating
-# feed-buffer species after N diavolumes, for a completely mixed retentate.
-RESID_LO = math.exp(-P_DV.prange[0])
-RESID_SP = math.exp(-P_DV.setpoint)
-RESID_HI = math.exp(-P_DV.prange[1])
-
-# Planned univariate run list: each parameter at both edges of its characterization
-# range with the other two at their set-points, replicated set-point runs, and one
-# combined worst-case run (low diavolumes, high pressure, high final concentration).
-N_CENTER = 3
-_col = {p.key: f"{p.name} ({p.unit})" for p in PARS}
+# --- doc-local derived scalars (pulled from the model; never typed) ---
+uo = CFG.unit_op(UO)
+n_params = len(uo.parameters)
+p_dv = uo.param("diavolumes")
+p_tmp = uo.param("tmp")
+p_conc = uo.param("final_conc")
+ds_target = CFG.meta["drug_substance_target_g_per_l"]
+yld = uo.raw["yield"]
 
 
-def _row(condition, **over):
-    r = {_col[p.key]: p.setpoint for p in PARS}
-    r.update({_col[k]: v for k, v in over.items()})
-    r["Condition"] = condition
-    return r
+def val(x):
+    """A scalar from the config, formatted plainly."""
+    return f"{x:g}"
 
 
-_rows = []
-for _p in PARS:
-    _rows.append(_row(f"{_p.name} low edge", **{_p.key: _p.prange[0]}))
-    _rows.append(_row(f"{_p.name} high edge", **{_p.key: _p.prange[1]}))
-for _i in range(N_CENTER):
-    _rows.append(_row("Set-point replicate"))
-_rows.append(_row("Combined worst case", diavolumes=P_DV.prange[0],
-                  tmp=P_TMP.prange[1], final_conc=P_CONC.prange[1]))
+def rng_of(p, kind="range"):
+    """A parameter's characterization range or NOR, as an en-dashed span."""
+    lo, hi = (p.nor if kind == "nor" else p.prange)
+    return f"{lo:g}–{hi:g}"
 
-plan_matrix = pd.DataFrame(_rows)
-plan_matrix.insert(0, "Run", range(1, len(plan_matrix) + 1))
-plan_matrix = plan_matrix[["Run"] + [_col[p.key] for p in PARS] + ["Condition"]]
-N_RUNS = len(plan_matrix)
-N_PARAMS = len(plan_params(UO))
+
+# Quality attributes carried into the step: the two measured across it and the one whose
+# per-dose basis it fixes. Nothing in the register is SET here (cqas_for(UO) is empty).
+mon_keys = ["aggregates_hmw", "acidic_variants", "residual_dna"]
+setter_steps = [UNIT_OP_TITLES[k] for k in CFG.train_order if k in set(cqa_reg.set_by)]
+setters_str = ", ".join(setter_steps[:-1]) + " and " + setter_steps[-1]
+
+# RA-001's pre-characterization scoring for this step (identical across its parameters).
+ra = ra_scope(UO)
+ra_sev, ra_occ, ra_det = (int(ra["Sev."].max()), int(ra["Occ."].max()), int(ra["Det."].max()))
+ra_rpn = int(ra["Initial RPN"].max())
+ra_priority = str(ra["Priority"].unique()[0])
+ra_sev_label = risk_scale("severity")[ra_sev].lower()
+ra_occ_label = risk_scale("occurrence")[ra_occ].lower()
+ra_det_label = risk_scale("detection")[ra_det].lower()
+
+# Planned run count. Each univariately studied parameter is taken to both edges of its
+# characterization range, and the set-point condition is executed once as its reference, so
+# the schedule is derived from the same register as plan_params and cannot drift from it.
+lv = univariate_levels(UO)
+n_edge_runs = int(lv[["Low level", "High level"]].size)
+n_ref_runs = int(len(lv))
+n_runs = n_edge_runs + n_ref_runs
+
+# Validated performance of the concentration assay (the only step method with a record).
+mperf = method_perf_for(UFDF_AMV_REFS, precision_with_unit=True)
+a280_prec = str(mperf.loc[mperf["Method"] == "AMV-3019", "Intermediate precision"].iloc[0])
+a280_loq = str(mperf.loc[mperf["Method"] == "AMV-3019", "LOQ"].iloc[0])
 ```
 
 ```{python}
@@ -116,474 +117,524 @@ print(SYN_BANNER)
 
 ## Abbreviations {.unnumbered}
 
-ALCOA+, attributable, legible, contemporaneous, original, accurate, and complete,
-consistent, enduring, available; AMV, analytical method validation; CEX, cation
-exchange chromatography; CQA, critical quality attribute; DS, drug substance; DV,
-diavolume; HMW, high molecular weight species; icIEF, imaged capillary isoelectric
-focusing; KPP, key process parameter; MSAT, Manufacturing Science and Technology; NOR,
-normal operating range; PAR, proven acceptable range; PCP, Process Characterization
-Plan; PCR, Process Characterization Report; SEC, size exclusion chromatography; SOP,
-standard operating procedure.
+AMV, analytical method validation; CQA, critical
+quality attribute; CPP, critical process parameter; DF, diafiltration; DS, drug substance;
+DV, diavolume; GPP, general process parameter; HMW, high molecular weight; icIEF, imaged
+capillary isoelectric focusing; KPP, key process parameter; MSAT, Manufacturing Science and
+Technology; NOR, normal operating range; PAR, proven acceptable range; RPN, risk priority
+number; SEC, size exclusion chromatography; SOP, standard operating procedure; TFF,
+tangential flow filtration; TMP, transmembrane pressure; UF, ultrafiltration; UV,
+ultraviolet; WC-CPP, well controlled critical process parameter.
 
 {{< pagebreak >}}
 
-# Purpose and scope {#sec-purpose}
+<!-- ========================= BODY START ========================= -->
 
-This plan defines the process characterization study for the ultrafiltration and
-diafiltration step of the A-Mab drug substance process. The step concentrates the
-virus-filtered pool, exchanges it into the formulation buffer, and delivers the drug
-substance at its target concentration of `{python} f"{V['ds_conc_g_per_l']:g}"` g/L. It
-is the last unit operation of the drug substance process, and the material it delivers
-is the material that is filled and released.
+# Purpose and scope
 
-The step forms no critical quality attribute, and no clearance claim is made for it.
-Its parameters are key process parameters (KPP), and the purpose of characterizing them
-is to bound process performance and batch consistency and not to control a quality
-attribute. That changes what this study has to establish, because everything it has to
-establish is a property of the operation itself. Buffer exchange must be complete, the
-target concentration must be met, the product mass must be accounted for, and the
-product must leave the step in the state in which it entered.
+Ultrafiltration and diafiltration is the last operation of the A-Mab drug substance
+process. It concentrates the filtrate of the small virus retentive filtration step,
+exchanges it into the formulation buffer and delivers the drug substance at its target
+concentration of `{python} val(ds_target)` g/L. This plan defines the characterization
+study for that operation. It states which parameters will be studied, over which ranges,
+on which scale-down system, and how the outcome will be judged. It is written before the
+study is executed and it reports no results.
 
-The plan covers the scale-down system, the `{python} N_PARAMS` parameters listed in
-@tbl-params, the process performance responses associated with them, and the
-confirmatory monitoring of the two drug substance attributes (aggregate content and
-charge variants) that a concentration operation could plausibly affect. The study will
-be executed at `{python} COMPANY` on a
-qualified scale-down model, under the operating procedure for the step (SOP-2013) and
-the scale-down qualification procedure (SOP-1001), in support of the technology
-transfer described in PTP-001.
+The study covers all `{python} val(n_params)` operating parameters of the step, each
+assessed one at a time over the range given in @tbl-params. Membrane selection, formulation
+buffer composition and the drug product operations that follow the step are outside the
+scope of this plan and of the drug substance characterization package. No quality attribute
+in the drug substance register is assigned to this step, and no viral clearance or impurity
+clearance is claimed for it. The step is characterized because it sets the concentration
+and the buffer of the drug substance, and because its operating ranges have to be justified
+before the process is transferred to the receiving site, `{python} RECEIVING_SITE`.
 
-Formulation characterization is out of scope. The identity and composition of the
-diafiltration buffer are set by the drug product development programme, and they are
-controlled at this step by SOP-2013. Excipient levels, pH, viscosity and the stability
-of the formulated drug substance are characterized and reported in the drug product
-package, and this plan takes the formulation as given. Commercial-scale process
-performance qualification is also out of scope, and the `{python} V['n_ppq']`
-qualification batches are planned separately under PTP-001.
+The plan is written under the lifecycle approach to process validation [@fda2011] and the
+enhanced development approach of ICH Q8, Q9 and Q11 [@ichq8; @ichq9; @ichq11]. Its content
+belongs to Stage 1, process design. The A-Mab case study treats this operation as part of
+the formulation and reports it with the drug product [@amab2009], and the position taken
+here is the same in substance. The step is included in the drug substance package for
+completeness of the transfer, not because a drug substance attribute depends on it.
 
-# Objectives {#sec-objectives}
+# Objectives
 
 The study has five objectives.
 
-1. Qualify the scale-down ultrafiltration and diafiltration system against
-   commercial-scale performance, so that ranges established on it can be applied to the
-   commercial process.
-2. Quantify the effect of each parameter in @tbl-params on the process performance
-   responses (buffer exchange, final concentration, step yield and mass balance) across
-   the characterization ranges.
-3. Establish a proven acceptable range for each parameter against the acceptance
-   criteria of @sec-acceptance.
-4. Confirm that aggregate content and charge variant distribution are unchanged across
-   the step, within the precision of the methods used to measure them (AMV-3011 and
-   AMV-3013).
-5. Confirm the key process parameter classification of all `{python} N_PARAMS`
-   parameters, and provide the operating ranges that the control strategy will carry
-   into Stage 2.
+1. Confirm that the size variant and charge variant content of the pool is unchanged across
+   the step, over the ranges studied and within the precision of the methods used.
+2. Establish the range of each parameter over which product quality remains acceptable and
+   the operation performs as intended, with the other parameters at their set-points.
+3. Confirm that the step delivers drug substance at the target concentration, and that the
+   number of diavolumes applied in each run is verified against the mass of permeate
+   collected.
+4. Classify each parameter under SOP-4001, with the evidence on which the class rests.
+5. Provide the operating ranges, in-process controls and monitoring that the control
+   strategy requires, and the process understanding the receiving site needs to run the
+   step.
 
-# Related documents {#sec-related}
+# Related documents
 
-This plan sits inside the characterization package summarized in @tbl-related. Its
-parents define the transfer scope (PTP-001), the risk basis for the study scope
-(RA-001) and the campaign-level approach (PCMP-001). The executed study will be
-reported in PCR-010 and will roll up into PCMR-001.
+This plan sits under the transfer plan, the master plan and the risk assessment, and it
+produces one report. Those documents are listed in @tbl-related.
 
 ```{python}
 #| output: asis
 print(related_docs_md(DOC))
 print()
-print(": Related documents in the A-Mab characterization package. {#tbl-related}")
+print(": Documents related to this plan. {#tbl-related}")
 ```
 
-The controlled procedures and validated analytical methods that govern the study are
-listed in @tbl-sop. All numbers in that table are placeholders for a synthetic
-document set.
+The procedures and validated methods that govern the study are listed in @tbl-refs. The
+controlled document numbers in this corpus are placeholders.
 
 ```{python}
 #| output: asis
 print(sop_table(sops=UFDF_SOP_REFS, amvs=UFDF_AMV_REFS))
 print()
-print(": Controlled procedures and validated methods for the step. {#tbl-sop}")
+print(": Controlled procedures and validated analytical methods for the step. {#tbl-refs}")
 ```
 
-# Prior knowledge and quality risk basis {#sec-prior}
+# Prior knowledge and quality risk basis
 
-## Unit-operation description and prior knowledge
+## Unit operation description and prior knowledge
 
-The step is operated as tangential flow filtration in three phases. The virus-filtered
-pool is first concentrated against a retentive membrane, then diafiltered at constant
-volume against the formulation buffer, and finally concentrated to the target before
-the system hold-up volume is recovered by a buffer flush. Product is retained by the
-membrane throughout, and buffer species pass into the permeate.
+Tangential flow filtration is a platform operation at `{python} COMPANY`. It has been used
+for three earlier humanized IgG1 antibodies (X-Mab, Y-Mab and Z-Mab) and throughout A-Mab
+clinical manufacture, on the same membrane chemistry and the same operating sequence
+[@amab2009]. The study bounds ranges that are already in routine use. It is not expected to
+discover new behaviour, and it is not designed to. The type of study the step receives
+follows from the risk assessment and is given in §4.3.
 
-Retention is by size, and for an antibody it is close to quantitative. Monomer,
-aggregate, charge variants and glycoforms are retained together, so the step
-concentrates the product without fractionating it. This is the mechanistic reason that
-the step forms and clears no quality attribute, and it is why the parameters of the
-step are classified for process performance.
+The operation runs in three phases, of which the first concentrates the feed against an
+ultrafiltration membrane whose nominal cut-off retains the antibody and passes the buffer
+species (salts, small ions, excipients of the preceding buffer and other low molecular
+weight solutes). The retentate is then diafiltered at constant volume against the formulation
+buffer, so that the species present at the start are washed out exponentially with the
+number of diavolumes applied. A final concentration phase brings the pool to the drug
+substance target, after which the retentate is recovered from the system by a buffer flush.
+Platform experience gives a step yield of about `{python} pct(yld["base"])` with a
+coefficient of variation of `{python} pct(yld["cv"])`. The product that is not recovered is
+held up in the membrane and in the flow path, and the study does not sample that volume, so
+it makes no statement about the fate of the material left behind. What it does establish is
+whether the material that is recovered has changed, from the comparison of final pool against
+feed described in §5.4.
 
-Some low molecular weight species pass into the permeate. No impurity clearance is
-claimed for this step, because the clearance that matters is delivered upstream and is
-credited there. Host cell protein, residual DNA and leached Protein A are cleared by
-the chromatographic steps and are reported in PCR-005, PCR-007 and PCR-008. No viral
-clearance claim is made for this step either. The modular clearance claim rests on the
-low-pH hold, the anion exchange step and the small virus retentive filtration step
-(PCR-006, PCR-008 and PCR-009), and it is consolidated in PCMR-001 [@ichq5a].
-
-Ultrafiltration and diafiltration is a platform operation at `{python} COMPANY`. The
-same membrane chemistry, the same crossflow and pressure window, and the same
-diafiltration strategy have been used for three earlier humanized IgG1 antibodies
-(X-Mab, Y-Mab and Z-Mab) and throughout A-Mab clinical manufacture, and the membrane
-retained all of those products quantitatively, so no product-specific difference in
-retention is expected for A-Mab. This prior knowledge is why the step is characterized
-univariately and at a smaller scale of effort than the chromatographic steps
-[@amab2009].
-
-Three mechanisms are known from that platform experience to matter, and the study is
-designed around them. Incomplete buffer exchange at a low number of diavolumes leaves
-residual feed buffer in the drug substance, which shifts the conductivity and osmolality
-of the final pool away from the values of the formulation buffer and is seen in process
-before the batch is filtered into its container. High transmembrane pressure raises the
-protein concentration at the membrane surface, which is the condition under which
-aggregation is most likely during a concentration operation (the size-variant assay
-AMV-3011 is the readout). A high final concentration raises viscosity, lengthens the
-final concentration phase, and increases both the shear history of the product and the
-fraction of the batch retained in the system. Each of these acts through hydraulics and
-mass balance, and none of them acts through the chemistry that forms a quality
-attribute.
+Two mechanisms could change product quality across the step, and both are the reason the
+study is run. High transmembrane pressure raises the flux, and with it the degree of
+concentration polarization at the membrane surface, where the protein is exposed to shear
+and to an interface, while a high final concentration raises the frequency of self
+association in the bulk.
+Both act on the size variant distribution, which is why aggregate is the attribute followed
+most closely here. The charge variant distribution is followed as well, because the pool is
+held at its highest concentration during the last phase of the operation and deamidation
+depends on time.
 
 ## Quality attributes in scope
 
-No drug substance attribute is formed or cleared at this step, so the step is assigned
-none in the quality attribute register. Two attributes are nevertheless monitored
-across it, and they are given in @tbl-cqa. Aggregate content is monitored because
-concentration and shear are the plausible routes by which a size variant could be
-generated this late in the process. Charge variants are monitored because the product
-is held in the formulation buffer at the end of the step, and deamidation is a pH-
-and time-dependent reaction.
+No drug substance quality attribute is formed or cleared at this step. Three attributes are
+nevertheless in scope, because the pool carries them into the drug substance and the
+operation could in principle change two of them. They are given in @tbl-cqa with their
+acceptance criteria, their criticality and the Tool #1 score (impact × uncertainty) from
+which the criticality level follows.
 
 ```{python}
 #| output: asis
-show(cqas_by_keys(MON_CQAS))
+show(cqas_by_keys(mon_keys))
 print()
-print(": Drug substance attributes monitored across the step. Neither is set nor "
-      "cleared here; both are measured to confirm that the step does not change them. "
-      "{#tbl-cqa}")
+print(": Drug substance quality attributes carried into the step. {#tbl-cqa}")
 ```
 
-Both attributes are set upstream. Aggregate is formed in the production bioreactor
-(PCR-003) and reduced principally by cation exchange (PCR-007), and it carries high
-criticality. Acidic charge variants are also formed upstream and are of very low
-criticality. The acceptance criteria in @tbl-cqa are the drug substance criteria that
-the final pool has to meet in any case, so the study measures a change across the step
-against them and does not set a limit of its own.
+Aggregate is the attribute at risk. It is of high criticality, its acceptance criterion is
+an upper limit, and both of the mechanisms described in §4.1 act on it. Acidic charge
+variants are of very low criticality and have a wide acceptance range, so they are measured
+as confirmation and not as a limit the step is expected to approach. Residual DNA is in the
+table for a different reason. Its acceptance criterion is expressed per dose, and this step
+brings the drug substance to the concentration on which a dose is based, but the membrane
+retains residual DNA together with the antibody, so concentrating the pool changes neither
+quantity relative to the other. The amount per dose is set by the clearance achieved
+upstream (PCR-005, PCR-007 and PCR-008).
 
-Glycosylation, host cell protein, residual DNA, leached Protein A and viral clearance
-are not measured across this step, because a size-based concentration and buffer
-exchange operation has no mechanism by which it could alter them. Each of them is
-already characterized in the report of the step that governs it (PCR-003 for the
-glycans, PCR-005 to PCR-009 for the impurities and the viral clearance).
+Every attribute in the register is set at an earlier step: `{python} setters_str`. Each is
+characterized in the plan and report pair for the step that sets it, and the clearance
+credited to the purification steps is consolidated in PCMR-001. This step is credited with
+none of that clearance and takes no part in the viral safety argument [@ichq5a]. What it
+must show is that it does not undo the work of the steps before it.
 
 ## Risk-based prioritization of parameters
 
-RA-001 ranked the parameters of this step before the study was designed and assigned
-all of them to univariate assessment. The ranking is driven by its severity axis.
-Because no critical quality attribute is at risk here, no parameter of the step scores
-high enough to require a multivariate design, and the interaction ranking that would
-otherwise justify one is low as well. The risk these parameters carry is to process
-performance and to batch-to-batch consistency, which is what makes them key process
-parameters and not critical process parameters [@amab2009].
+RA-001 carried all `{python} val(n_params)` parameters of this step into the
+pre-characterization assessment and assigned every one of them to univariate study. The rows are given in
+@tbl-ra.
 
-The characterization ranges in @tbl-params are wider than the normal operating ranges,
-so that the study bounds excursions as well as routine operation. The diavolume and
-pressure ranges extend above the normal operating range and share its lower edge, and
-the final concentration range extends beyond the normal operating range in both
-directions. The low edge of the diavolume range is the edge at which buffer exchange
-becomes measurably incomplete, and it is included for that reason. The pressure range
-is extended upward because that is the direction in which concentration polarization
-and aggregation risk increase, and the final concentration range is challenged on both
-sides, because its low edge carries a fill volume consequence and its high edge carries
-the viscosity and aggregation consequence.
+```{python}
+#| output: asis
+show(ra_scope(UO))
+print()
+print(": RA-001 pre-characterization risk rows for the step. {#tbl-ra}")
+```
 
-# Materials and methods {#sec-mm}
+All `{python} val(n_params)` parameters carry the same severity score of
+`{python} val(ra_sev)`, which the
+RA-001 scale calls `{python} ra_sev_label`. Their failure modes act on buffer exchange, on
+flux and on the concentration of the delivered drug substance, and none of those is a
+quality attribute. Occurrence is scored `{python} val(ra_occ)`, which the scale calls
+`{python} ra_occ_label`, on the ground that the skid controls each of them directly.
+Detection is scored `{python} val(ra_det)`, the score the scale gives to a failure that is
+seen after the operation and before release, and not during it. The initial risk priority
+number is `{python} val(ra_rpn)` for each parameter and each was ranked at
+`{python} ra_priority.lower()` priority.
 
-## Scale-down model and its qualification {#sec-sdm}
+Two consequences follow for the design of this study. RA-001 assigned no parameter of the
+step to a designed experiment, and the scores above are the whole basis of that assignment.
+The ranges must nonetheless be bounded, because the concentration of the drug substance is confirmed by
+release testing and this step is the last chance to set it. The parameters are studied one at
+a time, over ranges wider than the ranges in which the step will routinely run.
 
-The study will be run on a scale-down tangential flow filtration system that reproduces
-the commercial step on the variables that govern its performance. The model uses the
-same membrane chemistry and channel geometry as the commercial cassettes, and it is
-operated at the same membrane loading, the same crossflow per unit channel height, the
-same transmembrane pressure and the same number of diavolumes. One scale-dependent
-quantity cannot be matched. The ratio of system hold-up volume to batch volume is
-larger at small scale, and its consequence for the study is stated in @sec-risks.
+# Materials and methods
 
-Qualification will follow SOP-1001. The set-point condition will be run in
-`{python} N_CENTER` replicates, and the flux profile, the step yield, the final
-concentration and the two monitored attributes will be compared with the corresponding
-commercial-scale records. The model will be accepted as qualified when the scale-down
-values agree with the commercial-scale values within the reproducibility band
-established by those replicates, and when the flux profile has the same shape. The
-qualification data will be reported in PCR-010 alongside the study results.
+## Scale-down model and its qualification
+
+The study will be run on a scale-down tangential flow filtration system that reproduces the
+commercial operation, and no study run may start before that system has been qualified under
+SOP-1001. The scale-independent parameters are those in @tbl-params, and they are
+operated at the values proposed for commercial manufacture. The scale-dependent quantities
+are membrane area, crossflow rate and hold-up volume. These are set so that the small system
+matches the commercial system on the quantities that govern the operation: membrane chemistry
+and channel geometry, protein loading per unit membrane area, and crossflow per unit membrane
+area.
+
+Qualification compares the small system with commercial and pilot data on flux, on process
+time per diavolume and on the quality of the pool. Step yield is recorded at both scales but
+is not one of the quantities compared, because hold-up volume makes recovery scale
+dependent. The acceptance criteria for
+that comparison are defined in SOP-1001 and are not restated here. The comparison is made at
+the set-point condition, which is the condition at which the two scales are expected to agree
+most closely, and it is repeated after any change to the membrane lot or the flow path.
+
+One difference between the scales cannot be removed. The hold-up volume of a small system is
+a larger fraction of the batch than at commercial scale, so recovery from the final flush is
+not directly comparable between the two. Step yield at small scale will therefore be reported
+as an indicator of consistent operation and will not be used to set the commercial yield
+expectation. This limitation is carried as a study risk in §12. The skid used for the
+study (EQ-TFF-142) is under calibration and change control, and its calibration status at
+execution will be recorded in PCR-010.
 
 ## Operation
 
-The feed to the step is the filtrate of the small virus retentive filtration step
-(Step 9, PCR-009). Every run will follow SOP-2013, with only the parameter under study
-moved away from its set-point. The pool is concentrated to an intermediate
-concentration, diafiltered at constant volume against the formulation buffer for the
-number of diavolumes set for the run (@tbl-design), and then concentrated to the final
-target, after which the system is flushed with formulation buffer to recover the
-hold-up volume. The recovered material is pooled with the retentate and filtered into
-the drug substance container.
+The step is operated under SOP-2013. The feed is the filtrate of the small virus retentive
+filtration step, which is characterized in PCP-009 and PCR-009. Feed material for the study
+is drawn from runs of the preceding steps at their set-points, so that the input state of
+each attribute in @tbl-cqa is representative of routine operation.
 
-Membrane lot, buffer lots and system hold-up volume are controlled to platform
-specification under SOP-2013. They are identity and quality controlled inputs to the
-study, and they are not characterized by it.
+Each run follows the commercial sequence. The feed is concentrated to the concentration at
+which diafiltration begins, diafiltered at constant volume against formulation buffer for the
+number of diavolumes under study, concentrated to `{python} val(p_conc.setpoint)` g/L unless
+final concentration is itself the parameter being varied, and then recovered by a buffer
+flush. Transmembrane pressure is controlled by the skid throughout the concentration and
+diafiltration phases. The diavolume count is controlled by the recipe and confirmed against
+the mass of permeate collected.
+
+Materials that are controlled to platform specification are identity checked and released
+before use, and are not study variables. These are the membrane cassettes, the formulation
+buffer and the flush buffer. A single membrane lot will be used for the study wherever the
+schedule allows, so that a lot change cannot be confounded with a parameter effect.
 
 ## Analytical methods
 
-@tbl-sop lists the validated methods. Protein concentration is measured by absorbance
-at 280 nm (AMV-3019), and it is the basis of both the final concentration result and
-the mass balance. Size variants are measured by size exclusion chromatography
-(AMV-3011), and charge variants by imaged capillary isoelectric focusing (AMV-3013).
-Conductivity and osmolality are in-process measurements taken under SOP-2013, and they
-are the direct readout of buffer exchange.
+The study is supported by `{python} val(len(UFDF_AMV_REFS))` validated methods, each listed
+with its validation reference
+in @tbl-refs. Aggregate is measured by size exclusion chromatography (AMV-3011) and reported
+as the percentage of high molecular weight species. Charge variants are measured by imaged
+capillary isoelectric focusing (AMV-3013) and reported as the acidic variant percentage.
+Protein concentration is measured by ultraviolet absorbance (AMV-3019), which is also the
+method that decides whether a run met the concentration target.
 
-Method performance is defined in the validation reports and is not restated here. The
-intermediate precision of AMV-3019 is `{python} f"{amv_3019_precision:g}"` % relative
-standard deviation, which sets the resolution at which a difference in final
-concentration or in recovered mass can be claimed. The corresponding figures for the
-size-variant and charge-variant methods are given in AMV-3011 and AMV-3013.
+```{python}
+#| output: asis
+show(method_perf_for(UFDF_AMV_REFS, precision_with_unit=True))
+print()
+print(": Validated performance of the concentration method. {#tbl-methods}")
+```
+
+@tbl-methods gives the validated performance of the concentration method. Its intermediate
+precision is `{python} a280_prec` and its limit of quantitation is `{python} a280_loq`, so it
+resolves differences that are far smaller than the width of the range studied for that
+parameter. The validated performance of the size variant and charge variant methods is
+recorded in the validation reports for AMV-3011 and AMV-3013, and is not reproduced here.
+The precision of those two methods matters to this study, because it sets the smallest
+change in an attribute that can be attributed to a parameter rather than to the assay (§5.5).
 
 ## Sampling plan
 
-Samples will be taken at five points in every run. These are the feed pool, the end of
-the concentration phase, each whole diavolume of the diafiltration, the final
-concentrate before the recovery flush, and the pooled drug substance after it.
+Each run is sampled at four points: the feed, the retentate at the end of diafiltration, the
+final pool after the last concentration phase, and the permeate. The feed sample establishes
+the input state of every attribute in @tbl-cqa for that run, and the comparison that answers the
+first objective is the final pool against the feed of the same run. The retentate sample
+records the protein concentration at which diafiltration ended. The permeate is assayed for
+protein by ultraviolet absorbance to confirm that the membrane retained the antibody.
 
-Conductivity and osmolality will be measured on every diavolume sample, so that the
-approach of the retentate to the formulation buffer is followed across the whole
-diafiltration and not read off its endpoint alone. Protein concentration (AMV-3019)
-will be measured on every sample and on the pooled permeate and flush volumes, which is
-what closes the mass balance, while size variants (AMV-3011) and charge variants
-(AMV-3013) are measured on the feed pool and on the pooled drug substance of every run.
-The intermediate samples of the worst-case run are analysed as well.
+Aggregate and charge variants are measured on the feed and on the final pool. Protein
+concentration is measured on all four samples. Retains of every final pool are held under the
+conditions defined in SOP-2013, so that an unexpected result can be re-tested on the original
+material instead of on a repeat run.
 
 ## Statistical methods
 
-The planned analysis is descriptive, because no response model will be fitted at this
-step. Each parameter is varied one at a time with the other two at their set-points, so
-the design supports a statement about each parameter on its own but not about
-interactions between them, and the combined run of @sec-design is the only condition at
-which more than one parameter moves. The set-point replicates give the reproducibility
-of every response as a mean and a coefficient of variation, and that band is the
-reference against which each edge condition is judged.
+The planned analysis is descriptive. Each condition is compared with the set-point runs
+executed on the same feed, and each result is compared with the acceptance criteria in §7. A
+difference between a condition and the set-point runs is reported as real only when it
+exceeds the intermediate precision of the method that measured it and the scatter of the
+set-point runs themselves. Each edge condition is executed once (§6.2), which is too few for
+a significance test, and none is planned. The number of runs behind every comparison the
+report makes is stated with the comparison.
 
-A parameter will be reported as having an effect on a response when the value at the
-edge condition falls outside the set-point band and the difference is larger than the
-precision of the method used to measure it. Change in a monitored attribute across the
-step will be judged the same way. With `{python} N_CENTER` replicates the
-reproducibility estimate is itself imprecise, and the study is not powered to detect a
-small effect. It is powered to detect the effects that matter here, which are
-incomplete buffer exchange and a loss of product mass, and both of those are large when
-they occur.
+No designed experiment is run at this step and no model is fitted to its data. At the steps
+that do carry a designed experiment, the screening design identifies which parameters matter
+and the response surface model is the predictive model on which the design space rests.
+Neither exists here. The outcome of this study is a set of univariate acceptable ranges and a
+classification for each parameter. It is not a multivariate design space, and this plan
+claims nothing more for it.
 
-No commercial-scale capability estimate will be produced for this step. Capability is
-estimated for the attributes that a step governs, and this step governs none. The
-Monte-Carlo estimates over `{python} f"{V['n_monte_carlo']:,}"` simulated batches are
-reported in the documents of the steps that set each attribute, and they are
-consolidated in PCMR-001.
+Commercial-scale capability is not estimated from this step. Capability for the drug
+substance attributes is estimated by Monte-Carlo simulation of
+`{python} f"{V['n_monte_carlo']:,}"` batches from the qualified models of the steps that set
+those attributes, and the result is consolidated in PCMR-001. This step contributes the
+concentration at which the drug substance is expressed, and nothing else, to that
+calculation.
 
-# Study design {#sec-design}
+# Study design
 
 ## Factors, ranges and study type
 
-@tbl-params gives the parameters, their set-points, the ranges to be studied, the
-normal operating ranges and the study type assigned to each. All of them are assigned
-to univariate assessment, and no parameter of this step is carried into a multivariate
-design.
+The design is univariate. Each of the step's `{python} val(n_params)` parameters is studied
+across a range wider than the range in which the step will routinely operate, with the other
+parameters at their set-points. @tbl-params gives the set-point, the range studied, the normal
+operating range and the study type for each.
 
 ```{python}
 #| output: asis
 show(plan_params(UO))
 print()
-print(": Parameters to be studied, with set-points, characterization ranges and normal "
-      "operating ranges. {#tbl-params}")
+print(": Parameters, ranges and study type for the step. {#tbl-params}")
 ```
+
+The number of diavolumes is studied over `{python} rng_of(p_dv)` DV against a normal
+operating range of `{python} rng_of(p_dv, "nor")` DV. The range is extended upward only.
+Buffer exchange improves as diavolumes are added, so the risk lies at the low edge,
+and the upper edge is studied to show that the additional process time (the pool spends
+longer in the system, at its highest concentration) does not change the product. The low edge of the range studied is the low edge of the normal operating range, so
+this study does not bound an excursion below it. Applying fewer diavolumes than that is
+prevented by the recipe and detected by the permeate mass check described in §5.2.
+Completeness of the exchange itself belongs to the formulation and is not characterized here
+(@tbl-ra), and both bounds will be stated again in PCR-010.
+
+Transmembrane pressure is studied over `{python} rng_of(p_tmp)` psi against a normal
+operating range of `{python} rng_of(p_tmp, "nor")` psi. The range is extended above the
+normal operating range because the risk lies there. Shear and concentration polarization both
+rise with pressure. Below the normal range the consequence is a longer process time and not a
+change in product quality, which is why the low edge of the studied range and of the normal
+operating range are the same.
+
+Final drug substance concentration is studied over `{python} rng_of(p_conc)` g/L against a
+normal operating range of `{python} rng_of(p_conc, "nor")` g/L and a target of
+`{python} val(ds_target)` g/L. This range is extended in both directions, because both edges
+carry a consequence. The low edge delivers drug substance below the concentration the process
+is required to reach, and the high edge is where self association is most likely. The range studied
+extends beyond the normal operating range on both sides of the target, which follows the
+practice applied to the characterized steps of this process (PCMP-001) and the enhanced
+development approach of the case study [@amab2009].
 
 ## Univariate assessment
 
-No screening design and no response-surface design is planned for this step. There is
-no quality attribute response to model, and the `{python} N_PARAMS` parameters act
-through hydraulics and mass balance and not through a reaction whose rate they could
-jointly control,
-which is the condition under which a multivariate design earns its cost. The designs
-used at the bioreactor and at the chromatographic and filtration steps (PCP-003,
-PCP-005 to PCP-009) are therefore not applied here, and no design space will be claimed
-for this step. The outcome of the study is a set of proven acceptable ranges (PAR) and
-a confirmed classification, which is what a key process parameter needs.
+Each parameter is taken to the low and high levels of its characterization range with the
+other parameters at their set-points, and the set-point condition itself is executed once as
+the reference for each parameter. The study is `{python} val(n_runs)` runs in total:
+`{python} val(n_edge_runs)` runs at an edge and `{python} val(n_ref_runs)` at the set-point,
+with the runs for a given parameter executed on the same feed. No edge condition is
+replicated, so the scatter of the set-point runs
+is the only estimate of run-to-run variability the study produces, and §5.5 states how that
+scatter is used. The schedule is given in Appendix A. This design was chosen over a factorial
+for the reason given in §4.3, and the choice is a decision about scope and not about effort.
+A factorial would have to be justified against the risk RA-001 recorded for the step, and
+that assessment assigned every parameter to univariate study instead.
 
-The planned run list is given in @tbl-design and contains `{python} N_RUNS` runs. Each
-parameter is run at both edges of its characterization range with the other two at
-their set-points, the set-point condition is run in `{python} N_CENTER` replicates, and
-one further run combines the worst case of all `{python} N_PARAMS` parameters.
+The assessment is conditional. It establishes how the step behaves when one parameter is at
+an edge and the others are at their set-points, and it does not establish how the step
+behaves at a corner where two parameters are at their edges together. That limitation is
+accepted here, and it is the reason the control strategy will propose the normal operating
+ranges as the routine limits for the step, rather than the wider ranges studied.
+
+# Acceptance and decision criteria
+
+Four criteria decide the outcome of the study, and all four are fixed before any data are
+seen.
+
+The first is the scale-down model. The model is qualified when the comparison required by
+SOP-1001 is complete and meets the acceptance criteria stated there. Data generated on an
+unqualified system are not reportable, and the runs affected will be repeated.
+
+The second is product quality. At every condition, aggregate and acidic charge variants in
+the final pool must be within the drug substance acceptance criteria in @tbl-cqa. In
+addition, the change across the step is assessed: a difference between the final pool and its
+feed that exceeds the intermediate precision of the method is reported as a real change,
+investigated, and carried into the classification of the parameter that produced it.
+
+The third is process performance, and it is stated separately for the two kinds of run. A run
+at the set-point condition must deliver a final pool within the normal operating range of the
+final concentration parameter (`{python} rng_of(p_conc, "nor")` g/L). Its step yield must
+agree with the yield of the other set-point runs of the study, within the run-to-run scatter
+recorded when the system was qualified. That comparison stays inside the small scale, for the
+reason given in §5.1. A run at a deliberately varied condition must complete, and the
+condition intended for it must be achieved and verified: the mass of permeate collected for
+the number of diavolumes, the skid record for transmembrane pressure, and the concentration
+assay for the final concentration. Such a run is judged on product quality and on execution,
+and not on whether it reached the target concentration.
+
+The fourth is the decision rule for a parameter range. The acceptable range of a parameter is
+the widest contiguous span of the levels studied at which the product quality criterion is met
+and the run was executed at its intended condition, with the other parameters at their
+set-points. The process performance criterion enters through the set-point runs, which fix the
+reference the levels are compared against. Where every level studied meets those criteria, the
+whole characterization range is reported as acceptable, and the normal operating range sits
+inside it with margin on both sides.
+
+Classification follows from the same evidence, under SOP-4001. A parameter with a
+demonstrated effect on a drug substance quality attribute is classified as a critical process
+parameter (CPP), or as a well controlled critical process parameter (WC-CPP) where the control
+capability makes an excursion unlikely. A parameter with no demonstrated effect on a quality
+attribute, which must nonetheless be held for the process to perform consistently, is
+classified as a key process parameter (KPP). A parameter with neither property is a general
+process parameter (GPP). The class is an outcome of the study and is not pre-judged in this
+plan.
+
+A result that fails one of these criteria is not a failure of the plan. It is recorded,
+investigated under the site quality system, and reported in PCR-010 together with its effect
+on the ranges proposed for the control strategy.
+
+# Proven acceptable ranges (planned analysis)
+
+The report will state a proven acceptable range (PAR) for each parameter, against the two
+attributes measured across the step, which are aggregate and acidic charge variants. Residual
+DNA appears in @tbl-cqa because the step fixes the concentration on which a dose is based, and
+it is not assayed in this study, so no range is stated against it (§4.2). The acceptance basis
+is the drug substance specification, which is the set of criteria
+in @tbl-cqa; those are the criteria the drug substance is released against. No viral clearance
+attribute is in scope at this step, so no step-level clearance contribution has to be
+back-calculated from a cumulative requirement, as it is for the steps that carry a clearance
+claim.
+
+The analysis has one form here and not two. Each parameter is evaluated at the levels at which
+it was actually run, with the other parameters at their set-points, and the PAR
+is the span of those levels over which the monitored attributes remain within their
+acceptance criteria. The second analysis used at the designed steps has no counterpart at this
+one. There the remaining parameters are varied within their normal operating ranges by
+Monte-Carlo simulation of the fitted response surface model, and here there is no fitted model
+to propagate. The consequence is stated plainly in the report: every range it gives is
+conditional on the other parameters sitting at their set-points.
+
+The ranges will be reported as a table of the levels run against the attributes measured, with
+the acceptance limit for each attribute stated alongside, so that a reader can see the margin
+between the measured value and its limit at every level executed. The shaded acceptable-region plots
+used in the reports for the characterized steps are not available here, for the same reason:
+they are drawn from a fitted model. Two bounds therefore apply to every PAR
+this study can produce. It is bounded by the levels actually executed, and it is bounded
+by the assumption that the other parameters are at their set-points. Neither this plan nor its
+report will describe the result as a design space.
+
+# Data management and integrity
+
+Study data are recorded contemporaneously in the electronic batch record for the scale-down
+run and in the validated laboratory systems that hold the analytical results. Records follow
+the ALCOA+ principles: attributable, legible, contemporaneous, original, accurate, complete,
+consistent, enduring and available. Instrument output is retained in its original form with
+audit trails enabled.
+
+Every data set used in PCR-010 is subject to second-person review before it is used. The
+review confirms that the run was executed at the intended condition, that the sample identity
+is traceable, and that the analytical result was accepted by the method's own system
+suitability criteria. Any departure from this plan is documented under the site quality
+system at the time it happens and reported in PCR-010.
+
+# Roles and responsibilities
+
+The functions responsible for the study and its deliverables are given in @tbl-roles. The
+approval record at the front of this plan names the functions that approve it.
+
+| Function | Responsibility |
+|---|---|
+| Process Development / MSAT | Owns the plan, qualifies the scale-down system, executes the runs and authors PCR-010 |
+| Analytical Development | Performs the validated methods, releases the analytical data and owns method performance |
+| Manufacturing Science | Confirms that the study conditions represent commercial operation and receives the ranges |
+| Statistics | Reviews the analysis and the comparisons made against the reference condition |
+| Quality Assurance | Approves the plan and the report, and owns the handling of any departure from either |
+
+: Roles and responsibilities for the study. {#tbl-roles}
+
+# Deliverables and schedule
+
+The deliverable of this plan is one report, PCR-010, which contains the executed conditions,
+the analytical results, the acceptable range of each parameter, the classification of each
+parameter and any departures from this plan. PCR-010 rolls up into PCMR-001.
+
+The work runs in four phases, in order: qualification of the scale-down system under
+SOP-1001; execution of the runs listed in Appendix A; analysis and classification under
+SOP-4001; and issue of PCR-010 for approval. No calendar dates are given here. The study is
+scheduled within the campaign covered by PCMP-001, and the only sequence constraint that
+belongs to this step is that its feed comes from the preceding step (§5.2).
+
+# Risks and assumptions
+
+Three risks could affect the conclusions of this study, and each has a defined response.
+
+The scale-down system may not represent the commercial system in recovery. Hold-up volume is
+proportionally larger at small scale, and it acts directly on the step yield. The response is
+in §5.1: yield at small scale is reported as an indicator of consistent operation and is not
+used to set the commercial expectation.
+
+The feed may not be representative. If the material available for the study differs from
+routine post-filtration pool in its aggregate content, the comparison of pool against feed
+within a run remains valid, but the absolute levels reported are not those of a routine batch.
+The response is to draw the feed from set-point runs of the preceding steps (§5.2) and to
+report the measured feed state for every run.
+
+Assay variability may mask a small change. The intermediate precision of a method sets the
+smallest change that can be attributed to a parameter, and a change smaller than that is
+reported as lying within assay variability and not as an effect (§5.5). This risk is greatest
+for aggregate, which is the attribute the study is most concerned with and which is present at
+low levels.
+
+The plan makes three assumptions. Platform behaviour transfers from the earlier antibodies
+(X-Mab, Y-Mab and Z-Mab) to A-Mab, because the membrane chemistry, the operating sequence and
+the molecule class are the same. The parameter list in @tbl-params is complete for this step, which is the position
+RA-001 reached. The attributes carried into the step are within their acceptance criteria when
+it begins, which is established by the plans and reports for the steps before it and not by
+this study.
+
+# Approvals
+
+This plan takes effect when the functions listed in the approval record at the front of the
+document have approved it. Approval signifies agreement with the study design in §6, the
+acceptance and decision criteria in §7 and the planned analysis in §8. A change to any of
+these after approval requires a revision of this plan, or a documented departure reported in
+PCR-010.
+
+# Appendix A — Planned univariate evaluation schedule
+
+The schedule below gives the levels at which each parameter will be run. The other parameters
+are held at their set-points for every level of the parameter under study, and the reference
+column is the condition against which the levels of that parameter are compared. That
+reference condition is the same for every row, and it is executed once for each of them, so
+those runs are replicates of a single condition and the resulting run count is given in §6.2.
+The table contains no results.
 
 ```{python}
 #| output: asis
-show(plan_matrix)
+show(univariate_levels(UO))
 print()
-print(": Planned univariate run list. Levels are the set-points and the "
-      "characterization-range edges of @tbl-params. {#tbl-design}")
+print(": Planned evaluation levels, with the reference condition and the normal operating range. {#tbl-schedule}")
 ```
 
-The combined run is the worst case for this step. It sets pressure and final
-concentration at their high edges and the number of diavolumes at its low edge, so
-aggregation risk and hold-up losses are at their highest while buffer exchange is at
-its least complete. Meeting the acceptance criteria at that condition, as well as at
-every single-parameter edge, is what allows the univariate ranges to be read together
-with some confidence. It is a check on independence and it is not an interaction
-estimate.
-
-# Acceptance and decision criteria {#sec-acceptance}
-
-The study passes when the scale-down model is qualified, when the four process
-performance criteria below are met across the characterization ranges, and when the two
-monitored attributes are unchanged across the step and within the drug substance
-criteria of @tbl-cqa. Each criterion is stated here, before any data exist.
-
-Buffer exchange is the first criterion. Retentate conductivity and osmolality at the
-end of diafiltration must lie inside the control range of the formulation buffer
-(SOP-2013) at every diavolume level studied. Under ideal constant-volume diafiltration with complete
-mixing, the residual fraction of a freely permeating feed-buffer species falls
-exponentially with the number of diavolumes, so that at the low edge of the
-characterization range the ideal residual is
-`{python} f"{100 * RESID_LO:.2f}"` % of its starting value and at the set-point it is
-`{python} f"{100 * RESID_SP:.2f}"` %. Those values are the basis on which the low edge
-of the range was set. The study will measure the actual approach to the formulation
-buffer and will not assume it.
-
-Final concentration is the second criterion. The concentration of the pooled drug
-substance must lie inside the normal operating range of the final concentration
-parameter, which is `{python} f"{P_CONC.nor[0]:g}–{P_CONC.nor[1]:g}"` g/L, when the
-step is run at its set-point. At the edge conditions the requirement is that the target
-set for the run is achieved within the precision of AMV-3019.
-
-Step yield and mass balance are the third criterion. Yield at each condition will be
-compared with the platform expectation of `{python} pct(Y_BASE)`, whose batch-to-batch
-coefficient of variation is `{python} pct(Y_CV)`. A condition at which yield falls
-short of that expectation by more than the set-point reproducibility will be
-investigated before its range is accepted. The mass balance of every run must close,
-with the product mass in the retentate, the permeate and the flush accounting for the
-mass in the feed within the precision of AMV-3019.
-
-Product quality is the fourth criterion. Aggregate content and charge variant
-distribution of the pooled drug substance must meet the criteria of @tbl-cqa at every
-condition, and the change across the step must not exceed the precision of AMV-3011 and
-AMV-3013 respectively, measured between the feed pool and the final pool of the same
-run. A larger change at any condition will be treated as an effect of the step and
-investigated, whether or not the pool still meets the drug substance criterion.
-
-A condition that fails one of these criteria does not fail the study. It bounds the
-parameter, and the proven acceptable range is then reported as the part of the
-characterization range over which the criteria are met (@sec-par). A failure at the
-set-point condition is different, and so is a failure of the scale-down model
-qualification. Either one stops the study, and both are handled as deviations under the
-campaign procedures of PCMP-001.
-
-# Proven acceptable ranges (planned analysis) {#sec-par}
-
-The acceptance basis is stated before the analysis, and it differs by response. For the
-two monitored attributes the basis is the drug substance acceptance criterion in
-@tbl-cqa. For buffer exchange, final concentration, yield and mass balance the basis is
-the process performance criteria of @sec-acceptance, because those responses are not
-quality attributes and carry no specification of their own. No step-level clearance
-requirement is back-calculated for this step, since it makes no clearance claim.
-
-One analysis will be run per parameter. Each parameter will be assessed across its
-characterization range at the levels given in @tbl-design, with the other two held at
-their set-points, and its proven acceptable range will be reported as the widest
-continuous part of that range over which every criterion is met. Where the whole
-characterization range is acceptable, the report will say so, and the proven acceptable
-range of that parameter is then its full studied range.
-
-The NOR-propagated analysis used at the multivariate steps will not be run here. That
-analysis varies the other factors within their normal operating ranges by Monte-Carlo
-simulation of a fitted response-surface model, and no such model will exist for this
-step. The combined worst-case run of @sec-design is what this plan offers in its place.
-
-Each proven acceptable range will be presented as a table of the measured response at
-every level studied against its acceptance limit, with the acceptable region marked. No
-fitted curve will be shown, because none will be fitted. The report must state the two
-bounds on these ranges. They hold with the other two parameters at their set-points,
-and they hold on the qualified scale-down model, whose hold-up volume fraction differs
-from that of the commercial system.
-
-# Data management and integrity {#sec-data}
-
-Raw data will be recorded contemporaneously in the validated electronic laboratory
-notebook, and analytical results in the chromatography data system and the laboratory
-information management system. Records will meet the ALCOA+ expectations (attributable,
-legible, contemporaneous, original and accurate) set out in the site data integrity
-procedures. Instrument audit trails will be enabled and reviewed as part of the data
-review.
-
-Analysis scripts and their inputs will be version controlled and archived with the
-report, so that every table in PCR-010 can be regenerated from the raw data. A second
-person will review every calculation before the report is issued.
-
-# Roles and responsibilities {#sec-roles}
-
-Process Development and MSAT own this plan, execute the runs and author PCR-010.
-Analytical Development performs the assays and owns the method performance data that
-the acceptance criteria of @sec-acceptance depend on. Manufacturing Science reviews the
-scale-down model and the applicability of the resulting ranges to the receiving site.
-Statistics reviews the reproducibility estimate and the analysis. Quality Assurance
-approves the plan and the report and dispositions any deviation. The approval record is
-@tbl-appr.
-
-# Deliverables and schedule {#sec-deliverables}
-
-The deliverable of this plan is PCR-010. It will report the qualification of the
-scale-down model, the results of the `{python} N_RUNS` planned runs, the proven
-acceptable range of each parameter, the confirmed classification of all
-`{python} N_PARAMS` parameters (KPP), and the contribution this step makes to the
-control strategy.
-
-The work runs in four phases. The scale-down model is qualified first, the runs are
-then executed, the analysis follows, and PCR-010 is issued last. PCR-010 must be
-approved before the ranges of this step are carried into the commercial batch record
-and before the qualification batches described in PTP-001 are executed. No dates are
-given here, and the campaign schedule is held in PCMP-001.
-
-# Risks and assumptions {#sec-risks}
-
-The principal risk to the study is the representativeness of the scale-down model, and
-it comes from one quantity. The fraction of the batch held in the system hold-up volume
-is larger at small scale than at commercial scale, so the scale-down step yield is
-expected to be lower than the commercial yield and to be more sensitive to the recovery
-flush than the commercial step is. Yield will therefore be assessed as a difference
-from the scale-down set-point condition and not as an absolute value transferred to
-commercial scale. The qualification runs of @sec-sdm are what establish that this
-difference is stable.
-
-Two further risks are recorded. The feed for the study is the pool of the small virus
-retentive filtration step, so the study depends on the upstream campaign for
-representative feed material, and any substituted feed would have to be qualified
-before use. Membrane lot variability is not studied here, and it is controlled by the
-incoming specification held under SOP-2013.
-
-The plan makes three assumptions. Platform behaviour of the membrane is assumed to
-transfer to A-Mab, which the prior products and A-Mab clinical manufacture support but
-which no product-specific study at this step has yet confirmed. Diafiltration is
-assumed to be well mixed and at constant volume, which is the basis of the residual
-calculation in @sec-acceptance and will be checked against the measured conductivity
-profile. The formulation composition is assumed fixed, and it is not a variable of this
-study.
-
-# Approvals {#sec-approvals}
-
-This plan becomes effective when it is approved by the functions listed in @tbl-appr.
-Any change to the study design after approval will be recorded as an amendment to this
-plan and reported in PCR-010 [@fda2011].
+<!-- ========================= BODY END ========================= -->
 
 # References {.unnumbered}
 

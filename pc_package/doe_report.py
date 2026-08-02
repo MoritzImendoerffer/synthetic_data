@@ -355,7 +355,8 @@ def fig_diagnostics(key, resp):
 # predictive backend could replace `_mc_predictive` later without touching callers.
 PAR_SEED = 20240724
 PAR_MC_N = 2000          # Monte-Carlo draws per grid point
-PAR_GRID = 81            # parameter grid points across the characterization range
+PAR_GRID = 81            # grid points across the characterization range, NOR-propagated scan
+PAR_CENTRE_GRID = 201    # grid points across the characterization range, design-centre scan
 
 # response key -> CQA-register key (for responses not named as a CQA key directly)
 RESP_TO_CQA = {
@@ -513,7 +514,7 @@ def _contiguous_range(xs, mask, center=0.0):
     return float(xs[lo]), float(xs[hi])
 
 
-def par_at_design_centre(key, resp, factor, n_grid=201):
+def par_at_design_centre(key, resp, factor, n_grid=PAR_CENTRE_GRID):
     """PAR of `factor` for `resp` with all other factors at the DESIGN CENTRE (coded 0).
 
     The design centre is the midpoint of each factor's characterization range. It is **not**
@@ -633,6 +634,38 @@ def par_table(key):
                          _par_str(ps["par_nat"]), _par_str(pn["par_nat"])])
     return pd.DataFrame(rows, columns=["CQA", "Parameter", "Char. range", "Unit",
                                        "PAR (set-point)", "PAR (NOR)"])
+
+
+def acceptance_table(key):
+    """Per-response acceptance criteria for a step, with the basis of each.
+
+    The prospective counterpart of :func:`par_table`. A protocol has to state what each
+    measured response must achieve *before* any data exist, and the two bases differ: an
+    impurity or formed CQA is judged against the study-provided drug-substance criterion,
+    while a viral-clearance response is judged against the STEP contribution
+    back-calculated by :func:`acceptance_for` from the cumulative requirement. Responses
+    that map to no CQA (e.g. step yield) are omitted, as they are in ``par_table``.
+    """
+    rows = []
+    for resp in responses(key):
+        acc = acceptance_for(key, resp)
+        if acc is None:
+            continue
+        lo, hi, stype = acc
+        if resp in VIRAL_COL:
+            cqa_key = VIRAL_COL[resp][1]
+            unit, crit = "log₁₀ (this step)", f"≥ {lo:.2f}"
+            basis = "Cumulative requirement less the clearance credited to the other steps"
+        else:
+            cqa_key = resp if resp in set(cqa_reg["key"]) else RESP_TO_CQA.get(resp)
+            unit = str(cqa_reg[cqa_reg["key"] == cqa_key].iloc[0]["unit"])
+            crit = (f"≤ {hi:g}" if stype == "upper" else
+                    f"≥ {lo:g}" if stype == "lower" else f"{lo:g}–{hi:g}")
+            basis = "Drug-substance specification"
+        cqa_name = str(cqa_reg[cqa_reg["key"] == cqa_key].iloc[0]["cqa"])
+        rows.append([RESP_LABEL.get(resp, resp), cqa_name, crit, unit, basis])
+    return pd.DataFrame(rows, columns=["Response", "Quality attribute",
+                                       "Acceptance criterion", "Unit", "Basis"])
 
 
 def fig_par(key, resp, factor):

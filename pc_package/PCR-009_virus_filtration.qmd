@@ -40,201 +40,90 @@ sys.path.insert(0, os.path.abspath("."))
 from _pcpkg import *  # noqa: F401,F403
 import doe_report as D
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
 import scipy.stats as sstat
 
 DOC = "PCR-009"
 UO = "virus_filtration"
 UO_TITLE = "Small-Virus Retentive Filtration (Step 9)"
 
-# --- design structure -------------------------------------------------------
-LOAD, PRES = "filtration_volume", "pressure"
-LBL = D.RESP_LABEL
+# --- doc-local derived scalars (pulled from the model; nothing typed) ---------------
+STEP = CFG.unit_op(UO).step
 n_scr = doe_runs(UO, "screening")
 n_rsm = doe_runs(UO, "rsm")
-n_fac = len(D.screening_factors(UO))
-n_resp = len(D.responses(UO))
-p_load = CFG.unit_op(UO).param(LOAD)
-p_pres = CFG.unit_op(UO).param(PRES)
+cp_scr = doe_centre_points(UO, "screening")
+cp_rsm = doe_centre_points(UO, "rsm")
 
-load_char = f"{p_load.prange[0]:g}–{p_load.prange[1]:g}"
-load_nor = f"{p_load.nor[0]:g}–{p_load.nor[1]:g}"
-load_sp = f"{p_load.setpoint:g}"
-load_max = f"{p_load.prange[1]:g}"
-load_nor_max = f"{p_load.nor[1]:g}"
-pres_char = f"{p_pres.prange[0]:g}–{p_pres.prange[1]:g}"
-pres_nor = f"{p_pres.nor[0]:g}–{p_pres.nor[1]:g}"
-pres_sp = f"{p_pres.setpoint:g}"
-load_widen = (p_load.prange[1] - p_load.prange[0]) / (p_load.nor[1] - p_load.nor[0])
-pres_widen = (p_pres.prange[1] - p_pres.prange[0]) / (p_pres.nor[1] - p_pres.nor[0])
+p_vol = CFG.unit_op(UO).param("filtration_volume")
+p_prs = CFG.unit_op(UO).param("pressure")
 
-n_cp_scr = int(D.center_cv_df(UO, "screening")["n"].iloc[0])
-n_cp_rsm = int(D.center_cv_df(UO, "rsm")["n"].iloc[0])
-n_terms_rsm = len(D.rsm_coeff_df(UO, "mvm_lrf")) - 1
-df_res_rsm = n_rsm - n_terms_rsm - 1
-df_pe_rsm = n_cp_rsm - 1
 
-# --- acceptance criteria and the modular clearance ledger -------------------
-mvm_floor = D.acceptance_for(UO, "mvm_lrf")[0]
-xm_floor = D.acceptance_for(UO, "xmulv_lrf")[0]
+def _rng(lo, hi):
+    return f"{lo:g}–{hi:g}"
+
+
+vol_char = _rng(*p_vol.prange)
+vol_nor = _rng(*p_vol.nor)
+prs_char = _rng(*p_prs.prange)
+prs_nor = _rng(*p_prs.nor)
+
+# Fitted models (screening = 2FI, RSM = full quadratic), one per response.
+scr = {r: D.fit(UO, "screening", r) for r in D.responses(UO)}
+rsm = {r: D.fit(UO, "rsm", r) for r in D.responses(UO)}
+
+# Acceptance: the STEP contribution back-calculated from the cumulative requirement.
+acc_mvm = D.acceptance_for(UO, "mvm_lrf")
+acc_xmu = D.acceptance_for(UO, "xmulv_lrf")
+mvm_floor, xmu_floor = acc_mvm[0], acc_xmu[0]
+
+# Modular clearance: this step's contribution and the cumulative claim.
 vc = csv("viral_clearance.csv").set_index("step")
-mvm_credit = float(vc.loc["Virus Filtration", "MVM"])
-xm_credit = float(vc.loc["Virus Filtration", "XMuLV"])
-mvm_aex = float(vc.loc["Anion Exchange (AEX)", "MVM"])
-xm_aex = float(vc.loc["Anion Exchange (AEX)", "XMuLV"])
-xm_lowph = float(vc.loc["Low-pH Viral Inactivation", "XMuLV"])
-mvm_cum = float(vc.loc["Cumulative", "MVM"])
-xm_cum = float(vc.loc["Cumulative", "XMuLV"])
-mvm_req = float(cqa_reg[cqa_reg.key == "lrv_mvm"].iloc[0]["acc_low"])
-xm_req = float(cqa_reg[cqa_reg.key == "lrv_xmulv"].iloc[0]["acc_low"])
-mvm_share = mvm_credit / mvm_cum
-xm_share = xm_credit / xm_cum
+vf_mvm = float(vc.loc["Virus Filtration", "MVM"])
+vf_xmu = float(vc.loc["Virus Filtration", "XMuLV"])
+aex_mvm = float(vc.loc["Anion Exchange (AEX)", "MVM"])
+lowph_xmu = float(vc.loc["Low-pH Viral Inactivation", "XMuLV"])
+cum_mvm = float(vc.loc["Cumulative", "MVM"])
+cum_xmu = float(vc.loc["Cumulative", "XMuLV"])
 
-# --- model predictions (public prediction API) ------------------------------
-def _p(resp, load, pres):
-    return D.predict(UO, resp, natural={LOAD: load, PRES: pres})
+# Predictions from the fitted response-surface model.
+def _pred(resp, vol, prs):
+    return float(D.predict(UO, resp, natural={"filtration_volume": vol, "pressure": prs})[0])
 
 
-def _grid(load_rng, pres_rng, n=61):
-    ls = np.linspace(load_rng[0], load_rng[1], n)
-    ps = np.linspace(pres_rng[0], pres_rng[1], n)
-    L, P = np.meshgrid(ls, ps)
-    return L.ravel(), P.ravel()
+sp_mvm = _pred("mvm_lrf", p_vol.setpoint, p_prs.setpoint)
+nor_hi_mvm = _pred("mvm_lrf", p_vol.nor[1], p_prs.nor[1])
+wc_mvm = _pred("mvm_lrf", p_vol.prange[1], p_prs.prange[1])
+wc_margin = wc_mvm - mvm_floor
+nor_margin = nor_hi_mvm - mvm_floor
+wc_xmu = _pred("xmulv_lrf", p_vol.prange[1], p_prs.prange[0])
+wc_yield = _pred("step_yield", p_vol.prange[1], p_prs.prange[0])
+# The two pressure edges at the highest load, for the worst-case discussion.
+wc_lo_prs_mvm = _pred("mvm_lrf", p_vol.prange[1], p_prs.prange[0])
+prs_edge_gap = abs(wc_mvm - wc_lo_prs_mvm)
 
-
-def _worst(resp, load_rng, pres_rng, n=61):
-    L, P = _grid(load_rng, pres_rng, n)
-    y = _p(resp, L, P)
-    i = int(np.argmin(y))
-    return float(y[i]), float(L[i]), float(P[i])
-
-
-mvm_sp = float(_p("mvm_lrf", p_load.setpoint, p_pres.setpoint)[0])
-mvm_lo_load = float(_p("mvm_lrf", p_load.prange[0], p_pres.setpoint)[0])
-mvm_hi_load = float(_p("mvm_lrf", p_load.prange[1], p_pres.setpoint)[0])
-mvm_nor_load = float(_p("mvm_lrf", p_load.nor[1], p_pres.setpoint)[0])
-mvm_span = mvm_lo_load - mvm_hi_load
-mvm_per10 = float(_p("mvm_lrf", p_load.setpoint - 5, p_pres.setpoint)[0]
-                  - _p("mvm_lrf", p_load.setpoint + 5, p_pres.setpoint)[0])
-mvm_wc, mvm_wc_load, mvm_wc_pres = _worst("mvm_lrf", p_load.prange, p_pres.prange)
-mvm_wc_margin = mvm_wc - mvm_floor
-mvm_nwc, mvm_nwc_load, mvm_nwc_pres = _worst("mvm_lrf", p_load.nor, p_pres.nor)
-mvm_nwc_margin = mvm_nwc - mvm_floor
-mvm_credit_headroom = mvm_sp - mvm_credit
-
-xm_sp = float(_p("xmulv_lrf", p_load.setpoint, p_pres.setpoint)[0])
-xm_wc, xm_wc_load, xm_wc_pres = _worst("xmulv_lrf", p_load.prange, p_pres.prange)
-xm_wc_margin = xm_wc - xm_floor
-yld_sp = float(_p("step_yield", p_load.setpoint, p_pres.setpoint)[0])
-yld_wc, yld_wc_load, yld_wc_pres = _worst("step_yield", p_load.prange, p_pres.prange)
-
-_Lg, _Pg = _grid(p_load.prange, p_pres.prange)
-mvm_region_ok = pct(float(np.mean(D.meets_acceptance(UO, "mvm_lrf", _p("mvm_lrf", _Lg, _Pg)))))
-xm_region_ok = pct(float(np.mean(D.meets_acceptance(UO, "xmulv_lrf", _p("xmulv_lrf", _Lg, _Pg)))))
-
-# --- proven acceptable ranges ----------------------------------------------
-par_mvm = D.par_nor_propagated(UO, "mvm_lrf", LOAD)
-_i = int(np.argmin(np.abs(par_mvm["xs_nat"] - p_load.nor[1])))
-_j = int(np.argmin(np.abs(par_mvm["xs_nat"] - p_load.prange[1])))
-mvm_plo_nor = float(par_mvm["p_lo"][_i])
-mvm_plo_max = float(par_mvm["p_lo"][_j])
-mvm_plo_margin = mvm_plo_max - mvm_floor
-mvm_par_assurance = pct(float(np.min(par_mvm["p_in"])))
-gov_mvm = D.governing_factor(UO, "mvm_lrf")
-gov_xm = D.governing_factor(UO, "xmulv_lrf")
-
-# --- fit statistics ---------------------------------------------------------
-fs_rsm = D.fit_summary_df(UO, "rsm").set_index("Response")
-fs_scr = D.fit_summary_df(UO, "screening").set_index("Response")
-
-
-def fs(kind, resp, col):
-    t = fs_rsm if kind == "rsm" else fs_scr
-    return float(t.loc[LBL[resp], col])
-
-
-def lof(resp, col="p-value"):
-    a = D.anova_lof_df(UO, resp)
-    a["Source"] = a["Source"].str.strip()
-    return float(a.set_index("Source").loc["Lack of fit", col])
-
-
-def eff(resp, term, col="Effect"):
-    return float(D.screening_effects_df(UO, resp).set_index("Term").loc[term, col])
-
-
-def coef(resp, term, col="Coef."):
-    return float(D.rsm_coeff_df(UO, resp).set_index("Term").loc[term, col])
-
-
+# Centre-point reproducibility and screening effects.
 cv_rsm = D.center_cv_df(UO, "rsm").set_index("Response")
 cv_scr = D.center_cv_df(UO, "screening").set_index("Response")
+mvm_lab = D.RESP_LABEL["mvm_lrf"]
+xmu_lab = D.RESP_LABEL["xmulv_lrf"]
+yld_lab = D.RESP_LABEL["step_yield"]
+eff_mvm = D.screening_effects_df(UO, "mvm_lrf").set_index("Term")
+load_effect = float(eff_mvm.loc["A", "Effect"])
+load_effect_p = float(eff_mvm.loc["A", "p-value"])
+# The same effect refined by the response-surface model (effect = 2 x coded coefficient).
+coef_mvm = D.rsm_coeff_df(UO, "mvm_lrf").set_index("Term")
+rsm_load_effect = 2.0 * float(coef_mvm.loc["A", "Coef."])
 
+# Commercial-scale capability of the two viral-clearance attributes.
+cap_mvm = cap[cap.key == "lrv_mvm"].iloc[0]
+cap_xmu = cap[cap.key == "lrv_xmulv"].iloc[0]
+mvm_cpk = float(cap_mvm["Cpk"])
+xmu_cpk = float(cap_xmu["Cpk"])
+mvm_cap_margin = float(cap_mvm["mean"]) - float(cap_mvm["acc_low"])
+xmu_cap_margin = float(cap_xmu["mean"]) - float(cap_xmu["acc_low"])
 
-def cv(kind, resp, col="%CV"):
-    t = cv_rsm if kind == "rsm" else cv_scr
-    return float(t.loc[LBL[resp], col])
-
-
-def f2(x):
-    return f"{x:.2f}"
-
-
-def f3(x):
-    return f"{x:.3g}"
-
-
-def pv(p):
-    return f"= {p:.3f}" if p >= 0.001 else "< 0.001"
-
-
-# --- capability -------------------------------------------------------------
-cap_row = cap.set_index("key")
-mvm_cpk = float(cap_row.loc["lrv_mvm", "Cpk"])
-xm_cpk = float(cap_row.loc["lrv_xmulv", "Cpk"])
-mvm_cap_mean = float(cap_row.loc["lrv_mvm", "mean"])
-mvm_cap_sd = float(cap_row.loc["lrv_mvm", "sd"])
-mvm_cap_min = float(cap_row.loc["lrv_mvm", "min"])
-mvm_cap_margin = mvm_cap_mean - float(cap_row.loc["lrv_mvm", "acc_low"])
-xm_cap_mean = float(cap_row.loc["lrv_xmulv", "mean"])
-xm_cap_margin = xm_cap_mean - float(cap_row.loc["lrv_xmulv", "acc_low"])
-n_mc = f"{V['n_monte_carlo']:,}"
-n_par_mc = f"{D.PAR_MC_N:,}"
-min_cpk = V["min_cpk"]
-cls_counts = class_counts()
-n_wccpp_train = cls_counts.get("WC-CPP", 0)
-n_cpp_train = cls_counts.get("CPP", 0)
-
-# --- deviations -------------------------------------------------------------
-dev = dev_facts(DOC).set_index("dev_id")
-n_dev = len(dev)
-dev1_pres = dev_009_01_pmax_psi
-dev1_over_nor = dev1_pres - p_pres.nor[1]
-dev1_coded = float(D.to_coded(UO, PRES, dev1_pres))
-dev1_delta = float(_p("mvm_lrf", p_load.setpoint, dev1_pres)[0]) - mvm_sp
-dev2_lot = str(dev.loc["DEV-009-02", "lot"])
-dev2_method = str(dev.loc["DEV-009-02", "method"])
-dev2_deficit = dev_009_02_flux_deficit_pct
-
-# --- analytical method performance (Appendix D) -----------------------------
-_rows = []
-for _aid, _title in VIRUS_FILT_AMV_REFS:
-    _k = _aid.lower().replace("-", "_")
-    _rows.append([_aid, _title,
-                  f"{DEV_SCALARS[_k + '_precision']:.2g}",
-                  f"{DEV_SCALARS[_k + '_loq']:.2g}",
-                  f"{DEV_SCALARS[_k + '_accuracy']:.1f}",
-                  f"{DEV_SCALARS[_k + '_var_frac']:.2f}"])
-amv_df = pd.DataFrame(_rows, columns=["Reference", "Method", "Precision (log₁₀)",
-                                      "LOQ (log₁₀)", "Accuracy (%)",
-                                      "Assay share of variance"])
-mvm_assay_prec = DEV_SCALARS["amv_3018_precision"]
-mvm_assay_share = pct(DEV_SCALARS["amv_3018_var_frac"])
-xm_assay_prec = DEV_SCALARS["amv_3017_precision"]
-xm_assay_share = pct(DEV_SCALARS["amv_3017_var_frac"])
-cp_sd_scr = float(cv_scr.loc[LBL["mvm_lrf"], "SD"])
-cp_sd_rsm = float(cv_rsm.loc[LBL["mvm_lrf"], "SD"])
+# Deviations.
+dev_pressure_coded = float(D.to_coded(UO, "pressure", dev_009_01_pmax_psi))
+dev_pressure_mvm = _pred("mvm_lrf", p_vol.setpoint, dev_009_01_pmax_psi)
 ```
 
 ```{python}
@@ -258,144 +147,151 @@ print(SYN_BANNER)
 
 ## Abbreviations {.unnumbered}
 
-AMV, analytical method validation; ANOVA, analysis of variance; BLA, Biologics License
-Application; Cpk, process capability index (one-sided); CPP, critical process parameter;
-CQA, critical quality attribute; DoE, design of experiments; DS, drug substance; GPP,
-general process parameter; HCP, host cell protein; ICH, International Council for
-Harmonisation; KPP, key process parameter; LOQ, limit of quantitation; LRF, log reduction
-factor; MSAT, Manufacturing Science and Technology; MVM, minute virus of mice; NOR, normal
-operating range; OLS, ordinary least squares; PAR, proven acceptable range; PPQ, process
-performance qualification; qPCR, quantitative polymerase chain reaction; RSM, response
-surface methodology; SDM, scale-down model; SEC, size-exclusion chromatography; SOP,
-standard operating procedure; TCID50, fifty per cent tissue culture infectious dose; UF/DF,
-ultrafiltration and diafiltration; VF, virus filtration; WC-CPP, well-controlled critical
+AEX, anion exchange chromatography; AMV, analytical method validation; CPP, critical process
+parameter; Cpk, one-sided process capability index; CQA, critical quality attribute; %CV,
+coefficient of variation; ICH, International Council for Harmonisation; LOQ, limit of
+quantitation; LRF, log reduction factor; MSAT, Manufacturing Science and Technology; MVM,
+minute virus of mice; NOR, normal operating range; PAR, proven acceptable range; PRESS,
+predicted residual error sum of squares; qPCR, quantitative polymerase chain reaction; RMSE,
+root mean square error; SOP, standard operating procedure; TCID50, median tissue culture
+infective dose; UF/DF, ultrafiltration and diafiltration; WC-CPP, well-controlled critical
 process parameter; XMuLV, xenotropic murine leukaemia virus.
 
 {{< pagebreak >}}
 
-## Executive summary {.unnumbered}
+<!-- ========================= BODY START (author here) ========================= -->
 
-Small-virus retentive filtration is the dedicated size-based virus removal step of the
-A-Mab drug-substance process, and it is the principal contributor to the minute virus of
-mice (MVM) clearance claim. This report covers the characterization executed under the
-paired plan PCP-009 on a qualified scale-down spiking model, over the
-`{python} f"{n_fac}"` operating parameters that the pre-characterization risk assessment
-(RA-001) carried into multivariate study. The work follows the lifecycle approach to
-process validation [@fda2011] and the enhanced development principles of ICH Q8, ICH Q9
-and ICH Q11. The clearance claim is framed by ICH Q5A(R2) [@ichq5a]. The process model, the
-quality attribute framework and the modular clearance approach are those of the A-Mab case
+# Executive summary {.unnumbered}
+
+Small-virus retentive filtration removes non-enveloped virus from the anion exchange
+flow-through pool by size exclusion, and it is the largest single contributor to the
+parvovirus clearance claimed for A-Mab drug substance. The step is operated in single pass
+across a dedicated retentive membrane, at a controlled pressure and to a defined volumetric
+load. This report presents the Stage 1 characterization executed against PCP-009 on a
+qualified small-scale spiking model. The work follows the lifecycle approach to process
+validation [@fda2011], the enhanced development approach of ICH Q8 and ICH Q11 [@ichq8;
+@ichq11] and the viral safety evaluation framework of ICH Q5A(R2) [@ichq5a]. The process
+model, the criticality framework and the risk-ranking method are taken from the A-Mab case
 study [@amab2009].
 
-MVM clearance falls as the volumetric load on the membrane rises. Across the characterized
-load range of `{python} load_char` L/m² the response-surface model predicts a decrease of
-`{python} f2(mvm_span)` log₁₀, and volumetric load is the only parameter whose effect on
-MVM clearance was resolved (p `{python} pv(coef("mvm_lrf", "A", "p-value"))`). Each
-additional `{python} f"{10:g}"` L/m² of load costs about `{python} f2(mvm_per10)` log₁₀ of
-retention near the set-point. The trend is bounded by the acceptance criterion for the
-step. At the worst corner of the characterized region, which is the highest load at the
-highest pressure, the predicted MVM log reduction is `{python} f2(mvm_wc)` against a
-required step contribution of `{python} f2(mvm_floor)` log₁₀, so the criterion is met
-throughout the region studied (§6). Within the normal operating ranges the predicted worst
-case rises to `{python} f2(mvm_nwc)` log₁₀, a margin of `{python} f2(mvm_nwc_margin)`.
+Both parameters carried into the study, filtration volume and filtration pressure, are
+classified as well-controlled critical process parameters. The step has no critical process
+parameter and no key process parameter. Three responses were measured across a screening
+design of `{python} f"{n_scr:d}"` runs and a response-surface design of
+`{python} f"{n_rsm:d}"` runs: the MVM log reduction factor, the XMuLV log reduction factor
+and step yield. The volumetric load is the only parameter with a demonstrated effect on any
+response. The screening design estimates a reduction in MVM clearance of
+`{python} f"{abs(load_effect):.2f}"` log across the characterized load range
+(p = `{python} f"{load_effect_p:.3f}"`), and the response-surface model refines that estimate
+to `{python} f"{abs(rsm_load_effect):.2f}"` log.
 
-XMuLV clearance and step yield were robust to both parameters over the ranges studied. No
-model term reached significance for either response, and the two response-surface fits are
-reported as evidence of robustness and are not used predictively. Predicted XMuLV clearance
-remains at or above `{python} f2(xm_wc)` log₁₀ everywhere in the characterized region,
-against a required step contribution of `{python} f2(xm_floor)` log₁₀, and predicted step
-yield remains at or above `{python} pct(yld_wc)`.
+The response-surface model for MVM clearance is significant and adequate
+(R² = `{python} f"{rsm['mvm_lrf']['R2']:.3f}"`, adjusted
+R² = `{python} f"{rsm['mvm_lrf']['adjR2']:.3f}"`), and it is the predictive model on which the
+operating region rests. Neither the XMuLV model nor the step yield model was significant over
+the ranges studied, so no predictive model is claimed for either. Those two null results are
+reported as evidence of robustness and are carried into the knowledge space (see §5.3). At the
+worst-case corner of the characterized region the model predicts an MVM log reduction of
+`{python} f"{wc_mvm:.2f}"`, against a required step contribution of
+`{python} f"{mvm_floor:.2f}"` log.
 
-Both parameters are classified as well-controlled critical process parameters (WC-CPP), and
-the step carries no CPP and no key process parameter. Commercial-scale capability for the
-cumulative MVM clearance attribute is a one-sided Cpk of `{python} f2(mvm_cpk)`, with a
-margin of `{python} f2(mvm_cap_margin)` log₁₀ between the simulated mean and the
-requirement. No drug-substance attribute has a tighter capability, and the figure is
-cumulative over more than one step. Of the
-`{python} f2(mvm_cum)` log₁₀ of MVM clearance claimed for the process, this step is
-credited with `{python} f2(mvm_credit)` log₁₀ and anion exchange with
-`{python} f2(mvm_aex)` log₁₀ (PCR-008).
+At commercial scale both viral-clearance attributes clear their acceptance criteria with
+margin. The cumulative parvovirus clearance has a one-sided capability index of
+`{python} f"{mvm_cpk:.2f}"` and sits `{python} f"{mvm_cap_margin:.2f}"` log above its
+criterion; the enveloped-virus attribute has a capability index of
+`{python} f"{xmu_cpk:.2f}"`. Parvovirus clearance is the tighter of the two, and this step
+supplies `{python} f"{vf_mvm:.2f}"` of the `{python} f"{cum_mvm:.2f}"` cumulative log. Two
+deviations were recorded during execution. Both were investigated, both were dispositioned as
+retained, and neither altered a parameter classification or the operating region (see §13).
 
-No clearance of host cell protein, DNA, aggregate or leached Protein A is claimed for this
-step, and no product-quality attribute is formed here. The step does not meet the
-cumulative MVM requirement of `{python} f2(mvm_req)` log₁₀ on its own, and its clearance is
-credited only as one module of an orthogonal set. The campaign recorded
-`{python} f"{n_dev}"` deviations at this step. Each was investigated, retained and
-impact-assessed, and none changed a parameter classification or the operating region (§13).
-The results of this step roll up into the master report PCMR-001.
-
-{{< pagebreak >}}
+The step does not deliver viral safety on its own. Parvovirus clearance is shared with anion
+exchange (PCR-008), enveloped-virus clearance is shared with the low-pH hold (PCR-006) and
+with anion exchange, and the cumulative claim is consolidated in PCMR-001. No clearance is
+claimed for viruses other than the two model viruses used here, and the capability reported
+above is an estimate from qualified scale-down models that Stage 2 confirms at commercial
+scale.
 
 # Introduction
 
 ## Product and unit operation
 
-A-Mab is a humanized IgG1 monoclonal antibody produced in a fed-batch mammalian cell
-culture and purified by the platform train given in @tbl-train. The primary mechanism of
-action is antibody-dependent cellular cytotoxicity, so the glycan attributes that govern
-effector function are formed in the production bioreactor and are unaffected by the
-purification steps that follow. Viral safety, by contrast, is built across the purification
-train and not at any single step.
+A-Mab is a humanized IgG1 monoclonal antibody produced in a fed-batch mammalian cell culture
+and purified by the Novacyte platform train. The purification sequence is Protein A capture,
+low-pH viral inactivation, cation exchange, anion exchange, small-virus retentive filtration
+and UF/DF. Small-virus retentive filtration is Step `{python} f"{STEP:d}"` of the drug
+substance process, and it sits between the final chromatographic polish and formulation. It
+receives the anion exchange flow-through pool as its load (the composition of that pool is set
+by the design space of Step 8, and is reported in PCR-008) and delivers the filtrate to the
+UF/DF step.
+
+The step removes virus by size exclusion. The membrane retains particles above its pore-size
+distribution while the antibody monomer passes, so clearance depends on the physical
+dimensions of the virus and on how much material the retentive layer has already seen. This
+mechanism is orthogonal to the two upstream viral steps. Low-pH inactivation destroys the
+lipid envelope of enveloped virus (PCR-006), and anion exchange removes virus by charge-based
+binding in flow-through mode (PCR-008). A filtration step that works on size alone therefore
+adds clearance that does not share a failure mode with either of them. That is the basis of
+the modular claim made in ICH Q5A(R2) [@ichq5a].
+
+The step forms no product quality attribute of its own, and it contributes to two attributes
+of the drug substance: the cumulative clearance of minute virus of mice (MVM) as the
+parvovirus model, and the cumulative clearance of xenotropic murine leukaemia virus (XMuLV) as
+the enveloped model. MVM is the harder of the two to remove, because a parvovirus is small
+enough that its retention is set by the tail of the pore-size distribution. The filter is
+single use, so no resin or membrane life-cycle claim arises at this step. Performance of the
+nominal batch is given in @tbl-nominal.
 
 ```{python}
 #| output: asis
-show(process_steps_df())
+show(step_performance(STEP), floatfmt=",g")
 print()
-print(": The A-Mab drug-substance process train, with each step's principal role in the "
-      "control strategy. {#tbl-train}")
+print(": Nominal-batch performance of the small-virus retentive filtration step. {#tbl-nominal}")
 ```
 
-Small-virus retentive filtration is the last purification operation before formulation, and
-it works by passing the anion-exchange pool through a small-virus retentive membrane under
-constant pressure, with the filtrate collected as the load for ultrafiltration and
-diafiltration (Step 10). Retention is size based. Particles larger than the membrane
-retention rating are held back while the antibody monomer passes, so the mechanism does not
-depend on solution chemistry and is orthogonal to the mechanisms of the two other clearance
-steps. Low-pH inactivation (PCR-006) destroys the lipid envelope of enveloped viruses, and
-anion exchange (PCR-008) removes virus by charge-based binding in flow-through mode. A
-non-enveloped parvovirus such as MVM is not inactivated by low pH at all, which is why
-size-based removal carries the larger part of the MVM claim.
-
-Two model viruses were used, in line with the practice of the case study [@amab2009]. MVM
-(minute virus of mice) is the smaller of the two and its diameter is closest to the
-retention rating of the membrane, so it is the worst-case challenge for a size-based step
-and the response that governs the operating region (§6). XMuLV (xenotropic murine leukaemia
-virus) is a large enveloped retrovirus model and is retained with a wide size margin.
+Step yield is high and both log reduction factors sit well above the contribution the step is
+required to make (that contribution is derived in §7). The nominal batch is the at-set-point
+condition, so these values are the reference against which the characterization ranges were
+explored.
 
 ## Objectives
 
-The characterization had five objectives. Three of them concern the measurements: (i) to
-quantify the relationship between the two characterized operating parameters and the log
-reduction achieved for MVM and XMuLV, (ii) to define the operating region over which the
-step meets its required contribution to the cumulative clearance claim, and (iii) to
-establish a proven acceptable range for each parameter against each governed attribute. The
-remaining two concern the use made of those measurements: (iv) to classify each parameter
-under the decision logic of SOP-4001, and (v) to justify the ranges that will be applied in
-Stage 2 process performance qualification and in the commercial control strategy for the
-step.
+The objectives of this characterization were:
+
+(i) to quantify the relationship between each studied process parameter and the viral
+    clearance and process performance responses of the step;
+(ii) to define the operating region over which the required clearance contribution is met;
+(iii) to establish proven acceptable ranges for each parameter against each governed quality
+    attribute;
+(iv) to classify each parameter according to its demonstrated effect and the risk of
+    operating outside the region; and
+(v) to justify the ranges taken forward into Stage 2 and the controls carried into the
+    control strategy.
 
 ## Regulatory and scientific basis
 
-The study is a Stage 1 process design activity in the lifecycle approach to process
-validation [@fda2011]. Its record is organized so that the design, the execution, the
-analysis and the resulting ranges can be read as one traceable argument. The enhanced
-development approach of ICH Q8 and ICH Q11 provides the design-space framework, and ICH Q9
-provides the risk methodology used in RA-001. Criticality is treated as a continuum in the
-sense of ICH Q9, so an attribute is not simply critical or non-critical but carries a level
-of criticality that reflects both impact and residual uncertainty.
+The study is a Stage 1 process design activity in the sense of the FDA lifecycle guidance
+[@fda2011], and this report is the study record for that stage. The development approach is
+the enhanced approach of ICH Q8 and ICH Q11 [@ichq8; @ichq11], in which prior knowledge and a
+formal risk assessment set the scope of experimentation and the outcome is a control strategy
+supported by process understanding. Criticality is treated as a continuum in the sense of ICH
+Q9 [@ichq9], so a quality attribute is assigned a level of criticality and the attributes at
+high and very high criticality are called critical.
 
-Viral clearance is evaluated under ICH Q5A(R2) [@ichq5a]. Three consequences follow for
-this report. Clearance is demonstrated on a qualified small-scale spiking model, because
-virus cannot be introduced into the manufacturing facility. Clearance is claimed modularly,
-so each step is studied independently and the cumulative claim is the sum of the
-independent contributions. The conditions under which the reduction was demonstrated become
-part of the control strategy, so a parameter with no measurable effect on clearance is
-still held within the range in which the claim was established.
+Viral safety is evaluated under ICH Q5A(R2) [@ichq5a], a framework that requires clearance to
+be demonstrated on a qualified scale-down model with deliberately spiked virus, because live
+virus cannot be introduced into a manufacturing facility. It also requires that the steps
+credited in a cumulative claim remove virus by mechanisms that are distinct, so that one
+failure cannot remove the whole margin, and both of those requirements shape the study
+reported here. The process model, the CQA register and the risk-ranking method follow the
+A-Mab case study [@amab2009].
 
-## Related documents
+## Related documents and controlled procedures
 
-This report is one of the unit-operation reports in the A-Mab characterization package. Its
-parents (PTP-001, RA-001 and PCMP-001), its paired plan (PCP-009) and the report it rolls up
-into (PCMR-001) are listed in @tbl-related.
+This report is one of the per-step reports that roll up into the master report (PCMR-001), and
+its place in the package is fixed by three others: its scope was set by the
+pre-characterization risk assessment (RA-001), its method was fixed in advance by the paired
+plan (PCP-009), and its conclusions feed the campaign-level control strategy. The package is
+listed in @tbl-related.
 
 ```{python}
 #| output: asis
@@ -404,975 +300,1017 @@ print()
 print(": Related documents in the A-Mab characterization package. {#tbl-related}")
 ```
 
-# Prior knowledge and quality risk basis
-
-## Platform and prior-product knowledge
-
-Small-virus retentive filtration is a mature platform operation at Novacyte Biologics, and
-the study was designed to confirm and bound its behaviour rather than to discover it. The
-same membrane chemistry and the same mode of operation have been used for three prior
-humanized IgG1 products (X-Mab, Y-Mab and Z-Mab), and the mechanism of removal is identical
-across those products because retention depends on particle size and not on the antibody.
-Prior knowledge therefore transfers to A-Mab as a mechanistic expectation. It does not
-transfer as a numerical claim, and every log reduction credited to A-Mab comes from the
-studies reported here.
-
-Platform experience sets two expectations that the study was built to test. The first is
-that the log reduction achieved for the smallest model virus declines as the cumulative
-volume filtered per unit membrane area increases. Protein and particulate matter deposit
-progressively on and within the membrane during a run, and the retention of particles whose
-size is close to the retention rating is the first to be affected. The second expectation
-is that operating pressure changes the flux and therefore the duration of the filtration,
-but does not change the pore size distribution that produces retention. Pressure was
-expected to be inactive on both clearance responses over the range studied.
-
-## Quality attributes in scope
-
-The step governs the two viral-clearance attributes listed in @tbl-cqa. Neither is formed
-at this step. Both are cumulative attributes of the drug substance, accumulated across the
-purification train, and both are of very high criticality (VH) because a shortfall in viral
-clearance is a patient-safety issue with no downstream remedy. The step forms no
-product-quality attribute of its own, so the attributes that are formed upstream (the glycan
-attributes, the charge variants and aggregate) were not measured here.
-
-```{python}
-#| output: asis
-show(cqas_by_keys(["lrv_mvm", "lrv_xmulv"]))
-print()
-print(": Viral-clearance quality attributes governed by the step, with the cumulative "
-      "acceptance criteria for the drug substance and the criticality assigned under "
-      "Tool #1. {#tbl-cqa}")
-```
-
-The acceptance criteria in @tbl-cqa are cumulative and apply to the whole process. The
-criterion that applies to this step is the difference between the cumulative requirement
-and the clearance credited to the other contributing steps, and it is derived in §7. Step
-yield was measured as a process-performance response. It carries no drug-substance
-specification and is reported here as evidence that the operating region does not cost
-product.
-
-## Risk-based prioritization and parameter selection
-
-RA-001 ranked every operating input of the step on its potential impact on a CQA and on its
-potential to interact with other inputs, and it assigned a study type to each. Two
-parameters scored high enough for multivariate study: filtration volume, expressed as the
-cumulative load per unit membrane area (L/m²), and filtration pressure (psi). The remaining
-inputs are held to platform specification and were verified rather than characterized.
-Membrane lot and effective filtration area are controlled by pre-use flux verification and
-by the integrity test described in SOP-2012, and the composition of the load is fixed by the
-anion-exchange pool specification agreed in PCR-008.
-
-The ranges taken into the study are wider than the ranges the process will run in, which is
-the standard basis for a proven acceptable range [@amab2009]. Filtration volume was
-characterized over `{python} load_char` L/m², which is `{python} f2(load_widen)` times the
-width of its normal operating range of `{python} load_nor` L/m². The upper edge was placed
-well above the routine limit deliberately, because the expected decline in MVM retention
-with load can only be bounded by driving the step past the load it will see. Filtration
-pressure was characterized over `{python} pres_char` psi, `{python} f2(pres_widen)` times
-the width of its normal operating range of `{python} pres_nor` psi. The pressure range
-brackets the set-point on both sides and covers the excursions that a pump ramp can
-plausibly produce.
-
-# Materials and methods
-
-## Scale-down model and its qualification
-
-All data reported here were generated on a scale-down model of the commercial filtration
-step, qualified under SOP-1001. The model uses the same membrane, the same feed material
-and the same mode of operation as the commercial step, at a reduced membrane area. Scale
-is held by the two quantities that determine performance for a size-based step: the
-cumulative volume filtered per unit membrane area (L/m²), and the applied pressure (psi).
-Both are scale-independent, so a run at a given load and pressure on the small-scale device
-is equivalent to a commercial run at the same load and pressure.
-
-Qualification compared unspiked small-scale runs at the set-point with at-scale performance
-on the same measures the commercial step reports (flux decay across the run, step yield and
-post-use integrity), and no difference of practical consequence was found on any of them.
-The qualification record is held under SOP-1001 and summarized in PCP-009. The scale-down
-model is therefore suitable for defining operating ranges and for supporting a clearance
-claim.
-
-Spiking cannot be performed at commercial scale, so every log reduction reported here comes
-from the small-scale model. This is the arrangement ICH Q5A(R2) expects, and it carries a
-condition [@ichq5a]. The clearance claim is only as good as the representativeness of the
-model, so the qualification above is part of the claim and not a preliminary to it. The
-limitation this leaves is stated in §11.
-
-## Operation
-
-Each run followed SOP-2012. The membrane was flushed and integrity tested before use, the
-anion-exchange pool was spiked with the model virus and pre-filtered, and the spiked load
-was then filtered at constant pressure until the target volumetric load had been delivered.
-Filtrate was collected as a single pool. The membrane was integrity tested again after use,
-and a run that failed the post-use test would have been excluded from the analysis, since a
-compromised device tells nothing about the retention of an intact one. No run failed.
-
-Load material for the study was the anion-exchange pool produced under the conditions
-established in PCR-008. Using the real intermediate matters for a fouling-driven response,
-because the deposition that reduces retention at high load is caused by the protein and
-particulate content of the actual feed. Virus spike level, spike volume fraction and
-pre-filtration were held constant across all runs so that the measured reduction reflects
-the membrane and the operating conditions only.
-
-## Analytical methods
-
-The controlled procedures and validated methods used by the step are listed in @tbl-sop.
-Infectivity titres in the load and in the filtrate were determined for both model viruses,
-and the log reduction factor for each run is the difference between the total infectivity
-loaded and the total infectivity recovered in the filtrate. MVM titre was determined under
-AMV-3018 by a fifty per cent tissue culture infectious dose assay with a quantitative
-polymerase chain reaction confirmation, and XMuLV titre under AMV-3017 by a fifty per cent
-tissue culture infectious dose assay. Step yield was determined by mass balance from
-protein concentration and volume.
+The controlled procedures and validated analytical methods that govern the work are listed in
+@tbl-sop. Operation of the step, the pre-use flush and the post-use filter integrity test are
+covered by SOP-2012. The scale-down model was qualified under SOP-1001, the designs were
+built and analysed under SOP-1002, and the classification decisions in §9 follow SOP-4001.
 
 ```{python}
 #| output: asis
 print(sop_table(sops=VIRUS_FILT_SOP_REFS, amvs=VIRUS_FILT_AMV_REFS))
 print()
-print(": Controlled procedures and validated analytical methods applied to the step. "
-      "{#tbl-sop}")
+print(": Controlled procedures and validated analytical methods for the step. {#tbl-sop}")
 ```
 
-Both infectivity assays are validated, and their reported precision is the dominant
-component of the run-to-run scatter in the clearance responses. Method performance is
-summarized in Appendix D. The MVM assay (AMV-3018) has a reported precision of
-`{python} f3(mvm_assay_prec)` log₁₀ and contributes about `{python} mvm_assay_share` of the
-observed variance in the MVM response. The corresponding figures for the XMuLV assay
-(AMV-3017) are `{python} f3(xm_assay_prec)` log₁₀ and `{python} xm_assay_share`. Effects of
-a size comparable to the assay precision are therefore treated as unresolved, and are
-reported as such in §5.
+# Prior knowledge and quality risk basis
+
+## Platform and prior-product knowledge
+
+Small-virus retentive filtration is a mature platform step at Novacyte, and the prior
+knowledge available for it is substantial. The same filter type and the same operating mode
+have been used for the three previously licensed antibodies on the platform, X-Mab, Y-Mab and
+Z-Mab, and the step has been characterized for each of them. The mechanism of removal is
+identical across those products, because retention is set by the membrane and by the size of
+the virus. The antibody takes no part in it. Prior knowledge therefore transfers to A-Mab, and
+the purpose of this study is to confirm and bound the platform behaviour for this molecule.
+
+Two expectations followed from that experience and framed the design. The first is that MVM
+clearance falls as the cumulative volumetric load rises. Material deposited on and within the
+retentive layer changes the effective pore-size distribution as the filtration proceeds, and a
+particle as small as a parvovirus is the first to benefit from that change. Enveloped virus is
+large enough that the same shift does not reach it, so XMuLV clearance was expected to be flat
+across the load range. The second expectation is that pressure has little influence on
+retention. Pressure sets the flux, and with it the processing time, but a size-based retention
+mechanism is not driven by convective velocity over the range a filter of this type is
+qualified for.
+
+These expectations set the ranges as much as they set the factor list. The load range was
+extended well beyond the routine ceiling in order to find where clearance stops being
+sufficient, and the pressure range was extended to both operating limits of the filter so that
+a null result would be a bounded null result. Neither expectation was treated as established
+for A-Mab before the study, and both are tested in §5.
+
+## Quality attributes in scope
+
+The step sets no quality attribute of its own, and it governs the two viral-clearance
+attributes of the drug substance. Both are listed in @tbl-cqa with their acceptance criteria
+and their assigned criticality.
+
+```{python}
+#| output: asis
+show(cqas_by_keys(["lrv_mvm", "lrv_xmulv"]))
+print()
+print(": Quality attributes governed by the step, from the drug-substance CQA register. {#tbl-cqa}")
+```
+
+Both attributes are of very high criticality, which places them above the threshold at which
+the A-Mab framework calls an attribute critical [@amab2009]. Both acceptance criteria are
+cumulative one-sided floors on the whole purification train, so neither can be assessed
+against this step alone, and the criterion this step must meet is the cumulative requirement
+less the clearance credited to the other steps (the back-calculation is stated in §7). Product
+quality attributes formed upstream, such as the glycan and charge variant distributions, are
+not affected by a size-based filtration step and were not measured here. Aggregate was not
+measured here either. No change in aggregate is expected across a filtration that separates by
+size and passes the antibody monomer, and aggregate is reduced and reported at the cation
+exchange step (PCR-007).
+
+## Risk-based prioritization and parameter selection
+
+The scope of this study was fixed by RA-001. That assessment ranked every parameter of the
+step before any characterization data existed, and it scored the severity of the potential
+effect on a CQA together with the likelihood of occurrence and the ability to detect the
+failure in routine manufacture. Its output is a study assignment, not a classification. The
+rows for this step are reproduced in @tbl-ra.
+
+```{python}
+#| output: asis
+show(ra_scope(UO))
+print()
+print(": Pre-characterization risk assessment for the step (RA-001), with the assigned study type. {#tbl-ra}")
+```
+
+Both parameters scored at the top of the range and both were assigned to a multivariate
+design. The severity term is the same for each, because the consequence of interest is a
+parvovirus breakthrough and that consequence is scored at the maximum. What separates the two
+rows is the reason each parameter could reach that consequence. Volumetric load reaches it
+directly, by consuming the retentive capacity of the membrane, whereas pressure reaches it
+indirectly, by moving the filter away from the operating window in which its retention has
+been established by the vendor and by the platform.
+
+No parameter at this step was assigned to univariate assessment and none was excluded from
+study. That follows from the short parameter list the step has. Membrane lot, pre-use flush
+volume and the post-use integrity test are attributes of the filter and of the procedure,
+controlled under SOP-2012, and they are not process parameters in the sense of RA-001. The load material is the anion exchange flow-through pool,
+whose composition is controlled by the design space of Step 8 (PCP-008 and PCR-008), so feed
+variation was not introduced as a factor here.
+
+# Materials and methods
+
+## Scale-down model and its qualification
+
+All characterization runs were executed on a qualified scale-down model of the commercial
+filtration step, operated under SOP-2012 and qualified under SOP-1001. The model uses the same
+membrane chemistry and the same retentive layer as the commercial filter, in a device of
+smaller area from the same vendor family. Scaling is by filter area. Volumetric load is
+expressed per unit membrane area, so a load in litres per square metre carries the same
+meaning at both scales, and pressure is a scale-independent set-point that is matched directly
+(the qualification protocol is SOP-1001). The model thus reproduces the two quantities that
+the mechanism of retention depends on.
+
+Qualification compared the scale-down device with commercial-scale data at the target
+condition, using flux decay across the filtration, filtrate quality and step yield as the
+performance measures. No difference of practical consequence was found between the scales, and
+the qualification record is held under SOP-1001. This is the warrant for reading the operating
+ranges established here as ranges for the commercial step.
+
+Viral clearance cannot be measured at commercial scale, because live virus is not introduced
+into a manufacturing facility. Clearance is therefore measured on a small-scale spiking model,
+as ICH Q5A(R2) requires [@ichq5a]. The load material for each run was the anion exchange
+flow-through pool, spiked with the model virus to a titre high enough that a clearance of
+several logs can still be quantified above the detection limit of the assay. Spiking adds
+material to the load, so the spike volume was held to a small fraction of the load volume and
+the spiked load was clarified before filtration. Both precautions are part of the qualified
+method and both are recorded per run.
+
+The centre-point replicates of each design were executed as independent runs on independent
+filter devices, and not as repeat assays of one filtrate. They carry the whole run-to-run
+variability of the model, and their scatter is the pure-error term used in the lack-of-fit
+assessment (§5.3).
+
+## Operation
+
+The commercial step is a single-pass filtration at constant pressure. The filter is flushed
+and pressure-tested before use, the load is delivered from the anion exchange pool at the
+target pressure, and filtration continues until the batch volume has passed or the volumetric
+load limit is reached. A post-use integrity test is performed on every filter, and a filter
+that fails it invalidates the batch. All of this is specified in SOP-2012 and was followed in
+the scale-down runs.
+
+Two quantities are set by the operator. The volumetric load is fixed by the batch volume and
+the installed membrane area, and it is the quantity the operator manages when the filter area
+is selected for a batch. The filtration pressure is set at the start of the filtration and
+held, and everything else at the step is either an attribute of the filter, which is
+controlled by the vendor specification and by incoming inspection, or an attribute of the
+load, which is controlled by the preceding step (PCR-008).
+
+## Analytical methods
+
+Two validated infectivity assays supply the responses of the study. MVM titre is determined by
+AMV-3018, which combines a TCID50 endpoint assay with a qPCR confirmation, and XMuLV titre is
+determined by AMV-3017, a TCID50 endpoint assay. The log reduction factor for each run is the
+difference between the log titre of the spiked load and the log titre of the filtrate, both
+corrected for the volumes involved. Step yield is a protein mass balance across the filter,
+computed from the in-process concentration and volume records required by SOP-2012, so it is
+not an assay result and has no separate method validation. @tbl-analyte states which assay
+supplies which response.
+
+```{python}
+#| output: asis
+import pandas as _pd
+_analyte = {"AMV-3018": ("Minute virus of mice (MVM)", "MVM LRF"),
+            "AMV-3017": ("Xenotropic murine leukaemia virus (XMuLV)", "XMuLV LRF")}
+show(_pd.DataFrame(
+    [[mid, title, _analyte[mid][0], _analyte[mid][1]] for mid, title in VIRUS_FILT_AMV_REFS],
+    columns=["Method", "Title", "Analyte", "Reported response"]))
+print()
+print(": Validated analytical methods and the response each supplies. {#tbl-analyte}")
+```
+
+An infectivity assay is considerably less precise than a chromatographic purity assay, and
+that matters for how the results in §5 are read. The validated intermediate precision of each
+method, its limit of quantitation and the share of observed variance attributable to the
+method are given in Appendix D. Where an observed difference in log reduction is of the same
+order as the assay precision, it is reported as such and is not interpreted as a process
+effect.
 
 ## Sampling plan
 
-Each run was sampled at three points: the unspiked pool before spiking, the spiked load
-after pre-filtration, and the filtrate pool at the end of the run. The spiked load and the
-filtrate pool provide the two titres from which the log reduction is calculated, and the
-unspiked pool confirms the absence of adventitious signal in the assay. Protein
-concentration was measured in the load and in the filtrate for the yield calculation.
+Each run produced a spiked load sample and a filtrate sample, both assayed for the model virus
+of that run, plus load and filtrate samples for the protein mass balance. Samples were drawn
+under SOP-2012 and assayed within the validated hold conditions of the method.
 
-Replication was placed at the centre of the design. The screening design carried
-`{python} f"{n_cp_scr}"` centre-point runs and the response-surface design carried
-`{python} f"{n_cp_rsm}"`, all at the design centre of both factors. These replicates
-provide the pure-error estimate against which lack of fit is tested, and they are the only
-source of replication in either design.
+The screening design carried `{python} f"{cp_scr:d}"` centre-point replicates and the
+response-surface design carried `{python} f"{cp_rsm:d}"`. Centre points were spread through
+the run order and were not executed consecutively, so that a drift in the assay or in the load
+material would appear as scatter between them. Run order within each design was randomized.
 
 ## Statistical methods
 
-Both designs were analysed in coded factors, with the centre of the characterization range
-at 0 and its edges at −1 and +1, so that estimated effects are directly comparable between
-parameters of different units. The screening design was fitted by ordinary least squares
-with both main effects and their interaction, and an effect is reported as twice the coded
-coefficient, which is the change in response across the full characterized range of the
-parameter. The response-surface design was fitted with the full quadratic model in both
-factors. Significance was assessed at α = 0.05 throughout, following SOP-1002.
+Factors were coded so that the midpoint of each characterization range is zero, giving coded
+levels of −1 / +1 at the two edges. Coding puts the two parameters on a common scale, so
+effects can be compared directly, and it is the form in which every model in this report was
+fitted.
 
-Model adequacy was judged on four criteria taken together: the overall model F test, the
-coefficient of determination and its adjusted form, the predicted coefficient of
-determination computed from the prediction sum of squares, and an analysis of variance
-partition of the residual into lack of fit and pure error. A model whose lack of fit is
-significant against pure error is not used to define a region. A response for which no term
-reaches significance is reported as robust over the ranges studied, and is not given a
-predictive model.
+The screening data were fitted by ordinary least squares with both main effects and their
+interaction. An effect is reported as twice the coded coefficient, which is the change in the
+response across the full characterization range of that factor. The response-surface data were
+fitted with the full quadratic model, adding a squared term for each factor. Significance is
+assessed at alpha = 0.05 throughout.
 
-Commercial-scale capability was estimated by Monte-Carlo simulation of `{python} n_mc`
-batches, with every parameter of the process drawn independently across its normal
-operating range and the fitted models used to propagate those settings to the
-drug-substance attributes. Capability against a one-sided lower requirement is reported as
-Cpk. The simulation reflects parameter variation and model uncertainty, and it does not
-reflect the batch-to-batch variation of a commercial facility, which is confirmed in Stage
-2.
+Model adequacy is judged on four measures taken together. R² and adjusted R² describe the fit,
+predicted R² from the PRESS statistic describes how the model performs on data it has not
+seen, the overall F test asks whether the model explains more than the residual, and the
+analysis of variance partitions the residual into lack of fit and pure error so that the model
+form can be tested against the replicate scatter. A response for which no term is active is
+reported as robust over the ranges studied, and no predictive model is claimed for it.
+
+Commercial-scale capability was estimated by Monte-Carlo simulation of
+`{python} f"{V['n_monte_carlo']:,}"` batches with every parameter drawn inside its normal
+operating range, and is reported as a one-sided Cpk against the relevant acceptance criterion.
+The proven acceptable ranges in §7 use the same fitted response-surface model, once with the
+other parameter fixed and once with it varying inside its normal operating range.
 
 # Study design
 
 ## Factors, ranges and the knowledge space
 
-The design covers two parameters, and that is the correct size for this step. Only two of
-the step's operating inputs can plausibly affect a size-based retention mechanism, and
-RA-001 identified both. The parameters, their set-points, their normal operating ranges,
-their characterized ranges and their final classification are given in @tbl-params, and the
-coded letters used in the effect and coefficient tables are given in @tbl-legend.
+The design resolves the effect of each parameter on each response and then defines the region
+in which the required clearance is delivered. Both parameters of the step were studied, and
+their set-points, normal operating ranges, characterization ranges and final classifications
+are given in @tbl-params. The coded letters used in the effect and coefficient tables are
+given in @tbl-legend.
 
 ```{python}
 #| output: asis
 show(report_params(UO))
 print()
-print(": Characterized parameters of the step, with set-point, normal operating range, "
-      "characterization range, final classification and study type. {#tbl-params}")
+print(": Process parameters of the step, with normal operating range, characterization range and final classification. {#tbl-params}")
 ```
 
 ```{python}
 #| output: asis
 show(D.factor_legend_df(UO))
 print()
-print(": Factor legend for the coded designs. {#tbl-legend}")
+print(": Coded factor legend for the screening and response-surface designs. {#tbl-legend}")
 ```
 
-The characterized ranges define the knowledge space of the step. The design space is a
-subset of that knowledge space in which the governed attributes stay within their
-acceptance criteria, and the normal operating ranges sit inside the design space
-[@amab2009]. The load range extends above the routine limit by design, so that the
-knowledge space contains the region in which MVM retention is expected to degrade. The
-pressure range extends both above and below the routine limits, because pressure
-excursions in either direction are physically plausible on a constant-pressure filtration.
+The characterization ranges are wider than the normal operating ranges on both axes, and the
+two widenings were chosen for different reasons. Volumetric load runs from
+`{python} vol_char` L/m², against a normal operating range of `{python} vol_nor` L/m². The
+upper edge is well above the routine ceiling, because prior knowledge says clearance declines
+with load, and the point of the study is to establish how far that decline can go before the
+step stops meeting its required contribution (§7). A range that stopped at the routine ceiling
+could not have answered that question. Filtration pressure runs from `{python} prs_char` psi
+against a normal operating range of `{python} prs_nor` psi, and here the edges are the
+operating limits of the filter itself. Testing to the vendor limits is what turns an expected
+null result into a bounded one.
+
+The characterization ranges together define the knowledge space of the step. The design space
+established in §6 is a subset of that space, and the normal operating ranges sit inside the
+design space. That nesting is the structure ICH Q8 describes, and it is what allows a
+parameter excursion to be assessed against evidence rather than against judgement [@ichq8].
 
 ## Screening design
 
-The screening study was a two-level full factorial in both parameters with
-`{python} f"{n_cp_scr}"` centre points, `{python} f"{n_scr}"` runs in total. Runs were
-randomized. With two factors a full factorial estimates both main effects and their
-interaction with no aliasing at all, so this design has none of the resolution limitations
-that constrain a fractional screen. Its purpose was to establish which parameters are
-active, and to do so on an independent set of runs before the response-surface study was
-committed. The design matrix and the measured responses are given in Appendix A.
+The screening design is a two-level full factorial in the two parameters, augmented with
+`{python} f"{cp_scr:d}"` centre points, giving `{python} f"{n_scr:d}"` runs in total. A full
+factorial in two factors estimates both main effects and the interaction without confounding,
+so the factorial part is exactly saturated. The residual degrees of freedom come entirely from
+the centre points, and those runs also supply the replicate scatter and the test for
+curvature. The design matrix and the measured responses are in Appendix A.
+
+The purpose of this stage is to identify which parameters have an effect worth modelling. It
+is not to quantify that effect precisely, and this design could not do so. With three model
+terms and `{python} f"{n_scr:d}"` runs the residual carries few degrees of freedom, so the
+standard errors are wide and the test has limited power.
 
 ## Response-surface design
 
-The response-surface study was a face-centred central composite design in the same two
-parameters, `{python} f"{n_rsm}"` runs with `{python} f"{n_cp_rsm}"` centre points. The
-axial points sit at the edges of the characterized ranges, so the design adds curvature
-without extending the knowledge space beyond the ranges already justified in §2.3. The
-fitted model carries `{python} f"{n_terms_rsm}"` terms besides the intercept, which leaves
-`{python} f"{df_res_rsm}"` residual degrees of freedom, of which
-`{python} f"{df_pe_rsm}"` are pure error.
+The response-surface design is a face-centred central composite design in the same two
+parameters, with `{python} f"{cp_rsm:d}"` centre points and `{python} f"{n_rsm:d}"` runs. The
+axial points are placed on the faces of the design cube, so no run leaves the characterization
+range. Adding the axial points allows a squared term for each factor, so the model can
+describe curvature in the clearance surface. The design matrix and the measured responses are
+in Appendix B.
 
-The division of labour between the two designs needs to be stated plainly, because it is
-not the usual one. In a step with four or five factors the screening design is
-near-saturated and can only identify which factors matter, while the response-surface model
-is the predictive model and the basis of the design space. Here the screening design is not
-saturated, and it estimates the same parameters as the response-surface model does, minus
-the two quadratic terms. The response-surface model is still the predictive model and the
-basis of the design space, for two reasons. It uses the axial runs to test whether the
-response is linear in load across the full range, and it carries a larger replicated centre
-and therefore a better estimate of pure error. The screening study is used here as an
-independent confirmation of the sign and approximate size of the load effect, and its
-estimates are reported for that purpose only.
+Both parameters appear in both designs, because there are only two of them. In this study the
+response-surface stage is not a reduction of the factor set, as it usually is. It augments the
+same factor set with the runs needed to fit curvature and to obtain a model that can be used
+for prediction. The division of labour still holds. The screening design identifies which
+parameters are active, and the response-surface model is the predictive model and the basis of
+the design space (§6).
 
 ## Univariate assessment
 
-No parameter of this step was assessed univariately, because both characterized parameters
-went into the multivariate design. Three further inputs were verified against platform
-specification without a designed study. Membrane lot permeability is verified before use by
-a flush and flux measurement, effective filtration area is fixed by the device, and the
-composition of the load is controlled by the anion-exchange pool specification. These are
-verified and not characterized because none of them is an adjustable operating parameter of
-the step. A finding against one of them is a material or equipment finding and is handled as
-a deviation, which is what happened in DEV-009-02 (§13.2).
+No parameter of this step was assessed univariately. RA-001 assigned both parameters to the
+multivariate design, and there was no third parameter left over to assess one at a time.
+Attributes of the filter and of the procedure that could in principle affect retention, such
+as membrane lot and pre-use flush volume, are controlled under SOP-2012 and by the vendor
+specification, and they are treated as controlled inputs. One of them became the subject of a
+deviation during execution, and that is reported in §13.2.
 
 # Results
 
 ## Centre-point performance and reproducibility
 
-Reproducibility at the design centre is good for all three responses, and it is poorest for
-the MVM log reduction factor. The centre-point means, standard deviations and coefficients
-of variation are given in @tbl-cv-scr for the screening design and @tbl-cv-rsm for the
-response-surface design.
-
-```{python}
-#| output: asis
-show(D.center_cv_df(UO, "screening"))
-print()
-print(": Centre-point performance in the screening design: mean, standard deviation and "
-      "coefficient of variation per response. {#tbl-cv-scr}")
-```
+Reproducibility of the scale-down model is adequate for the effects the study set out to
+resolve, and the two log reduction factors are the least precise of the three responses.
+@tbl-cv-rsm gives the centre-point mean, standard deviation and coefficient of variation for
+each response in the response-surface design, and @tbl-cv-scr gives the same for the screening
+design.
 
 ```{python}
 #| output: asis
 show(D.center_cv_df(UO, "rsm"))
 print()
-print(": Centre-point performance in the response-surface design, which provides the "
-      "pure-error term for the lack-of-fit tests. {#tbl-cv-rsm}")
+print(": Centre-point reproducibility in the response-surface design. {#tbl-cv-rsm}")
 ```
 
-The MVM response is the least precise of the three in both designs. In the screening design
-its centre-point coefficient of variation was `{python} f2(cv("screening", "mvm_lrf"))` per
-cent, corresponding to a standard deviation of `{python} f2(cp_sd_scr)` log₁₀. That is of
-the same order as the reported precision of the MVM infectivity assay
-(`{python} f3(mvm_assay_prec)` log₁₀, Appendix D), so most of the scatter at the centre of
-the screening design is analytical. In the response-surface design, with one more replicate,
-the corresponding coefficient of variation was `{python} f2(cv("rsm", "mvm_lrf"))` per cent
-and the standard deviation `{python} f2(cp_sd_rsm)` log₁₀. Two things follow. The pure-error
-term
-used in the lack-of-fit tests below is estimated from
-`{python} f"{n_cp_rsm}"` replicates and should be read as a lower bound on the true run-to-run
-variation. Any effect on MVM clearance smaller than about the assay precision is beyond the
-resolution of this study and is not claimed.
+```{python}
+#| output: asis
+show(D.center_cv_df(UO, "screening"))
+print()
+print(": Centre-point reproducibility in the screening design. {#tbl-cv-scr}")
+```
 
-XMuLV and step yield reproduce more tightly. The XMuLV centre-point coefficient of variation
-was `{python} f2(cv("rsm", "xmulv_lrf"))` per cent and the step-yield value
-`{python} f2(cv("rsm", "step_yield"))` per cent in the response-surface design. For step
-yield in particular, the centre-point scatter is small enough that a factor effect of any
-practical consequence would have been detected.
+Step yield reproduces most tightly, at a coefficient of variation of
+`{python} f"{cv_rsm.loc[yld_lab, '%CV']:.2f}"` % in the response-surface design. A mass
+balance across a filter that plugs very little should reproduce about that well. The two log
+reduction factors are less precise, at `{python} f"{cv_rsm.loc[mvm_lab, '%CV']:.2f}"` % for
+MVM and `{python} f"{cv_rsm.loc[xmu_lab, '%CV']:.2f}"` % for XMuLV, and the enveloped-virus
+response is the noisier of the two in this design. In absolute terms the MVM
+centre-point standard deviation is `{python} f"{cv_rsm.loc[mvm_lab, 'SD']:.3f}"` log, against
+a validated intermediate precision of `{python} f"{amv_3018_precision:g}"` log for AMV-3018.
+The observed run-to-run scatter is below the intermediate precision of the assay, so the
+reproducibility of the model cannot be resolved separately from the method at this sample
+size. The validation of AMV-3018 attributes a fraction of
+`{python} f"{amv_3018_var_frac:g}"` of observed variance to the method (Appendix D).
+
+The screening centre points are noisier for MVM, at
+`{python} f"{cv_scr.loc[mvm_lab, '%CV']:.2f}"` %, with a standard deviation of
+`{python} f"{cv_scr.loc[mvm_lab, 'SD']:.3f}"` log. That scatter is of the same order as the
+assay precision quoted above, and it rests on only `{python} f"{cp_scr:d}"` replicates, so it
+is read here as assay variability in a small sample. It is the reason the screening standard
+errors in §5.2 are wide. The response-surface design carries more centre points and shows the
+tighter figure.
 
 ## Screening: factor effects
 
-Volumetric load reduces MVM clearance, and it is the only parameter whose effect was
-resolved on any response. The screening model fits are summarized in @tbl-scr-fit and the
-MVM effect estimates in @tbl-scr-mvm; the corresponding tables for XMuLV and step yield are
-in Appendix C.
+The screening stage identified volumetric load as the only active parameter, and it identified
+it on one response only. Model-level statistics for the three screening fits are given in
+@tbl-fit-scr.
 
 ```{python}
 #| output: asis
 show(D.fit_summary_df(UO, "screening"))
 print()
-print(": Screening model summary for each response. {#tbl-scr-fit}")
+print(": Screening model adequacy, all responses. {#tbl-fit-scr}")
 ```
+
+None of the three screening models is significant overall at alpha = 0.05, including the MVM
+model, whose overall p-value is `{python} f"{scr['mvm_lrf']['p']:.3f}"`. The screening design
+has `{python} f"{n_scr:d}"` runs against three model terms, so the residual carries few
+degrees of freedom and the overall F test is weak by construction. What the MVM model does
+show is a single large term against a small residual, and the finding rests on that term. The
+step yield model has a negative predicted R², which means it predicts a held-out run worse
+than the response mean does, and no conclusion is drawn from any of these three fits beyond
+which terms are worth carrying into the response-surface stage.
 
 ```{python}
 #| output: asis
 show(D.screening_effects_df(UO, "mvm_lrf"))
 print()
-print(": Screening effect estimates for the MVM log reduction factor. An effect is the "
-      "change in response across the full characterized range of the parameter. "
-      "{#tbl-scr-mvm}")
+print(": Screening effect estimates for MVM log reduction. {#tbl-eff-mvm}")
 ```
 
-Load carried an effect of `{python} f2(eff("mvm_lrf", "A"))` log₁₀ across its characterized
-range, with p `{python} pv(eff("mvm_lrf", "A", "p-value"))`. Pressure carried
-`{python} f2(eff("mvm_lrf", "B"))` log₁₀ and the interaction
-`{python} f2(eff("mvm_lrf", "AB"))` log₁₀, neither of which approaches significance. The
-overall F test for the MVM screening model does not reach significance either
-(p `{python} pv(fs("screening", "mvm_lrf", "p-value"))`), which is the expected outcome
-when two of a model's three terms are inactive and only
-`{python} f"{n_scr - 4}"` residual degrees of freedom remain. The load term is significant
-on its own, and that is the finding the screening study was run to produce.
-
-Neither XMuLV clearance nor step yield gave a significant term
-(p `{python} pv(fs("screening", "xmulv_lrf", "p-value"))` and
-p `{python} pv(fs("screening", "step_yield", "p-value"))` for the respective models). The
-largest XMuLV effect was that of pressure, at
-`{python} f2(eff("xmulv_lrf", "B"))` log₁₀ across the characterized range, which is not
-distinguishable from the assay precision. These are null results, and they were carried
-forward as findings. Both parameters were retained in the response-surface design so that
-the robustness of XMuLV clearance and yield would be tested again on an independent set of
-runs and over the axial points.
-
-## Response-surface models
-
-Only the MVM model is adequate for prediction. The response-surface model summaries are
-given in @tbl-rsm-fit.
-
-```{python}
-#| output: asis
-show(D.fit_summary_df(UO, "rsm"))
-print()
-print(": Response-surface model summary for each response. {#tbl-rsm-fit}")
-```
-
-The MVM model explains `{python} pct(fs("rsm", "mvm_lrf", "R²"))` of the variation in the
-response, with an adjusted value of `{python} pct(fs("rsm", "mvm_lrf", "Adj. R²"))` and an
-overall F test of p `{python} pv(fs("rsm", "mvm_lrf", "p-value"))`. Its root mean square
-error is `{python} f2(fs("rsm", "mvm_lrf", "RMSE"))` log₁₀, which is close to the
-centre-point standard deviation reported above. The predicted coefficient of determination
-is `{python} pct(fs("rsm", "mvm_lrf", "Pred. R²"))`, well below the adjusted value. That
-gap is a real limitation and it is what a design of `{python} f"{n_rsm}"` runs with
-`{python} f"{n_terms_rsm}"` model terms produces under leave-one-out cross-validation. The
-model is used to predict mean levels over the ranges studied, and it is not used to
-extrapolate beyond them.
-
-The XMuLV and step-yield models are not adequate and are not used predictively. The XMuLV
-model returns p `{python} pv(fs("rsm", "xmulv_lrf", "p-value"))` with an adjusted
-coefficient of determination of `{python} pct(fs("rsm", "xmulv_lrf", "Adj. R²"))`, and the
-step-yield model p `{python} pv(fs("rsm", "step_yield", "p-value"))`. Neither result is a
-defect in the study. A response that no parameter moves cannot produce a significant model,
-and the correct reading is that both responses are robust to load and pressure over the
-ranges studied. The evidence for that reading is given at the end of this section.
-
-```{python}
-#| output: asis
-show(D.rsm_coeff_df(UO, "mvm_lrf"))
-print()
-print(": Full quadratic coefficient table for the MVM log reduction factor, in coded "
-      "factors. {#tbl-rsm-mvm}")
-```
-
-Load dominates the MVM model. Its coded coefficient is
-`{python} f2(coef("mvm_lrf", "A"))` log₁₀ per half-range with
-p `{python} pv(coef("mvm_lrf", "A", "p-value"))` (@tbl-rsm-mvm), and no other term
-reaches significance. The quadratic term in pressure is the largest of the remainder at
-`{python} f2(coef("mvm_lrf", "B²"))` with
-p `{python} pv(coef("mvm_lrf", "B²", "p-value"))`, and it is not claimed. Translated into
-natural units, the model predicts `{python} f2(mvm_lo_load)` log₁₀ at the bottom of the
-characterized load range, `{python} f2(mvm_sp)` at the set-point of
-`{python} load_sp` L/m², `{python} f2(mvm_nor_load)` at the upper limit of the normal
-operating range, and `{python} f2(mvm_hi_load)` at `{python} load_max` L/m². The decline is
-close to linear, which is why the quadratic term in load is not significant.
-
-```{python}
-#| output: asis
-show(D.anova_lof_df(UO, "mvm_lrf"))
-print()
-print(": Analysis of variance for the MVM response-surface model, partitioning the "
-      "residual into lack of fit and pure error. {#tbl-anova-mvm}")
-```
-
-Lack of fit for the MVM model does not reach significance, but the margin is not
-comfortable. The partition is given in @tbl-anova-mvm, and the lack-of-fit test returns
-F = `{python} f2(lof("mvm_lrf", "F"))` with
-p `{python} pv(lof("mvm_lrf"))` against `{python} f"{df_pe_rsm}"` degrees of freedom of
-pure error. The test is passed at α = 0.05 and the model is accepted, with the reservation
-that a pure-error estimate from `{python} f"{n_cp_rsm}"` replicates is itself imprecise and
-that a small pure error inflates the lack-of-fit ratio. The corresponding tests for XMuLV
-(p `{python} pv(lof("xmulv_lrf"))`) and step yield
-(p `{python} pv(lof("step_yield"))`) are far from significance, as they should be for
-responses with no structure to fit.
-
-```{python}
-#| label: fig-contours
-#| fig-cap: "Response-surface predictions over filtration volume and filtration pressure for all three measured responses. The MVM surface falls steadily with load and is almost flat in pressure; the XMuLV and step-yield surfaces are flat in both parameters."
-D.fig_rsm_contours(UO, xf=LOAD, yf=PRES)
-plt.show()
-```
-
-The contour panel in @fig-contours makes the shape of the three surfaces plain. The MVM
-surface is a set of near-vertical bands, so the response is governed by load and almost
-independent of pressure. The XMuLV and step-yield surfaces are flat over the whole
-rectangle, and their apparent gradients are smaller than the replicate scatter reported in
-§5.1.
-
-```{python}
-#| label: fig-diag-mvm
-#| fig-cap: "Model diagnostics for the MVM log reduction factor: standardized residuals against predicted values, a normal quantile plot of the residuals, and actual against predicted values."
-D.fig_diagnostics(UO, "mvm_lrf")
-plt.show()
-```
-
-Diagnostics for the MVM model are shown in @fig-diag-mvm. The residuals show no trend
-against the predicted value and no funnel, the normal quantile plot is close to a straight
-line, and the actual values fall on the identity line across the whole range of prediction.
-There is no evidence of a missing term or of a variance that changes with the level of the
-response.
-
-## Mechanistic interpretation
-
-The shape of the MVM surface follows from how a size-based membrane retains a particle
-whose diameter is close to its retention rating. Retention is not a step function of size.
-The membrane presents a distribution of flow paths, and MVM is small enough that it is held
-by the tighter part of that distribution and passed by the loosest part. As filtration
-proceeds, protein and particulate matter from the load deposit within the membrane and
-progressively change that distribution, and the fraction of the load that finds a path
-through increases with the volume that has already been filtered. The result is a log
-reduction that decreases steadily with cumulative volumetric load, which is what
-@tbl-rsm-mvm and @fig-contours show, and which is consistent with the behaviour reported
-for this class of filter in the case study [@amab2009].
-
-XMuLV is retained by a wide margin because its diameter is far above the retention rating,
-so the change in the flow-path distribution that costs MVM retention leaves XMuLV
-unaffected. This is the expected result and the study confirms it. The absence of a load
-effect on XMuLV also argues against gross membrane damage as the mechanism behind the MVM
-trend, since damage severe enough to pass a parvovirus at higher rates would be expected to
-pass a retrovirus as well.
-
-Pressure has no resolved effect on either clearance response over `{python} pres_char` psi.
-That is consistent with a size-based mechanism, in which pressure sets the flux and hence
-the duration of the run but does not alter the pore size distribution. It is also
-consistent with the step-yield result, since the antibody monomer passes freely at every
-pressure studied. The practical consequence is that the operating region of this step is
-effectively one-dimensional. It is bounded by load, and pressure is constrained by the
-clearance claim and not by a measured effect. That is a narrower structure than the
-multivariate regions reported for the chromatographic steps, and it is stated here so that
-the design space in §6 is not read as more complex than the data support.
-
-# Design space
-
-The design space of the step is the region of the characterized ranges over which the
-predicted MVM log reduction meets the required step contribution, and that region is the
-whole characterized rectangle. Across a grid spanning `{python} load_char` L/m² and
-`{python} pres_char` psi, `{python} mvm_region_ok` of the predicted MVM values meet the
-step requirement of `{python} f2(mvm_floor)` log₁₀, and `{python} xm_region_ok` of the
-predicted XMuLV values meet theirs. The principal plane of the region is load against
-pressure, which is the only plane there is.
-
-The worst case within the characterized region is the highest load, at
-`{python} f"{mvm_wc_load:g}"` L/m² and `{python} f"{mvm_wc_pres:g}"` psi. The MVM log
-reduction predicted there is `{python} f2(mvm_wc)` log₁₀, a margin of
-`{python} f2(mvm_wc_margin)` over the step requirement. The worst case within the normal
-operating ranges is `{python} f"{mvm_nwc_load:g}"` L/m² at
-`{python} f"{mvm_nwc_pres:g}"` psi, where the predicted value is `{python} f2(mvm_nwc)`
-log₁₀ and the margin `{python} f2(mvm_nwc_margin)`. Both worst cases are at the top of the
-load range, as the mechanism in §5.4 predicts.
-
-The clearance credited to the step in the cumulative claim is `{python} f2(mvm_credit)`
-log₁₀ for MVM and `{python} f2(xm_credit)` log₁₀ for XMuLV. The response-surface model
-predicts `{python} f2(mvm_sp)` log₁₀ for MVM at the set-point, so the credited value sits
-`{python} f2(mvm_credit_headroom)` log₁₀ below the prediction at the condition the process
-will run at. The credit is conservative with respect to the characterization data, which is
-the appropriate direction for a safety claim.
-
-Three ranges are nested at this step, and they should not be confused with one another. The
-normal operating ranges of `{python} load_nor` L/m² and `{python} pres_nor` psi are the
-ranges the batch record will hold. The characterized ranges of `{python} load_char` L/m²
-and `{python} pres_char` psi are the knowledge space. The design space is the region within
-the knowledge space that meets the step requirement, and here it covers the whole knowledge
-space. Movement within the design space is not a change in the sense of ICH Q8(R2), and
-movement outside it requires change control under the pharmaceutical quality system of
-ICH Q10.
-
-Three bounds apply to this claim. It holds over the characterized ranges only, and no
-statement is made about loads above `{python} load_max` L/m² or pressures outside
-`{python} pres_char` psi. It rests on a mean-level model, so the assurance statement that
-accounts for prediction uncertainty is the one in §7 and not this section. It rests on the
-scale-down model qualified in §3.1, and the edges of the region have not been confirmed at
-commercial scale.
-
-# Proven acceptable ranges
-
-The design space above is a multivariate region. It is complemented here by proven
-acceptable ranges, which are the ranges of each parameter individually over which the
-governed attribute stays within acceptance. A viral-clearance attribute carries no
-drug-substance specification that a single step can be measured against, so the acceptance
-basis is derived below before any range is claimed.
-
-The acceptance criteria in @tbl-cqa are cumulative requirements on the whole process. The
-criterion that applies to this step is the cumulative requirement minus the clearance
-credited to every other contributing step, which is the modular arithmetic of ICH Q5A(R2)
-[@ichq5a]. For MVM the cumulative requirement is `{python} f2(mvm_req)` log₁₀ and anion
-exchange is credited with `{python} f2(mvm_aex)` log₁₀ (PCR-008), which leaves
-`{python} f2(mvm_floor)` log₁₀ for this step. Low-pH inactivation is credited with no MVM
-clearance at all, because a non-enveloped parvovirus is not inactivated by low pH. For
-XMuLV the cumulative requirement is `{python} f2(xm_req)` log₁₀, low-pH inactivation is
-credited with `{python} f2(xm_lowph)` log₁₀ (PCR-006) and anion exchange with
-`{python} f2(xm_aex)` log₁₀, which leaves `{python} f2(xm_floor)` log₁₀ here. These two
-floors are the acceptance criteria used throughout this report.
-
-```{python}
-#| output: asis
-show(D.par_table(UO))
-print()
-print(": Proven acceptable ranges for each governed attribute and each parameter, at the "
-      "set-point and with the other parameter varying within its normal operating range. "
-      "{#tbl-par}")
-```
-
-Every proven acceptable range in @tbl-par spans the full characterization range of its
-parameter, under both analyses. The first analysis holds the other parameter at its
-set-point and scans the parameter of interest across its characterized range. The second
-repeats the scan with the other parameter drawn at random from its normal operating range,
-propagating that variation through the fitted model by Monte-Carlo simulation of
-`{python} n_par_mc` draws at each of `{python} f"{D.PAR_GRID}"` grid points. The two
-analyses agree for all four combinations
-(@tbl-par), which means that no parameter of this step has an edge of failure inside its
-characterized range, and that the result is not sensitive to how the other parameter moves
-within its routine range.
-
-```{python}
-#| label: fig-par-mvm
-#| fig-cap: "Proven acceptable range for the MVM log reduction factor against filtration volume. Left panel: filtration pressure held at its set-point. Right panel: filtration pressure varying within its normal operating range, with the median and the 95 per cent predictive band. The acceptance limit is the required step contribution and the acceptable region is shaded green."
-D.fig_par(UO, "mvm_lrf", gov_mvm)
-plt.show()
-```
-
-```{python}
-#| label: fig-par-xm
-#| fig-cap: "Proven acceptable range for the XMuLV log reduction factor against filtration pressure, in the same two-panel form. The response is flat and the acceptance limit is far below the predicted values across the whole characterized range."
-D.fig_par(UO, "xmulv_lrf", gov_xm)
-plt.show()
-```
-
-The adverse trend is drawn against its acceptance limit in @fig-par-mvm. The predicted MVM
-log reduction falls steadily from left to right, the acceptance limit runs well below the
-curve, and the green region covers the whole axis. The right panel adds the information that
-matters for assurance. With pressure varying across its normal operating range, the lower edge of the
-95 per cent predictive band is `{python} f2(mvm_plo_nor)` log₁₀ at the upper limit of the
-normal operating range for load, and `{python} f2(mvm_plo_max)` log₁₀ at
-`{python} load_max` L/m². The latter is still `{python} f2(mvm_plo_margin)` log₁₀ above the
-step requirement, and the simulated assurance of meeting the requirement does not fall below
-`{python} mvm_par_assurance` anywhere on the axis. @fig-par-xm shows the corresponding
-picture for XMuLV, where the response is flat and the margin to the limit is large
-throughout.
-
-Two consequences follow for how the ranges are used. Because every proven acceptable range
-covers the full characterized range, no univariate range binds the operating region; the
-binding constraint on the step is the worst-case corner of the multivariate region
-identified in §6, and in practice the load limit written into the batch record. Because the
-proven acceptable ranges were established against a step requirement that is itself derived
-from the clearance credited elsewhere, they are only valid while that credit holds. A change
-to the clearance claimed for anion exchange would change the floor for this step and would
-require the ranges here to be re-derived.
-
-Both conclusions are bounded by the characterization ranges of `{python} load_char` L/m²
-and `{python} pres_char` psi, and by the fitted response-surface model. Neither is a
-statement about conditions outside those ranges, and neither is a statement about a membrane
-type other than the one used here.
-
-# Process capability and robustness
-
-The step supports both cumulative viral-clearance attributes with adequate capability, and
-the MVM attribute is the tightest capability of the drug substance. Capability was estimated
-by Monte-Carlo simulation of `{python} n_mc` batches with every process parameter drawn
-across its normal operating range. Results for the two attributes this step governs are
-given in @tbl-cap.
-
-```{python}
-#| output: asis
-show(cap_for(["lrv_mvm", "lrv_xmulv"]))
-print()
-print(": Commercial-scale capability for the two viral-clearance attributes, from a "
-      "Monte-Carlo simulation of the whole process with all parameters inside their normal "
-      "operating ranges. {#tbl-cap}")
-```
-
-Cumulative MVM clearance has a mean of `{python} f2(mvm_cap_mean)` log₁₀ against a
-requirement of `{python} f2(mvm_req)` log₁₀, a margin of
-`{python} f2(mvm_cap_margin)` log₁₀, and a one-sided Cpk of `{python} f2(mvm_cpk)`. The
-lowest simulated batch reached `{python} f2(mvm_cap_min)` log₁₀, which is still above the
-requirement. Cumulative XMuLV clearance is less constrained, with a mean of
-`{python} f2(xm_cap_mean)` log₁₀, a margin of `{python} f2(xm_cap_margin)` and a Cpk of
-`{python} f2(xm_cpk)`. Both exceed the value of 1.33 that is conventionally taken as
-adequate for a critical characteristic. The minimum Cpk recorded across all drug-substance
-attributes is `{python} f2(min_cpk)`, and it belongs to the MVM attribute.
-
-That minimum belongs to the process and not to this step. The MVM figure in @tbl-cap is
-cumulative over the two steps credited with MVM clearance, of which this step contributes
-`{python} f2(mvm_credit)` log₁₀ and anion exchange `{python} f2(mvm_aex)` log₁₀ (PCR-008).
-This step therefore carries about `{python} pct(mvm_share)` of the claim, and it is the
-larger of the two contributions. The XMuLV figure is cumulative over three steps, of which
-low-pH inactivation contributes the most (PCR-006) and this step
-`{python} f2(xm_credit)` log₁₀, or about `{python} pct(xm_share)` of the total.
-
-Robustness of the step itself is separate from capability, and the evidence for it is the
-three null results in §5. Neither parameter affects XMuLV clearance or step yield over
-`{python} load_char` L/m² and `{python} pres_char` psi, and only load affects MVM
-clearance. Predicted step yield does not fall below `{python} pct(yld_wc)` anywhere in the
-characterized region, against `{python} pct(yld_sp)` at the set-point, so the operating
-region costs no measurable product.
-
-These capability figures are bounded in two ways. They are computed with every parameter
-inside its normal operating range, so they describe routine operation and not operation at
-the edges of the design space, and they are computed from qualified scale-down models rather
-than from manufacturing data, so they will be confirmed against commercial-scale results
-during Stage 2 process performance qualification.
-
-# Parameter classification
-
-Both characterized parameters are classified as well-controlled critical process parameters
-under SOP-4001. The classification and the reason for each are as follows.
-
-Filtration volume, expressed as load per unit membrane area, is a WC-CPP. It has a
-demonstrated effect on MVM clearance, which is a very high criticality attribute, so it is
-quality-linked and cannot be a general process parameter. It is not a CPP, because the
-volume delivered per unit membrane area is set by the batch record and measured directly
-during the run, so the risk of leaving the design space is low. The parameter is easy to
-control and the consequence of an excursion is graded and not abrupt, as @fig-par-mvm shows
-directly.
-
-Filtration pressure is also a WC-CPP, and the reason is different. No effect of pressure was
-resolved on any of the three responses over `{python} pres_char` psi, so on the measured
-evidence alone it would be a general process parameter. It is classified WC-CPP because the
-viral clearance claimed for this step was demonstrated under the conditions studied, and
-ICH Q5A(R2) ties the claim to those conditions [@ichq5a]. Holding pressure within
-`{python} pres_nor` psi keeps the step inside the range in which the claim was established.
-Pressure is straightforward to control on a constant-pressure filtration, so the risk of
-leaving the range is low.
-
-The null results were retained in the knowledge space. The absence of a
-pressure effect on MVM and XMuLV clearance, and the absence of any effect on step yield, are
-evidence that the step is robust to both parameters over the ranges studied, and they are
-the basis for the wide characterized ranges recorded in @tbl-params. They are also the
-reason no additional in-process control is proposed for pressure beyond the normal operating
-range.
-
-The step carries no CPP and no key process parameter. Across the whole drug-substance
-process, `{python} f"{n_wccpp_train}"` parameters are classified WC-CPP and
-`{python} f"{n_cpp_train}"` is classified CPP, so both parameters of this step fall into the
-larger class, and the one CPP of the process belongs to low-pH inactivation (PCR-006).
-
-# Contribution to the control strategy
-
-The step contributes to the control strategy in four ways, and it is the principal
-mechanistic barrier to parvovirus in the process. Its contributions are the following.
-
-Volumetric load is held at or below `{python} load_nor_max` L/m² by the batch record, which
-specifies the membrane area to be installed and the volume to be filtered. This is the
-control that preserves the MVM claim, and it is the one control at this step that follows
-from a measured effect.
-
-Filtration pressure is held within `{python} pres_nor` psi and is monitored continuously
-during the run. The control exists to keep the step within the conditions under which the
-clearance was demonstrated, not because a pressure effect was found.
-
-Membrane integrity is verified before and after every run under SOP-2012. A post-use
-integrity failure invalidates the clearance claimed for that batch, and this is the control
-that detects the failure mode a designed experiment cannot cover, which is a defective or
-damaged device.
-
-Membrane lot permeability is verified before use by a flush and flux measurement. The
-control was already in place and its value was demonstrated during this campaign, when it
-detected the lot described in §13.2.
-
-Viral clearance is not a batch release test. It is established by the validation studies
-reported here and in PCR-006 and PCR-008, so the assurance of viral safety for a commercial
-batch rests entirely on holding the validated parameter ranges and on the integrity tests
-above. This is why a parameter with no measured effect is still controlled here.
-
-Two limits on this step's contribution should be read alongside the list. The step is not
-credited with clearance of host cell protein, DNA, aggregate or leached Protein A, and no
-such claim is made anywhere in this report; those attributes are controlled by Protein A
-capture (PCR-005), cation exchange (PCR-007) and anion exchange (PCR-008). The step also
-does not deliver the cumulative MVM requirement by itself, since its credited
-`{python} f2(mvm_credit)` log₁₀ is below the cumulative requirement of
-`{python} f2(mvm_req)` log₁₀. The modular claim is consolidated in PCMR-001, which is where
-the cumulative arithmetic and the orthogonality argument are presented for the process as a
-whole.
-
-# Discussion
-
-The step is well understood, and the understanding is simple because the mechanism is
-simple. One parameter governs the one response that varies, and the direction of the effect
-was predicted by prior knowledge before the study was run. Volumetric load reduces MVM
-clearance by progressively changing the flow-path distribution of the membrane, and the
-study quantified that relationship over a load range `{python} f2(load_widen)` times the
-width of the routine range. The result is a step whose principal risk is known, bounded and
-controlled by a single entry in the batch record.
-
-The adverse finding deserves to be read in its own terms before its mitigation. MVM
-clearance at the top of the characterized load range is `{python} f2(mvm_span)` log₁₀ below
-its value at the bottom, and that is a large change for an attribute whose cumulative
-capability is the tightest of the drug substance. The mitigation is that the step retains a
-margin of `{python} f2(mvm_wc_margin)` log₁₀ over its required contribution even at the
-worst corner studied, and a margin of `{python} f2(mvm_nwc_margin)` log₁₀ at the worst
-corner of the normal operating ranges. The residual position is that the load limit is a
-real constraint on the process and must be treated as one, and that operating above the
-characterized range has not been studied and is not supported.
-
-Confidence in the scale-down model is high for this step, and higher than it would be for a
-chromatographic step. Scale enters a size-based filtration through two quantities only,
-which are the volume filtered per unit membrane area and the applied pressure, and both are
-matched exactly between the small-scale device and the commercial installation. The
-qualification described in §3.1 compared the unspiked performance of the two, and no
-difference of practical consequence was found.
-
-Five limitations qualify the conclusions of this report. The response-surface model is a
-mean-level model whose predicted coefficient of determination
-(`{python} pct(fs("rsm", "mvm_lrf", "Pred. R²"))`) is well below its adjusted value, so
-predictions near the edge of the region carry more uncertainty than the fit alone suggests;
-the assurance statement in §7 is the one that accounts for this. The pure-error term rests
-on `{python} f"{n_cp_rsm}"` centre-point replicates, and the lack-of-fit test for the MVM
-model returns p `{python} pv(lof("mvm_lrf"))`, which passes but not by a wide margin. All
-clearance data come from a small-scale spiking model, which ICH Q5A(R2) requires but which
-means the claim is conditional on the qualification of that model [@ichq5a]. The study used
-one membrane type and a limited number of membrane lots, so lot-to-lot permeability
-variation is managed by the pre-use verification described in §10 and not by the design
-space. The edges of the region have not been confirmed at commercial scale, and confirmation
-of the routine ranges is a Stage 2 activity.
-
-Each of these is managed forward. The load limit and the pressure range enter the batch
-record and the PPQ protocol. The pre-use flux verification and the post-use integrity test
-remain in the control strategy for the life of the product. The clearance claim is revisited
-if the membrane, the load composition or the credited clearance of anion exchange changes.
-
-No parameter of this step required the most stringent classification. Neither parameter has
-a narrow range, a steep response near a limit, or a control capability that would put the
-design space at risk, so neither is a CPP. The single CPP of the drug-substance process
-remains the inactivation pH of the low-pH step (PCR-006).
-
-# Conclusions
-
-The small-virus retentive filtration step is well characterized over `{python} load_char`
-L/m² of volumetric load and `{python} pres_char` psi of filtration pressure, and it meets
-its required contribution to the viral-clearance claim across that whole region. MVM
-clearance falls with volumetric load, by `{python} f2(mvm_span)` log₁₀ across the
-characterized range, and the worst corner of the region still delivers
-`{python} f2(mvm_wc)` log₁₀ against a requirement of `{python} f2(mvm_floor)`. XMuLV
-clearance and step yield are robust to both parameters over the same ranges.
-
-The operating region proposed for Stage 2 is `{python} load_nor` L/m² of load and
-`{python} pres_nor` psi of pressure. Both parameters are classified WC-CPP, and the step
-carries no CPP and no key process parameter. Commercial-scale capability for the cumulative
-MVM attribute is a Cpk of `{python} f2(mvm_cpk)` with a margin of
-`{python} f2(mvm_cap_margin)` log₁₀ to the requirement, which is the tightest capability of
-the drug substance; the cumulative XMuLV attribute gives `{python} f2(xm_cpk)`.
-
-Three bounds attach to these conclusions. They hold over the characterized ranges and not
-beyond them. They rest on a qualified scale-down spiking model whose edges have not been
-confirmed at commercial scale. They rest on a modular clearance claim in which this step is
-credited with `{python} f2(mvm_credit)` log₁₀ of MVM reduction and cannot meet the
-cumulative requirement alone. All `{python} f"{n_dev}"` recorded deviations were
-investigated and retained, and none altered a classification or the operating region. The step's contribution is
-consolidated in PCMR-001.
-
-# Deviations from the plan
-
-The study recorded `{python} f"{n_dev}"` deviations from PCP-009 during execution. Each was
-investigated, assigned a root cause and impact-assessed against the study conclusions, and
-each was dispositioned as retained. None altered a parameter classification, the fitted
-models or the operating region. The register is given in @tbl-dev and each event is
-described below.
-
-```{python}
-#| output: asis
-print(dev_register(DOC))
-print()
-print(": Register of deviations recorded during execution of PCP-009. {#tbl-dev}")
-```
-
-The two events are of different kinds and were investigated differently. DEV-009-01 is an
-excursion of a characterized parameter beyond its normal operating range during a study run,
-so its assessment is a question about the design. DEV-009-02 is a material finding on an
-input that the study did not characterize, so its assessment is a question about the
-representativeness of the runs it touched.
-
-## DEV-009-01 — filtration pressure excursion above the normal operating range
-
-Filtration pressure reached `{python} f3(dev1_pres)` psi during a study run, which is
-`{python} f3(dev1_over_nor)` psi above the upper limit of the normal operating range of
-`{python} pres_nor` psi. The excursion was transient and was detected by the in-process
-pressure monitoring required by SOP-2012.
-
-The investigation attributed the excursion to overshoot on the feed pump ramp at the start
-of the run. The control loop approached its pressure set-point from above instead of
-asymptotically, and the peak occurred in the first minutes of the run, before any
-appreciable load had accumulated on the membrane. No equipment fault was found and the run
-completed normally, with a passing post-use integrity test.
-
-The impact assessment turns on two facts. The peak pressure of `{python} f3(dev1_pres)` psi
-lies inside the characterized range of `{python} pres_char` psi, at a coded level of
-`{python} f2(dev1_coded)`, so the condition experienced during the excursion is one the
-design space covers. Pressure has no resolved effect on any of the three responses (§5.2 and
-§5.3), and evaluating the fitted MVM model at the peak pressure changes the predicted log
-reduction by `{python} f2(dev1_delta)` log₁₀ relative to the set-point, which is well below
-the precision of the MVM assay. The run was retained in the analysis. The corrective action
-was a revision of the pump ramp profile to approach the pressure set-point without
-overshoot, which is carried into the commercial batch record.
-
-## DEV-009-02 — membrane lot flux below the vendor-typical value
-
-Membrane lot `{python} dev2_lot` gave a water flux `{python} f3(dev2_deficit)` per cent
-below the vendor-typical value at the pre-use flux verification. The finding was made before
-any product contacted the device, by the verification step described in §10.
-
-The investigation attributed the deficit to lot-to-lot permeability variation within the
-vendor's release specification. The lot met its release criteria and its integrity test, and
-the deficit was in permeability and not in retention. These are separate membrane
-properties. Permeability is set by the number and the size of the flow paths available and
-determines how fast the load passes, whereas retention is set by the tightest part of the
-same distribution and determines what is held back. A lot with lower permeability filters
-more slowly at a given pressure, and it has no reason to retain less.
-
-The affected runs were retained. Three lines of evidence support that disposition. The runs
-were executed at the same volumetric load per unit membrane area and the same pressure as
-the rest of the design, and those are the two quantities the scale-down model is built on
-(§3.1). The MVM titres for those runs were determined under `{python} dev2_method`
-(Appendix D), and the residual diagnostics for the fitted MVM model show no outlying
-observation (@fig-diag-mvm). The post-use integrity test passed on every run. The corrective
-action was to add the flux verification result to the batch record as a recorded attribute,
-so that a permeability trend across future lots can be detected before it becomes a
-performance issue.
-
-{{< pagebreak >}}
-
-# Appendix A — Screening design matrix and responses {.unnumbered}
-
-The coded design and the measured responses of the screening study are given in
-@tbl-a-coded, and the same runs in natural units in @tbl-a-natural. Factor letters are as
-defined in @tbl-legend.
-
-```{python}
-#| output: asis
-show(D.coded_matrix_df(UO, "screening"))
-print()
-print(": Screening design in coded factors, with the measured responses. {#tbl-a-coded}")
-```
-
-```{python}
-#| output: asis
-show(D.design_matrix_df(UO, "screening"))
-print()
-print(": Screening design in natural units, with the measured responses. "
-      "{#tbl-a-natural}")
-```
-
-# Appendix B — Response-surface design matrix and responses {.unnumbered}
-
-The face-centred central composite design is given in coded factors in @tbl-b-coded and in
-natural units in @tbl-b-natural.
-
-```{python}
-#| output: asis
-show(D.coded_matrix_df(UO, "rsm"))
-print()
-print(": Response-surface design in coded factors, with the measured responses. "
-      "{#tbl-b-coded}")
-```
-
-```{python}
-#| output: asis
-show(D.design_matrix_df(UO, "rsm"))
-print()
-print(": Response-surface design in natural units, with the measured responses. "
-      "{#tbl-b-natural}")
-```
-
-# Appendix C — Full effect and coefficient tables {.unnumbered}
-
-Screening effect estimates for the two responses not shown in §5.2 are given in
-@tbl-c-scr-xm and @tbl-c-scr-yld. Response-surface coefficients and the analysis of
-variance for the same two responses follow in @tbl-c-rsm-xm to @tbl-c-anova-yld, and the
-diagnostics for the XMuLV model in @fig-c-diag-xm.
+Volumetric load reduces MVM clearance by `{python} f"{abs(load_effect):.2f}"` log across the
+characterized load range, and it is the only term in @tbl-eff-mvm that reaches significance
+(p = `{python} f"{load_effect_p:.3f}"`). The sign is the one prior knowledge predicted, since
+clearance falls as more material passes the membrane. Pressure has an effect of
+`{python} f"{abs(float(eff_mvm.loc['B', 'Effect'])):.3f}"` log in the same direction. That
+estimate is smaller than the centre-point scatter of the same design and does not approach
+significance. The interaction term is smaller still, and its estimate of
+`{python} f"{abs(float(eff_mvm.loc['AB', 'Effect'])):.3f}"` log is two orders of magnitude
+below the load effect.
 
 ```{python}
 #| output: asis
 show(D.screening_effects_df(UO, "xmulv_lrf"))
 print()
-print(": Screening effect estimates for the XMuLV log reduction factor. {#tbl-c-scr-xm}")
+print(": Screening effect estimates for XMuLV log reduction. {#tbl-eff-xmulv}")
 ```
+
+Enveloped-virus clearance shows no significant dependence on either parameter (@tbl-eff-xmulv).
+The largest term is pressure, at `{python} f"{abs(float(D.screening_effects_df(UO, 'xmulv_lrf').set_index('Term').loc['B', 'Effect'])):.3f}"`
+log across the pressure range, and it does not reach significance. Load, which drives the MVM
+response, is the smallest of the three terms here. The contrast between the two model viruses
+is exactly the contrast prior knowledge expected, and §5.4 takes it up. Step yield shows no
+significant term either, and its full effect table is in Appendix C.
+
+The screening stage carried one active term forward. The magnitudes above are estimates from a
+design built to detect effects, and they are refined by the response-surface model (§5.3),
+which is the model used for prediction.
+
+## Response-surface models
+
+One of the three response-surface models is adequate and predictive, and it is the model for
+the response that governs the step. Model-level statistics for all three are given in
+@tbl-fit-rsm.
+
+```{python}
+#| output: asis
+show(D.fit_summary_df(UO, "rsm"))
+print()
+print(": Response-surface model adequacy, all responses. {#tbl-fit-rsm}")
+```
+
+The MVM model explains R² = `{python} f"{rsm['mvm_lrf']['R2']:.3f}"` of the variation with an
+adjusted R² of `{python} f"{rsm['mvm_lrf']['adjR2']:.3f}"`, and the overall F test gives
+p = `{python} f"{rsm['mvm_lrf']['p']:.4f}"`. Its predicted R² is
+`{python} f"{rsm['mvm_lrf']['predR2']:.3f}"`, which is materially lower than the fitted R² and
+is the honest measure of how the model behaves on a run it has not seen, so predictions near
+the edge of the region should be read with that gap in mind. The residual standard error is
+`{python} f"{rsm['mvm_lrf']['rmse']:.3f}"` log, of the same order as the assay precision
+quoted in §5.1.
+
+Neither of the other two models is significant. The XMuLV model gives
+p = `{python} f"{rsm['xmulv_lrf']['p']:.3f}"` with an adjusted R² of
+`{python} f"{rsm['xmulv_lrf']['adjR2']:.3f}"`, and the step yield model gives
+p = `{python} f"{rsm['step_yield']['p']:.3f}"`. Both have negative predicted R². These are
+null results and they are reported as such. No predictive model is claimed for enveloped-virus
+clearance or for step yield at this step, and neither response is used to constrain the
+operating region. Both remain in the knowledge space as evidence that the step is insensitive
+to load and to pressure over the ranges studied. Their coefficient tables and analyses of
+variance are in Appendix C.
+
+```{python}
+#| output: asis
+show(D.rsm_coeff_df(UO, "mvm_lrf"))
+print()
+print(": Response-surface coefficients for MVM log reduction (coded factors). {#tbl-coef-mvm}")
+```
+
+The coefficient table confirms the screening result and adds the curvature terms
+(@tbl-coef-mvm). The load coefficient is the only term significant at alpha = 0.05, and its
+standard error is small enough that the effect is resolved rather than merely detected. The
+squared term in pressure has a p-value of
+`{python} f"{float(D.rsm_coeff_df(UO, 'mvm_lrf').set_index('Term').loc['B²', 'p-value']):.3f}"`,
+close to the threshold without crossing it. It describes a shallow maximum in
+clearance near the middle of the pressure range, and its practical size is small. Since it is
+not significant it is not treated as a mechanism. It is nevertheless retained in the model,
+for two reasons. Dropping a term this close to the threshold in order to refit a five-term
+model on `{python} f"{n_rsm:d}"` runs would overstate the precision of the coefficients that
+remain. The surface fitted with the term in place is also the more conservative basis for the
+worst-case corner evaluated in §6. The interaction term is not significant, which means the
+effect of load on clearance does not depend on the pressure the filter is run at.
+
+```{python}
+#| output: asis
+show(D.anova_lof_df(UO, "mvm_lrf"))
+print()
+print(": Analysis of variance with lack-of-fit partition for the MVM model. {#tbl-anova-mvm}")
+```
+
+The analysis of variance in @tbl-anova-mvm supports the model form with one qualification.
+Lack of fit is not significant at alpha = 0.05, with
+p = `{python} f"{rsm['mvm_lrf']['p_lof']:.3f}"`, so the quadratic surface is not rejected
+against the replicate scatter. The margin is small, and the pure-error estimate rests on
+`{python} f"{rsm['mvm_lrf']['df_pe']:d}"` degrees of freedom, so this test is not a strong one.
+Taken with the modest predicted R², it means the model should be used to define an operating
+region (§6) and to predict mean levels inside it, and not to make point predictions at the
+corners with a claimed precision.
+
+```{python}
+#| label: fig-contours
+#| fig-cap: "Response-surface predictions across the characterized load and pressure ranges, for each of the three measured responses."
+fig = D.fig_rsm_contours(UO, xf="filtration_volume", yf="pressure")
+plt.show()
+```
+
+The surfaces in @fig-contours make the shape of the result visible. MVM clearance falls
+steadily from left to right across the load axis and is almost flat along the pressure axis,
+so its contours are close to vertical lines. The XMuLV and step yield panels are drawn from
+models that are not significant, and the small tilts they show should not be read as effects.
+They are shown for completeness, and because a flat surface is the visual form of the
+robustness claim made above.
+
+```{python}
+#| label: fig-diag-mvm
+#| fig-cap: "Model diagnostics for the MVM response-surface model: standardized residuals against predicted values, normal quantile plot, and actual against predicted."
+fig = D.fig_diagnostics(UO, "mvm_lrf")
+plt.show()
+```
+
+Diagnostics for the MVM model are given in @fig-diag-mvm. The residuals show no structure
+against the predicted value, so the variance is stable across the range of clearance the model
+covers. The normal quantile plot is close to a straight line, with no point far enough from it
+to suggest an outlier or a failed run. The actual against predicted panel sits on the identity
+line across the whole range. Nothing in the diagnostics contradicts the model form, which is
+the most that diagnostics on `{python} f"{n_rsm:d}"` runs can establish.
+
+## Mechanistic interpretation
+
+The results are consistent with retention by size exclusion on a membrane whose effective
+pore-size distribution changes as material accumulates. Every finding of the study follows
+from that one mechanism, and the two model viruses behave differently for the reason that
+mechanism predicts.
+
+MVM is at the small end of what the membrane can retain. Its retention depends on the tail of
+the pore-size distribution, so anything that shifts that tail changes clearance. As the
+volumetric load rises, protein and other load components deposit within the retentive layer,
+and the passage available to a particle of parvovirus size changes with them. Clearance
+declines steadily with load, and the load coefficient in @tbl-coef-mvm measures that decline.
+XMuLV is several times larger and is retained with a wide margin over the whole range, so the
+same shift in the tail of the distribution does not reach it. The flat XMuLV surface is not an
+absence of information. It is the expected consequence of a size-based mechanism acting on a
+virus that is comfortably above the retention threshold.
+
+Pressure behaves as expected as well. Over the range tested, pressure sets the flux, and with
+it the time the filtration takes, and it does not change what the membrane retains.
+That is why the pressure terms are small on every response and why the interaction with load
+is negligible. The practical consequence is that the two parameters can be treated as acting
+independently inside the region, so the operating region is close to a rectangle in the two
+parameters.
+
+A multivariate design was still the right instrument, because independence is a finding of the
+study and not an assumption of it, and the interaction term had to be estimated in order to be
+dismissed. Had the interaction been active, univariate ranges on the two parameters would have
+described a region the process does not have. The step yield result belongs to the same
+picture. Yield stays high across the whole region, including at the highest load. The membrane
+is therefore not plugging to any appreciable degree over the loads tested, and the decline in
+MVM clearance comes from a change in the retentive layer rather than from gross fouling.
+
+# Design space
+
+The design space of the step is the whole characterized region, bounded by the load and
+pressure ranges studied. Within `{python} vol_char` L/m² of volumetric load and
+`{python} prs_char` psi of filtration pressure, the fitted response-surface model predicts an
+MVM log reduction at or above the contribution the step is required to make, and no corner of
+that region breaches it. The region has one principal plane, load against pressure, because
+those are the only two parameters of the step.
+
+The worst case in that region is the corner at the highest load and the highest pressure. The
+model predicts an MVM log reduction of `{python} f"{wc_mvm:.2f}"` there, against a required
+step contribution of `{python} f"{mvm_floor:.2f}"` log, leaving a margin of
+`{python} f"{wc_margin:.2f}"` log. Load is what puts that corner where it is. The shallow
+curvature term discussed in §5.3 places the pressure minimum at an edge of the pressure range
+instead of in the middle of it, and the two pressure edges then differ by
+`{python} f"{prs_edge_gap:.2f}"` log at the highest load, against a residual standard error of
+`{python} f"{rsm['mvm_lrf']['rmse']:.3f}"` log. That difference is well inside the scatter of
+the model, so load alone sets the worst case, and a reader tracking the limiting condition of
+this step should track the load axis. At the upper corner of the normal operating ranges the
+predicted clearance is `{python} f"{nor_hi_mvm:.2f}"` log, a margin of
+`{python} f"{nor_margin:.2f}"` log over the requirement, and at the set-point it is
+`{python} f"{sp_mvm:.2f}"` log.
+
+The operating ranges are nested inside the design space in the way ICH Q8 describes [@ichq8].
+The normal operating range for load, `{python} vol_nor` L/m², is a strict subset of the
+characterized range, and the same holds for pressure at `{python} prs_nor` psi. The knowledge
+space is wider than both, since the study deliberately explored loads well above the routine
+ceiling. Movement within the design space is not a regulatory change, though it is still
+assessed under the pharmaceutical quality system before it is made [@ichq10]. Movement outside
+the design space requires change control and, for a viral clearance step, a fresh assessment
+of whether the clearance credited in the cumulative claim still holds.
+
+Three bounds apply to this design space. It is bounded by the ranges studied, and nothing is
+claimed for a load above `{python} f"{p_vol.prange[1]:g}"` L/m² or a pressure outside
+`{python} prs_char` psi. It is bounded by the model, which predicts mean levels of clearance
+from `{python} f"{n_rsm:d}"` runs and has a predicted R² of
+`{python} f"{rsm['mvm_lrf']['predR2']:.3f}"`, so the assurance available at the very edge of
+the region is lower than at its centre. It is bounded by the scale-down spiking model, which
+is the only place clearance can be measured, and by the assumption that the load material
+stays within the composition the anion exchange design space delivers (PCR-008). The design
+space is also constrained by things the model does not describe. A filter that fails its
+post-use integrity test invalidates the batch whatever the model predicts, and the vendor
+operating limits for the device remain in force at both edges of the pressure range.
+
+# Proven acceptable ranges
+
+The proven acceptable ranges complement the design space by stating, for each governed quality
+attribute and each parameter separately, the range over which the attribute stays within
+acceptance. The acceptance basis comes first, because for a viral clearance response it is not
+the drug substance specification. The specification is a cumulative floor over the whole
+train, so the criterion for this step is that floor less the clearance credited to the other
+steps that contribute. @tbl-accept states the resulting criterion for each response.
+
+```{python}
+#| output: asis
+show(D.acceptance_table(UO))
+print()
+print(": Acceptance criterion for each measured response, with its basis. {#tbl-accept}")
+```
+
+The step must deliver at least `{python} f"{mvm_floor:.2f}"` log of MVM clearance and at least
+`{python} f"{xmu_floor:.2f}"` log of XMuLV clearance. Both criteria are well below what the
+step achieves at its set-point. Step yield maps to no quality attribute and so has no
+acceptance criterion here; it is a process performance measure and is treated as such.
+
+Two analyses were run for each pairing of attribute and parameter. The first holds the other
+parameter at its set-point and evaluates the fitted response-surface model across the
+parameter's characterization range. The second propagates the normal operating range of the
+other parameter by Monte-Carlo simulation of the fitted model, with
+`{python} f"{D.PAR_MC_N:,}"` draws at each grid point and the model residual added, and takes
+the range over which the predictive interval stays within acceptance. The second is the
+reproducible default, because it asks whether the range still holds when the rest of the
+operating point moves as it normally does. The results are in @tbl-par.
+
+```{python}
+#| output: asis
+show(D.par_table(UO))
+print()
+print(": Proven acceptable ranges per governed quality attribute and parameter, from both analyses. {#tbl-par}")
+```
+
+Every entry in @tbl-par spans the full characterization range, and the two analyses agree on
+every row. The whole studied range of volumetric load is a proven acceptable range for MVM
+clearance, and it stays a proven acceptable range when pressure varies across its normal
+operating range. The same holds for pressure, and both parameters behave the same way against
+the XMuLV attribute. Nothing narrows. There is no binding univariate constraint anywhere in
+this step, and clearance never falls to its floor inside the region (§5.4).
+
+That result has a consequence for how the ranges should be used. Because no proven acceptable
+range is narrower than the characterization range, the binding constraint on the operating
+region is not any univariate range. It is the multivariate corner identified in §6, the point
+of highest load and highest pressure, where the margin over the requirement is smallest. A
+reader looking for the limiting condition of this step should look there.
+
+```{python}
+#| label: fig-par-mvm
+#| fig-cap: "Proven acceptable range for MVM log reduction against volumetric load. The acceptance limit is drawn, the acceptable region is shaded green, and the set-point and normal operating range are marked. Left panel: the other parameter at set-point. Right panel: the other parameter varying within its normal operating range."
+fig = D.fig_par(UO, "mvm_lrf", D.governing_factor(UO, "mvm_lrf"))
+plt.show()
+```
+
+@fig-par-mvm shows the governing pairing of the step, MVM clearance against volumetric load.
+The predicted clearance declines across the load range in both panels and stays above the
+acceptance limit throughout, so the shaded acceptable region covers the whole axis. The right
+panel shows the predictive interval widening around the median once pressure is allowed to
+vary within its normal operating range, and the lower bound of that interval still clears the
+limit at the highest load. The set-point sits in the left half of the range, with the normal
+operating range around it.
+
+```{python}
+#| label: fig-par-xmulv
+#| fig-cap: "Proven acceptable range for XMuLV log reduction against filtration pressure, with the acceptance limit drawn and the acceptable region shaded green."
+fig = D.fig_par(UO, "xmulv_lrf", D.governing_factor(UO, "xmulv_lrf"))
+plt.show()
+```
+
+@fig-par-xmulv shows the equivalent pairing for enveloped virus, plotted against pressure
+because that is the parameter with the largest main effect on the XMuLV response. The
+predicted clearance is essentially flat and sits far above the acceptance limit at every
+pressure tested. No effect was found, the range over which no effect was found is stated, and
+the distance to the limit is visible.
+
+Two bounds apply to the ranges in @tbl-par. They are conditional on the fitted
+response-surface model, so they inherit the predicted R² and the residual scatter reported in
+§5.3, and they extend no further than the characterization ranges over which that model was
+fitted. They are also conditional on the step's acceptance criterion, a back-calculation from
+the cumulative requirement. If the clearance credited to anion exchange
+or to the low-pH hold changed, the criterion for this step would change with it, and the
+ranges would have to be re-evaluated against the new floor.
+
+# Process capability and robustness
+
+Both viral-clearance attributes of the drug substance meet their acceptance criteria at
+commercial scale with margin, and the parvovirus attribute is the tighter of the two.
+@tbl-cap gives the simulated distribution and the one-sided capability index for each.
+
+```{python}
+#| output: asis
+show(cap_for(["lrv_mvm", "lrv_xmulv"]))
+print()
+print(": Commercial-scale capability of the viral-clearance attributes the step governs. {#tbl-cap}")
+```
+
+Cumulative parvovirus clearance has a capability index of `{python} f"{mvm_cpk:.2f}"` and a
+simulated mean `{python} f"{mvm_cap_margin:.2f}"` log above its acceptance floor. Cumulative
+enveloped-virus clearance has a capability index of `{python} f"{xmu_cpk:.2f}"` and a mean
+`{python} f"{xmu_cap_margin:.2f}"` log above its floor. The parvovirus figure is the tighter
+capability of the two, and it is the one this step contributes most to.
+
+Three bounds apply to this claim. The estimate comes from Monte-Carlo simulation of
+`{python} f"{V['n_monte_carlo']:,}"` batches on qualified scale-down models, so it is a
+prediction of commercial-scale behaviour and not a measurement of it, and Stage 2 confirms it
+at scale. Every parameter in the simulation is drawn inside its normal operating range, which
+for this step means loads up to `{python} f"{p_vol.nor[1]:g}"` L/m² and not the wider range
+explored in the characterization. The simulation propagates the fitted models, so it inherits
+their limitations, including the modest predicted R² of the MVM model.
+
+Neither capability figure belongs to this step alone. @tbl-vc gives the modular clearance
+claim for the nominal batch, step by step, and the simulated mean in @tbl-cap is the
+distribution of that same claim across the `{python} f"{V['n_monte_carlo']:,}"` simulated
+batches.
+
+```{python}
+#| output: asis
+show(csv("viral_clearance.csv").rename(columns={"step": "Step"}), floatfmt=".2f")
+print()
+print(": Modular viral clearance across the drug-substance process, by step (log₁₀). {#tbl-vc}")
+```
+
+Filtration supplies `{python} f"{vf_mvm:.2f}"` log of the `{python} f"{cum_mvm:.2f}"` log
+cumulative parvovirus claim, and anion exchange supplies `{python} f"{aex_mvm:.2f}"` log of it
+(PCR-008). The low-pH hold contributes nothing to parvovirus clearance, because a
+non-enveloped virus is not inactivated by low pH, and it is not credited for it. For enveloped
+virus the picture is different. Filtration supplies `{python} f"{vf_xmu:.2f}"` log of the
+`{python} f"{cum_xmu:.2f}"` log cumulative claim, the low-pH hold supplies
+`{python} f"{lowph_xmu:.2f}"` log (PCR-006), and anion exchange supplies the rest. Protein A
+and cation exchange remove virus as well, and neither is credited in the claim. The
+consolidated position is in PCMR-001.
+
+Robustness across the operating region rests on two findings from §5. Neither enveloped-virus
+clearance nor step yield varied significantly with load or with pressure over the ranges
+studied, so the only response that moves with an operating parameter is the one the step is
+designed to deliver. Both parameters are also easy to hold in practice. The volumetric load is
+fixed when the filter area is selected for the batch, and the pressure is set at the start of
+the filtration and monitored throughout under SOP-2012. The margins on both viral-clearance
+attributes are wide, and on that basis the small-virus safety of A-Mab drug substance is
+assured at commercial scale.
+
+# Parameter classification
+
+Both parameters of the step are classified as well-controlled critical process parameters
+under SOP-4001. Each is linked to a critical quality attribute, and each has a low risk of
+leaving the design space in routine operation, which is the distinction the A-Mab framework
+draws between a CPP and a WC-CPP [@amab2009]. The classifications are recorded in @tbl-params
+and the reasoning for each is given below.
+
+- **Filtration volume (load), WC-CPP.** It has a demonstrated and quantified effect on MVM
+  clearance, which is a very high criticality attribute, so it cannot be a general process
+  parameter. It is not a CPP because the risk of leaving the design space is low. The load is
+  fixed when the filter area is chosen for a batch and does not drift during operation, and
+  its normal operating range sits well inside a characterized range over which the acceptance
+  criterion is met everywhere (§7).
+- **Filtration pressure, WC-CPP.** No effect of pressure on any response reached significance
+  over `{python} prs_char` psi, and that null result is the evidence for the class, not an
+  absence of evidence. Pressure is retained as a well-controlled critical process parameter,
+  because it is the parameter that keeps the filter inside the operating window in which its
+  retention has been established, and because the null result rests on a design with limited
+  residual degrees of freedom. It is easy to
+  control and it is monitored continuously, so it carries no risk of leaving the design space
+  unnoticed.
+
+The step has no critical process parameter, and it has no key process parameter. There is no
+parameter here whose control capability is poor relative to the width of its design space,
+which is the condition that would force the CPP designation. A key process parameter would
+drive process consistency without touching quality, and the step has no such parameter either.
+Step yield at this step is high and insensitive, and it is monitored as a process attribute.
+
+The null pressure result is kept in the knowledge space. It is the evidence that the step
+tolerates the full operating window of the filter, and the control strategy in §10 relies on
+it when it assesses a pressure excursion against the design space.
+
+# Contribution to the control strategy
+
+The step contributes four things to the control strategy of the drug substance process. Each
+follows from a result reported above, and each is carried into the campaign-level strategy in
+PCMR-001.
+
+The first is a pair of controlled ranges. Volumetric load is controlled to
+`{python} vol_nor` L/m² and filtration pressure to `{python} prs_nor` psi, both inside the
+design space established in §6. The load range is the one that matters for quality, and its
+upper limit is the operative control on parvovirus clearance at this step.
+
+The second is in-process monitoring. Filtration pressure is recorded throughout the
+filtration, and the volume filtered per unit membrane area is recorded and reconciled against
+the batch volume, both under SOP-2012. An excursion in either is assessed against the design
+space and against the proven acceptable ranges in §7. The pump ramp profile is now specified
+in SOP-2012 as well, following the deviation in §13.1, so that the set-point is reached
+without an overshoot. Neither enveloped-virus clearance nor step yield is monitored as a
+control point, because neither varied with load or with pressure over the ranges studied
+(§5.3).
+
+The third is the filter itself. Every filter is flushed and pressure-tested before use and
+integrity-tested after use under SOP-2012, and a failed post-use integrity test invalidates
+the batch. Membrane lots are controlled by the vendor specification and by incoming
+verification, and the deviation in §13.2 led to the pre-use flux verification being retained
+as a routine record.
+
+The fourth is the clearance credit itself. The log reduction this step delivers is claimed as
+a module of the cumulative viral clearance under ICH Q5A(R2) [@ichq5a], and it is claimed on
+the basis that its mechanism is independent of the mechanisms credited to the other steps.
+That independence is an argument about mechanism and not a measurement, and it is made in
+PCMR-001 where the whole claim is assembled.
+
+The step does not control viral safety by itself, and nothing in this report should be read
+that way. Parvovirus clearance is shared with anion exchange (PCR-008) and enveloped-virus
+clearance with the low-pH hold (PCR-006) and anion exchange. Nor does the step control the
+quality of the material it receives. The composition of the anion exchange flow-through pool
+is set by the design space of Step 8, and a load outside that composition is outside what was
+characterized here.
+
+# Discussion
+
+The step is well understood, and the understanding is concentrated in one relationship. MVM
+clearance declines with volumetric load, the decline is quantified across a range that extends
+well past the routine ceiling, and the required contribution is met at every point of that
+range including its worst corner. Everything else the study measured was flat. That is a
+simple result, and its simplicity is a property of the step. A size-based retention mechanism
+has few ways to fail, and the ones it has are covered by the post-use integrity test and by
+the load limit.
+
+Confidence in the scale-down model is good for the operating-range conclusions and is
+necessarily weaker for the clearance figures themselves. Load per unit membrane area and
+pressure are the two quantities retention depends on, and both are matched between scales, so
+a range established on the model is a range for the commercial step. The clearance values are
+a different matter. They come from a spiked small-scale system that no commercial batch can
+reproduce, which is why ICH Q5A(R2) treats them as a modular claim supported by mechanism and
+not as a batch release measurement [@ichq5a]. The margins reported in §6 and §8 should be read
+in that light.
+
+Two deviations occurred during execution and both were dispositioned as retained. The pressure
+excursion reached `{python} f"{dev_009_01_pmax_psi:g}"` psi, above the normal operating range,
+and the membrane lot in the second deviation was `{python} f"{dev_009_02_flux_deficit_pct:g}"`
+% below the vendor-typical flux. Neither changed a fitted effect, a classification or the
+operating region, and both are reported in full in §13. They are mentioned here because they
+are the only two places where the executed study departed from PCP-009.
+
+Four limitations bound what this report establishes. The clearance figures rest on a
+small-scale spiking model, as noted above. The study used two model viruses, so nothing is
+established about the clearance of any other virus, and the parvovirus result should not be
+extended to other non-enveloped viruses without a mechanistic argument about size. The
+response-surface model has a modest predicted R² and rests on
+`{python} f"{n_rsm:d}"` runs, so it defines a region and predicts mean levels within it, and it
+does not support precise point predictions at the corners. Finally, the design space is not
+confirmed at scale at its edges, which is a general property of a characterization package and
+is addressed by the Stage 2 programme.
+
+Each limitation is managed forward in a stated way. The spiking model and the choice of model
+viruses are the accepted approach of ICH Q5A(R2), and the claim they support is a modular one
+consolidated in PCMR-001. The precision of the model is managed by operating well inside the
+region, since the normal operating range for load stops far below the load at which the margin
+becomes small. Edge confirmation is a Stage 2 activity. No parameter at this step required the
+most stringent control, and the reasoning for that is in §9.
+
+# Conclusions
+
+The small-virus retentive filtration step is well understood and robust across the ranges
+studied, and it delivers the clearance contribution the cumulative viral safety claim requires
+of it. Volumetric load governs parvovirus clearance and is the only parameter with a
+demonstrated effect on any response. Filtration pressure has no demonstrated effect over the
+full operating window of the filter, and enveloped-virus clearance and step yield are
+insensitive to both parameters over the ranges studied.
+
+The design space is the characterized region of `{python} vol_char` L/m² of load and
+`{python} prs_char` psi of pressure. At its worst corner the fitted model predicts
+`{python} f"{wc_mvm:.2f}"` log of MVM clearance against a required contribution of
+`{python} f"{mvm_floor:.2f}"` log. Every proven acceptable range in §7 spans the whole
+characterization range under both analyses, so the binding constraint on the operating region
+is the multivariate corner and not any univariate range. Both parameters are classified as
+well-controlled critical process parameters, and the step has no critical process parameter and
+no key process parameter.
+
+At commercial scale both governed attributes meet their acceptance criteria. Cumulative
+parvovirus clearance is the tighter capability at `{python} f"{mvm_cpk:.2f}"`, with a mean
+`{python} f"{mvm_cap_margin:.2f}"` log above its floor. Two deviations were recorded and both
+were resolved without impact on the classifications or on the operating region. These
+conclusions are bounded by the characterization ranges, by the fitted response-surface model
+and by the qualified small-scale spiking model on which clearance was measured. They do not by
+themselves establish viral safety, which is a cumulative claim consolidated in PCMR-001 and
+confirmed at commercial scale in Stage 2.
+
+# Deviations from the plan
+
+Two deviations from PCP-009 were recorded during execution of the study. Each was
+investigated, each was assessed for impact on the reported results, and each was dispositioned
+as retained, meaning that the affected runs remain in the analysis reported above.
+@tbl-dev summarizes them.
+
+```{python}
+#| output: asis
+print(dev_register(DOC))
+print()
+print(": Deviations recorded during execution of the study. {#tbl-dev}")
+```
+
+The two deviations are unrelated to each other. The first is an equipment event during a run
+and was found by in-process monitoring, and the second is a material attribute found before
+the affected runs began. Neither invalidated a design and neither required a study to be
+re-executed.
+
+## DEV-009-01 — transient filtration-pressure excursion above the normal operating range
+
+Filtration pressure rose to `{python} f"{dev_009_01_pmax_psi:g}"` psi during one run, above
+the upper edge of the normal operating range of `{python} prs_nor` psi. The excursion was
+transient and was detected by the in-process pressure record required by SOP-2012.
+
+The investigation identified an overshoot on the pump ramp at the start of the filtration as
+the root cause. The pressure controller reached its set-point through an initial overshoot
+that decayed within the first part of the filtration, and the recorded maximum is that
+overshoot. No equipment fault was found, and the same behaviour was not seen on the other runs
+of the design.
+
+The impact assessment rests on two facts. The excursion peak is inside the characterization
+range of `{python} prs_char` psi, at a coded position of
+`{python} f"{dev_pressure_coded:+.2f}"`, so the affected run sits inside the region the study
+explored. The fitted model predicts an MVM log reduction of
+`{python} f"{dev_pressure_mvm:.2f}"` at that pressure and the set-point load, against a
+required step contribution of `{python} f"{mvm_floor:.2f}"` log, and pressure was in any case
+shown in §5.3 to have no significant effect on any response. The deviation is therefore
+retained, the affected run remains in the analysis, and the classification of filtration
+pressure in §9 is unchanged. The pump ramp profile has been added to the operating parameters
+specified in SOP-2012 so that the overshoot is not repeated at commercial scale.
+
+## DEV-009-02 — filter membrane lot flux below the vendor-typical value
+
+The membrane lot used for part of the study, LOT-VF-9331, showed a flux
+`{python} f"{dev_009_02_flux_deficit_pct:g}"` % below the vendor-typical value at pre-use flux
+verification. A permeability deficit of that size raises a legitimate question about whether
+the lot is representative, and therefore about whether the retention characterized on it can
+be read as platform behaviour.
+
+The investigation attributed the deficit to lot-to-lot variation in membrane permeability
+within the vendor specification. The lot met every release criterion of its certificate of
+analysis, including the vendor's own retention test, and the deficit is a shift within the
+specified permeability window.
+
+The impact assessment rests on mechanism and on the reproducibility already reported. Flux is
+a permeability property of the membrane and is set by the open structure of the support,
+whereas retention is set by the pore-size distribution of the retentive layer, and the two are
+specified and released separately by the vendor. Any contribution the lot did make to the
+results is contained in the run-to-run scatter reported in §5.1, which was small enough to
+resolve the load effect without difficulty and a substantial part of which the method
+validation attributes to the infectivity assay (Appendix D).
+The MVM clearance of the affected runs was determined by AMV-3018 in the same way as every
+other run, and nothing in the diagnostics of @fig-diag-mvm marks those runs out. Every filter
+in the study passed its post-use integrity test.
+
+The deviation is retained and the affected runs remain in the analysis. One change was made
+forward. Pre-use flux verification is now a routine record for the commercial step under
+SOP-2012, so that a lot at the edge of the vendor permeability window is identified before the
+batch is loaded.
+
+# Appendices A-D
+
+The appendices carry the complete design matrices, the full effect and coefficient tables for
+every response, and the validated performance of the analytical methods. They are the primary
+record of the data summarized in §5.
+
+## Appendix A — Screening design matrix and responses
+
+The coded screening design and the measured responses are given in @tbl-appa. The
+coded settings of −1 / +1 mark the edges of the characterization range of each factor, and 0
+marks its midpoint.
+
+```{python}
+#| output: asis
+show(D.coded_matrix_df(UO, "screening"))
+print()
+print(": Screening design matrix in coded factors, with the measured responses. {#tbl-appa}")
+```
+
+## Appendix B — Response-surface design matrix and responses
+
+The coded face-centred central composite design and the measured responses are given in
+@tbl-appb.
+
+```{python}
+#| output: asis
+show(D.coded_matrix_df(UO, "rsm"))
+print()
+print(": Response-surface design matrix in coded factors, with the measured responses. {#tbl-appb}")
+```
+
+## Appendix C — Full effect and coefficient tables
+
+The screening effect table for step yield, which is referred to in §5.2, is given in
+@tbl-appc1.
 
 ```{python}
 #| output: asis
 show(D.screening_effects_df(UO, "step_yield"))
 print()
-print(": Screening effect estimates for step yield. {#tbl-c-scr-yld}")
+print(": Screening effect estimates for step yield. {#tbl-appc1}")
 ```
+
+The response-surface coefficient tables for the two responses not shown in §5.3 are given in
+@tbl-appc2 and @tbl-appc3, with their analyses of variance in @tbl-appc4 and @tbl-appc5.
+Neither model is significant overall, so neither table supports a predictive claim.
 
 ```{python}
 #| output: asis
 show(D.rsm_coeff_df(UO, "xmulv_lrf"))
 print()
-print(": Response-surface coefficients for the XMuLV log reduction factor. "
-      "{#tbl-c-rsm-xm}")
+print(": Response-surface coefficients for XMuLV log reduction (coded factors). {#tbl-appc2}")
 ```
 
 ```{python}
 #| output: asis
 show(D.rsm_coeff_df(UO, "step_yield"))
 print()
-print(": Response-surface coefficients for step yield. {#tbl-c-rsm-yld}")
+print(": Response-surface coefficients for step yield (coded factors). {#tbl-appc3}")
 ```
 
 ```{python}
 #| output: asis
 show(D.anova_lof_df(UO, "xmulv_lrf"))
 print()
-print(": Analysis of variance for the XMuLV response-surface model. {#tbl-c-anova-xm}")
+print(": Analysis of variance with lack-of-fit partition, XMuLV log reduction. {#tbl-appc4}")
 ```
 
 ```{python}
 #| output: asis
 show(D.anova_lof_df(UO, "step_yield"))
 print()
-print(": Analysis of variance for the step-yield response-surface model. "
-      "{#tbl-c-anova-yld}")
+print(": Analysis of variance with lack-of-fit partition, step yield. {#tbl-appc5}")
 ```
 
-```{python}
-#| label: fig-c-diag-xm
-#| fig-cap: "Model diagnostics for the XMuLV log reduction factor. The actual-against-predicted panel shows the narrow range of prediction that follows from a response with no resolved factor effect."
-D.fig_diagnostics(UO, "xmulv_lrf")
-plt.show()
-```
+## Appendix D — Analytical methods summary
 
-# Appendix D — Analytical methods summary {.unnumbered}
-
-Performance of the two validated infectivity assays used by the step is summarized in
-@tbl-d-amv. The assay share of variance is the fraction of the observed run-to-run variance
-in the corresponding response that is attributable to the method.
+The validated performance of the two infectivity assays used in the study is given in
+@tbl-appd. Precision for both is reported as a log10 standard deviation, which is the natural
+unit for a titre-based method, and the variance share is the fraction of observed variability
+the validation attributes to the method.
 
 ```{python}
 #| output: asis
-show(amv_df)
+show(method_perf_for(VIRUS_FILT_AMV_REFS, precision_with_unit=True))
 print()
-print(": Validated analytical methods for the step, with reported precision, limit of "
-      "quantitation, accuracy and the assay share of the observed variance. {#tbl-d-amv}")
+print(": Validated performance of the analytical methods used at the step. {#tbl-appd}")
 ```
+
+<!-- ========================= BODY END ======================================== -->
 
 # References {.unnumbered}
 

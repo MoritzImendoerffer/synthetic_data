@@ -13,8 +13,10 @@ hedge and boundary detection.
 > no document here contains a planted claim, so the builder merges none. It carries spans
 > only on `feature/weak-claims-via-brief`.
 >
-> **Coverage is complete**: all eight `PCR-00N` reports plus `PCMR-001` carry a layer,
-> 315 spans in total. Only `PCR-003`'s live in an external
+> **Coverage**: all eight `PCR-00N` reports, `PCMR-001` and `RA-001` carry a layer. RA-001 is
+> not a report, but it argues — it decides the characterization scope, and every decision in it
+> is a claim with a stated warrant — so its argument structure is labeled the same way.
+> Only `PCR-003`'s live in an external
 > `authoring/rhetorical/PCR-003.spans.yaml`; every other layer is a Python constant inside
 > `pc_package/build_ground_truth.py` (see `AX_RHET_SPANS`).
 >

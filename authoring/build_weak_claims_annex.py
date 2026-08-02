@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""RETIRED FEATURE. Emit the annex fragment for planted weak claims and verify grounding.
+"""Emit the annex fragment for the labeled weak claims and verify grounding.
 
-    Nothing in the shipped pipeline calls this. The planted weak-claim feature was retired
-    because the claims were injected AFTER authoring, which makes them contradict the
-    surrounding prose rather than merely lack support for themselves — see
-    ``authoring/WEAK_CLAIMS.md``. This script is kept as a working record and as the
-    starting point if the feature is revived (in which case the claims must be named in the
-    authoring brief and written in one pass, not injected). Run against a document with no
-    planted claims it correctly exits non-zero.
+    Standalone strict check for the feature described in ``authoring/WEAK_CLAIMS.md``. The
+    claims are ACTIVE on ``feature/weak-claims-via-brief`` and assigned in each document's
+    brief BEFORE it is authored; this script runs afterwards and only ever READS the
+    document. It is not the pipeline path — ``pc_package/build_ground_truth.py`` emits the
+    annex records — but it is the sharpest single check of the layer.
 
-Emit the ground-truth annex fragment for the planted weak claims, and verify each is
+    The registry is two-phase (``assignment:`` then ``captured:``). A claim that is assigned
+    but not yet captured is reported as PENDING and is not a failure: that is the expected
+    state between authoring a document and recording the author's wording. A captured quote
+    that no longer appears IS a failure, and the fix is always to re-read the document and
+    re-record the wording, never to edit the document to match.
+
+Emit the ground-truth annex fragment for the labeled weak claims, and verify each is
 grounded (its verbatim quote appears in the document it labels).
 
     uv run python authoring/build_weak_claims_annex.py --doc PCR-003 \
@@ -75,6 +79,17 @@ def resolve_file(doc_id: str, explicit: str | None) -> str | None:
     return None
 
 
+def captured(c: dict) -> dict:
+    """The recorded half of a claim, under either registry shape.
+
+    The registry became two-phase when the feature was rebuilt around the brief: an
+    ``assignment`` written before the document and a ``captured`` block filled in after it
+    renders. Older entries are flat. Reading both shapes keeps this script usable on any
+    branch, which is the same reason ``build_rhetorical_annex.py`` does it.
+    """
+    return c.get("captured") or c
+
+
 def annex_fragment(doc_id: str, claims: list[dict]) -> dict:
     """A self-contained fragment mirroring the ground-truth annex assertion shape."""
     return {
@@ -85,11 +100,12 @@ def annex_fragment(doc_id: str, claims: list[dict]) -> dict:
                 "section": c.get("section"),
                 "support": "unsupported",             # the label: NOT grounded by evidence
                 "weakness_type": c["weakness_type"],
-                "source_reference": {"quote": _collapse(c["quote"])},
-                "rationale": _collapse(c.get("rationale", "")),
-                "correct_version": _collapse(c.get("correct_version", "")),
+                "source_reference": {"quote": _collapse(captured(c)["quote"])},
+                "rationale": _collapse(captured(c).get("rationale", "")),
+                "correct_version": _collapse(captured(c).get("correct_version", "")),
             }
             for c in claims
+            if (captured(c) or {}).get("quote")
         ],
     }
 
@@ -119,19 +135,31 @@ def main() -> int:
             continue
         text = doc_text(path)
         grounded = 0
+        pending = 0
         for c in claims:
-            q = _collapse(c["quote"])
+            raw = (captured(c) or {}).get("quote")
+            if not raw:
+                # Assigned, not yet recorded. Expected between authoring and the capture
+                # step; only a captured quote can be checked, and only against the document.
+                pending += 1
+                print(f"  PEND {c['id']} [{c['weakness_type']}] assigned, wording not recorded yet")
+                continue
+            q = _collapse(raw)
             ok = q in text
             grounded += ok
             print(f"  {'OK  ' if ok else 'FAIL'} {c['id']} [{c['weakness_type']}]"
-                  + ("" if ok else f"\n       ungrounded quote: {q!r}"))
+                  + ("" if ok else f"\n       ungrounded quote: {q!r}"
+                                   f"\n       re-read the document and re-record the wording;"
+                                   f" never edit the document to match"))
             if not ok:
                 rc = 1
         frag = annex_fragment(doc_id, claims)
         out = os.path.join(OUT, f"{doc_id}.weak_claims.json")
         json.dump(frag, open(out, "w", encoding="utf-8"), indent=2)
-        print(f"  {grounded}/{len(claims)} grounded · wrote {os.path.relpath(out, ROOT)} "
-              f"(checked against {os.path.relpath(path, ROOT)})")
+        print(f"  {grounded}/{len(claims) - pending} grounded"
+              + (f" · {pending} pending capture" if pending else "")
+              + f" · wrote {os.path.relpath(out, ROOT)} "
+                f"(checked against {os.path.relpath(path, ROOT)})")
     return rc
 
 

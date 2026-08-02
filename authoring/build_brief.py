@@ -156,6 +156,100 @@ HELPERS_BY_JOB = [
 ]
 
 
+def _weak_claim_assignments(doc_id: str) -> str:
+    """The labeled benchmark negatives this document is assigned, if any.
+
+    Surfaced to the author BEFORE writing, which is the whole point. The previous design
+    planted these into finished documents, where a claim cannot be merely unsupported —
+    it lands in prose that has already settled the question and so reads as a
+    contradiction of its neighbour. Written in one pass instead, the surrounding argument
+    accommodates the claim and it stays an overreach rather than a self-contradiction.
+    See authoring/WEAK_CLAIMS.md.
+    """
+    path = os.path.join(HERE, "weak_claims.yaml")
+    if not os.path.exists(path):
+        return ""
+    with open(path) as fh:
+        data = yaml.safe_load(fh) or {}
+    claims = (data.get("claims") or {}).get(doc_id) or []
+    if not claims:
+        return ""
+
+    b = io.StringIO()
+    b.write("## 5b. Assigned weak claims — WRITE THESE, and nothing else ungrounded\n\n")
+    b.write("> This document carries labeled benchmark negatives. They are the **only** "
+            "ungrounded claims you may write; every other claim must be fully supported "
+            "(WRITING_GUIDE §7a).\n>\n"
+            "> Each must end up **unsupported, not contradicted**. Write it into the "
+            "argument so the surrounding prose accommodates it.\n>\n"
+            "> **Move the claim, never the document.** If a neighbouring sentence rebuts "
+            "it, relocate the claim. Do not soften the neighbour, do not delete a grounded "
+            "statement, and do not remove a citation elsewhere to make an uncited claim "
+            "blend. Smoothing the document around a planted claim turns a local negative "
+            "into a diffuse weakening of the report, which is worse than the problem this "
+            "design exists to solve. If you do change anything in service of the claim, "
+            "say so in your report so it can be checked on its own merits.\n>\n"
+            "> It must read as ordinary in-register prose. A negative a reader spots by "
+            "style rather than by checking the evidence is worthless.\n\n")
+    for c in claims:
+        a = c.get("assignment") or {}
+        b.write(f"### {c['id']} — `{c['weakness_type']}` (section: {c.get('section', '?')})\n\n")
+        b.write(f"- **The grounded fact it distorts:** {' '.join((a.get('distorts') or '').split())}\n")
+        b.write(f"- **Write:** {' '.join((a.get('write') or '').split())}\n")
+        b.write(f"- **Placement:** {' '.join((a.get('placement') or '').split())}\n\n")
+    b.write("Do not mark these in the text in any way. After the document renders, the "
+            "maintainer records your exact wording in the registry so the annex can label "
+            "it — that step reads the document, it never edits it.\n\n")
+    return b.getvalue()
+
+
+def _discrepancy_assignments(doc_id: str) -> str:
+    """The registered discrepancies this document is required to carry, if any.
+
+    A registered discrepancy lives in prose, so it survives only as long as nobody
+    re-authors the document holding it. D-002 did not survive: PCR-003 was re-authored, the
+    sentence was not written again, and authoring/DISCREPANCIES.md went on calling the item
+    open. Nothing failed, because no gate reads that registry.
+
+    Surfacing the assignment here puts these on the same footing as the weak claims: named
+    before the document is written, so the author builds them into the argument, and never
+    restored afterwards. See authoring/discrepancies.yaml.
+    """
+    path = os.path.join(HERE, "discrepancies.yaml")
+    if not os.path.exists(path):
+        return ""
+    with open(path) as fh:
+        data = yaml.safe_load(fh) or {}
+    items = (data.get("items") or {}).get(doc_id) or []
+    if not items:
+        return ""
+
+    b = io.StringIO()
+    b.write("## 5c. Registered discrepancies — this document must carry these\n\n")
+    b.write("> `authoring/DISCREPANCIES.md` registers a small number of **genuine "
+            "inconsistencies** that a competent review should catch. They are deliberate "
+            "benchmark items, and each one lives in the prose of a particular document. "
+            "Yours carries the following.\n>\n"
+            "> Write each in your own words, in register, where the assignment says. Then "
+            "leave it alone. **Do not reconcile it** with another document, with the data, "
+            "or with a later section of your own report, and do not qualify it into "
+            "something true. Correcting one deletes a benchmark item.\n>\n"
+            "> This is not the weak-claims layer. These are not labeled in the annex, so "
+            "nothing in the document or its ground truth reveals them.\n\n")
+    for it in items:
+        a = it.get("assignment") or {}
+        b.write(f"### {it['id']} — `{it.get('kind', '?')}`\n\n")
+        b.write(f"- **State:** {' '.join((a.get('state') or '').split())}\n")
+        if a.get("write_next"):
+            b.write(f"- **Then write:** {' '.join(a['write_next'].split())}\n")
+        b.write(f"- **Why it is there:** {' '.join((a.get('why') or '').split())}\n")
+        b.write(f"- **Placement:** {' '.join((a.get('placement') or '').split())}\n")
+        if a.get("do_not"):
+            b.write(f"- **Do not:** {' '.join(a['do_not'].split())}\n")
+        b.write("\n")
+    return b.getvalue()
+
+
 def _helper_by_job():
     out = ["**Find a helper by the job you are doing.** The full alphabetical listing "
            "follows; this is an index into it.\n"]
@@ -225,8 +319,13 @@ def build(doc_id: str) -> str:
         w(f"- **DoE step:** {'yes' if doe else 'no (univariate / qualitative — do NOT fabricate a DoE)'}\n")
     else:
         w("- **Scope:** corpus-level document (no single unit operation)\n")
-    w(f"- **Doc-type outline:** `section_plan.yaml` -> "
-      f"`{'report_doe' if (is_report and doe) else 'report_nondoe' if is_report else 'plan' if is_plan else 'n/a'}`\n")
+    # Which outline in section_plan.yaml this document follows. The corpus-level documents
+    # each have their own, and saying "n/a" here left four authors to guess.
+    CORPUS_OUTLINE = {"PTP-001": "transfer_plan", "RA-001": "risk_assessment",
+                      "PCMP-001": "master_plan", "PCMR-001": "master_report"}
+    outline = ("report_doe" if (is_report and doe) else "report_nondoe" if is_report
+               else "plan" if is_plan else CORPUS_OUTLINE.get(doc_id, "n/a"))
+    w(f"- **Doc-type outline:** `section_plan.yaml` -> `{outline}`\n")
     if superseded:
         w(f"- **Superseded study present:** yes — real re-executed dataset(s) for "
           f"{', '.join(superseded)} (see §5). Reference it; analyse the requalified data.\n")
@@ -342,6 +441,8 @@ def build(doc_id: str) -> str:
         w("\n")
 
     # 6. Cross-references -------------------------------------------------------
+    w(_weak_claim_assignments(doc_id))
+    w(_discrepancy_assignments(doc_id))
     w("## 6. Cross-references\n\n")
     if step is not None:
         w("Related documents — `related_docs_md(\"%s\")`:\n\n" % doc_id)

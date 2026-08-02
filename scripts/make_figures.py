@@ -153,7 +153,13 @@ def fig_bioreactor_designspace():
     inspec = np.ones_like(XXc, dtype=bool)
     for r, z in Z.items():
         lo, hi = acc[r]
-        inspec &= (z >= lo) & (z <= hi)
+        # honour the CQA's spec type, as doe_report.meets_acceptance does: an upper-only
+        # attribute is not out of spec below the range-of-experience floor.
+        stype = st.spec_type(r)
+        if stype != "lower":
+            inspec &= (z <= hi)
+        if stype != "upper":
+            inspec &= (z >= lo)
 
     fig, ax = plt.subplots(figsize=(6.4, 5.0))
     ax.contourf(Xn, Yn, inspec.astype(float), levels=[0.5, 1.5], colors=[viz.STATUS["good"]], alpha=0.16)
@@ -300,14 +306,28 @@ def fig_vf():
         res = dict(PROC.units)["virus_filtration"].run(feeds["virus_filtration"].copy(), PROC.rng(9),
                                                        setpoints={"filtration_volume": v})
         mvm.append(res.metrics["mvm_lrf"])
+    # NO ACCEPTANCE LINE IS DRAWN HERE, deliberately. This figure used to draw a spec line
+    # at 4.62 labelled "4.62 log floor", with a caption asserting that the load limit
+    # preserves LRF >= 4.62. Both numbers were typed, and the 4.62 is not this model's
+    # acceptance floor at all: it is an observation from the A-Mab case study (LRV >= 4.62
+    # for load <= 105 L/m2, p.152-166), recorded in the comment above this unit operation in
+    # config/parameters.yaml. The step's actual requirement is back-calculated from the
+    # cumulative viral-clearance requirement less the clearance credited to the other steps,
+    # which gives 3.89 log10 for MVM — so the figure was presenting prior knowledge as a
+    # specification and overstating the floor by 0.73 log10. The back-calculation lives in
+    # doe_report.acceptance_for and belongs to the report, not to a figure script.
+    nor_lo, nor_hi = p.param("filtration_volume").nor
     fig, ax = plt.subplots(figsize=(6.6, 4.2))
     ax.plot(vols, mvm, color=viz.CATEGORICAL[6], lw=2.2, label="MVM LRF")
-    viz.spec_lines(ax, low=4.62, label="4.62 log floor")
-    viz.nor_band(ax, *p.param("filtration_volume").nor, setpoint=p.param("filtration_volume").setpoint, vertical=True)
-    ax.axvline(105, color=viz.MUTED, ls="-.", lw=1, label="105 L/m² limit")
+    viz.nor_band(ax, nor_lo, nor_hi, setpoint=p.param("filtration_volume").setpoint, vertical=True)
+    ax.axvline(nor_hi, color=viz.MUTED, ls="-.", lw=1, label=f"{nor_hi:g} L/m² limit")
     ax.set_xlabel("filtration volume / load (L/m²)"); ax.set_ylabel("MVM log-reduction (log₁₀)")
     ax.set_title("Virus filtration — MVM clearance vs volumetric load"); ax.legend(fontsize=8)
-    out(fig, "fig_vf.png", "Small-virus filtration: MVM log-reduction declines with volumetric load; the 105 L/m² limit preserves LRF ≥ 4.62.")
+    out(fig, "fig_vf.png",
+        f"Small-virus filtration: MVM log-reduction declines with volumetric load, and the "
+        f"normal operating range is bounded at {nor_hi:g} L/m². The step acceptance floor is "
+        f"back-calculated in PCR-009 from the cumulative requirement and the clearance "
+        f"credited to the other steps; it is not drawn here.")
 
 
 # ============================================================ 10. viral clearance bar

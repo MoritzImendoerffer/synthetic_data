@@ -29,6 +29,15 @@ knowledge that a plausible-looking label can be wrong.
 3. **Do not fix a registered discrepancy without removing its entry**, and do not remove an
    entry without agreement — that silently deletes a benchmark item.
 4. Conversely, **an unregistered inconsistency is a bug**, not a feature. Fix it.
+5. **Every entry that lives in prose has a machine half in `authoring/discrepancies.yaml`**,
+   which `build_brief.py` renders into the author's brief as §5c. Keep the two in agreement.
+   This exists because a registered discrepancy is a property of the text, so it survives only
+   as long as nobody re-authors the document carrying it — and D-002 did not survive: PCR-003
+   was re-authored, the sentence was not written again, and this file went on calling the item
+   open. No gate noticed, because no gate reads this file. Assigning the item before the
+   document is written is the same fix, and for the same reason, as the one `WEAK_CLAIMS.md`
+   arrived at: anything that changes what a document *claims* must be present while the
+   argument is being built, never restored afterwards.
 
 ---
 
@@ -43,7 +52,13 @@ against the plans' stated method. Not caught during authoring or during the anne
 ### What the protocols commit to
 
 Each affected plan states that the first PAR analysis holds the **other factors at their
-set-points**:
+set-points**. Quoted from the 2026-07-28 regeneration, in which every plan was re-authored
+and the commitment was assigned through the brief (§5c, `authoring/discrepancies.yaml`)
+rather than left to chance:
+
+> "The first analysis holds the other parameters at their set-points and evaluates the fitted
+> response-surface model across the characterization range of the parameter of interest."
+> — PCP-003 (production bioreactor)
 
 > "The first holds the other parameters at their set-points and scans the parameter of
 > interest across its characterization range."
@@ -53,14 +68,39 @@ set-points**:
 > response-surface model across the parameter's characterization range."
 > — PCP-008 (anion exchange)
 
-> "The first holds the other parameter at its set-point and scans the parameter of interest
-> across its characterization range on a grid of 81 points, using the fitted response-surface
-> model."
+> "The first holds the other parameter at its set-point and evaluates the fitted
+> response-surface model across the characterization range of the parameter of interest."
 > — PCP-009 (small-virus retentive filtration)
 
-PCP-003 makes the same commitment ("The first holds the other factors at their set-points…").
 The authoring guideline in `section_plan.yaml` says the same thing: *"(1) at set-point (other
 factors held at their set-points)"*.
+
+### What the reports say, and how that changed the item
+
+This is the part to read before scoring D-001, because the three affected reports do not all
+behave the same way. All three render `par_table`'s **"PAR (set-point)"** column unchanged.
+On the method statement they diverge:
+
+| Report | What it says about where the other factors are held | Effect on the item |
+|---|---|---|
+| PCR-006 | "The first holds the other parameters **fixed** and scans the parameter of interest across its characterization range on a grid, using the fitted response-surface model." | Neutral. Asserts nothing about set-points, so the plan-versus-analysis gap is untouched and remains the cross-document form described below. |
+| PCR-008 | "The first holds the other parameters **at their set-points** and evaluates the fitted response-surface model across the parameter's characterization range." | The report now asserts the protocol's method as fact. For anion exchange that is false: protein load's set-point is 200 g/L resin and the design centre is 175. |
+| PCR-009 | "The first holds the other parameter **at its set-point** and evaluates the fitted response-surface model across the parameter's characterization range." | Same, for filtration volume (set-point 90 L/m², design centre 95) and pressure (13 psi, design centre 19). |
+
+So for **PCR-008 and PCR-009 the discrepancy is now also visible inside a single document**,
+which the earlier version of this entry denied. A reader who compares the report's method
+statement against its own Appendix B — whose centre-point rows print protein load at 175
+where the factor table gives a set-point of 200 — can catch it without opening the plan.
+That makes those two a document-internal item as well as a cross-document one, and it makes
+the pH case in PCR-006 the only one that still requires reading two documents.
+
+This was not planned. The §5c assignment for the reports said "do not add a sentence that
+reconciles the reported analysis with the method the plan specifies", and two authors read
+"reconcile" as "explain away the difference" rather than "assert that they match". The
+instruction has been sharpened in `authoring/discrepancies.yaml`. The result was kept rather
+than re-authored, because a report that states a false method is a real defect of the same
+family and is if anything a better test — but it is a *different* item from the one first
+registered, and this file has to say which.
 
 ### What the reports actually did
 
@@ -167,9 +207,21 @@ acceptance criterion like any other CQA.
 
 ### What makes it a good test
 
-- It is **document ↔ data**, not document ↔ document. Catching it means reading PCR-003
-  against the register or against PCR-005 — neither the bioreactor plan nor the bioreactor
-  report is internally inconsistent, so reading either alone reveals nothing.
+- It is chiefly **document ↔ data**, not document ↔ document. The sharp form of the catch is
+  reading PCR-003 against `cqa_register.csv` or against PCR-005, which is what makes leached
+  Protein A a counterexample rather than a quibble.
+
+  One qualification, verified rather than assumed. The absolute sits a few lines below the
+  process-train table (`@tbl-train`), whose Step 5 row reads "Protein A Chromatography —
+  Capture; **sets leached Protein A**; principal HCP and DNA clearance". So a careful reader
+  of PCR-003 alone *can* catch it, from a table on the same page. This was checked against the
+  pre-regeneration original (`git show 6e3734b:pc_package/PCR-003_bioreactor.qmd`) and was
+  true there too, so it is a description defect in this entry rather than something the
+  2026-07-28 regeneration introduced. Earlier wording here claimed the report was not
+  internally inconsistent and that reading it alone revealed nothing; that was too strong.
+  What is true is that the table names the *relation* and never contradicts the sentence in
+  words, so catching it still requires a reader to notice that "sets leached Protein A" is an
+  instance of forming a quality attribute.
 - **The next sentence is true**, and narrower: "The glycosylation and charge variant
   distributions are established inside the cell and in the culture fluid, and neither is
   modified by the platform purification train." A reader who checks only the elaboration finds
@@ -192,6 +244,8 @@ qualification.
 ### Do not fix silently
 
 Both the PCR-003 prose and the two `ProcessStep.description` fields are deliberately left as
-written. Correcting either erases D-002. Note that the branch `feature/weak-claims-via-brief`
-carries a narrowed annex description; if that branch is ever rebased onto a `main` that still
-registers D-002, keep `main`'s wording.
+written. Correcting either erases D-002. The absolute is written into `build_step` in
+`pc_package/build_ground_truth.py`, with a comment at the field pointing back here; the item
+has already been silently deleted once, by an annex pass that narrowed the description while
+re-grounding a re-authored PCR-003, so treat any narrowing of that field as a regression
+rather than an improvement.

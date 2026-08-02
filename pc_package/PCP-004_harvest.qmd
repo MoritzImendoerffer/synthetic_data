@@ -38,76 +38,91 @@ jupyter: python3
 import sys, os
 sys.path.insert(0, os.path.abspath("."))
 from _pcpkg import *  # noqa: F401,F403
-import doe_report as D
-import matplotlib.pyplot as plt
-import scipy.stats as sstat
 
 DOC = "PCP-004"
 UO = "harvest"
 UO_TITLE = "Harvest and Clarification (Step 4)"
 
-# --- doc-local derived scalars (pulled from the model; never typed) ------------------
-HARV = CFG.unit_op(UO)
-p_cent = HARV.param("centrifuge_g")          # centrifugation intensity (settable)
-p_load = HARV.param("depth_filter_load")     # depth filter load (settable)
-p_turb = HARV.param("turbidity")             # post-clarification turbidity (outcome)
-SET_PARAMS = [p_cent, p_load]                # the directly settable inputs
-LEVELS = ("low characterization edge", "set-point", "high characterization edge")
-n_conditions = len(SET_PARAMS) * len(LEVELS)
+# --- doc-local derived scalars (pulled from the model; never typed) ---
+uo = CFG.unit_op(UO)
+p_rcf = uo.param("centrifuge_g")
+p_load = uo.param("depth_filter_load")
+p_turb = uo.param("turbidity")
 
-def setp(p):
-    return f"{p.setpoint:g} {p.unit}"
+# Platform step-recovery expectation and its batch-to-batch variability. The standard
+# deviation is carried in recovery points as well as as a CV, because the agreement
+# tolerance between two runs is a difference and not a coefficient of variation: two runs
+# from a distribution with a 2 % CV differ by more than 2 % about half the time.
+_yld = uo.raw["yield"]
+yield_pct = 100.0 * _yld["base"]
+yield_cv_pct = 100.0 * _yld["cv"]
+yield_sd_pct = 100.0 * _yld["base"] * _yld["cv"]
+yield_tol_pct = 3.0 * yield_sd_pct
+yield_floor_pct = 100.0 * _yld["base"] * (1.0 - 3.0 * _yld["cv"])
 
-def par_span(p):
-    return f"{p.prange[0]:g} to {p.prange[1]:g} {p.unit}"
+# Host-cell-protein burden the clarified harvest carries into capture.
+hcp_clarified = CFG.unit_op("bioreactor").raw["rsm"]["harvest_centre"]["hcp"]
 
-def nor_span(p):
-    return f"{p.nor[0]:g} to {p.nor[1]:g} {p.unit}"
+# Attributes the clarified harvest carries into the purification train.
+CARRIED = ["hcp", "residual_dna", "aggregates_hmw"]
 
-def area(x):
-    return f"{x:,.0f} m2"
+# Planned univariate condition schedule: one series per parameter, with the parameter
+# of interest set at the edges of its characterization range, the edges of its NOR and
+# its set-point, and the other parameters at their set-points. Every level comes from
+# config, through Parameter.prange / .nor / .setpoint. Where two of those levels
+# coincide (turbidity shares a lower edge between its NOR and its characterization
+# range) the condition is listed once, under a joined label — a schedule that ran the
+# same condition twice and called it two levels would misstate the design.
+LEVEL_NAMES = ["Char. low", "NOR low", "Set-point", "NOR high", "Char. high"]
+PARAMS = [p_rcf, p_load, p_turb]
+COLS = {p.key: f"{p.name} [{p.unit}]" for p in PARAMS}
 
-# platform step recovery and the recovery decision floor (mean less three SD)
-y_base = HARV.raw["yield"]["base"]
-y_cv = HARV.raw["yield"]["cv"]
-y_floor = y_base * (1 - 3 * y_cv)
 
-# impurity burden the step carries forward, and the clearance the train must deliver
-hcp_broth = CFG.unit_op("bioreactor").raw["rsm"]["harvest_centre"]["hcp"]
-hcp_ds_limit = float(cqa_reg.loc[cqa_reg.key == "hcp", "acc_high"].iloc[0])
-hcp_logs = np.log10(hcp_broth / hcp_ds_limit)
+def _levels(p):
+    """Distinct study levels for one parameter, in ascending order, with joined labels."""
+    out = []
+    for name, val in zip(LEVEL_NAMES,
+                         [p.prange[0], p.nor[0], p.setpoint, p.nor[1], p.prange[1]]):
+        for seen in out:
+            if seen[1] == val:
+                seen[0] = f"{seen[0]} / {name}"
+                break
+        else:
+            out.append([name, val])
+    return out
 
-# commercial-scale filtration duty implied by the load parameter
-scale_l = V["commercial_scale_l"]
-area_sp = scale_l / p_load.setpoint
-area_lo = scale_l / p_load.nor[1]
-area_hi = scale_l / p_load.nor[0]
-turb_loq_x = p_turb.nor[1] / amv_3015_loq
 
-# planned univariate condition list
-cond_rows = []
-for _p in SET_PARAMS:
-    _other = [q for q in SET_PARAMS if q.key != _p.key][0]
-    cond_rows.append([_p.name, _p.unit, f"{_p.prange[0]:g}", f"{_p.setpoint:g}",
-                      f"{_p.prange[1]:g}", f"{_other.name} at {_other.setpoint:g} {_other.unit}"])
-cond_df = pd.DataFrame(cond_rows, columns=["Parameter varied", "Unit", "Low edge",
-                                           "Set-point", "High edge", "Other parameter held at"])
+_rows = []
+for _p in PARAMS:
+    for _name, _val in _levels(_p):
+        _row = {"Series": _p.name, "Level": _name}
+        # Turbidity is an OUTPUT of the centrifuge and the depth filter. It is a set
+        # target only in its own challenge series; elsewhere it is measured, and the
+        # schedule says so instead of printing a set-point that is not set.
+        _row.update({COLS[q.key]: f"{q.setpoint:g}" for q in PARAMS})
+        if _p.key != p_turb.key:
+            _row[COLS[p_turb.key]] = "measured"
+        _row[COLS[_p.key]] = f"{_val:g}"
+        _rows.append(_row)
+schedule = pd.DataFrame(_rows)
+schedule.insert(0, "Run", range(1, len(schedule) + 1))
+n_runs = len(schedule)
+n_series = int(schedule["Series"].nunique())
+n_params = len(PARAMS)
 
-# planned acceptance and decision criteria
-acc_df = pd.DataFrame([
-    ["Post-clarification turbidity", "Nephelometry (AMV-3015)",
-     f"Within the normal operating range of {nor_span(p_turb)} at the set-point condition; "
-     f"reported without a limit at the other conditions"],
-    ["Product recovery over the step", "Mass balance from volume and protein concentration",
-     f"Mean not below {pct(y_floor)} of the product mass entering the step"],
-    ["Depth filter train pressure", "In-process differential pressure",
-     "Batch volume completed without exceeding the media manufacturer's rated "
-     "differential pressure"],
-    ["Aggregates (HMW)", "SEC-HPLC (AMV-3011)",
-     "No increase across the step beyond the precision of the method"],
-    ["Host cell protein and residual DNA", "ELISA (AMV-3012); qPCR (AMV-3014)",
-     "Characterized and reported as the capture feed; no limit applied at this step"],
-], columns=["Attribute or outcome", "Method or basis", "Criterion for a studied condition"])
+# Validated-method performance for the subset of this step's methods that carries a
+# qualification record in the campaign method register.
+_amv_ids = [a for a, _ in HARVEST_AMV_REFS]
+_m = csv("dev_methods.csv")
+methods_perf = _m[_m["id"].isin(_amv_ids)].copy()
+methods_perf["__o"] = methods_perf["id"].apply(_amv_ids.index)
+methods_perf = methods_perf.sort_values("__o").rename(columns={
+    "id": "Method", "name": "Title", "precision_pct": "Precision (% RSD)",
+    "loq": "LOQ", "loq_unit": "LOQ unit", "accuracy_pct": "Accuracy (%)"})
+methods_perf = methods_perf[["Method", "Title", "Precision (% RSD)", "LOQ",
+                             "LOQ unit", "Accuracy (%)"]]
+n_methods_qual = len(methods_perf)
+n_methods_total = len(_amv_ids)
 ```
 
 ```{python}
@@ -131,100 +146,100 @@ print(SYN_BANNER)
 
 ## Abbreviations {.unnumbered}
 
-ALCOA+, attributable, legible, contemporaneous, original and accurate, plus complete,
-consistent, enduring and available; AMV, analytical method validation; BLA, Biologics
-License Application; CQA, critical quality attribute; DNA, deoxyribonucleic acid; DS,
-drug substance; ELISA, enzyme-linked immunosorbent assay; GPP, general process
-parameter; HCP, host cell protein; HMW, high molecular weight; ICH, International
-Council for Harmonisation; KPP, key process parameter; LOQ, limit of quantitation;
-MSAT, Manufacturing Science and Technology; NOR, normal operating range; NTU,
-nephelometric turbidity unit; PAR, proven acceptable range; PPQ, process performance
-qualification; qPCR, quantitative polymerase chain reaction; rcf, relative centrifugal
-force; SD, standard deviation; SDM, scale-down model; SEC-HPLC, size-exclusion
-high-performance liquid chromatography; SOP, standard operating procedure.
+ALCOA+, attributable, legible, contemporaneous, original and accurate data principles;
+AMV, analytical method validation; CPP, critical process parameter; CQA, critical quality
+attribute; DNA, deoxyribonucleic acid; ELISA, enzyme-linked immunosorbent assay; GPP,
+general process parameter; HCP, host cell protein; HMW, high molecular weight; ICH,
+International Council for Harmonisation; KPP, key process parameter; LOQ, limit of
+quantitation; MSAT, Manufacturing Science and Technology; NOR, normal operating range;
+NTU, nephelometric turbidity unit; PCP, Process Characterization Plan; PCR, Process
+Characterization Report; qPCR, quantitative polymerase chain reaction; rcf, relative
+centrifugal field; RSD, relative standard deviation; SEC, size-exclusion chromatography;
+SOP, standard operating procedure; WC-CPP, well controlled critical process parameter.
 
 {{< pagebreak >}}
+
+<!-- ========================= BODY START ========================= -->
 
 # Purpose and scope
 
 Harvest and clarification is the primary recovery step of the A-Mab drug substance
-process, and this plan defines the studies that will characterize it. The step separates
-the antibody from cells and cell debris, and it delivers the clarified harvest that the
-Protein A capture step (Step 5) receives. It forms no product quality attribute of its
-own, and its parameters exist for two purposes: to make the product recovery
-reproducible, and to keep the composition of the material handed to capture consistent
-from batch to batch.
+process, in which the antibody is separated from the cells and the cell debris of the
+production bioreactor and a clarified feed is delivered to Protein A capture. The step
+forms no product quality attribute. What it does set is the particle load and the impurity
+burden that the capture step receives, and that input shapes how the rest of the
+purification train performs.
 
-The scope covers the three parameters listed in @tbl-params, studied at a qualified
-scale-down model of the commercial harvest train (SOP-1001). Centrifugation intensity
-(rcf) and depth filter load are the two settable inputs. Post-clarification turbidity is
-the attribute by which the clarified harvest is released to capture, and its range is in
-scope because it defines the feed that the capture step has to accept.
+This plan defines the characterization studies that will support the commercial operating
+ranges for the step. It covers the parameters in @tbl-params, each studied one at a time on
+a qualified scale-down model held at commercial equivalent conditions, and it measures
+product recovery, post-clarification turbidity, depth filter throughput and the impurity
+burden delivered to capture at every condition. The plan is
+prospective, so no results appear in it, and the outcome is reported in PCR-004.
 
-The plan does not cover the fed-batch culture that produces the broth, which is
-characterized under PCP-003. It does not cover the capture step, which is characterized
-under PCP-005. No viral clearance is claimed for harvest and clarification, and no log
-reduction will be measured across it.
-
-The work is Stage 1 process design under the lifecycle approach to process validation
-[@fda2011], and it follows the enhanced development approach of ICH Q8, ICH Q9 and ICH
-Q11 [@ichq8; @ichq9; @ichq11]. The methodology, the attribute framework and the
-parameter classification scheme are those of the A-Mab case study [@amab2009]. The
-studies support the transfer of the drug substance process from the sending site to the
-receiving site under PTP-001.
+Three things sit outside the scope. The production bioreactor and the Protein A capture
+step are characterized under PCP-003 and PCP-005, and this plan addresses them only at the
+interface each shares with harvest. No viral clearance is claimed for harvest or for
+clarification, so the step contributes nothing to the modular clearance strategy set out
+in PCMP-001 [@ichq5a]. Confirmation of the step at commercial scale belongs to Stage 2 of
+the process validation lifecycle [@fda2011] and is delivered by process performance
+qualification.
 
 # Objectives
 
-The study has five objectives.
+The characterization has five objectives, and each is written so that PCR-004 can state
+plainly whether it was met.
 
-- To establish the effect of centrifugation intensity on centrate clarity, on product
-  recovery, and on the impurity burden released into the centrate by cell lysis (HCP and
-  residual DNA).
-- To establish the effect of depth filter load on filtrate turbidity, on the differential
-  pressure of the filter train, and on product recovery.
-- To confirm that the size variant profile of the antibody (high molecular weight species
-  by SEC-HPLC) does not change across the step over the ranges studied.
-- To characterize the host cell protein (HCP) and residual DNA burden of the clarified
-  harvest, which is the input the capture step has to clear.
-- To propose a proven acceptable range and a normal operating range for each parameter,
-  and to support the classification of each parameter under SOP-4001.
+- (i) Quantify the relationship between each parameter and the quality of the clarified
+  harvest, across the characterization ranges given in @tbl-params.
+- (ii) Determine a proven acceptable range for each parameter against the acceptance basis
+  in §7.
+- (iii) Show that each normal operating range sits inside its proven acceptable range, with
+  margin at every edge where the characterization range extends past it.
+- (iv) Provide the evidence needed to classify each parameter under SOP-4001.
+- (v) Describe the clarified harvest that the step delivers at each condition studied, so
+  that this study and the capture characterization (PCP-005) can be read together.
+
+The first four objectives follow the pattern used for every step in the campaign
+(PCMP-001). Objective (iii) carries a bound because the characterization range and the
+normal operating range of post-clarification turbidity share their lower edge (@tbl-params),
+and no margin can be shown at an edge where the two ranges meet. The fifth objective is
+specific to primary recovery. Harvest hands the
+purification train its feed, so a description of that feed at each condition studied is
+part of what the step has to deliver, alongside the operating ranges themselves.
 
 # Related documents
 
-@tbl-related lists the documents that govern this plan and the documents that depend on
-it. The controlled procedures and the validated analytical methods used in the study are
-listed in @tbl-sop.
+@tbl-related sets out the documents this plan depends on and the documents it feeds.
+RA-001 fixed the study scope for Step 4 before any study was designed. PCMP-001 states the
+campaign approach that this plan instantiates. PCR-004 is the deliverable, and PCMR-001
+consolidates it with the reports for the other steps.
 
 ```{python}
 #| output: asis
 print(related_docs_md(DOC))
 print()
-print(": Related documents. {#tbl-related}")
+print(": Documents related to this plan. {#tbl-related}")
 ```
+
+@tbl-sop lists the controlled procedures and the validated analytical methods used in the
+study. Performance of the methods that carry the quantitative decisions is summarized in
+Appendix B.
 
 ```{python}
 #| output: asis
 print(sop_table(sops=HARVEST_SOP_REFS, amvs=HARVEST_AMV_REFS))
 print()
-print(": Controlled procedures and validated analytical methods for the study. {#tbl-sop}")
+print(": Controlled procedures and validated analytical methods for Step 4. {#tbl-sop}")
 ```
 
 # Prior knowledge and quality risk basis
 
-## Unit-operation description and prior knowledge
+## Unit operation description and prior knowledge
 
-Harvest and clarification is a platform operation at Novacyte Biologics, so the study
-confirms and bounds behaviour that is already understood. The same continuous disk-stack
-centrifuge and the same graded depth filter train have been used for three previous
-humanized IgG1 antibodies (X-Mab, Y-Mab and Z-Mab) and for the A-Mab clinical campaigns.
-Across those products the step has consistently delivered clarified harvest of acceptable
-turbidity and consistent recovery. This experience reduces the work required here to a
-confirmation of the proposed ranges at the commercial scale-down model.
-
-@tbl-train places the step in the drug substance train. Step 4 sits between the
-production bioreactor (Step 3), which forms the glycan, charge variant and aggregate
-attributes, and the capture step (Step 5), which begins the removal of process
-impurities. The clarified harvest is the only material transferred between them.
+Harvest and clarification sits between the production bioreactor and Protein A capture,
+and it is the only step of the train that handles whole cells (@tbl-train). Everything
+downstream of it operates on a clarified solution.
 
 ```{python}
 #| output: asis
@@ -233,344 +248,500 @@ print()
 print(": The A-Mab drug substance process train and the principal role of each step. {#tbl-train}")
 ```
 
-The two settable parameters act through different mechanisms, and each one carries a
-penalty at the end of its range. Centrifugation removes cells and large debris by
-sedimentation, so a higher relative centrifugal force gives a clearer centrate. Higher
-force also raises the hydrodynamic shear in the feed zone and at the solids discharge
-(the two places at which the broth is accelerated most sharply), which breaks a fraction
-of the cells and releases HCP, DNA and fine particles into the centrate. The two effects
-oppose each other, and the set-point is expected to lie near the force at which the gain
-in clarity no longer pays for the additional lysis.
+The step runs as two unit operations in series. Continuous disk-stack centrifugation
+removes the cells and the larger debris from the culture broth, depth filtration then
+removes the fines that the centrifuge leaves behind, and a sterilizing grade filter closes
+the train and delivers the clarified harvest to the capture feed vessel. Separation in the
+centrifuge is driven by the density difference between the cells and the medium, and it is
+governed by the relative centrifugal field (rcf) and by the flow per unit settling area.
+Depth filtration works by a combination of retention within the media matrix and adsorption
+of fines onto the media, so its performance falls away as the media approaches its capacity.
 
-Depth filtration retains the fine particles that the centrifuge does not remove. Its
-capacity is expressed as the volume filtered per unit of media area
-(`{python} p_load.unit`), and both the
-filtrate turbidity and the differential pressure rise as that load increases. Loading
-beyond the capacity of the primary media allows fines to break through into the filtrate,
-which raises the turbidity of the clarified harvest and increases the particulate burden
-carried into the capture column, and both of those effects are expected at the high end
-of the load range studied here. The depth filter media also adsorb a fraction of the HCP
-and the DNA in the centrate (an effect seen across the platform products). That clearance
-varies with the state of the culture at harvest and is not predictable, so none is
-claimed for this step.
+The platform recovery step has been used for three prior platform products (X-Mab, Y-Mab
+and Z-Mab) and throughout A-Mab clinical supply, and recovery across the step is
+about `{python} f"{yield_pct:.0f}"`% on the platform, with a coefficient of variation of
+about `{python} f"{yield_cv_pct:.0f}"`% between batches. The clarified harvest carries a
+host cell protein burden of the order of `{python} f"{hcp_clarified:,.0f}"` ng/mg into
+capture, which is the load the capture step receives. This body of experience is what
+allows the step to be bounded by univariate studies instead of a designed experiment.
+
+Three mechanisms frame the study. Raising the centrifugal field improves solids removal and
+lowers centrate turbidity, but it also raises the hydrodynamic shear the cells experience,
+and shear releases intracellular protein and DNA into the broth. The two effects run in
+opposite directions, so the useful range of the field is bounded at both ends and neither
+end can be assumed from the platform alone. Raising the depth filter load moves the media
+towards its capacity, at which point fines break through and the differential pressure
+across the train rises, so the load has to be studied beyond the value the platform uses in
+order to locate that point. Turbidity is treated as a parameter in its own right, because
+the clarified harvest is released to capture against a turbidity limit. The study has to
+describe what the harvest carries at each level of turbidity, which is what such a limit is
+set against.
 
 ## Quality attributes in scope
 
-The step sets no critical quality attribute. The attributes in scope are the ones it
-carries forward to the purification train (@tbl-cqa), and they are given there with their
-drug substance acceptance criteria and their criticality.
+No drug substance quality attribute is formed at this step, and none is cleared by it.
+Three attributes are nevertheless in scope, because the clarified harvest carries them into
+the purification train (@tbl-cqa).
 
 ```{python}
 #| output: asis
-show(cqas_by_keys(["hcp", "residual_dna", "aggregates_hmw"]))
+show(cqas_by_keys(CARRIED))
 print()
-print(": Quality attributes carried forward from harvest and clarification. The step "
-      "forms none of them and is credited with no clearance of them. {#tbl-cqa}")
+print(": Quality attributes carried by the clarified harvest into the purification train. {#tbl-cqa}")
 ```
 
-Host cell protein is the attribute in this table that most constrains the design of the
-downstream train. The clarified harvest is expected to carry about
-`{python} f"{hcp_broth:,.0f}"` ng/mg of HCP against a drug substance limit of
-`{python} f"{hcp_ds_limit:g}"` ng/mg, so the purification train has to deliver about
-`{python} f"{hcp_logs:.1f}"` logs of clearance in total, of which the capture step
-provides the largest single contribution (PCR-005) and the two ion exchange polishing
-steps provide the remainder (PCR-007 and PCR-008). Harvest and clarification is credited
-with none of it. What the step does control is the consistency of the burden it hands
-over, which is why HCP and residual DNA are measured on the clarified harvest at every
-studied condition.
+Host cell protein (HCP) is the attribute most exposed to this step. It is of moderate to
+high criticality, and the burden entering capture is set both by the culture that produced
+it and by how much intracellular material primary recovery releases. Residual DNA behaves
+the same way, and its limit is set per dose where the host cell protein limit is a ratio
+against product (@tbl-cqa). Its criticality is very low, because the clearance available
+downstream of this step is large. Aggregate is of high criticality and is formed in the
+bioreactor (PCR-003), and it is expected to pass through recovery unchanged, which the study
+will confirm and not assume.
 
-The size variant profile is measured for a different reason. Shear at the centrifuge feed
-zone is the only mechanism at this step that could raise the level of high molecular
-weight species, and the study measures aggregate across the step to confirm that it does
-not. Aggregate reduction is the business of the cation exchange step (PCR-007), and none
-is expected or claimed here.
+None of the three attributes is controlled by this step alone, and none is controlled by it
+principally. Host cell protein and residual DNA are cleared by Protein A capture (PCR-005),
+by cation exchange (PCR-007) and by anion exchange (PCR-008), and aggregate is polished at
+cation exchange (PCR-007). The contribution of harvest is to bound the burden that enters
+capture and to describe it at every condition studied. Criticality is treated as a continuum
+here, in the sense of ICH Q9 and of the A-Mab case study, and the levels in @tbl-cqa follow
+the Tool #1 assessment of impact and uncertainty [@amab2009; @ichq9].
 
 ## Risk-based prioritization of parameters
 
-RA-001 assigned a study type to every parameter in the drug substance train
-(`{python} V['n_parameters']` parameters in total), and all three harvest parameters were
-assigned to univariate study. Neither settable parameter is linked to a critical quality
-attribute, and no interaction between them is expected to act on product quality, so
-neither reached the risk score at which a multivariate design is required. The assigned
-study type is carried into the last column of @tbl-params.
+RA-001 ranked every parameter of the step before the studies were designed, and its output
+is the study scope this plan executes. The ranking combines the potential impact of a
+parameter on a quality attribute with its potential to interact with other parameters. For
+every parameter of the step, RA-001 recorded an effect on process performance and on the
+quality of the feed delivered to capture, and no impact on a drug substance quality
+attribute. That placed each of them below the band that calls for a multivariate design, and
+each was assigned to univariate assessment (the parameters that do reach that band at other
+steps are studied by designed experiment). The reasoning behind the split is set out in
+RA-001 and in PCMP-001.
 
-The characterization ranges are wider than the routine control ranges, so that the study
-bounds the consequence of an excursion as well as the behaviour at the set-point. The
-centrifugation range spans `{python} par_span(p_cent)` against a normal operating range
-of `{python} nor_span(p_cent)`. The depth filter load range spans
-`{python} par_span(p_load)` against a normal operating range of
-`{python} nor_span(p_load)`. Turbidity is studied to `{python} f"{p_turb.prange[1]:g}"`
-NTU (AMV-3015), which is twice the upper edge of its normal operating range, because the
-capture step has to be shown to tolerate a harvest at the worst clarity that the
-clarification train can produce.
+Univariate assessment is the right instrument here for a second reason. The parameters
+act through different mechanisms, and in two cases they act through different equipment.
+The centrifugal field acts on the separation of cells from broth, and the depth filter load
+acts on the retention of fines by the media. Turbidity is the outcome
+of the two operations taken together, and it is controlled by them. An interaction that
+changed a quality outcome would need two of these mechanisms to act on the same attribute
+at the same time, and no such pathway has been seen on the platform or in the development
+work that supports the transfer (PTP-001). §12 states the assumption this rests on and the
+observation that would falsify it.
+
+The characterization ranges in @tbl-params are wider than the normal operating ranges, and
+that is deliberate. A range that covers only routine operation cannot show where
+performance begins to fail, and it leaves no room for later movement inside a known space
+[@amab2009]. Each range is bounded by a mechanism. The centrifugal field is studied from
+`{python} f"{p_rcf.prange[0]:g}"` to `{python} f"{p_rcf.prange[1]:g}"` × g, which spans
+the field at which centrate turbidity is expected to rise at the low end and the field at
+which shear damage is expected to become measurable at the high end. The depth filter load
+is studied from `{python} f"{p_load.prange[0]:g}"` to `{python} f"{p_load.prange[1]:g}"`
+L/m², and its upper edge sits well above the `{python} f"{p_load.nor[1]:g}"` L/m² that
+bounds routine operation, so that the load at which fines break through falls inside the
+range studied. Turbidity is studied from `{python} f"{p_turb.prange[0]:g}"` to
+`{python} f"{p_turb.prange[1]:g}"` NTU, which reaches well beyond the upper edge of the
+normal operating range. The levels above that edge give measured material at turbidities a
+release limit would reject, so that an excursion can be assessed against data instead of
+assumption. What those levels are judged on is set out in §7.
 
 # Materials and methods
 
 ## Scale-down model and its qualification
 
-The studies will be run at a scale-down model of the commercial harvest train, qualified
-before the first characterization run (SOP-1001). The model uses a bench continuous
-disk-stack centrifuge matched to the commercial machine on equivalent settling area and
-on feed residence time, followed by a depth filter train of the same media grades in the
-same sequence, operated at the same volume per unit of media area. Scale-independent
-settings (relative centrifugal force, load per unit area, temperature) will be held at
-the values proposed for commercial operation. Scale-dependent settings (feed flow rate,
-solids discharge interval, hold-up volumes) will be established so that the model matches
-the performance of the commercial train.
+The studies will be run on a scale-down model of the recovery train, qualified against
+commercial scale data under SOP-1001. The model has two parts, because the step has two
+unit operations, and each part is scaled on the variable that governs its mechanism.
 
-At commercial scale the filtration duty follows from the load parameter and the batch
-volume. A working volume of `{python} f"{scale_l:,.0f}"` L (the commercial bioreactor
-volume) at the set-point load of `{python} setp(p_load)` calls for about
-`{python} area(area_sp)` of depth filter media, and the normal operating range
-corresponds to about `{python} f"{area_lo:,.0f}"` to `{python} area(area_hi)`. The scale-down
-model is operated at the same volume per unit area, so the duty on the media is preserved
-even though the absolute area is not.
+The centrifuge model reproduces the commercial separation on a bench scale device operated
+at matched equivalent settling area, so that the flow per unit settling area is the same at
+both scales. Shear is handled separately, and it is handled first. The cells are exposed to
+the energy dissipation rate of the commercial feed zone in a rotating shear device before
+they are settled, because the feed zone and not the bowl is where the damaging shear occurs
+at commercial scale. The depth filtration model uses the same media grade as the commercial
+train and is scaled at constant area normalized load, with matched flux and with the same
+flush and recovery volumes per unit area.
 
-Qualification will use triplicate model runs on a common feed. The model results will be
-compared with the corresponding at-scale records for centrate turbidity, clarified
-harvest turbidity, step recovery, and the HCP and DNA content of the clarified harvest.
-The acceptance criteria for that comparison are given below (§7). The qualification
-report will be issued before the characterization runs begin and will be summarized in
-PCR-004.
+Qualification will compare the model against commercial scale data at the set-point
+condition for product recovery, centrate turbidity, post-clarification turbidity, host cell
+protein and residual DNA. The model is qualified when the difference between the scales in
+each of these measures falls inside the intermediate precision of the method that measured
+it, at the confidence level stated in SOP-1001. The criterion is equivalence within a
+stated bound and not the absence of a significant difference, because a small qualification
+run set would pass the second on low power alone. The number of qualification runs, the
+confidence level and the test are defined in SOP-1001, and the qualification record will be
+cited in PCR-004.
 
-The model has a known limitation. It reproduces the sedimentation and filtration duty of
-the commercial train, but it does not reproduce the residence time distribution of the
-commercial bowl or the frequency of its solids discharge. Confirmation at commercial
-scale comes from the turbidity and recovery records of the PPQ batches, and this
-limitation will be restated in the report.
+The warrant the model has to carry is narrow. It supports claims about operating ranges and
+about the quality of the clarified harvest at those ranges. It does not reproduce the hold
+times, line volumes or transfer rates of the commercial facility, which are addressed in the
+transfer plan (PTP-001). It supports no
+claim about viral clearance, and none is made.
 
 ## Operation
 
-The broth will be harvested at the end of the fed-batch culture, at the nominal end of
-culture viability of `{python} f"{V['final_viability_pct']:.0f}"`% for the platform
-process and at a nominal titre of `{python} f"{V['nominal_titer_g_per_l']:.2f}"` g/L
-(PCP-003). Broth is fed continuously to the centrifuge (SOP-2005). The centrate passes to
-the graded depth filter train and then to a sterilising grade filter (SOP-2006). The
-clarified harvest is collected, sampled and held for capture.
+The step will be operated as SOP-2005 and SOP-2006 describe it, at commercial equivalent
+conditions. The feed is the harvested culture broth taken at the end of the fed-batch
+production culture, under the conditions defined in PCP-003. Broth is fed continuously to
+the disk-stack centrifuge at the set-point field of `{python} f"{p_rcf.setpoint:g}"` × g.
+The centrate passes to the depth filter train at the set-point load of
+`{python} f"{p_load.setpoint:g}"` L/m², then through a sterilizing grade filter into the
+capture feed vessel.
 
-Two feed states will be used, because the solids load and the lysis-derived impurity
-burden both depend on the state of the culture at harvest. The first is a culture
-harvested at the nominal duration. The second is a culture harvested after an extended
-duration, which has lower viability, a higher solids load and a higher impurity burden,
-and which is the worst case that the clarification train has to handle. The culture
-conditions that produce the two feed states are defined in PCP-003.
+Inputs that are controlled to platform specification are not characterized here. The depth
+filter media grade, the flush and hold buffers and the operating temperature are identity
+and quality controlled under SOP-2006. Media lot and buffer lot are recorded for every run,
+so that a lot effect can be separated from a parameter effect if one appears.
 
 ## Analytical methods
 
-The validated methods are listed in @tbl-sop. Turbidity in the centrate and in the
-clarified harvest is measured by nephelometry (AMV-3015). HCP is measured by ELISA
-(AMV-3012), residual DNA by qPCR (AMV-3014), and the size variant profile by SEC-HPLC
-(AMV-3011).
+The study is supported by `{python} n_methods_total` validated methods, and each measures
+one response. Turbidity in the centrate and in the clarified pool is measured by
+nephelometry (AMV-3015). Host cell
+protein is measured by ELISA (AMV-3012) and residual DNA by qPCR (AMV-3014), on the
+harvested broth and on the clarified pool, so that the burden delivered to capture is
+always reported against the burden presented to the step. Aggregate is measured by
+size-exclusion chromatography (AMV-3011) across the step, to confirm that the size variant
+profile passes through unchanged.
 
-Method precision sets the smallest difference the study can resolve, so it is stated here
-and used again in the decision criteria of §7. The turbidity method has a precision of
-`{python} f"{amv_3015_precision:.1f}"`% and a limit of quantitation of
-`{python} f"{amv_3015_loq:g}"` NTU. The upper edge of the turbidity operating range
-therefore sits about `{python} f"{turb_loq_x:.0f}"` times above the limit of
-quantitation, and the whole of the studied range is resolved. The HCP ELISA has a
-precision of `{python} f"{amv_3012_precision:.1f}"`%, and a difference in the clarified
-harvest burden smaller than that will not be separated from assay variability. Full
-method performance is reported in the validations listed in @tbl-sop.
+Performance of the methods that carry the quantitative decisions is given in Appendix B.
+The turbidity method has an intermediate precision of `{python} f"{amv_3015_precision:g}"`%
+and a limit of quantitation of `{python} f"{amv_3015_loq:g}"` NTU, and that limit sits below the lower edge of the normal
+operating range for turbidity, which is `{python} f"{p_turb.nor[0]:g}"` NTU, so the whole of
+the studied range can be measured and not merely bounded. The host cell protein ELISA has
+an intermediate precision of `{python} f"{amv_3012_precision:g}"`% and a limit of
+quantitation of `{python} f"{amv_3012_loq:g}"` ng/mg. Of the methods whose validated
+performance is summarized in Appendix B, it is the less precise, and §7 sets the decision
+rule that follows from that. Performance of the residual DNA and size-exclusion methods is
+held in their validation reports, AMV-3014 and AMV-3011.
 
 ## Sampling plan
 
-Samples will be taken at four points in every run: the bioreactor broth before
-centrifugation, the centrate, the pooled depth filtrate, and the clarified harvest after
-the sterilising filter (the material released to capture). Turbidity is measured at every
-point. HCP, residual DNA and the size variant profile are measured on the broth and on
-the clarified harvest, so that the change across the whole step is measured directly and
-not inferred from the values recorded at the two intermediate points. Volume and protein
-concentration are recorded at each point for the mass balance, and the differential
-pressure across the depth filter train is recorded continuously.
+Three samples will be taken from every run. The first is the harvested broth presented to
+the centrifuge, the second is the centrate leaving it, and the third is the clarified pool
+after depth and sterilizing filtration. Turbidity is measured on the centrate and on the
+clarified pool. Host cell protein, residual DNA and aggregate are measured on the harvested
+broth and on the clarified pool, and volume and protein concentration are recorded at all
+three points, which is what closes the mass balance and gives step recovery for the run.
+
+Differential pressure and throughput are recorded continuously across the depth filter
+train for the whole of each run. The shape of the pressure curve is the earliest indication
+that the media is approaching its capacity, and it is available before any assay result is.
+Retain samples are held for every run under SOP-2006 and may be re-tested if an analytical
+result is questioned.
 
 ## Statistical methods
 
-The analysis is univariate, because no parameter at this step is linked to a critical
-quality attribute. Each parameter will be varied across its characterization range while
-the other parameters are held at their set-points, and each response will be summarized
-as a mean and a standard deviation over the runs executed at that condition on each of
-the two feed states. The replicated set-point condition provides the reproducibility term
-against which the edge conditions are compared.
+The analysis is univariate, because the design is univariate. Each response will be
+regressed on the parameter of its series across that parameter's characterization range. A
+linear term is fitted first, and a quadratic term is added only where the residuals show
+curvature. The slope is tested at α = 0.05. Where the slope does not differ significantly
+from zero, the response is declared insensitive to the parameter over the range studied,
+and the null result is reported instead of dropped, because a parameter with no effect
+across a wide range is itself evidence that the step is robust to it.
 
-Edge conditions will be compared with the set-point condition by a two-sided t-test
-(α = 0.05). Statistical significance will be reported separately from practical
-significance. A difference that is significant but smaller than the precision of the
-method that measured it will be reported as detected and not meaningful, with the method
-precision given alongside it.
+The set-point runs, one of which sits in each of the `{python} n_series` series, carry two
+jobs, and the two are taken in order. They are first compared against each other for a lot
+effect, by the rule §7 gives, because each series uses its own broth lot. Where no lot
+effect is found they are pooled into the estimate of variability between runs, which carries
+`{python} f"{n_series - 1}"` degrees of freedom and is the reference against which every
+parameter effect is judged. Where a lot effect is found the affected series is repeated, and
+the estimate is formed once the repeat is in hand, since a lot difference left inside it
+would inflate the yardstick every effect is measured against.
 
-No response surface model will be fitted, and no design space will be claimed for this
-step. Process capability for the attributes in @tbl-cqa is established at the steps that
-govern them (PCR-005, PCR-007 and PCR-008) and consolidated in PCMR-001.
+Statistical significance and practical significance are separated explicitly. An effect
+smaller than the intermediate precision of the method that measured it will be reported as
+detected but not meaningful, and PCR-004 will say so in those terms. This matters most for
+host cell protein, where the assay contributes about `{python} pct(amv_3012_var_frac)` of
+the total observed variance, and for turbidity, where it contributes about
+`{python} pct(amv_3015_var_frac)`.
+
+No process capability index will be calculated for this step. A capability index is a
+statement about a quality attribute against its acceptance criterion, and this step has no
+attribute of its own. Commercial scale capability for the attributes the clarified harvest
+carries is estimated across the whole train from a simulation of
+`{python} f"{V['n_monte_carlo']:,}"` batches with every parameter inside its normal
+operating range, and it is reported in PCMR-001.
 
 # Study design
 
 ## Factors, ranges and study type
 
-@tbl-params gives the parameters, their set-points, the ranges to be studied, the normal
-operating ranges and the study type. The centrifugation set-point of
-`{python} setp(p_cent)` and the depth filter load set-point of `{python} setp(p_load)`
-are the platform values proposed for commercial operation, and each one is the centre of
-its characterization range.
+The design bounds each parameter on its own and claims nothing about interactions between
+them. @tbl-params gives the set-point, the normal operating range, the characterization
+range and the study type for each.
 
 ```{python}
 #| output: asis
-show(plan_params(UO), floatfmt=".0f")
+show(plan_params(UO))
 print()
-print(": Parameters to be studied, with set-points, characterization ranges, normal "
-      "operating ranges and study type. {#tbl-params}")
+print(": Parameters to be studied, with set-points, normal operating ranges, characterization ranges and study type. {#tbl-params}")
 ```
 
-Post-clarification turbidity is not set directly. It is the outcome of the centrifuge and
-the depth filter train, and it is the attribute by which the clarified harvest is judged
-before it is fed to capture. It appears in @tbl-params because its range defines the feed
-that the capture step has to accept, and because it is the in-process control that will
-be applied in routine manufacture.
+The set-point is the commercial target and the centre of every series, and the normal
+operating range is the band within which routine manufacture is held. The characterization
+range is the wider band the study will explore, and the characterization ranges taken
+together are the knowledge space for the step. The operating region proposed in PCR-004
+will be a subset of that space and cannot be larger than it.
 
 ## Univariate assessment
 
-Each settable parameter will be studied at its low characterization edge, at its
-set-point and at its high characterization edge, with the other settable parameter held
-at its set-point, which gives `{python} n_conditions` clarification conditions in all,
-listed in @tbl-cond. Every condition will be run on both feed states. The set-point condition
-will be run in triplicate on each feed state, and it is the reference for every
-comparison.
+No screening design and no response-surface design are planned for this step. At the steps
+that carry a designed experiment, the screening design identifies which parameters have an
+effect and the response-surface model is the predictive model and the basis of the design
+space (PCMP-001). Neither applies here. No quality attribute is formed or cleared at
+harvest, the parameters are assessed one at a time, and nothing in this plan will
+support a predictive multivariate model of the step.
 
-```{python}
-#| output: asis
-show(cond_df)
-print()
-print(": Planned univariate conditions. Each condition is run on both feed states; the "
-      "set-point condition is run in triplicate. {#tbl-cond}")
-```
+The study is a set of `{python} n_series` univariate series, one per parameter, executed on
+the qualified scale-down model. Within a series the parameter of interest is set in turn at
+the two edges of its characterization range, the two edges of its normal operating range
+and its set-point. The other parameters that can be set are held at their set-points, and
+post-clarification turbidity, which is an output of the clarification train and not a
+setting, is measured in the two series that do not challenge it. Where two of
+those levels coincide the condition is run once. That happens for post-clarification
+turbidity, whose normal operating range and characterization range share a lower edge, so
+that series carries one run fewer than the other two. The full schedule of
+`{python} n_runs` runs is given in Appendix A.
 
-Two corners of the studied region are worst cases, for opposite reasons. The low
-centrifugation and high filter load corner carries the largest solids burden into a
-filter train that is already near the end of its capacity, and it is expected to give the
-highest turbidity in the clarified harvest and the highest differential pressure across
-the depth filters. The high centrifugation corner gives the clearest centrate but the
-greatest shear, and it is the condition at which the lysis-derived HCP and DNA burden is
-expected to be highest. Both corners will be run on the extended culture feed state.
+The turbidity series is a challenge series and is executed differently from the other two.
+Turbidity is an output of the centrifuge and the depth filter train and cannot be set
+directly, so both operations run at their set-points and the clarified pool is brought to
+each level by adjusting the clarification train. An additional filtration stage is used to
+reach the levels below the set-point, and unclarified centrate is blended into the pool to
+reach the levels above it.
 
-The turbidity range will be spanned by these conditions, and, where the conditions do not
-reach the edges of the range, by blending clarified harvest to the required turbidity.
-Material at the low, set-point and high end of the turbidity range will be retained for
-the capture feed challenge described in PCP-005.
+Placing the set-point in every series is deliberate. It gives `{python} n_series` replicate
+runs at one condition, spread across the whole execution instead of clustered at the start,
+so the estimate of variability between runs also detects drift in the feed material or in
+the model. Run order will be randomized within a series, and each series will use a single
+harvested broth lot, so that variation in the feed cannot be confounded with the parameter
+being varied.
+
+A confirmation set follows the univariate series. For each parameter, the proposed edges of
+its proven acceptable range will be run again with the other parameters held at the corner
+of their normal operating ranges that the univariate results identify as least favorable
+(the direction of that corner is fixed from the effects seen in the series). The choice is
+recorded before the confirmation runs are executed. These runs are the direct test of the
+assumption that the parameters act independently, and §12 states what will happen if that
+assumption fails.
 
 # Acceptance and decision criteria
 
-@tbl-acc gives the criteria that each studied condition has to meet. Three of them are
-process performance criteria (turbidity, recovery and filter train pressure). The other
-two confirm that the step does not alter product quality and that the impurity burden
-handed to capture is characterized.
+The criteria below are fixed before execution, and PCR-004 will report against them in the
+order given here.
 
-```{python}
-#| output: asis
-show(acc_df)
-print()
-print(": Acceptance and decision criteria for a studied condition. {#tbl-acc}")
-```
+The scale-down model is qualified when the comparison described in §5.1 shows the model and
+commercial scale to agree, within the precision of the method that measured each one, on
+recovery, turbidity, host cell protein and residual DNA. Studies executed on an unqualified
+model are not reportable. Qualification must therefore be closed before the first series
+starts.
 
-Product recovery is the criterion with the largest consequence for the process. The
-platform recovery over this step is `{python} pct(y_base)` with a batch-to-batch
-coefficient of variation of `{python} pct(y_cv)`, so a condition will be judged to have
-reduced recovery when its mean falls below `{python} pct(y_floor)`, which is three
-standard deviations below the platform mean. Turbidity in the clarified harvest has to
-remain inside its normal operating range at the set-point condition, and it is reported
-without a limit at the other conditions.
+A run is valid when every analytical result falls inside the validated range of its method,
+and when the run was executed within the tolerances given in SOP-2005 and SOP-2006. A series
+is valid when its set-point run agrees on recovery with the set-point runs of the other
+series. The platform standard deviation of step recovery is
+`{python} f"{yield_sd_pct:.1f}"` recovery points, and each set-point run must sit within
+three of those standard deviations, which is `{python} f"{yield_tol_pct:.1f}"` recovery
+points, of the mean of the set-point runs. The comparison is made against the platform
+standard deviation because a single set-point run in each series leaves no within-series
+estimate to test against.
 
-A condition that fails a criterion does not invalidate the study. The proven acceptable
-range of that parameter is narrowed to the last level that met every criterion, and the
-narrowed range is carried into PCR-004 together with the evidence for it. A failure at
-the set-point condition, or a failure of the scale-down model qualification, stops the
-study and is escalated under the quality system.
+A parameter level is acceptable when all of the following hold. Step recovery is at or
+above `{python} f"{yield_floor_pct:.1f}"`%, which is the platform mean less three times its
+standard deviation between batches. Turbidity of the clarified pool is at or below
+`{python} f"{p_turb.nor[1]:g}"` NTU, the upper edge of the normal operating range for that
+attribute. Host cell protein and residual DNA in the clarified pool are not raised above
+the set-point condition by more than the intermediate precision of the method that measured
+them. Aggregate across the step is unchanged within the validated precision of AMV-3011.
 
-The scale-down model qualification will be accepted when the model and at-scale values of
-centrate turbidity, clarified harvest turbidity and step recovery agree within the
-precision of the methods that measure them, and when the HCP and DNA content of the
-clarified harvest produced by the model falls inside the range recorded at commercial
-scale. If the model fails on any of these, it will be modified and requalified before any
-characterization run is executed.
+Two of these criteria do not apply in the turbidity series, where the pool turbidity is the
+condition set and not a response of the step. The turbidity criterion is the first of them,
+since a level of that series would otherwise be judged against itself and the acceptable
+range could only come back as the normal operating range. The criterion on host cell protein
+and residual DNA is the second, because the levels above the set-point are reached by
+blending unclarified centrate into the pool, which raises both by construction. A level of
+the turbidity series is acceptable when recovery meets its floor and when aggregate across
+the step is unchanged. The impurity burden measured at each level is reported and not
+judged, and it is the description of the clarified harvest that objective (v) calls for.
 
-The study is complete when every condition in @tbl-cond has been executed on both feed
-states, every planned sample has been assayed, the mass balance has been closed, and the
-criteria in @tbl-acc have been evaluated for each condition.
+The proven acceptable range of a parameter is the contiguous span of that parameter,
+containing its set-point, over which every criterion that applies to it is met in the
+univariate series and again in the confirmation runs. §8 describes how each range will be
+determined and reported.
+
+Classification follows SOP-4001 and uses the definitions given in the A-Mab case study
+[@amab2009]. A parameter whose variation across its characterization range affects a
+critical quality attribute is a critical process parameter, and it is a well controlled
+critical process parameter where the risk of leaving the design space is low. A parameter
+that affects process performance but no quality attribute is a key process parameter. A
+parameter that affects neither is a general process parameter. The class of each harvest
+parameter is an outcome of the study and is stated in PCR-004, not here.
+
+The study fails an objective when a proven acceptable range does not contain its normal
+operating range with the margin objective (iii) states. In that case the normal operating
+range will be narrowed to what the data support, or the step will be re-designed and
+re-characterized, and the decision and its basis will be recorded as a deviation in
+PCR-004. A proven acceptable
+range that turns out wider than expected is not a failure, and it does not license
+operation outside the characterization range that produced it.
 
 # Proven acceptable ranges (planned analysis)
 
-The proven acceptable ranges for this step will be derived from process performance and
-not from a drug substance specification. No critical quality attribute is formed or
-cleared here, so there is no attribute limit from which a step level criterion could be
-back-calculated (as it is for the viral clearance steps). The acceptance basis is the set
-of criteria in @tbl-acc, together with the requirement that the clarified harvest is
-acceptable as feed to the capture step.
+The acceptance basis has to be stated before the analysis, because this step has no
+specification of its own. No drug substance specification applies directly to the clarified
+harvest. For a step that carries a viral clearance attribute the step level requirement
+would be back-calculated from the cumulative requirement less the clearance credited to the
+other steps, and no clearance is credited to harvest, so that route does not apply here.
+The basis is the set of criteria in §7. Those criteria are the recovery floor, the turbidity
+limit on the clarified pool, the bound on how far host cell protein and residual DNA may
+rise across the step, and the requirement that aggregate pass through unchanged. Which of
+them applies to a given series is stated there.
 
-For each settable parameter, the proven acceptable range will be the contiguous interval
-around the set-point over which every criterion in @tbl-acc is met on both feed states,
-and it will be read from the univariate series and reported next to the full
-characterization range so that the margin between the two is visible. Where every studied
-level meets the criteria, the whole characterization range will be reported as proven
-acceptable, and the binding constraint on routine operation will remain the normal
-operating range.
+Two analyses will be run for each parameter. The first is the univariate series itself, in
+which the other parameters that can be set are held at their set-points and the parameter
+of interest is scanned across its characterization range. The second is the confirmation
+set described in §6.2, in which the other parameters sit at the least favorable corner of
+their normal operating ranges. The second analysis is executed and not simulated. At the steps
+that carry a designed experiment, the equivalent analysis propagates the normal operating
+ranges through a fitted response-surface model by Monte Carlo simulation, but no such model
+exists at this step, so the corner is executed as a set of runs instead.
 
-Two analyses that a multivariate step would report will not be run here. There is no
-fitted response surface model, so a proven acceptable range cannot be propagated by
-Monte-Carlo simulation of the other parameters varying within their normal operating
-ranges. There is no multivariate operating region either, so no design space is claimed
-for the step. The proven acceptable ranges reported for harvest and clarification will be
-univariate, and they will hold for the two feed states studied and at the qualified
-scale-down model.
+The decision rule is the one given in §7. A proven acceptable range is the contiguous span
+containing the set-point over which every criterion that applies to the parameter is met
+under both analyses. Where the two analyses give the same span, the parameter is robust to
+the others moving
+anywhere inside their normal operating ranges, and PCR-004 will report it in those terms.
+Where the confirmation runs narrow the span, the narrower span is the proven acceptable
+range, and the report will name the criterion that binds it and the margin that remains at
+the set-point.
 
-Each proven acceptable range will be presented as a plot of the response against the
-parameter, with the acceptance criterion drawn, the acceptable region shaded green, and
-the set-point and the normal operating range marked. The plots and the data behind them
-will be given in the report (PCR-004).
+Each proven acceptable range will be reported with a plot of the governing response against
+the parameter, with the acceptance limit drawn, the acceptable region shaded green, and the
+set-point and the normal operating range marked on the parameter axis.
+
+This step has no multivariate design space, because none was studied and none is claimed.
+The operating region for harvest is the intersection of the proven acceptable ranges, which
+is a univariate
+construction and not the multivariate region ICH Q8 describes [@ichq8]. Every range will be
+bounded by the characterization range that produced it and by the scale-down model that
+produced the data. A setting outside a characterization range lies outside the knowledge
+space and is not covered by this study.
 
 # Data management and integrity
 
-Study data will be recorded and reviewed under the ALCOA+ principles. Raw analytical data
-are captured in the validated laboratory systems named in the method validations
-(@tbl-sop), and process data are captured in the scale-down model batch records. Each
-record is reviewed by a second qualified person before the data are used in the report.
-Changes to an executed record are made by controlled amendment with the reason recorded.
+Study data will be recorded and retained under the ALCOA+ principles, so that every result
+is attributable, legible, contemporaneous, original, accurate, complete, consistent,
+enduring and available. Raw analytical data are captured in the validated laboratory
+information system, and process data are captured in the electronic batch record for each
+run.
+
+Calculated results, including step recovery and every regression, are produced by a version
+controlled analysis script and are traceable to the raw data that fed them. Entries are
+reviewed by a second person before a data set is closed. Corrections are made so that the
+original entry stays readable, with the reason and the date recorded against it. Access
+rights and audit trails are managed under the site quality system [@ichq10].
 
 # Roles and responsibilities
 
-Process Development prepares this plan, executes the scale-down runs and authors PCR-004.
-Analytical Development performs the assays and releases the results against the validated
-methods. MSAT owns the scale-down model qualification and the comparison with the
-at-scale records (§5.1). Statistics reviews the analysis and the decision rules. Quality
-Assurance approves the plan and the report and dispositions any deviation.
+Process Development owns this plan, executes the studies and writes PCR-004. Analytical
+Development runs the validated methods, releases the results and owns the method
+performance figures quoted in §5.3. Manufacturing Science reviews the scale-down model and
+the operating conditions for commercial equivalence, and it owns the interface to the
+receiving site. Statistics reviews the design and the analysis, including the decision on
+whether a quadratic term is warranted. Quality Assurance approves this plan and the report.
+
+Any departure from this plan during execution is recorded at the time, assessed for impact
+by Process Development and Quality Assurance, and reported in PCR-004. A departure that
+invalidates a run requires that run to be repeated before the series is analysed.
 
 # Deliverables and schedule
 
-The deliverable is PCR-004, the process characterization report for this step
-(@tbl-related). The work runs in three phases. Scale-down model qualification is executed
-and reported first. The characterization runs on the two feed states follow, with the
-analytical testing and the mass balance closed out as each condition completes. The
-report is then authored, reviewed and approved, and it rolls up into PCMR-001. No dates
-are given in this synthetic plan.
+The deliverable of this plan is PCR-004, the characterization report for the step. It will
+present the executed design, the univariate results, the proven acceptable ranges, the
+parameter classifications, the contribution of the step to the control strategy and any
+deviations recorded during execution. PCR-004 rolls up into PCMR-001, which consolidates
+the campaign.
+
+The work runs in four phases, and no phase starts before the previous one is closed.
+Scale-down model qualification comes first, and the univariate series follow. The
+confirmation runs come after the series, because the corner they use is chosen from the
+series results. Analysis and reporting close the study. No calendar dates are fixed in this
+plan, and the schedule is held in the campaign plan (PCMP-001) and in the transfer plan
+(PTP-001).
 
 # Risks and assumptions
 
-The main risk to the study is the representativeness of the scale-down model. The model is
-qualified against at-scale records before use, and its limitation (§5.1) is carried into
-the report.
+Three risks could affect the conclusions of this study, and each has a defined mitigation.
 
-The second risk is the supply of the extended culture feed state, which depends on the
-bioreactor campaign run under PCP-003, and if that material is not available the
-worst-case conditions will be executed on the nominal feed state and the gap stated in
-PCR-004 as a bound on the conclusions.
+The first is the representativeness of the scale-down model for shear. The bench device
+reproduces the energy dissipation rate of the commercial feed zone, but it does not
+reproduce the residence time distribution of a commercial disk-stack bowl, so the exposure
+of any given cell to that dissipation rate is not identical at the two scales.
+Qualification against commercial scale data for host cell protein and residual DNA is the
+control on this, because both respond to cell lysis. If the model overstates lysis the
+proven acceptable ranges will be conservative, and if it understates lysis the confirmation
+at commercial scale in Stage 2 will find it.
 
-The study assumes that the platform centrifuge and the platform depth filter media are
-unchanged for commercial manufacture. It also assumes that the impurity burden of the
-clarified harvest is set by the culture and not by the clarification train. The HCP and
-DNA measurements taken across the step will test that second assumption directly.
+The second is variation in the harvested broth between series. Cell density and viability
+at harvest vary from batch to batch, and both change the solids load the step has to
+handle. Each series will use a single broth lot, and the set-point run in each series gives
+a direct comparison between lots. If a set-point run departs from the mean of the set-point
+runs by more than the tolerance given in §7, the affected series will be repeated.
+
+The third is variation in the depth filter media. Media capacity varies between lots, and
+the depth filter load series is the series most exposed to it. A single media lot family
+will be used across the study, and the lot will be recorded for every run. A media lot
+change during the study is a deviation and will be assessed before results are pooled.
+
+Two assumptions underlie the design. The first is that platform experience with X-Mab,
+Y-Mab and Z-Mab transfers to A-Mab at this step. The mechanism supports that assumption,
+since primary recovery separates cells from broth and does not act on the antibody itself.
+The second assumption is that the parameters act independently across their
+characterization ranges. The confirmation runs described in §6.2 test it directly. If a
+confirmation run differs from the univariate result by more than the precision of the
+method that measured it, the assumption fails, and a multivariate study of the affected
+pair will be raised through PCMP-001 before any range is proposed.
 
 # Approvals
 
-This plan takes effect when the approvals recorded in @tbl-appr are complete. Changes
-after approval are made by controlled revision. Any departure from the plan during
-execution is recorded at the time and assessed in PCR-004.
+This plan takes effect once it has been approved by the functions listed in @tbl-appr.
+Approval commits those functions to the design, the acceptance criteria and the decision
+rules it contains. Any change after approval is made by revising this document and not by
+agreement during execution.
+
+# Appendices
+
+## Appendix A — Planned univariate condition schedule
+
+@tbl-schedule gives the `{python} n_runs` runs of the univariate study, with the setting of
+each of the `{python} n_params` parameters in every run. The levels are those defined in
+§6.2. No results appear here. Turbidity is a set target only in its own series, and in the
+other two it is a measured response, which the table records instead of showing a
+set-point that is not set.
+
+```{python}
+#| output: asis
+show(schedule)
+print()
+print(": Planned univariate condition schedule (settings only; no results). {#tbl-schedule}")
+```
+
+## Appendix B — Analytical methods summary
+
+@tbl-methods summarizes the performance of the validated methods that carry the
+quantitative decisions in this study, which are `{python} n_methods_qual` of the
+`{python} n_methods_total` listed in @tbl-sop. Performance for the remaining methods is
+held in their own validation reports.
+
+```{python}
+#| output: asis
+show(methods_perf)
+print()
+print(": Performance of the validated methods that carry the study's quantitative decisions. {#tbl-methods}")
+```
+
+<!-- ========================= BODY END ========================= -->
 
 # References {.unnumbered}
 

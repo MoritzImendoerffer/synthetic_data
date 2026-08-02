@@ -143,7 +143,39 @@ def test_annex_study_designs_match_the_seeded_designs():
             rows = list(_csv.DictReader(fh))
         return len(rows), sum(1 for r in rows if r["run_type"] == "center")
 
+    def univariate_counts(key):
+        """Run counts a UNIVARIATE schedule can legitimately have at a non-DoE step.
+
+        Harvest (Step 4) and UF/DF (Step 10) run no designed experiment, so their studies
+        match no ``doe_*.csv`` and the seeded-design check above cannot see them. Their
+        schedules are still derived from the parameter register, in one of two shapes, and
+        each plan states which it uses:
+
+          * edges plus the set-point as a reference, per parameter — PCP-010, "9 runs in
+            total: 6 runs at an edge and 3 at the set-point";
+          * every distinct level among the two characterization edges, the two normal-
+            operating edges and the set-point — PCP-004, whose turbidity series is one run
+            shorter because its NOR and characterization range share a lower edge.
+
+        Both are computed here from ``CFG`` alone, so a count that is neither remains a
+        failure. This is deliberately not a free pass: it is the same "derived, never typed"
+        rule the DoE branch enforces, applied to the schedule these steps actually run.
+        """
+        uo = CFG.unit_op(key)
+        ps = [p for p in uo.parameters if p.study == "univariate"]
+        if not ps:
+            return set()
+        edges_plus_reference = 3 * len(ps)
+        distinct_levels = sum(
+            len({p.prange[0], p.nor[0], p.setpoint, p.nor[1], p.prange[1]}) for p in ps)
+        return {edges_plus_reference, distinct_levels}
+
     keys = [k for k in CFG.train_order if st.DOE_FACTORS.get(k)]
+    nondoe_runs = set()
+    for k in CFG.train_order:
+        if not st.DOE_FACTORS.get(k):
+            nondoe_runs |= univariate_counts(k)
+
     problems = []
     for path in sorted(glob.glob(os.path.join(gt, "*.json"))):
         annex = json.load(open(path))
@@ -154,11 +186,17 @@ def test_annex_study_designs_match_the_seeded_designs():
                 continue
             # match against any seeded design of any DoE step; the annex names its own
             # unit operation, so a mismatch everywhere means the numbers are invented.
-            if not any(design(k, kind) == (n_runs, n_cp)
-                       for k in keys for kind in ("screening", "rsm")
-                       if design(k, kind) is not None):
-                problems.append(f"{doc} {sd.get('study_id', '?')}: "
-                                f"n_runs={n_runs}, n_center_points={n_cp} matches no seeded design")
+            if any(design(k, kind) == (n_runs, n_cp)
+                   for k in keys for kind in ("screening", "rsm")
+                   if design(k, kind) is not None):
+                continue
+            # A univariate study has no centre points, so n_cp must be absent, and its run
+            # count must be one the parameter register produces.
+            if n_cp is None and n_runs in nondoe_runs:
+                continue
+            problems.append(f"{doc} {sd.get('study_id', '?')}: "
+                            f"n_runs={n_runs}, n_center_points={n_cp} matches no seeded "
+                            f"design and no univariate schedule the register supports")
     assert not problems, ("annex StudyDesign counts disagree with the seeded designs:\n  "
                           + "\n  ".join(problems))
 

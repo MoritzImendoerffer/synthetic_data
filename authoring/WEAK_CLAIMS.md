@@ -1,47 +1,38 @@
-# Weak claims — labeled benchmark negatives, written in one pass
+# Weak claims — why injection failed, and where the feature lives now
 
-**Status: ACTIVE.** Four claims across three documents:
+**Status on `main`: NOT APPLIED.** No document on this branch contains a planted weak claim,
+and none should: `main` is the fully grounded corpus. `authoring/weak_claims.yaml` is kept
+here as the record of the design.
 
-| id | document | type |
-|---|---|---|
-| WC-003-01 | PCR-003 (report) | `unsupported_prior_knowledge` |
-| WC-003-02 | PCR-003 (report) | `overstated_outcome` |
-| WC-009-01 | PCR-009 (report) | `unbounded_generalization` |
-| WC-006-01 | PCP-006 (**plan**) | `missing_citation` |
+**The feature is active on `feature/weak-claims-via-brief`**, rebuilt around the fix this
+document argues for: each claim is assigned in the document's brief *before* it is written,
+so the author writes it into the argument in one pass, and its wording is recorded afterwards
+by reading the rendered document. Four claims across three documents. That branch is
+deliberately never merged here — see its own copy of this file for the procedure and the
+review checklist.
 
-The registry is `authoring/weak_claims.yaml`. Each claim is **assigned before the document is
-written** and its wording **captured after**. Everything below explains why that order is the
-whole design, because the obvious alternative was tried first and failed.
+The rest of this file is the failure analysis that produced that design. It is worth reading
+before adding any labelled negative to a corpus, because the mistake was not obvious and no
+gate caught it.
 
-## This feature does not belong on `main`
-
-It lives on its own branch (`feature/weak-claims-via-brief`) and is **not merged into
-`main`**. `main` stays a corpus in which every claim is grounded — that invariant is what
-makes it usable as a positive-example set, and a reader or a downstream tool has no way to
-know that four sentences in it are deliberately unsupported unless they read the annex.
-Keeping the two apart makes the distinction a property of which branch you check out, rather
-than a footnote someone has to notice.
-
-So the branch is the deliverable. Rebase it onto `main` when `main` moves; do not merge it
-back.
-
-## What the feature is for
+## What the feature was
 
 The corpus's default invariant is that **every claim is grounded** (CLAUDE.md golden rule 3,
-WRITING_GUIDE §3/§6). This is the controlled exception: a few fluent, in-register but
-unsupported or overstated claims, **labeled** in the annex, so the benchmark carries negative
-examples for evidence-grounding tasks — claim verification, overstatement detection, "does
-the cited evidence actually support this sentence?".
+WRITING_GUIDE §3/§6). This feature was the controlled exception: a few fluent, in-register
+but unsupported or overstated claims would be planted into a report and **labeled**, so the
+benchmark carried negative examples for evidence-grounding tasks — claim verification,
+overstatement detection, "does the cited evidence actually support this sentence?".
 
-A grounded corpus teaches a model what supported prose looks like, but not how to catch the
-failure it most needs to catch: a claim that *reads* authoritative and on-register yet is not
-backed by the data or a citation. Real regulatory documents contain exactly these.
+The motivation is still sound. A grounded corpus teaches a model what supported prose looks
+like, but not how to catch the failure it most needs to catch: a claim that *reads*
+authoritative and on-register yet is not backed by the data or a citation. Real regulatory
+documents contain exactly these.
 
-## The first attempt failed, and why
+## Why it was retired
 
-The claims were originally **planted after authoring**, as a maintainer step. The author is
-required to ground everything, so a labeled negative could not come from the author — hence
-the post-hoc injection. That sequencing is the flaw.
+The claims were **planted after authoring**, as a maintainer step. The author is required to
+ground everything (WRITING_GUIDE §7a), so a labeled negative could not come from the author
+— hence the post-hoc injection. That sequencing is the flaw.
 
 A claim written against a finished document has no way to be *merely unsupported*. It lands
 in prose that has already settled every question it touches, so it does not read as an
@@ -83,82 +74,36 @@ annex, the rhetorical layer, the grounding check. Those never modify what the do
 When `check_grounding` fails, the fix direction is always to re-anchor the annex quote to the
 document, never to edit the document to suit the annex.
 
-## Watch for the author smoothing the document around the claim
+## What replaced it
 
-Observed on the first run of the revived design. The PCP-006 author placed WC-006-01
-correctly, then also changed a sentence in a **different section** from "These samples
-establish the shape of the inactivation curve" to "…confirm the shape…", and reported that
-it did so to remove a sentence that "could have read as a rebuttal".
+The fix is the sequencing, and it lives on `feature/weak-claims-via-brief`:
 
-The wording was left as "confirm", because it is independently the better word — the story
-bible has characterization *confirming and bounding* known platform mechanisms rather than
-discovering them, so "establish" was the outlier. But the reasoning was wrong, and the edit
-was not even necessary: the claim sits in §4.1 and the sentence it touched is in §5.4.
+1. The claim is **assigned before the document is written** — `weak_claims.yaml` records
+   which fact it distorts, what to assert instead, and where to place it.
+2. `build_brief.py` renders that assignment into the author's brief as §5b, so the single
+   author sees it before writing and builds the surrounding argument around it.
+3. The wording is **captured afterwards** by reading the rendered document. That step is
+   post-hoc, but it *reads* the document; it never edits it. That distinction is the whole
+   difference from the retired approach.
 
-The lesson generalises. An author told to write an unsupported claim will feel the pull to
-make the whole document hospitable to it, and will reach across sections to do so. That
-converts a local planted negative into a diffuse weakening of the report, which is worse
-than the original injection problem because it is invisible — nothing in the registry
-records it and no gate sees it.
+Two rules the branch learned the hard way. A claim must be **unsupported, not contradicted**
+— if a neighbouring sentence rebuts it, move the claim. And **move the claim, never the
+document**: an author asked to write an unsupported claim will feel the pull to soften
+sentences elsewhere to accommodate it, which converts a local planted negative into a diffuse
+weakening that nothing records.
 
-So the instruction to authors is specific, and both halves matter: **move the claim, never
-the document.** If a neighbour rebuts the claim, relocate the claim. Do not soften the
-neighbour, do not delete a grounded statement, do not remove a citation elsewhere to make
-the uncited one blend. When reviewing an authored document, read the author's report for
-any edit it made *in service of* the claim, and check that edit on its own merits.
+A separate option remains open: treat contradiction as its own labelled category (a
+`contradicted_by_document` weakness type) rather than as a defect to avoid. That is a
+benchmark design decision, not a mechanical one, and it has not been made.
 
-## How to add a claim
+## State of the machinery on this branch
 
-1. **Assign it** in `authoring/weak_claims.yaml` under the target document, with an
-   `assignment:` block giving the grounded fact it distorts, what to assert instead, and
-   where to place it. Leave `captured.quote` as `null`.
-2. **Regenerate the brief** (`build_brief.py <DOC>`). The assignment appears as §5b, so the
-   author sees it before writing.
-3. **Author the document in one pass**, as normal. `WRITING_GUIDE.md` §7a tells the author
-   these are the only ungrounded claims permitted, and that a document whose brief has no
-   §5b grounds everything.
-4. **Capture the wording.** Read the rendered `.docx`, copy the author's sentence verbatim
-   into `captured.quote`, and write the `rationale` and `correct_version`. This is the one
-   post-hoc step and it **reads** the document — it never edits it.
-5. **Rebuild.** `build_ground_truth.py` emits a `WeakClaim` with `support = "unsupported"`,
-   so the span grounds while being labeled weak. `build_weak_claims_annex.py` is the
-   standalone strict check.
-
-The build distinguishes three states, so nothing degrades quietly. Assigned-but-uncaptured
-prints a note (expected until the document is authored). A captured quote that no longer
-appears **hard-fails** with instructions to re-read the document and re-record the wording —
-never to edit the document to match. A document with no assignment simply has none.
-
-## Review checklist
-
-Read these against the rendered document, not the author's report:
-
-- Does the quote ground verbatim?
-- Read its neighbours. Is it **unsupported**, or does an adjacent sentence rebut it? If a
-  neighbour rebuts it, the placement is wrong.
-- Is it in register? Compare its length against the document's own distribution. A negative
-  a reader spots by style tests nothing.
-- Did the author change anything *in service of* the claim? Its report should say so. Check
-  that edit on its own merits — see the section above.
-- Does any *normal* grounded assertion or `claim` span anchor on the same sentence? It must
-  not; the sentence belongs to the `weak_claims` layer alone.
-
-## An option not taken
-
-Contradiction could be its own labeled category (a `contradicted_by_document` weakness type)
-rather than a defect to avoid. That would make the retired approach useful again instead of
-wrong. It is a benchmark design decision, not a mechanical one, and it has not been made —
-`authoring/DISCREPANCIES.md` covers cross-document inconsistency separately and to different
-ends.
-
-## The machinery
-
-- `authoring/weak_claims.yaml` — the registry, `assignment:` then `captured:` per claim.
-- `authoring/build_brief.py` — `_weak_claim_assignments()` renders §5b into the brief.
-- `pc_package/build_ground_truth.py` — `build_weak_claims()`, wired into **every** annex
-  constructor. It was wired into only one for a long time, which meant assigning a claim to
-  any other document would silently produce no annex record.
-- `authoring/build_rhetorical_annex.py` — merges each captured claim as a `weak_claim` span.
-  It reads the wording under either registry shape and skips a claim whose text is not in the
-  document, so `main` (where the claims are retired) and this branch both build cleanly.
-- `authoring/build_weak_claims_annex.py` — standalone strict verification.
+- `authoring/weak_claims.yaml` — the three retired PCR-003 entries, kept as a record. Their
+  wording is not in any document, and that is correct.
+- `pc_package/build_ground_truth.py` `build_weak_claims()` — skips a registered claim whose
+  quote is absent and prints a note, so "no planted claims" is a clean, buildable state
+  rather than a guaranteed grounding failure.
+- `authoring/build_rhetorical_annex.py` — skips them for the same reason. It used to emit
+  them anyway, producing a layer with three spans whose text was nowhere in the document.
+- `authoring/build_weak_claims_annex.py` — the standalone strict check. It hard-fails here,
+  because the claims are not in the document. That failure is correct.

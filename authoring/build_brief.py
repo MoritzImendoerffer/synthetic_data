@@ -156,53 +156,6 @@ HELPERS_BY_JOB = [
 ]
 
 
-def _weak_claim_assignments(doc_id: str) -> str:
-    """The labeled benchmark negatives this document is assigned, if any.
-
-    Surfaced to the author BEFORE writing, which is the whole point. The previous design
-    planted these into finished documents, where a claim cannot be merely unsupported —
-    it lands in prose that has already settled the question and so reads as a
-    contradiction of its neighbour. Written in one pass instead, the surrounding argument
-    accommodates the claim and it stays an overreach rather than a self-contradiction.
-    See authoring/WEAK_CLAIMS.md.
-    """
-    path = os.path.join(HERE, "weak_claims.yaml")
-    if not os.path.exists(path):
-        return ""
-    with open(path) as fh:
-        data = yaml.safe_load(fh) or {}
-    claims = (data.get("claims") or {}).get(doc_id) or []
-    if not claims:
-        return ""
-
-    b = io.StringIO()
-    b.write("## 5b. Assigned weak claims — WRITE THESE, and nothing else ungrounded\n\n")
-    b.write("> This document carries labeled benchmark negatives. They are the **only** "
-            "ungrounded claims you may write; every other claim must be fully supported "
-            "(WRITING_GUIDE §7a).\n>\n"
-            "> Each must end up **unsupported, not contradicted**. Write it into the "
-            "argument so the surrounding prose accommodates it.\n>\n"
-            "> **Move the claim, never the document.** If a neighbouring sentence rebuts "
-            "it, relocate the claim. Do not soften the neighbour, do not delete a grounded "
-            "statement, and do not remove a citation elsewhere to make an uncited claim "
-            "blend. Smoothing the document around a planted claim turns a local negative "
-            "into a diffuse weakening of the report, which is worse than the problem this "
-            "design exists to solve. If you do change anything in service of the claim, "
-            "say so in your report so it can be checked on its own merits.\n>\n"
-            "> It must read as ordinary in-register prose. A negative a reader spots by "
-            "style rather than by checking the evidence is worthless.\n\n")
-    for c in claims:
-        a = c.get("assignment") or {}
-        b.write(f"### {c['id']} — `{c['weakness_type']}` (section: {c.get('section', '?')})\n\n")
-        b.write(f"- **The grounded fact it distorts:** {' '.join((a.get('distorts') or '').split())}\n")
-        b.write(f"- **Write:** {' '.join((a.get('write') or '').split())}\n")
-        b.write(f"- **Placement:** {' '.join((a.get('placement') or '').split())}\n\n")
-    b.write("Do not mark these in the text in any way. After the document renders, the "
-            "maintainer records your exact wording in the registry so the annex can label "
-            "it — that step reads the document, it never edits it.\n\n")
-    return b.getvalue()
-
-
 def _helper_by_job():
     out = ["**Find a helper by the job you are doing.** The full alphabetical listing "
            "follows; this is an index into it.\n"]
@@ -389,7 +342,6 @@ def build(doc_id: str) -> str:
         w("\n")
 
     # 6. Cross-references -------------------------------------------------------
-    w(_weak_claim_assignments(doc_id))
     w("## 6. Cross-references\n\n")
     if step is not None:
         w("Related documents — `related_docs_md(\"%s\")`:\n\n" % doc_id)

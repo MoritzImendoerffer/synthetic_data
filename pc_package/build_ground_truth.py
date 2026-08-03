@@ -79,6 +79,46 @@ def meta(basis="explicit", conf="high"):
     )
 
 
+def par_basis_text(uo_key, cqa_label):
+    """Acceptance basis for a ProvenAcceptableRange, derived from the engine.
+
+    These strings used to be written out per step, which meant the annex asserted a basis
+    the analysis no longer used the moment the criteria moved. The basis is now read from
+    ``doe_report`` for the response behind the table row, so it cannot drift from the
+    criterion the PAR was actually computed against."""
+    import doe_report as D
+    resp = next((r for r in D.responses(uo_key)
+                 if D.RESP_LABEL.get(r, r) == cqa_label), None)
+    if resp is None:
+        return ("Acceptance criterion applied to this attribute at the outlet of the step.")
+    lo, hi, stype = D.effective_acceptance(uo_key, resp)
+    limit = f"at or above {lo:.3g}" if stype == "lower" else f"at or below {hi:.3g}"
+    if D.acceptance_basis(uo_key, resp) == "drug substance":
+        if stype == "lower":
+            return ("Step-level required log-reduction, back-calculated from the cumulative "
+                    "viral-clearance requirement minus the clearance credited to the other "
+                    "orthogonal steps (modular viral-safety claim under ICH Q5A(R2)); the "
+                    f"step contribution must be {limit} log10.")
+        return ("Drug-substance specification for the attribute, applied directly at the "
+                f"outlet of this step ({limit}). No downstream clearance is credited against "
+                "it, so the specification is itself the binding in-process criterion.")
+    ent = ((D.CFG.ipc_limits.get("steps") or {}).get(uo_key, {}) or {}).get(resp) or {}
+    if "from_capability" in ent:
+        k = D.CFG.ipc_limits.get("capability_alert_sigma")
+        return ("In-process alert limit set from demonstrated capability at "
+                f"mean + {k:g} standard deviations ({limit}). The attribute is not modified "
+                "downstream, so the drug-substance specification already applies here and is "
+                "the wider of the two; capability is what binds.")
+    if "from_modular_claim" in ent:
+        a = D.CFG.ipc_limits.get("viral_assay_allowance")
+        return ("In-process criterion set from the log-reduction claimed for this step in the "
+                f"modular clearance table, less an assay allowance of {a:g} log10 ({limit}).")
+    m = (ent.get("from_ds_backcalc") or {}).get("margin")
+    return ("In-process limit carried back from the drug-substance specification through the "
+            "clearance the downstream steps deliver in the nominal train, then divided by an "
+            f"assurance margin of {m:g} ({limit}).")
+
+
 def ref(doc_id, file_name, section_id, section_title, quote, table_title=None, table_id=None):
     return S.SourceReference(
         document_id=doc_id, document_title=P.DOC_REGISTRY[doc_id][0], file_name=file_name,
@@ -495,8 +535,8 @@ def build_report_sections(doc_id, file_name, report):
         st(3, "Within the design space the fitted response-surface models predict every measured "
               "attribute inside acceptance, with one galactosylation corner excluded.",
            "Design space",
-           "Within that region the fitted response-surface models predict mean attribute levels "
-           "inside acceptance"),
+           "Evaluated on an evenly spaced grid over the four factors, the fitted response-surface "
+           "models predict mean levels inside every limit"),
         st(4, "The response-surface models are adequate for all five responses and predictive for four of them.",
            "Response-surface models",
            "The response-surface models are adequate for all 5 responses and predictive for four of them"),
@@ -515,12 +555,14 @@ def build_design_spaces(doc_id, file_name):
         parameters=["param:culture_ph", "param:culture_temperature",
                     "param:culture_duration", "param:dissolved_co2"],
         quality_attributes_constrained=[CQA_CONCEPT[r["key"]] for r in CQA_ROWS],
-        definition="The characterized region in culture pH, culture temperature, culture duration "
-                   "and dissolved CO2 within which the fitted response-surface models predict every "
-                   "measured attribute inside acceptance, with one galactosylation corner excluded.",
+        definition="The part of the characterized region in culture pH, culture temperature, "
+                   "culture duration and dissolved CO2 within which the fitted response-surface "
+                   "models predict every measured attribute inside its in-process limit. It is "
+                   "smaller than the characterized region, and galactosylation is the attribute "
+                   "that excludes most of it.",
         source_references=[ref(doc_id, file_name, "Design space", "Design space",
-                               "The design space for this step is the characterized region in the "
-                               "four response-surface factors")],
+                               "The design space for this step is the part of the characterized "
+                               "region in the four")],
         metadata=meta())]
 
 
@@ -541,8 +583,8 @@ PAR_CQA_QUOTE = {
     "Acidic variants": "Proven acceptable range for acidic charge variants against its governing parameter.",
     "Aggregates (HMW)": "Proven acceptable range for aggregate against its governing parameter.",
 }
-_PAR_GENERAL_QUOTE = ("Every characterized range is a proven acceptable range for every attribute "
-                      "this step governs")
+_PAR_GENERAL_QUOTE = ("The acceptance criteria are the in-process limits for this step and not "
+                      "the drug substance specifications")
 
 
 def build_proven_acceptable_ranges(doc_id, file_name):
@@ -560,10 +602,7 @@ def build_proven_acceptable_ranges(doc_id, file_name):
             characterization_range=char,
             par_at_setpoint=f"{r['PAR (set-point)']} {unit}".strip(),
             par_nor_propagated=f"{r['PAR (NOR)']} {unit}".strip(),
-            acceptance_basis=(
-                "Drug-substance specification for the CQA (the study's released-glycan, "
-                "size-variant or charge-variant limit), applied as the ceiling, floor or "
-                "two-sided window; the production bioreactor forms no viral-clearance CQA."),
+            acceptance_basis=par_basis_text(UO, cqa),
             source_references=[ref(doc_id, file_name, f"{doc_id}_sec_par", PAR_SEC,
                                    PAR_CQA_QUOTE.get(cqa, _PAR_GENERAL_QUOTE))],
             metadata=meta()))
@@ -1593,8 +1632,8 @@ PA_PRIOR_QUOTE = {
 }
 # Report §7 "Proven acceptable ranges": one fragment per response of @tbl-par.
 PA_PAR_QUOTE = {
-    "Pool HCP (ng/mg)": ("The drug-substance criterion for host cell protein does not apply at the "
-                         "outlet of this step"),
+    "Pool HCP (ng/mg)": ("The in-process limit is, and against it every pool host cell protein "
+                         "row returns a range"),
     "Leached Protein A (ppm)": ("Its whole characterization range is proven acceptable for every "
                                 "parameter at set-point"),
 }
@@ -1716,11 +1755,11 @@ def pa_params(doc_id, file_name, sec, classified):
 def pa_cqas(doc_id, file_name, sec, report):
     """The one attribute the step SETS plus the two it clears.
 
-    The cleared attributes carry a drug-substance acceptance criterion, but neither
-    document judges the step against it at its own outlet: the report states plainly
-    that "the drug-substance criterion ... does not apply at the outlet of this step".
-    The criterion is therefore recorded as the attribute's DS acceptance, and the
-    step-level position is carried by the assertions and report_sections instead.
+    The cleared attributes carry a drug-substance acceptance criterion, but the step is
+    not judged against it at its own outlet. It is judged against an in-process limit,
+    carried back from the drug-substance limit through the clearance the downstream steps
+    deliver. The DS acceptance is still recorded as the attribute's criterion, and the
+    step-level position is carried by the assertions and report_sections.
     """
     out = []
     for key in PA_CQA_KEYS:
@@ -1879,7 +1918,7 @@ def pa_assertions(doc_id, file_name, report):
         f"Host cell protein acceptance: {hcp['acc_low']:g}–{hcp['acc_high']:g} {hcp['unit']} at "
         f"drug substance; the criterion is not applied at the outlet of this step.",
         "Proven acceptable ranges" if report else "Acceptance and decision criteria",
-        "For pool host cell protein the criterion is the drug-substance limit of 100 ng/mg" if report
+        "For pool host cell protein the criterion is the in-process limit of" if report
         else "Pool host cell protein will be judged against the drug-substance criterion of 100 ng/mg")
     # parameter -> attribute impacts / non-impacts
     if report:
@@ -1970,7 +2009,7 @@ def pa_report_sections(doc_id, file_name, report):
            "Parameter classification", "Elution buffer pH is a well-controlled critical process parameter."),
         st(3, "The design space is the multivariate region in all four multivariate parameters, and "
               "the attribute the step sets stays inside acceptance across the whole characterized region.",
-           "Design space", "that condition is met across the whole characterized region"),
+           "Design space", "Leached Protein A does not bound it"),
         st(4, "Pool host cell protein is well described and its predicted coefficient of "
               "determination supports prediction; step yield is adequate but descriptive.",
            "Response-surface models",
@@ -2005,11 +2044,11 @@ def pa_design_spaces(doc_id, file_name):
         # the drug-substance criterion here, so it does not constrain the region.
         quality_attributes_constrained=["attr:leached_protein_a"],
         definition="The multivariate region in protein load, elution buffer pH, load flow rate and "
-                   "end of pool collect over which leached Protein A — the only quality attribute "
-                   "the step sets — stays within its acceptance criterion. That condition is met "
-                   "across the whole characterized region, so the region is not constrained by the "
-                   "attribute the step sets; what bounds the operating region is the pool host cell "
-                   "protein handed to the polishing steps (PCR-007, PCR-008), consolidated in PCMR-001.",
+                   "end of pool collect over which both governed impurity attributes stay within "
+                   "the criteria that apply to this pool. Leached Protein A does not constrain the "
+                   "region. What bounds it is the pool host cell protein handed to the polishing "
+                   "steps (PCR-007, PCR-008), judged against an in-process limit carried back from "
+                   "the drug-substance limit through their clearance and consolidated in PCMR-001.",
         source_references=[ref(doc_id, file_name, f"{doc_id}_sec_ds", "Design space",
                                "the multivariate region in protein load, elution buffer pH, load "
                                "flow rate and end of pool collect")],
@@ -2020,9 +2059,10 @@ def pa_proven_acceptable_ranges(doc_id, file_name):
     """One ProvenAcceptableRange per governed response x multivariate parameter, from the
     same DoE engine (``doe_report.par_table``) that renders @tbl-par in §7 of the report.
 
-    The pool host cell protein rows carry no range: the report states that the
-    drug-substance criterion does not apply at the outlet of this step, so the analysis
-    reports "none (set-point breaches)" against a limit it does not claim to meet."""
+    The pool host cell protein rows are measured against the in-process limit for this
+    pool, not the drug-substance criterion, which does not apply at the outlet of a capture
+    step. Before that limit existed the analysis reported "none (set-point breaches)" here,
+    against a limit the step never claimed to meet."""
     import doe_report as D
     out = []
     for i, r in enumerate(D.par_table(PAUO).to_dict("records"), 1):
@@ -2035,7 +2075,7 @@ def pa_proven_acceptable_ranges(doc_id, file_name):
             if not str(r["PAR (set-point)"]).startswith("none") else str(r["PAR (set-point)"]),
             par_nor_propagated=f"{r['PAR (NOR)']} {unit}".strip()
             if not str(r["PAR (NOR)"]).startswith("none") else str(r["PAR (NOR)"]),
-            acceptance_basis=PA_PAR_BASIS[cqa],
+            acceptance_basis=par_basis_text(PAUO, cqa),
             source_references=[ref(doc_id, file_name, f"{doc_id}_sec_par",
                                    "Proven acceptable ranges", PA_PAR_QUOTE[cqa],
                                    table_title=PA_PAR_TABLE, table_id=f"{doc_id}_tab_par")],
@@ -2145,9 +2185,7 @@ PA_RHET_SPANS = [
      "rises with the mass of product bound, and it is released preferentially at the harsher "
      "low-pH desorption condition.", [], None, None),
     ("R25", "claim", "Design space",
-     "Every setting in the region studied delivers leached Protein A within its acceptance "
-     "criterion, whether the other factors are held at set-point or allowed to vary within their "
-     "normal operating ranges.", ["R23"], None, None),
+     "Leached Protein A does not bound it", ["R23"], None, None),
     ("R26", "bounded_conclusion", "Design space",
      "All runs used a single clarified-harvest pool at nominal titre and impurity burden, so the "
      "region is defined for that feed state and the study does not bound the effect of feed "
@@ -2269,15 +2307,14 @@ def build_report_protein_a():
         document_class=P.DOC_REGISTRY[doc][0], version=P.VERSION, effective_date=P.EFFECTIVE_DATE,
         schema_extensions_used=COMMON_EXT + [
             "ProvenAcceptableRange (new model) — per-response x parameter PAR (at-set-point / "
-            "NOR-propagated), including the 'none (set-point breaches)' rows for a response whose "
+            "NOR-propagated), measured against the in-process limit for the pool where the "
             "drug-substance criterion does not apply at this step",
             "RhetoricalSpan (new model) — argument-structure roles over the report prose",
         ],
         out_of_schema_notes=[
-            "Pool host cell protein is an in-process response with no step-level spec; the report "
-            "states the drug-substance criterion does not apply at the outlet of this step, so the "
-            "value is reported via studies/report_sections and the train-wide position is deferred "
-            "to PCR-007 / PCR-008 / PCMR-001.",
+            "Pool host cell protein is an in-process response judged against an in-process limit "
+            "carried back from the drug-substance limit through the CEX and AEX clearance; the "
+            "train-wide position is deferred to PCR-007 / PCR-008 / PCMR-001.",
             "Leached Protein A is a robustness result, not a modelled response: no parameter is "
             "significant and the fitted surface is retained as knowledge-space evidence only. It is "
             "carried as a StudyDesign response and in report_sections, never as a predictive model.",
@@ -2790,7 +2827,7 @@ def vi_report_sections(doc_id, file_name, report):
         st(5, "Exactly one proven acceptable range is narrower than its characterization range — "
               "inactivation pH against the log reduction factor, under co-variation of the other "
               "parameters within their normal operating ranges.",
-           "Proven acceptable ranges", "One entry is narrower than its characterized range."),
+           "Proven acceptable ranges", "One further entry is narrower than its characterized range."),
         st(6, "Cumulative enveloped-virus clearance is the tightest of the three capabilities the "
               "step influences.",
            "Process capability and robustness",
@@ -2855,7 +2892,7 @@ VI_PAR_CQA_QUOTE = {
                           "obtained by subtracting the clearance credited to anion exchange and "
                           "virus filtration from the cumulative requirement"),
 }
-_VI_PAR_GENERAL_QUOTE = ("For aggregate and for acidic variants the criterion is the drug "
+_VI_PAR_GENERAL_QUOTE = ("For acidic variants the criterion is the drug "
                          "substance specification given in")
 
 
@@ -2870,13 +2907,7 @@ def vi_proven_acceptable_ranges(doc_id, file_name):
     for i, r in enumerate(par.to_dict("records"), 1):
         cqa, param, unit = r["CQA"], r["Parameter"], (r["Unit"] or "")
         char = f"{r['Char. range']} {unit}".strip()
-        viral = "LRF" in cqa
-        basis = (
-            "Step-level required log-reduction, back-calculated from the cumulative XMuLV "
-            "requirement minus the clearance credited to anion exchange and small-virus retentive "
-            "filtration (modular viral-safety claim under ICH Q5A(R2))."
-            if viral else
-            "Drug-substance specification for the attribute, applied at the outlet of the step.")
+        basis = par_basis_text(VIUO, cqa)
         out.append(S.ProvenAcceptableRange(
             par_id=f"{doc_id}-PAR{i:02d}", unit_operation=VIUO_NAME,
             quality_attribute=cqa, parameter=param,
@@ -3584,8 +3615,7 @@ def cx_report_sections(doc_id, file_name, report):
               "intermediate and is not a failed acceptance criterion; the step is judged on its "
               "clearance factor.",
            "Proven acceptable ranges",
-           "This is the correct result for an intermediate that is not the drug substance, and it "
-           "should not be read as a failed acceptance criterion"),
+           "That corner is therefore outside the operating region this step claims"),
         st(8, "The further host cell protein clearance is credited to anion exchange in PCR-008 and "
               "the cumulative position across the train is consolidated in PCMR-001.",
            "Executive summary",
@@ -3607,18 +3637,19 @@ def cx_design_spaces(doc_id, file_name):
         parameters=["param:cex_load", "param:cex_wash_cond", "param:cex_elution_ph",
                     "param:cex_stop_collect"],
         quality_attributes_constrained=["attr:aggregates_hmw"],
-        definition="The whole of the characterized four-dimensional region in protein load, "
-                   "load/wash conductivity, elution buffer pH and the stop collect criterion. "
-                   "Aggregate is the governing attribute and stays within the drug-substance "
-                   "limit at every point of the region, including the worst corner (all four "
-                   "parameters at their upper edges). Pool host cell protein does not bound the "
-                   "region: it is an in-process value judged against a step-level ceiling "
-                   "back-calculated from the anion-exchange clearance factor, not against the "
-                   "drug-substance criterion.",
+        definition="The part of the characterized four-dimensional region in protein load, "
+                   "load/wash conductivity, elution buffer pH and the stop collect criterion in "
+                   "which both governed attributes stay within their in-process limits. Aggregate "
+                   "is the governing attribute, and its worst corner (all four parameters at their "
+                   "upper edges) lies outside the region: it is below the drug-substance limit but "
+                   "above the in-process limit, which is that limit divided by an assurance margin "
+                   "because no downstream step removes aggregate. Pool host cell protein is judged "
+                   "against a limit carried back from the drug-substance criterion through the "
+                   "anion-exchange clearance.",
         source_references=[ref(doc_id, file_name, "Design space", "Design space",
-                               "The design space for this step is the whole of the characterized "
-                               "four-dimensional region, because the governing attribute stays "
-                               "within its acceptance criterion at every point in that region")],
+                               "The design space for this step is the part of the characterized "
+                               "four-dimensional region in which both governed attributes stay "
+                               "within their in-process limits")],
         metadata=meta())]
 
 
@@ -3635,13 +3666,12 @@ def cx_design_spaces(doc_id, file_name):
 # --------------------------------------------------------------------------- #
 CX_PAR_SEC = "Proven acceptable ranges"
 CX_PAR_QUOTE = {
-    "Aggregates (HMW, %)": ("For aggregate the two analyses give the same answer for all four "
-                            "parameters, and that answer is the full characterization range in "
-                            "each case"),
-    "Pool HCP (ng/mg)": ("For host cell protein the analysis returns no acceptable range for any "
-                         "parameter"),
+    "Aggregates (HMW, %)": ("For aggregate the two analyses separate, and the separation is the "
+                            "informative part"),
+    "Pool HCP (ng/mg)": ("For host cell protein the analysis returns a range for every parameter"),
 }
-_CX_PAR_GENERAL_QUOTE = ("The acceptance basis is the drug substance specification in both cases")
+_CX_PAR_GENERAL_QUOTE = ("the criterion applied to each is the in-process limit for this "
+                         "step rather than the criterion the drug substance itself must meet")
 
 
 def cx_proven_acceptable_ranges(doc_id, file_name):
@@ -3676,7 +3706,7 @@ def cx_proven_acceptable_ranges(doc_id, file_name):
             else r["PAR (set-point)"],
             par_nor_propagated=f"{r['PAR (NOR)']} {unit}".strip() if not hcp
             else r["PAR (NOR)"],
-            acceptance_basis=basis,
+            acceptance_basis=par_basis_text(CXUO, cqa),
             source_references=[ref(doc_id, file_name, f"{doc_id}_sec_par", CX_PAR_SEC,
                                    CX_PAR_QUOTE.get(cqa, _CX_PAR_GENERAL_QUOTE))],
             metadata=meta()))
@@ -3729,7 +3759,7 @@ CX_RHET_SPANS = [
     ("R15", "justification", "Response-surface models",
      "the change should be read as better resolution and not as a different result", [], None, None),
     ("R16", "claim", "Design space",
-     "The design space for this step is the whole of the characterized four-dimensional region",
+     "The design space for this step is the part of the characterized four-dimensional region in",
      ["R12", "R14"], None, None),
     ("R17", "cross_step_credit", "Design space",
      "What this step must deliver instead is a clearance factor, and a pool that anion exchange "
@@ -3738,11 +3768,10 @@ CX_RHET_SPANS = [
      "Three bounds apply to this claim, and none of them is removed by the data in this report",
      [], None, "R16"),
     ("R19", "claim", "Proven acceptable ranges",
-     "For aggregate the two analyses give the same answer for all four parameters, and that answer "
-     "is the full characterization range in each case", [], None, None),
+     "For aggregate the two analyses separate, and the separation is the informative part",
+     [], None, None),
     ("R20", "bounded_conclusion", "Proven acceptable ranges",
-     "This is the correct result for an intermediate that is not the drug substance, and it should "
-     "not be read as a failed acceptance criterion", [], None, None),
+     "That corner is therefore outside the operating region this step claims", [], None, None),
     ("R21", "deferral", "Proven acceptable ranges",
      "This conclusion is conditional on the anion exchange clearance factor holding, which is a "
      "claim of PCR-008 and not of this report", [], None, None),
@@ -3774,8 +3803,7 @@ CX_RHET_SPANS = [
      "The excursion accordingly produced no aggregate signal the study could detect, and the run "
      "was retained", [], None, None),
     ("R31", "restatement", "Conclusions",
-     "The design space is the whole characterized region, because the governing attribute stays "
-     "within its criterion at every corner of it", [], "R16", None),
+     "bounded by the in-process limits on pool aggregate and pool host cell protein", [], "R16", None),
     ("R32", "bounded_conclusion", "Conclusions",
      "These conclusions hold over the ranges studied, for the scale-down model as qualified, and "
      "for load material of the character used here", [], None, None),
@@ -4376,8 +4404,7 @@ AX_PAR_CQA_QUOTE = {
     "MVM LRF (log₁₀)": ("whereas for the two viral clearance responses the criterion is the step "
                         "contribution back-calculated from the cumulative requirement"),
 }
-_AX_PAR_GENERAL_QUOTE = ("Each characterized parameter is proven acceptable across its entire "
-                         "characterization range, for every quality attribute the step governs")
+_AX_PAR_GENERAL_QUOTE = ("Neither viral attribute is restricted anywhere")
 
 
 def ax_proven_acceptable_ranges(doc_id, file_name):
@@ -4405,7 +4432,7 @@ def ax_proven_acceptable_ranges(doc_id, file_name):
             characterization_range=char,
             par_at_setpoint=f"{r['PAR (set-point)']} {unit}".strip(),
             par_nor_propagated=f"{r['PAR (NOR)']} {unit}".strip(),
-            acceptance_basis=basis,
+            acceptance_basis=par_basis_text(AXUO, cqa),
             source_references=[ref(doc_id, file_name, f"{doc_id}_sec_par", AX_PAR_SEC,
                                    AX_PAR_CQA_QUOTE.get(cqa, _AX_PAR_GENERAL_QUOTE))],
             metadata=meta()))
@@ -4464,7 +4491,7 @@ AX_RHET_SPANS = [
     ("R15", "bounded_conclusion", "Design space",
      "Three bounds apply to the design space claim.", [], None, None),
     ("R16", "claim", "Proven acceptable ranges",
-     "The two analyses coincide in every row, and both equal the characterization range",
+     "Neither viral attribute is restricted anywhere",
      [], None, None),
     ("R17", "bounded_conclusion", "Proven acceptable ranges",
      "That result is not a statement that any combination of extremes is acceptable",
@@ -5004,10 +5031,11 @@ def vf_design_spaces(doc_id, file_name):
         design_space_id="ds:vf", unit_operation=VFUO_NAME,
         parameters=["param:vf_filtration_volume", "param:vf_pressure"],
         quality_attributes_constrained=["attr:lrv_mvm", "attr:lrv_xmulv"],
-        definition="The whole characterized rectangle in volumetric load and filtration pressure: "
-                   "everywhere inside the characterized ranges the response-surface model predicts "
-                   "an MVM log-reduction at or above the back-calculated step requirement, and the "
-                   "XMuLV requirement is met with a wide margin. The region is effectively "
+        definition="The part of the characterized rectangle in volumetric load and filtration "
+                   "pressure over which the response-surface model predicts an MVM log-reduction at "
+                   "or above the required step contribution. Volumetric load is bounded below the "
+                   "top of its characterized range, which is the parvovirus breakthrough edge, and "
+                   "the XMuLV requirement is met with a wide margin everywhere. The region is effectively "
                    "one-dimensional — volumetric load is the only resolved effect, and filtration "
                    "pressure is bounded because ICH Q5A(R2) ties the clearance claim to the "
                    "conditions under which it was demonstrated, not because an effect was measured. "
@@ -5034,8 +5062,7 @@ VF_PAR_CQA_QUOTE = {
     "XMuLV LRF (log₁₀)": ("Figure 4 shows the corresponding picture for XMuLV, where the response "
                           "is flat and the margin to the limit is large throughout"),
 }
-_VF_PAR_GENERAL_QUOTE = ("Every proven acceptable range in Table 15 spans the full characterization "
-                         "range of its parameter, under both analyses.")
+_VF_PAR_GENERAL_QUOTE = ("The result that matters is the ceiling on filtration volume")
 
 
 def vf_proven_acceptable_ranges(doc_id, file_name):
@@ -5055,10 +5082,7 @@ def vf_proven_acceptable_ranges(doc_id, file_name):
             characterization_range=f"{r['Char. range']} {unit}".strip(),
             par_at_setpoint=f"{r['PAR (set-point)']} {unit}".strip(),
             par_nor_propagated=f"{r['PAR (NOR)']} {unit}".strip(),
-            acceptance_basis=(
-                "Step-level required log-reduction, back-calculated from the cumulative "
-                "viral-clearance requirement minus the clearance credited to the other orthogonal "
-                "steps (modular viral-safety claim under ICH Q5A(R2))."),
+            acceptance_basis=par_basis_text(VFUO, cqa),
             source_references=[ref(doc_id, file_name, f"{doc_id}_sec_par", VF_PAR_SEC,
                                    VF_PAR_CQA_QUOTE.get(cqa, _VF_PAR_GENERAL_QUOTE))],
             metadata=meta()))
@@ -5149,10 +5173,10 @@ VF_RHET_SPANS = [
      "measured against, so the acceptance basis is derived below before any range is claimed.",
      [], None, None),
     ("R28", "claim", "Proven acceptable ranges",
-     "no parameter of this step has an edge of failure inside its characterized range",
+     "this step does have an edge of failure inside the range it was studied over",
      ["R29"], None, None),
     ("R29", "justification", "Proven acceptable ranges",
-     "The two analyses agree for all four combinations", [], None, None),
+     "The result that matters is the ceiling on filtration volume", [], None, None),
     ("R30", "bounded_conclusion", "Proven acceptable ranges",
      "Because the proven acceptable ranges were established against a step requirement that is "
      "itself derived from the clearance credited elsewhere, they are only valid while that credit "

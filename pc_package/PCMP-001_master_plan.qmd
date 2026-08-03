@@ -85,6 +85,23 @@ n_runs_scr = sum(doe_runs(k, "screening") for k in DOE_KEYS)
 n_runs_rsm = sum(doe_runs(k, "rsm") for k in DOE_KEYS)
 n_runs_total = n_runs_scr + n_runs_rsm
 
+# --- in-process acceptance criteria: the campaign-wide rules and a worked chain ---------
+# Nothing here is typed. The sigma multiple and the assay allowance come from the config
+# block that the analysis itself reads, and the host cell protein chain is read from the
+# nominal train, so this section cannot drift from the criteria the studies apply.
+_IPC = CFG.ipc_limits
+ipc_sigma = _IPC["capability_alert_sigma"]
+ipc_assay = _IPC["viral_assay_allowance"]
+_PS = csv("process_summary.csv").set_index("step")
+hcp_ds_limit = float(cqa_reg[cqa_reg["key"] == "hcp"].iloc[0]["acc_high"])
+cex_hcp_fold = float(_PS.loc[7, "hcp_clearance_fold"])
+aex_hcp_fold = float(_PS.loc[8, "hcp_clearance_fold"])
+pa_hcp_ceiling = hcp_ds_limit * cex_hcp_fold * aex_hcp_fold
+pa_hcp_margin = (_IPC["steps"]["protein_a"]["pool_hcp_ng_mg"]["from_ds_backcalc"]["margin"])
+pa_hcp_ipc = D.effective_acceptance("protein_a", "pool_hcp_ng_mg")[1]
+pa_hcp_nominal = float(_PS.loc[5, "pool_hcp_ng_mg"])
+n_ipc = sum(len(v) for v in _IPC["steps"].values())
+
 # --- tables ---------------------------------------------------------------------------
 cqa_tbl = cqas_by_keys(list(cqa_reg["key"]))
 cqa_tbl.insert(1, "Set by", [UNIT_OP_TITLES[s] for s in cqa_reg["set_by"]])
@@ -574,6 +591,71 @@ is adequate, whether an operating region is acceptable, and how each parameter i
 classified. The numeric limits belong to the individual plan, because they depend on the
 attributes the step governs and on the precision of the assays that measure them.
 
+## Which criterion a step is judged against {#sec-ipc}
+
+Before any of those four decisions can be made, the criterion itself has to be fixed, and for
+most steps it is not the drug substance specification. The specifications in @tbl-cqa apply to
+the drug substance. An intermediate pool is not the drug substance, and judging one against
+those specifications gives an answer that is wrong in both directions. The capture pool
+carries about `{python} f"{pa_hcp_nominal:,.0f}"` ng/mg host cell protein against a drug
+substance limit of `{python} f"{hcp_ds_limit:g}"` ng/mg, so the comparison condemns a step
+that is performing normally. At the last step the same comparison is too generous, because it
+leaves no margin for the variation of a batch that has nowhere left to be cleaned.
+
+Each step is therefore given an in-process limit, and the campaign uses one of three
+procedures to set it. Which procedure applies depends on what the downstream train does to
+the attribute, not on the preference of the author.
+
+The first procedure is backward calculation from the drug substance specification. It is the
+default, and it applies to every attribute that a later step still clears. The specification is carried back
+through the clearance that the downstream steps deliver in the nominal train, which gives the
+concentration at this step from which the rest of the process can still reach the
+specification. That concentration is then divided by an assurance margin. The margin is not
+decoration. A limit set at the undivided ceiling would leave the drug substance dependent on
+every downstream step delivering its nominal clearance exactly, which is a break-even point
+and not a control.
+
+Host cell protein at the capture step is the worked example. The drug substance limit is
+`{python} f"{hcp_ds_limit:g}"` ng/mg. Cation exchange clears a factor of
+`{python} f"{cex_hcp_fold:.1f}"` and anion exchange a further
+`{python} f"{aex_hcp_fold:.1f}"`, so a capture pool at
+`{python} f"{pa_hcp_ceiling:,.0f}"` ng/mg would still reach the specification if both
+downstream steps performed exactly as they do in the nominal train. Dividing by an assurance
+margin of `{python} f"{pa_hcp_margin:g}"` gives the in-process limit of
+`{python} f"{pa_hcp_ipc:,.0f}"` ng/mg that PCP-005 and PCR-005 apply. The margin is chosen so
+that the limit also sits above the nominal pool and above the design centre of the study,
+because a limit below either would put the process outside its own limit while running at its
+set-point.
+
+The second procedure is a capability alert limit. Where no later step modifies the attribute,
+there is no clearance
+to calculate back through. The drug substance specification already applies at the step that
+forms the attribute, and for the glycans and the charge variants it is far wider than the
+spread the process itself shows, so it would not bound the step at all. The limit is then set
+from demonstrated capability, at the mean plus `{python} f"{ipc_sigma:g}"` standard
+deviations of the commercial-scale simulation. This is an alert limit and not a
+specification. A batch beyond it is investigated, not rejected.
+
+The third procedure is the modular clearance claim. A viral clearance step is judged on the
+log reduction claimed
+for it, less an allowance of `{python} f"{ipc_assay:g}"` log~10~ for the variability of the
+spiked clearance assay. Where the claim itself is credited from this process's own studies
+rather than from platform data, the step-level requirement is instead the cumulative
+requirement less the clearance credited to the other orthogonal steps, which is the modular
+calculation described in @sec-stats.
+
+`{python} f"{n_ipc}"` in-process limits are set across the campaign by these three
+procedures. None of them is a typed number. Each is a rule evaluated against the seeded
+process model, so a change to the process or to a clearance factor moves the limits with it,
+and the plans and reports for the individual steps state the value each rule produces
+together with the procedure that produced it. Two consequences follow and are stated here
+because they surprise readers who expect the drug substance specification everywhere. An
+in-process limit is tighter than the specification it derives from, so a proven acceptable
+range measured against it can be narrower than the range that was characterized. It follows
+that the design space for a step is generally smaller than its characterized region, because
+a parameter with a narrowed range is a parameter some of whose characterized settings are
+not acceptable.
+
 A scale-down model is qualified when the performance and quality attributes it is required
 to predict are statistically indistinguishable from the commercial-scale data at the target
 condition. A difference does not by itself disqualify a model: where it is explained by a
@@ -590,12 +672,14 @@ terms is reported as such, because a null result bounds how much of the observed
 the parameters studied can account for.
 
 An operating region is acceptable when three conditions hold together. Every attribute the
-step governs is predicted to stay inside its acceptance criterion across the region, that
-prediction holds with the other parameters of the step varying within their normal operating
-ranges, and the worst-case corner of the region (identified from the signs of the model
-coefficients) also satisfies the criteria. A region that meets these conditions is claimed
-only inside the characterization ranges that produced it, and it remains a statement about
-mean levels until the capability analysis converts it into a statement about batches.
+step governs is predicted to stay inside the in-process limit set for it under @sec-ipc
+across the region, that prediction holds with the other parameters of the step varying within
+their normal operating ranges, and the worst-case corner of the region (identified from the
+signs of the model coefficients) also satisfies those limits. Where the worst corner does not,
+the region is the part of the characterized space that does, and the report states how much
+of the characterized space that is. A region defined this way is claimed only inside the
+characterization ranges that produced it, and it remains a statement about mean levels until
+the capability analysis converts it into a statement about batches.
 
 Capability is estimated as described in @sec-stats. This plan does not set one minimum
 capability index for the whole campaign. An acceptable value depends on the criticality of

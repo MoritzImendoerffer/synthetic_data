@@ -402,6 +402,81 @@ def acceptance_for(key, resp):
 
 
 # --------------------------------------------------------------------------------------
+# In-process acceptance criteria — the limit a step's OWN output must meet.
+#
+# `acceptance_for` above returns the DRUG-SUBSTANCE criterion and keeps doing so, because
+# the reports quote it as exactly that (PCR-007 builds its clearance ceiling from it). An
+# intermediate, though, must be judged against a criterion that applies to it: the Protein A
+# pool carries ~9100 ng/mg host cell protein against a drug-substance limit of 100 ng/mg,
+# and comparing the two made the PAR analysis report "none (set-point breaches)" for every
+# host cell protein row of PCR-005 and PCR-007 — which reads as a failing step and is not
+# what it means. The criteria are configured in `ipc_limits:` and are computed here from the
+# seeded outputs, never hard-coded. Only the analysis functions below use them.
+# --------------------------------------------------------------------------------------
+def _ipc_backcalc(key, spec):
+    """Ceiling carried BACK from the drug-substance criterion through the clearance the
+    downstream steps deliver in the nominal train, then divided by the assurance margin.
+
+    A limit set at the undivided ceiling would leave the drug substance dependent on every
+    downstream step delivering its nominal clearance exactly, so the margin is what makes it
+    an in-process control rather than a break-even point."""
+    ds = float(cqa_reg[cqa_reg["key"] == spec["cqa"]].iloc[0]["acc_high"])
+    ps = csv("process_summary.csv").set_index("step")
+    down = ps[ps.index > CFG.unit_op(key).step]
+    col = spec.get("clearance_column")
+    fold = float(down[col].dropna().prod()) if col in down.columns else 1.0
+    ceiling = ds * (fold if fold > 0 else 1.0)
+    inc = spec.get("increase_column")
+    if inc and inc in down.columns:
+        # attributes the downstream train ADDS to (viral inactivation raises aggregate) eat
+        # into the ceiling this step may hand on
+        ceiling -= float(down[inc].dropna().sum())
+    return ceiling / float(spec.get("margin", 1.0))
+
+
+def ipc_limit(key, resp):
+    """(lo, hi, spec_type) in-process criterion for a step's response, or None if the step
+    has no in-process limit configured for it."""
+    cfg = CFG.ipc_limits
+    if not cfg:
+        return None
+    ent = (cfg.get("steps") or {}).get(key, {}).get(resp)
+    if not ent:
+        return None
+    base = acceptance_for(key, resp)
+    lo = base[0] if base else 0.0
+    stype = base[2] if base else "upper"
+    if "from_modular_claim" in ent:
+        col, _ = VIRAL_COL[resp]
+        vc = csv("viral_clearance.csv")
+        claim = float(vc[vc["step"] == VIRAL_STEP_ROW[key]].iloc[0][col])
+        return claim - float(cfg.get("viral_assay_allowance", 0.0)), float("inf"), "lower"
+    if "from_capability" in ent:
+        row = csv("capability.csv").set_index("key").loc[ent["from_capability"]]
+        hi = float(row["mean"]) + float(cfg.get("capability_alert_sigma", 2.0)) * float(row["sd"])
+        return lo, hi, stype
+    if "from_ds_backcalc" in ent:
+        return lo, _ipc_backcalc(key, ent["from_ds_backcalc"]), stype
+    if "max" in ent:
+        return lo, float(ent["max"]), stype
+    if "min" in ent:
+        return float(ent["min"]), float("inf"), "lower"
+    return None
+
+
+def effective_acceptance(key, resp):
+    """The criterion the PAR analysis judges a step against: its in-process limit where one
+    is configured, otherwise the drug-substance criterion."""
+    return ipc_limit(key, resp) or acceptance_for(key, resp)
+
+
+def acceptance_basis(key, resp):
+    """'in-process' or 'drug substance' — which criterion `effective_acceptance` returned.
+    Documents use this to say which yardstick a PAR was measured against."""
+    return "in-process" if ipc_limit(key, resp) else "drug substance"
+
+
+# --------------------------------------------------------------------------------------
 # Public prediction API.
 #
 # Documents need to evaluate a fitted response-surface model at settings of their own
@@ -461,10 +536,11 @@ def predict(key, resp, kind="rsm", coded=None, natural=None, superseded=False):
 def meets_acceptance(key, resp, values):
     """Boolean array: does each predicted value meet this response's acceptance criterion?
 
-    Uses `acceptance_for(key, resp)`, so viral-clearance responses are judged against the
-    back-calculated STEP floor rather than the cumulative requirement. Returns None when the
-    response maps to no acceptance criterion (e.g. step yield)."""
-    acc = acceptance_for(key, resp)
+    Uses `effective_acceptance(key, resp)`: the step's in-process limit where one is
+    configured, otherwise the drug-substance criterion (and for viral-clearance responses
+    the back-calculated STEP floor rather than the cumulative requirement). Returns None
+    when the response maps to no acceptance criterion (e.g. step yield)."""
+    acc = effective_acceptance(key, resp)
     if acc is None:
         return None
     lo, hi, stype = acc
@@ -535,8 +611,11 @@ def par_at_design_centre(key, resp, factor, n_grid=201):
 
     The function name says design centre because the *code* should be honest about what it
     computes; the *documents* carry the discrepancy.
+
+    The criterion is `effective_acceptance`: the step's in-process limit where one is
+    configured, otherwise the drug-substance criterion.
     """
-    acc = acceptance_for(key, resp)
+    acc = effective_acceptance(key, resp)
     if acc is None:
         return None
     lo, hi, stype = acc
@@ -569,8 +648,9 @@ def par_nor_propagated(key, resp, factor, n_grid=PAR_GRID, n_mc=PAR_MC_N):
 
     The PAR is the range of `factor` over which the 95% predictive interval of the CQA
     (from the NOR Monte-Carlo of the fitted model) stays within acceptance — a robustness
-    criterion, so it is narrower than the at-set-point PAR."""
-    acc = acceptance_for(key, resp)
+    criterion, so it is narrower than the at-set-point PAR. The criterion is
+    `effective_acceptance`: the step's in-process limit where one is configured."""
+    acc = effective_acceptance(key, resp)
     if acc is None:
         return None
     lo, hi, stype = acc
@@ -594,6 +674,39 @@ def par_nor_propagated(key, resp, factor, n_grid=PAR_GRID, n_mc=PAR_MC_N):
             "med": med, "p_lo": p_lo, "p_hi": p_hi, "p_in": p_in, "par_coded": par_c,
             "par_nat": None if par_c is None else (_natural(par_c[0], key, factor),
                                                    _natural(par_c[1], key, factor))}
+
+
+def design_space_grid(key, n=11):
+    """How much of the characterized region actually meets every criterion this step governs.
+
+    Once a step has in-process limits, the design space stops being "the whole characterized
+    region" as a matter of course: a parameter whose PAR is narrower than its characterization
+    range is, by definition, a parameter some of whose characterized settings are unacceptable.
+    This evaluates the fitted response-surface models on an evenly spaced grid over the coded
+    cube and reports what survives, so a report can state the size of its region from the data
+    instead of asserting it.
+
+    Returns a dict with ``fraction`` (share of grid points inside every criterion),
+    ``per_response`` (share each response alone rejects) and ``binding`` (the response that
+    rejects most). Uses mean predictions, matching the design-space convention of the reports.
+    """
+    fs = rsm_factors(key)
+    grids = np.meshgrid(*[np.linspace(-1, 1, n)] * len(fs), indexing="ij")
+    coded = pd.DataFrame({f: g.ravel() for f, g in zip(fs, grids)})
+    ok = np.ones(len(coded), dtype=bool)
+    per = {}
+    for resp in responses(key):
+        acc = effective_acceptance(key, resp)
+        if acc is None:
+            continue
+        lo, hi, stype = acc
+        y = _predict_points(fit(key, "rsm", resp), coded)
+        good = _in_spec(y, lo, hi, stype)
+        per[resp] = float(1.0 - good.mean())
+        ok &= good
+    binding = max(per, key=per.get) if per else None
+    return {"fraction": float(ok.mean()), "per_response": per, "binding": binding,
+            "n_points": int(len(coded))}
 
 
 def governing_factor(key, resp):
@@ -622,17 +735,22 @@ def par_table(key):
     units = {p.key: p.unit for p in CFG.unit_op(key).parameters}
     rows = []
     for resp in responses(key):
-        if acceptance_for(key, resp) is None:
+        acc = effective_acceptance(key, resp)
+        if acc is None:
             continue
+        # the criterion the two PAR columns were measured against, so the table does not
+        # leave the reader to guess whether it was the step's limit or the drug substance's
+        lo, hi, stype = acc
+        crit = f"≥ {lo:.3g}" if stype == "lower" else f"≤ {hi:.3g}"
         for factor in rsm_factors(key):
             p = CFG.unit_op(key).param(factor)
             ps = par_at_design_centre(key, resp, factor)
             pn = par_nor_propagated(key, resp, factor)
             rows.append([RESP_LABEL.get(resp, resp), names.get(factor, factor),
                          f"{p.prange[0]:g}–{p.prange[1]:g}", units.get(factor, ""),
-                         _par_str(ps["par_nat"]), _par_str(pn["par_nat"])])
+                         crit, _par_str(ps["par_nat"]), _par_str(pn["par_nat"])])
     return pd.DataFrame(rows, columns=["CQA", "Parameter", "Char. range", "Unit",
-                                       "PAR (set-point)", "PAR (NOR)"])
+                                       "Criterion", "PAR (set-point)", "PAR (NOR)"])
 
 
 def fig_par(key, resp, factor):

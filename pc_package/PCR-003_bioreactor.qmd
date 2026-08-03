@@ -248,21 +248,32 @@ for _r in resps:
     nor_lo_pred[_r], nor_hi_pred[_r] = float(_y.min()), float(_y.max())
 
 gal_acc_hi = D.acceptance_for(UO, "galactosylation")[1]
+# The criterion that actually bounds this step is its in-process limit, not the drug substance
+# criterion: the glycans are not modified downstream, so the limit is a capability alert limit
+# (config: ipc_limits). It is the tighter of the two and it is what the region is drawn against.
+ipc_hi = {r: D.effective_acceptance(UO, r)[1] for r in resps}
+gal_ipc_hi = ipc_hi["galactosylation"]
 gal_pred_max = cube_hi["galactosylation"]
-gal_exceed = gal_pred_max - gal_acc_hi
+gal_exceed = gal_pred_max - gal_ipc_hi
+
+DSG = D.design_space_grid(UO)
+ds_pct = 100.0 * DSG["fraction"]
+ds_reject = {r: 100.0 * v for r, v in DSG["per_response"].items()}
+ds_binding = DSG["binding"]
+ds_binding_name = D.RESP_LABEL.get(ds_binding, ds_binding)
 
 
 def _edge_temp():
     xs = np.linspace(-1, 1, 4001)
     cd = pd.DataFrame({f: (xs if f == "temperature" else -np.ones_like(xs)) for f in rsm_facs})
     y = _pred("galactosylation", cd)
-    idx = np.flatnonzero(y > gal_acc_hi)
+    idx = np.flatnonzero(y > gal_ipc_hi)
     return float(D.to_natural(UO, "temperature", xs[idx.min()])) if idx.size else float("nan")
 
 
 gal_edge_temp = _edge_temp()
 gal_edge_headroom = rng_hi("temperature") - gal_edge_temp
-gal_nor_headroom = gal_acc_hi - nor_hi_pred["galactosylation"]
+gal_nor_headroom = gal_ipc_hi - nor_hi_pred["galactosylation"]
 
 # ---- proven acceptable ranges -----------------------------------------------
 par_tbl = D.par_table(UO)
@@ -270,6 +281,12 @@ n_par_rows = len(par_tbl)
 n_par_full_sp = int((par_tbl["PAR (set-point)"] == par_tbl["Char. range"]).sum())
 n_par_full_nor = int((par_tbl["PAR (NOR)"] == par_tbl["Char. range"]).sum())
 n_par_cqa = par_tbl["CQA"].nunique()
+# which parameter the stricter analysis bounds most often, read off the table rather than
+# stated by hand, so the sentence that names it cannot drift from the table above it
+_nor_b = par_tbl[par_tbl["PAR (NOR)"] != par_tbl["Char. range"]]["Parameter"].value_counts()
+_sp_b = par_tbl[par_tbl["PAR (set-point)"] != par_tbl["Char. range"]]["Parameter"].value_counts()
+par_nor_worst, par_nor_worst_n = _nor_b.index[0], int(_nor_b.iloc[0])
+par_sp_worst, par_sp_worst_n = _sp_b.index[0], int(_sp_b.iloc[0])
 
 # ---- deviations --------------------------------------------------------------
 dev_tbl = dev_facts(DOC)
@@ -358,14 +375,16 @@ the predictive model and the basis of the design space. Its coefficients of dete
 range from `{python} f"{rsm_r2_min:.2f}"` to `{python} f"{rsm_r2_max:.2f}"`, and no
 response shows significant lack of fit against the centre-point pure error.
 
-One corner of the characterized region is excluded from the design space. Where culture
+The design space is `{python} f"{ds_pct:.0f}"` % of the characterized region and not all of
+it. The attributes are judged against the in-process limits for this step, which for the
+glycans and the charge variants are capability alert limits and are tighter than the drug
+substance criteria. The largest single exclusion is a galactosylation edge. Where culture
 pH, dissolved CO₂ and culture duration are all at their lower characterization edges and
 culture temperature is at or above `{python} f"{gal_edge_temp:.1f}"` °C, the model
-predicts galactosylation above its upper acceptance limit. The largest predicted
-exceedance anywhere in the region is `{python} f"{gal_exceed:.2f}"` percentage points.
-Everywhere else in the characterized region all `{python} n_resp` attributes are predicted
-within acceptance. Within the normal operating ranges (NOR) the highest predicted
-galactosylation is `{python} f"{nor_hi_pred['galactosylation']:.1f}"` %, which leaves
+predicts galactosylation above its limit, and the largest predicted exceedance anywhere in
+the characterized region is `{python} f"{gal_exceed:.2f}"` percentage points. Within the
+normal operating ranges (NOR) the highest predicted galactosylation is
+`{python} f"{nor_hi_pred['galactosylation']:.1f}"` %, which leaves
 `{python} f"{gal_nor_headroom:.1f}"` percentage points of headroom to the limit.
 
 Commercial-scale capability was estimated from `{python} f"{n_mc:,}"` simulated batches
@@ -1156,25 +1175,35 @@ governed by exposure time and by surface charge.
 
 # Design space
 
-The design space for this step is the characterized region in the four response-surface
-factors (culture pH, culture temperature, culture duration and dissolved CO₂), with one
-corner excluded. Osmolality is held within its characterized range, and every other
-parameter of the step within the range given in @tbl-params. Within that region the fitted
-response-surface models predict mean attribute levels inside acceptance for all
-`{python} n_resp` responses.
+The design space for this step is the part of the characterized region in the four
+response-surface factors (culture pH, culture temperature, culture duration and dissolved
+CO₂) in which every attribute this step governs stays within its in-process limit.
+Osmolality is held within its characterized range, and every other parameter of the step
+within the range given in @tbl-params. The region is smaller than the characterized cube.
+Evaluated on an evenly spaced grid over the four factors, the fitted response-surface models
+predict mean levels inside every limit at `{python} f"{ds_pct:.0f}"` % of the grid points,
+and the design space is that part.
 
-The excluded corner is a galactosylation edge of failure, and it bounds the claim made
-above. Where culture pH is at `{python} f"{rng_lo('pH'):.2f}"`, dissolved CO₂ at
-`{python} f"{rng_lo('co2'):.0f}"` mmHg and culture duration at
-`{python} f"{rng_lo('duration'):.0f}"` days, all three at their lower characterization
-edges, the model predicts galactosylation above its upper limit of
-`{python} f"{gal_acc_hi:.0f}"` % once culture temperature reaches
+The criterion applied here is the in-process limit for the step and not the drug substance
+criterion. The glycans and the charge variants are not modified after the bioreactor, so the
+drug substance criterion already applies at this step, and it is far wider than the spread
+the process itself shows. The binding control is therefore the demonstrated capability, and
+the limits used are the capability alert limits given in @tbl-par. For galactosylation that
+is `{python} f"{gal_ipc_hi:.1f}"` % against a drug substance criterion of
+`{python} f"{gal_acc_hi:.0f}"` %.
+
+`{python} ds_binding_name` is the attribute that removes most of the cube, rejecting
+`{python} f"{ds_reject[ds_binding]:.0f}"` % of the grid points on its own. The region it
+takes out is the low pH corner. Where culture pH is at
+`{python} f"{rng_lo('pH'):.2f}"`, dissolved CO₂ at `{python} f"{rng_lo('co2'):.0f}"` mmHg
+and culture duration at `{python} f"{rng_lo('duration'):.0f}"` days, all three at their
+lower characterization edges, the model predicts galactosylation above
+`{python} f"{gal_ipc_hi:.1f}"` % once culture temperature reaches
 `{python} f"{gal_edge_temp:.1f}"` °C. The exceedance grows to
-`{python} f"{gal_exceed:.2f}"` percentage points at the extreme corner. The affected
-volume is small, since it requires three factors at an edge simultaneously and then
-occupies only the top `{python} f"{gal_edge_headroom:.1f}"` °C of the temperature range at
-that corner. The corner is nevertheless excluded, and movement into it would be a change
-requiring prior assessment.
+`{python} f"{gal_exceed:.2f}"` percentage points at the extreme corner, and that corner
+occupies the top `{python} f"{gal_edge_headroom:.1f}"` °C of the temperature range. The
+other four attributes remove further parts of the cube, and none of them is negligible.
+Movement outside the region would be a change requiring prior assessment.
 
 The principal planes of the region are culture pH against culture duration and culture
 temperature against dissolved CO₂. The first plane carries the galactosylation and
@@ -1183,19 +1212,20 @@ carries the acidic variant gradient and the temperature dependence of high manno
 @fig-contours and @fig-contours-tc are the graphical form of the region on these two
 planes.
 
-The worst case that the region must satisfy is not the same corner for every attribute.
-For galactosylation it is low pH with high temperature, short duration and low dissolved
-CO₂, which is the excluded corner, and for high mannose it is high pH with low
-temperature, where the predicted level reaches
-`{python} f"{cube_hi['high_mannose']:.2f}"` % against an upper limit of
-`{python} f"{D.acceptance_for(UO,'high_mannose')[1]:.0f}"` %. For aggregate it is high pH
-with long duration, where the predicted level reaches
+The worst case is not the same corner for every attribute, and this is why the region has to
+be stated as a region and not as four independent ranges. For galactosylation the worst
+corner is low pH with high temperature, short duration and low dissolved CO₂. For high
+mannose it is high pH with low temperature, where the predicted level reaches
+`{python} f"{cube_hi['high_mannose']:.2f}"` % against an in-process limit of
+`{python} f"{ipc_hi['high_mannose']:.2f}"` %. For aggregate it is high pH with long
+duration, where the predicted level reaches
 `{python} f"{cube_hi['aggregates_hmw']:.2f}"` % against a limit of
-`{python} f"{D.acceptance_for(UO,'aggregates_hmw')[1]:.0f}"` %. For afucosylation the
-binding case is the lower limit, and the minimum predicted level anywhere in the region is
+`{python} f"{ipc_hi['aggregates_hmw']:.2f}"` %. Each of these worst corners sits outside its
+limit, so each is outside the design space, and they are excluded in different parts of the
+cube. For afucosylation the binding case at the low end is the drug substance lower limit,
+and the minimum predicted level anywhere in the characterized region is
 `{python} f"{cube_lo['afucosylation']:.2f}"` % against a lower limit of
-`{python} f"{D.acceptance_for(UO,'afucosylation')[0]:.0f}"` %. Each of these worst cases
-sits inside acceptance.
+`{python} f"{D.acceptance_for(UO,'afucosylation')[0]:.0f}"` %, so that end is not binding.
 
 The normal operating ranges sit well inside the region, since over the whole normal
 operating box the model predicts galactosylation between
@@ -1221,16 +1251,23 @@ that every parameter not carried into the design is held at the value stated in
 
 # Proven acceptable ranges
 
-Every characterized range is a proven acceptable range for every attribute this step
-governs, under both of the analyses described below. This section states the acceptance
-basis, gives the computed ranges, and explains why that outcome does not make the design
-space redundant.
+Most characterized ranges are proven acceptable ranges in full when the other factors are
+held at their set-points, and most are not once the other factors are allowed to move. This
+section states the acceptance basis, gives the computed ranges, and explains what the
+difference between the two analyses means for the control strategy.
 
-The acceptance criteria are the drug substance specifications for the attributes formed at
-this step, taken directly from the attribute register (@tbl-cqa), so no back-calculation
-is involved. A viral clearance attribute would require one, because its step-level
-criterion is the cumulative requirement less the clearance credited to the other steps,
-but this step claims no viral clearance and that case does not arise here.
+The acceptance criteria are the in-process limits for this step and not the drug substance
+specifications. The two differ, and the difference matters here. The attributes this step
+forms are glycans, charge variants and aggregate, and the first two are not modified by any
+later step, so the drug substance specification already applies at the bioreactor. It is
+also far wider than the spread the process itself shows, which means it would not bound the
+step at all. The in-process limits are therefore capability alert limits, set at
+`{python} f"{D.CFG.ipc_limits['capability_alert_sigma']:g}"` standard deviations above the
+demonstrated mean of each attribute (@tbl-cap), and they are the criteria the ranges below
+are measured against. Aggregate is the one attribute here that later steps do change, and
+its limit is carried back from the drug substance criterion through the clearance that
+cation exchange delivers. No viral clearance is claimed for this step, so the step-level
+back-calculation used for a clearance attribute does not arise.
 
 Two analyses were run for each attribute and parameter pair. The first holds every other
 response-surface factor at its set-point and finds the contiguous range of the parameter
@@ -1250,12 +1287,25 @@ print(": Proven acceptable ranges for each governed quality attribute and each r
 ```
 
 @tbl-par gives all `{python} n_par_rows` combinations of the `{python} n_par_cqa` governed
-attributes and the `{python} n_rsm_fac` response-surface parameters, and in every row the
-proven acceptable range equals the characterization range. That holds for all
-`{python} n_par_full_sp` rows under the at set-point analysis and for all
-`{python} n_par_full_nor` rows under the NOR-propagated analysis. No parameter has a
-narrower proven acceptable range than the range over which it was studied, and no
-attribute binds a parameter before the edge of the knowledge space is reached.
+attributes and the `{python} n_rsm_fac` response-surface parameters. Under the at set-point
+analysis `{python} f"{n_par_full_sp}"` of the `{python} n_par_rows` rows return the full
+characterization range. Under the NOR-propagated analysis only
+`{python} f"{n_par_full_nor}"` do. The gap between those two counts is the whole content of
+this section. Holding the other three factors at their set-points, almost every parameter
+can be run across the range it was studied over. Letting the other three move within their
+normal operating ranges takes that back for most of them, because the predictive interval
+then carries the variation of three factors and the residual spread of the model as well.
+
+The parameter the stricter analysis bounds most often is
+`{python} par_nor_worst.lower()`, narrowed for `{python} f"{par_nor_worst_n}"` of the
+`{python} n_par_cqa` attributes. Under the at set-point analysis the parameter bounded most
+often is `{python} par_sp_worst.lower()`, and it is narrowed for only
+`{python} f"{par_sp_worst_n}"`. The practical reading is that these parameters are
+acceptable across their studied ranges when the rest of the operating point is near its
+set-point, and not when the rest of the operating point is anywhere in its normal operating
+range. That is the condition the normal operating ranges are there to hold. It is also the
+reason the control strategy leans on the normal operating ranges and on the design space,
+and not on the proven acceptable ranges taken one parameter at a time.
 
 Figures @fig-parafuc to @fig-paragg give the representative plot for each governed
 attribute against its governing parameter, which is the response-surface factor with the
@@ -1298,14 +1348,19 @@ fig = D.fig_par(UO, "aggregates_hmw", D.governing_factor(UO, "aggregates_hmw"))
 plt.show()
 ```
 
-The plots show how much margin sits behind that result. For high mannose against culture
-pH the predicted level stays between `{python} f"{cube_lo['high_mannose']:.2f}"` % and
-`{python} f"{cube_hi['high_mannose']:.2f}"` % across the whole characterized region,
-against limits of `{python} f"{D.acceptance_for(UO,'high_mannose')[0]:.0f}"` % and
-`{python} f"{D.acceptance_for(UO,'high_mannose')[1]:.0f}"` %. For aggregate against
-culture pH the predicted level does not exceed
-`{python} f"{cube_hi['aggregates_hmw']:.2f}"` % anywhere, against a limit of
-`{python} f"{D.acceptance_for(UO,'aggregates_hmw')[1]:.0f}"` %. The predictive interval in
+The plots show where the margin runs out. For high mannose the predicted level stays between
+`{python} f"{cube_lo['high_mannose']:.2f}"` % and
+`{python} f"{cube_hi['high_mannose']:.2f}"` % across the whole characterized region. That
+sits inside the drug substance limits of
+`{python} f"{D.acceptance_for(UO,'high_mannose')[0]:.0f}"` % and
+`{python} f"{D.acceptance_for(UO,'high_mannose')[1]:.0f}"` % everywhere, and it crosses the
+in-process alert limit of `{python} f"{ipc_hi['high_mannose']:.2f}"` % at the top of the
+range. For aggregate the predicted level reaches
+`{python} f"{cube_hi['aggregates_hmw']:.2f}"` %, against a drug substance limit of
+`{python} f"{D.acceptance_for(UO,'aggregates_hmw')[1]:.0f}"` % and an in-process limit of
+`{python} f"{ipc_hi['aggregates_hmw']:.2f}"` %. The distance between those two limits is the
+margin the later steps provide, and the distance to the in-process limit is the margin this
+step controls. The predictive interval in
 the right-hand panels widens the band but does not reach a limit in any case.
 
 The relationship between these ranges and the design space needs to be explicit. A proven
@@ -1546,16 +1601,17 @@ specification across the whole of each characterized range.
 The production bioreactor is well characterized and robust over the ranges studied. A
 response-surface model in culture pH, culture temperature, culture duration and dissolved
 CO₂ defines an operating region within which afucosylation, galactosylation, high mannose,
-acidic charge variants and aggregate all remain within their acceptance limits. One corner
-of the characterized region is excluded, where three factors sit at a lower edge and
+acidic charge variants and aggregate all remain within their in-process limits. That region
+is `{python} f"{ds_pct:.0f}"` % of the characterized region and not all of it. The largest
+single exclusion is a galactosylation edge, where three factors sit at a lower edge and
 culture temperature is at or above `{python} f"{gal_edge_temp:.1f}"` °C, and the maximum
-predicted exceedance there is `{python} f"{gal_exceed:.2f}"` percentage points of
-galactosylation.
+predicted exceedance there is `{python} f"{gal_exceed:.2f}"` percentage points.
 
-Every characterized range is a proven acceptable range for every attribute the step
-governs, under both the at set-point and the NOR-propagated analyses, so the binding
-constraint on the operating region is the multivariate corner and not any univariate
-range.
+`{python} f"{n_par_full_sp}"` of the `{python} n_par_rows` proven acceptable ranges cover
+the full characterization range when the other factors are held at their set-points, and
+`{python} f"{n_par_full_nor}"` do so when the other factors vary within their normal
+operating ranges. The binding constraint on routine operation is therefore the design space
+together with the normal operating ranges, and not any univariate range on its own.
 
 `{python} n_params` parameters were classified, of which `{python} n_wccpp` are WC-CPP,
 `{python} n_kpp` are KPP and `{python} n_gpp` is a GPP, and no parameter required CPP

@@ -80,6 +80,18 @@ class Config:
                 return c
         raise KeyError(f"no CQA {key!r}")
 
+    # -- in-process acceptance criteria ----------------------------------------
+    @property
+    def ipc_limits(self) -> Dict[str, Any]:
+        """In-process acceptance criteria: the limit each step's own output must meet.
+
+        The criteria in ``cqas`` are drug-substance criteria and are the wrong yardstick for
+        an intermediate. Every entry here is a rule evaluated against the seeded outputs (a
+        backward calculation through the clearance chain, a capability alert limit, or a
+        modular clearance claim), never a literal number, so the limits move with the seed.
+        Returns ``{}`` when the block is absent, so an older config still loads."""
+        return self._d.get("ipc_limits", {})
+
     # -- process ---------------------------------------------------------------
     @property
     def process(self) -> Dict[str, Any]:

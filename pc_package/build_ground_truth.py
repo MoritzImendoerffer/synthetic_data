@@ -6600,6 +6600,25 @@ def build_master_plan():
             f"{r['cqa']} acceptance: {r['acc_low']:g}–{r['acc_high']:g} {r['unit']}.",
             "Critical quality attribute framework", r["cqa"])
 
+    # The three procedures by which a step's in-process limit is set (§ "Which criterion a
+    # step is judged against"). Anchored on non-numeric fragments on purpose: the limits are
+    # rules evaluated against the seeded model, so the VALUES move with meta.seed while the
+    # procedure that produced them does not.
+    # The in-process criterion the master plan works through in full (§ "Which criterion a
+    # step is judged against"). `predicate` is a closed literal in the contract, so this is an
+    # attribute_has_acceptance_criterion assertion and not an invented relation. The quote is
+    # rebuilt from the same values the document renders, so it survives a change of meta.seed.
+    IPC_SEC = "Which criterion a step is judged against"
+    import doe_report as _D
+    _pa_ipc = _D.effective_acceptance("protein_a", "pool_hcp_ng_mg")[1]
+    add("attr:hcp", "attribute_has_acceptance_criterion", "lit:hcp_ipc_protein_a",
+        f"Host cell protein at the capture step is judged against an in-process limit of "
+        f"{_pa_ipc:,.0f} ng/mg, carried back from the drug substance specification through "
+        f"the cation exchange and anion exchange clearance and divided by an assurance "
+        f"margin, and not against the drug substance specification itself.",
+        IPC_SEC,
+        f"gives the in-process limit of {_pa_ipc:,.0f} ng/mg that PCP-005 and PCR-005 apply")
+
     def stx(i, text, sec, quote):
         return ReportStatement(statement_id=f"{doc}-S{i:02d}", statement_text=text,
                                confidence="high", review_status="accepted",
@@ -6629,6 +6648,31 @@ def build_master_plan():
                "campaign; each per-unit-operation plan states the minimum index for its own step.",
             "Acceptance criteria framework",
             "This plan does not set one minimum capability index for the whole campaign"),
+        stx(8, "Each step is judged against an in-process limit rather than the drug substance "
+               "specification, because an intermediate pool is not the drug substance and the "
+               "comparison is wrong in both directions.",
+            IPC_SEC,
+            "An intermediate pool is not the drug substance, and judging one against those "
+            "specifications gives an answer that is wrong in both directions"),
+        stx(9, "The campaign sets every in-process limit by one of three procedures, and which "
+               "procedure applies is decided by what the downstream train does to the attribute.",
+            IPC_SEC,
+            "Which procedure applies depends on what the downstream train does to the "
+            "attribute, not on the preference of the author"),
+        stx(10, "The assurance margin applied after the backward calculation is what makes the "
+                "limit a control; a limit set at the undivided ceiling would be a break-even "
+                "point dependent on every downstream step delivering its nominal clearance.",
+            IPC_SEC,
+            "which is a break-even point and not a control"),
+        stx(11, "No in-process limit is a typed number; each is a rule evaluated against the "
+                "seeded process model, so a change to the process or to a clearance factor "
+                "moves the limits with it.",
+            IPC_SEC, "Each is a rule evaluated against the seeded process model"),
+        stx(12, "Because an in-process limit is tighter than the specification it derives from, "
+                "the design space for a step is generally smaller than its characterized region.",
+            IPC_SEC,
+            "It follows that the design space for a step is generally smaller than its "
+            "characterized region"),
         stx(6, "Every per-unit-operation characterization protocol follows the structure and the "
                "methods defined in this master plan and adds only what is specific to its step.",
             "Register of characterization plans",

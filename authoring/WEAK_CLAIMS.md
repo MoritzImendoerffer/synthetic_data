@@ -28,6 +28,18 @@ python3 -c "import json,glob; print(sum(len(json.load(open(f)).get('weak_claims'
 git log --oneline main --merges --grep=weak-claims   # should find nothing unreverted
 ```
 
+**The rebase is parked as of 2026-08-03: it is now an authoring job, not a git one.** The
+branch is three commits behind `main` and the two sides have re-authored the same documents
+independently. Eleven `.qmd` differ on both sides; the three that carry the claims —
+`PCR-003`, `PCR-009`, `PCP-006` — differ by around 3,000 lines, and no sentence of the four
+registered claims appears anywhere in `main`. There is no hunk-by-hunk merge of two one-pass
+authorings, so a rebase must choose one text per document: `main`'s, which drops the claims
+(re-inserting them afterwards is exactly the post-hoc injection this document argues
+against), or the branch's, whose prose still argues the drug-substance acceptance basis that
+`083bfb1` replaced with per-step in-process limits — a contradiction between prose and
+regenerated tables that no gate here detects. Integration therefore means re-authoring three
+documents with their claims assigned in the brief. See the branch note in `README.md`.
+
 **And verify the rebase itself; do not trust it.** Reverting the merge left `a0b1f66` an
 ancestor of `main` whose content `main` no longer has, so replaying the branch on top
 resolves hunk by hunk against reverted text. `git rebase main -X theirs` was tried on

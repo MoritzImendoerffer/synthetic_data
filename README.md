@@ -65,6 +65,25 @@ claims are invisible in the text by design, so a reader cannot tell a branch doc
 > instruction in its own commit message, and put four unsupported claims into the grounded
 > corpus. It was reverted on 2026-08-02. To carry `main` forward onto the branch, rebase.
 
+> **That rebase is PARKED as of 2026-08-03, and it is no longer a git operation.** The
+> branch sits at `0fee2de`, three commits behind `main` (`083bfb1` in-process limits,
+> `d7b5ec2`, `02a170a` row anchors). Both sides have since re-authored documents: 11 `.qmd`
+> differ on both sides, the three claim-bearing ones (`PCR-003`, `PCR-009`, `PCP-006`) by
+> around 3,000 lines, and none of the four claim sentences exists anywhere in `main`'s text.
+> Those are two one-pass authorings of the same document, so no hunk-by-hunk merge is
+> meaningful — a rebase has to *pick* an authoring per document, and each choice loses
+> something real:
+>
+> - take `main`'s documents and the four claims go with them, because re-inserting a claim
+>   into a finished document is the post-hoc injection this feature was rebuilt to avoid
+>   (`authoring/WEAK_CLAIMS.md`). They have to be re-authored, assigned in the brief;
+> - keep the branch's documents and their prose still argues the drug-substance acceptance
+>   basis, which `083bfb1` replaced with per-step in-process limits. The regenerated tables
+>   would then contradict the surrounding text, and no gate in this repo catches that.
+>
+> So integration needs an authoring pass on three documents, not a merge strategy. Until
+> someone schedules it, the branch stays where it is and `main` moves on without it.
+
 ### Reproduce everything
 
 ```bash

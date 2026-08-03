@@ -52,11 +52,14 @@ def _collapse(s: str) -> str:
 
 
 def doc_text(path: str) -> str:
-    """Whitespace-collapsed plain text of a .qmd (comments stripped) or a rendered .docx."""
+    """Whitespace-collapsed plain text of a .qmd (comments stripped) or a rendered .docx.
+
+    The docx branch marks table cell boundaries as " | ", exactly like
+    pc_package/check_grounding.docx_text, so a quote that grounds here grounds there."""
     if path.endswith(".docx"):
         with zipfile.ZipFile(path) as z:
             xml = z.read("word/document.xml").decode("utf-8")
-        xml = re.sub(r"<[^>]+>", " ", xml)
+        xml = re.sub(r"<[^>]+>", " ", xml.replace("</w:tc>", " | "))
         return _collapse(html.unescape(xml))
     raw = open(path, encoding="utf-8").read()
     raw = re.sub(r"<!--.*?-->", " ", raw, flags=re.DOTALL)  # comments do not render

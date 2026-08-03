@@ -136,16 +136,20 @@ validate against a named model:
 | `rhetorical_spans[]` | `RhetoricalSpan` | discourse roles and claim → evidence edges |
 | `weak_claims[]` | `WeakClaim` | labelled unsupported claims — **empty here**, see above |
 
-Two invariants hold for all 1470 quotes in the corpus:
+Two invariants hold for all 2084 spans in the corpus:
 
-- Every `SourceReference.quote` appears **verbatim** in the rendered document
-  (`check_grounding.py` gates it).
+- Every `SourceReference.quote` — and every `table_header` — appears **verbatim** in the
+  rendered document (`check_grounding.py` gates both), under whitespace collapse and with a
+  table cell boundary read as `" | "`, so a quote spanning a table row keeps its columns
+  separable and the header says what each column is.
 - Entity **values** — set-points, NOR/PAR, acceptance criteria, classifications — come from
   the same `outputs/data/*.csv` the documents render from, so annex and document cannot
   disagree on a number.
 
-A quote also has to *identify* its evidence, not merely exist. Per-record quotes anchor on the
-rendered **table row** carrying both ends of the relation, and `check_grounding` reports
+A quote also has to *identify* its evidence, not merely exist. Every parameter and attribute
+record anchors on the rendered **table row** carrying both ends of the relation — cells
+separated by `" | "` so the row splits back into columns, with `table_header` naming them —
+and `check_grounding` reports
 quotes that are too generic to attest anything. The mechanism, and why it is not a
 length rule, is in [`GROUND_TRUTH.md`](GROUND_TRUTH.md) §1.
 

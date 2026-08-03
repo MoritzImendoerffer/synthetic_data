@@ -52,6 +52,10 @@ def doc_text(path: str) -> str:
     if path.endswith(".docx"):
         with zipfile.ZipFile(path) as z:
             xml = z.read("word/document.xml").decode("utf-8")
+        # Same normalisation as pc_package/check_grounding.docx_text, including its cell
+        # separator: a span that grounds here must ground there too, and the annex these
+        # spans land in is checked by that script.
+        xml = xml.replace("</w:tc>", " | ")
         return _collapse(html.unescape(re.sub(r"<[^>]+>", " ", xml)))
     raw = open(path, encoding="utf-8").read()
     raw = re.sub(r"<!--.*?-->", " ", raw, flags=re.DOTALL)

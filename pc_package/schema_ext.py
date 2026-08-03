@@ -26,6 +26,9 @@ Extensions added (and why the upstream contract could not express them):
   * ``StudyDesign`` / ``DesignSpace`` — no upstream model represents a designed
     experiment (DoE) or a multivariate design space, which are the central
     objects of a characterization plan/report. New models.
+  * ``SourceReference.table_header`` — upstream carries ``table_id`` and ``table_title``
+    but nothing naming the columns, so a quote anchored on a rendered row cannot be read
+    column by column from the span alone. Added here (additive, optional).
 
 "Upstream" above means the contract as vendored in ``annex_contract/``. Each extension
 is a candidate to fold into the contract at its origin later; that is a change to
@@ -45,7 +48,8 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from annex_contract.base import ExtractionMetadata, SourceReference  # noqa: E402
+from annex_contract.base import ExtractionMetadata  # noqa: E402
+from annex_contract.base import SourceReference as _SourceReference  # noqa: E402
 from annex_contract.pharma_entities import (  # noqa: E402
     AnalyticalMethod,
     Equipment,
@@ -69,6 +73,33 @@ __all__ = [
     "AssertionStore", "ConceptStore", "ReportSection", "TransferGap",
     "SourceReference", "ExtractionMetadata", "GroundTruthAnnex",
 ]
+
+# --------------------------------------------------------------------------- #
+# Extended provenance                                                          #
+# --------------------------------------------------------------------------- #
+class SourceReference(_SourceReference):
+    """Contract SourceReference plus the column header of the table it points into.
+
+    The contract carries ``table_id`` and ``table_title`` — which table, and what its caption
+    says — but nothing that names the *columns*. A quote anchored on a rendered row therefore
+    reads ``"Culture pH | pH | 6.85 | 6.75–6.95 | 6.6–7.1 | WC-CPP | multivariate"``, and a
+    consumer holding only that span cannot tell which range is the normal operating range and
+    which is the characterization range. The record's own typed fields (``NOR``, ``PAR``)
+    still say, so nothing is lost to a reader of the annex; what is lost is the ability to
+    read the *span alone*, which is what a span-first consumer (span classification, an
+    LLM judge shown only the citation, a retrieval index over quotes) has.
+
+    The header belongs here rather than inside ``quote`` for two reasons. Caption, header and
+    row are three non-contiguous spans, so concatenating them yields a string that appears
+    nowhere in the document — and the verbatim substring test is the only reason the grounding
+    gate has a crisp pass/fail at all. And one header serves every row of its table: as a
+    quote it would be a span standing in for dozens of records, which is exactly the weak
+    anchor ``check_grounding.specificity_report`` exists to catch.
+
+    Still a rendered span, so ``check_grounding`` verifies it verbatim like a quote.
+    """
+    table_header: Optional[str] = None
+
 
 # --------------------------------------------------------------------------- #
 # Widened enums                                                               #

@@ -19,6 +19,22 @@ must appear **verbatim** in the rendered document. `check_grounding.py` extracts
 text of the `.docx`, collapses whitespace, and asserts that every `quote` is a substring of
 it. Any quote that isn't present fails the gate.
 
+Exactly one piece of document structure survives that extraction: a **table cell boundary
+reads as `" | "`** (`check_grounding.CELL_SEP`). Everything else — tags, line wraps, runs of
+spaces — collapses to a single space, and sub/superscript digits fold to plain digits
+(`SCRIPT_DIGITS`: the same `log₁₀` label renders both ways across the corpus, so it is a
+rendering artifact, not content). Prose quotes are unaffected by the separator, because a
+sentence lives inside one paragraph and never crosses a cell boundary; row quotes carry it, so
+a consumer can split the row back into the cells the document actually has.
+
+A row still does not say what its columns *mean*, so a table-anchored reference also carries
+`table_header` — the rendered header row, gated verbatim like the quote itself. Between the
+two, `"Culture pH | pH | 6.85 | 6.75–6.95 | 6.6–7.1 | WC-CPP | multivariate"` becomes readable
+from the span alone: the fourth cell is the NOR because the header says so. The caption is
+already `table_title`, and the section is `section_title` / `heading_path`, so neither belongs
+in the quote — concatenating them would produce a string that appears nowhere in the document
+and forfeit the substring test.
+
 We call this **verbatim span grounding**. The idea is simple but load-bearing: *a label is
 only allowed to exist if it can point at the exact span of source text it describes, by
 quoting it.* The quote is the alignment between the gold label and the report. Nothing in
@@ -49,19 +65,36 @@ table cell, so quoting it identifies nothing.
 
 | Signal | Threshold | What it means |
 |---|---|---|
-| one quote reused across many records | more than 8 | the span stands in for records it cannot all attest |
+| one **prose** span reused across records | more than 3 | the caption failure: the span stands in for records it names none of |
+| one **rendered row** reused across records | more than 8 | a row may state several relations at once, but not many |
 | the quote occurs many times in the document | more than 3 | the reference is ambiguous |
+
+The reuse ceiling is two-tier because the two shapes fail differently. A row carries both ends
+of its relation by construction, so reuse is normal — RA-001's ranking rows name five
+attributes each and rightly anchor five assertions. A sentence reused four times is almost
+always the caption failure instead. Every case in this corpus that looked like a legitimate
+exception turned out not to be one: where a sentence genuinely stated three relations, the
+shortest contiguous slice naming each record was available inside it ("released N-glycan
+mapping, which reports afucosylation"), and where a claim quantified over parameters without
+naming any ("no process parameter had a significant effect"), the per-parameter classification
+sentence in §9 stated the same result for one named parameter. Fix a weak anchor by finding
+the span that names the record — not by raising the number.
 
 It is deliberately **not** a length rule. The corpus convention is to anchor a per-record
 assertion on the **rendered table row** carrying the relation, and those rows are short.
-`"Production Bioreactor Culture pH 6.9 6.8–7.0 …"` names both ends of what it asserts, which
-makes it a far better anchor than a long sentence that merely discusses the topic. An earlier
-word-count version of this check flagged 135 false positives, nearly all of them good rows.
+`"Culture pH | pH | 6.85 | 6.75–6.95 | 6.6–7.1 | WC-CPP | multivariate"` names both ends of
+what it asserts, which makes it a far better anchor than a long sentence that merely
+discusses the topic. An earlier word-count version of this check flagged 135 false positives,
+nearly all of them good rows.
 
 `build_ground_truth.row_quotes` rebuilds those rows from the same DataFrame the document
-renders, so the anchor stays verbatim and stays correct when the seed changes. The corpus is
-at **zero** weak anchors; `GROUNDING_VERBOSE=1` lists any that appear, and
-`GROUNDING_STRICT_ANCHORS=1` turns the advisory into a gate.
+renders — joining the cells with `CELL_SEP` through `_join_cells`, which is how the row reads
+in the extracted text — so the anchor stays verbatim and stays correct when the seed changes.
+Keep the separator when you hand-build a partial row (RA-001 anchors on the leading cells of
+its ranking rows): a space-joined row still grounded before the separator existed, but it
+handed the consumer `"Culture pH pH 6.85 …"`, in which nothing marks where the parameter name
+stops and its unit begins. The corpus is at **zero** weak anchors; `GROUNDING_VERBOSE=1`
+lists any that appear, and `GROUNDING_STRICT_ANCHORS=1` turns the advisory into a gate.
 
 ---
 

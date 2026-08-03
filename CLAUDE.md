@@ -133,9 +133,15 @@ differ only in their `UO` key and unit-specific narrative:
   method, and how it relates to schema-constrained (Pydantic→LLM) generation and other
   attribution techniques — is documented in [`pc_package/GROUND_TRUTH.md`](pc_package/GROUND_TRUTH.md).**
   The rule in one line: every `SourceReference.quote` is a verbatim substring of the
-  rendered document (`check_grounding.py` gates it), numeric values are derived from the
+  rendered document (`check_grounding.py` gates it, under whitespace collapse and with a
+  table cell boundary read as `" | "` — build row quotes with `row_quotes()` /
+  `_join_cells()`, never by joining cells with a space), numeric values are derived from the
   seeded CSVs, and the whole annex validates against the Pydantic schema
-  (`validate_annex.py`).
+  (`validate_annex.py`). **Anchor every parameter and attribute record on its own rendered
+  row**, pass `table_header=rows.header` with it (the row alone does not say which column is
+  the NOR), and keep prose reuse at or below `MAX_PROSE_REUSE`; a caption or a bare label
+  grounds while attesting nothing. Fix a weak anchor by finding the span that names the
+  record, never by raising the threshold.
 
 ## Which steps have DoE (affects report content)
 

@@ -17,6 +17,7 @@ import re
 
 import _pcpkg as P
 import schema_ext as S
+from check_grounding import CELL_SEP   # the one definition of a rendered cell boundary
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "ground_truth")
@@ -119,12 +120,31 @@ def par_basis_text(uo_key, cqa_label):
             f"assurance margin of {m:g} ({limit}).")
 
 
-def ref(doc_id, file_name, section_id, section_title, quote, table_title=None, table_id=None):
+def ref(doc_id, file_name, section_id, section_title, quote, table_title=None, table_id=None,
+        table_header=None):
+    """A SourceReference. ``table_header`` is the rendered header row of the anchor table.
+
+    Pass ``rows.header`` from :func:`row_quotes` whenever the quote is a row of that table:
+    the row alone does not say which column is which (see ``schema_ext.SourceReference``).
+    """
     return S.SourceReference(
         document_id=doc_id, document_title=P.DOC_REGISTRY[doc_id][0], file_name=file_name,
         section_id=section_id, section_title=section_title,
         heading_path=[section_title], table_id=table_id, table_title=table_title, quote=quote,
+        table_header=table_header,
     )
+
+
+def _join_cells(cells):
+    """Join the cells of one rendered row the way ``check_grounding.docx_text`` reads them.
+
+    Whitespace is collapsed after joining, so an empty cell reads as the bare separator on both
+    sides of the comparison rather than dropping out of the row. The cell text is kept exactly
+    as the DataFrame holds it — including "log₁₀", which two rendered documents disagree about
+    (see ``check_grounding.SCRIPT_DIGITS``); reconciling that is the checker's job, so the
+    annex keeps the form the data uses.
+    """
+    return re.sub(r"\s+", " ", CELL_SEP.join(c.strip() for c in cells)).strip()
 
 
 def row_quotes(df, keys, floatfmt=None):
@@ -140,18 +160,68 @@ def row_quotes(df, keys, floatfmt=None):
     ``_md_rows`` reproduces the rendered row from the same DataFrame the document renders, so
     the quote stays verbatim and stays correct when the seed changes.
     ``check_grounding.specificity_report`` flags the alternative.
+
+    The result also carries ``.header`` — the rendered header row of the same table — to pass
+    as ``ref(..., table_header=rows.header)``. A row says ``"… | 6.75–6.95 | 6.6–7.1 | …"``
+    and only the header says which of the two is the normal operating range.
     """
-    return dict(zip(list(keys), _md_rows(df, floatfmt)))
+    out = RowQuotes(zip(list(keys), _md_rows(df, floatfmt)))
+    out.header = _join_cells(str(c) for c in df.columns)
+    return out
+
+
+class RowQuotes(dict):
+    """``{key -> rendered row}`` plus the rendered ``header`` row they share."""
+    header: str = ""
+
+
+# --------------------------------------------------------------------------- #
+# The three tables every unit-operation pair anchors on.                       #
+#                                                                              #
+# Each rebuilds the table from the helper the .qmd renders, so a record can    #
+# anchor on its own row instead of on the caption every row of the table       #
+# shares. Pass the SAME key order and floatfmt the document uses: the row text #
+# depends on both, and a mismatch is an ungrounded quote rather than a silent  #
+# wrong answer (check_grounding is the gate).                                  #
+# --------------------------------------------------------------------------- #
+def param_rows(uo_key, classified, floatfmt=None):
+    """Rendered ``@tbl-params`` rows, keyed by parameter name.
+
+    The report table carries the final classification and the report's ranges; the plan
+    table carries the ranges to be studied, so each document gets its own row text.
+    """
+    df = P.report_params(uo_key) if classified else P.plan_params(uo_key)
+    return row_quotes(df, df["Parameter"], floatfmt)
+
+
+def cqa_rows(keys, floatfmt=None, uo_key=None):
+    """Rendered ``@tbl-cqa`` rows, keyed by attribute key.
+
+    ``uo_key`` selects ``cqas_for`` (the attributes a step *sets*); ``keys`` selects
+    ``cqas_by_keys`` (the attributes it governs, in the document's own order — which
+    differs between a plan and its report, and changes the rendered rows).
+    """
+    df = P.cqas_for(uo_key) if uo_key else P.cqas_by_keys(keys)
+    return row_quotes(df, keys, floatfmt)
+
+
+def par_rows(uo_key, floatfmt=None):
+    """Rendered ``@tbl-par`` rows, keyed by ``(CQA, parameter)`` — the PAR table's own key."""
+    import doe_report as D
+    df = D.par_table(uo_key)
+    return row_quotes(df, list(zip(df["CQA"], df["Parameter"])), floatfmt)
 
 
 def title_block_quote(doc_id):
-    """The title-block row that declares this document's identity.
+    """The title-block rows that declare this document's identity.
 
     ``"Process Characterization Plan"`` alone appears in the title, the title-block table and
     the abbreviation list, so it cannot say *which* document is meant. The document ID and the
-    declared class together are unique in every document of the corpus.
+    declared class together are unique in every document of the corpus. They are two
+    consecutive rows of the two-column title block, so the span crosses a row boundary — which
+    reads as one more cell separator, since ``docx_text`` marks cells and not rows.
     """
-    return f"Document ID {doc_id} Document class {P.DOC_REGISTRY[doc_id][0]}"
+    return CELL_SEP.join(["Document ID", doc_id, "Document class", P.DOC_REGISTRY[doc_id][0]])
 
 
 # --------------------------------------------------------------------------- #
@@ -250,7 +320,8 @@ def build_params(doc_id, file_name, sec, classified):
                                    "Factors, ranges and the knowledge space" if classified
                                    else "Factors, ranges and study type",
                                    rows[name], table_title=caption,
-                                   table_id=f"{doc_id}_tab_params")],
+                                   table_id=f"{doc_id}_tab_params",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -297,7 +368,8 @@ def build_cqas(doc_id, file_name, sec, report):
             criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
             tool2_severity=int(r["tool2_severity"]),
             source_references=[ref(doc_id, file_name, sec, sec_title, rows[key],
-                                   table_title=table_title, table_id=f"{doc_id}_tab_cqa")],
+                                   table_title=table_title, table_id=f"{doc_id}_tab_cqa",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -311,8 +383,18 @@ METHOD_QUOTE = {
     "AMV-3013": "acidic charge variants by imaged capillary isoelectric focusing (icIEF)",
     "AMV-3014": "residual DNA by quantitative polymerase chain reaction (qPCR)",
 }
-# CQA key -> the same fragment, used for the attribute -> method assertions.
+# CQA key -> the fragment used for that attribute's attribute -> method assertion.
+#
+# One sentence states three of these relations, so quoting it whole made one span the anchor
+# for four records at once. Each attribute instead takes the SHORTEST contiguous slice of that
+# sentence that still names both ends of its own relation — which is what a human annotator
+# marks, and what makes the span usable on its own. The method entity keeps the opening clause.
 CQA_METHOD_QUOTE = {k: METHOD_QUOTE[m] for k, m in CQA_METHOD.items()}
+CQA_METHOD_QUOTE.update({
+    "afucosylation": "released N-glycan mapping, which reports afucosylation",
+    "galactosylation": "which reports afucosylation, galactosylation",
+    "high_mannose": "afucosylation, galactosylation and high mannose from a single injection",
+})
 
 # Per-parameter classification sentence from the report's "Parameter classification"
 # section (§9). "Dissolved CO2" is quoted without its leading subscripted name.
@@ -423,27 +505,29 @@ def build_assertions(doc_id, file_name, report):
     A = []
     n = [0]
 
-    def add(subj, pred, obj, text, sec, quote):
+    def add(subj, pred, obj, text, sec, quote, header=None):
         n[0] += 1
         A.append(EvidenceBackedAssertion(
             assertion_id=f"{doc_id}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
             assertion_text=text,
-            source_references=[ref(doc_id, file_name, sec, sec, quote)], metadata=meta()))
+            source_references=[ref(doc_id, file_name, sec, sec, quote,
+                                   table_header=header)],
+            metadata=meta()))
 
     # step -> parameters and step -> quality attributes (both docs). Each assertion anchors on
     # the table row naming the parameter or the attribute, so the span carries both ends of the
     # relation rather than a caption shared by every row.
-    param_rows = param_row_quotes(report)
-    cqa_rows = cqa_row_quotes(report)
+    prow = param_row_quotes(report)
+    crow = cqa_row_quotes(report)
     for name, cid in PARAM_CONCEPT.items():
         add("step:production_bioreactor", "step_has_parameter", cid,
             f"{UO_NAME} has process parameter {name}.",
             "Factors, ranges and the knowledge space" if report else "Factors, ranges and study type",
-            param_rows[name])
+            prow[name], prow.header)
     for r in CQA_ROWS:
         add("step:production_bioreactor", "step_has_quality_attribute", CQA_CONCEPT[r["key"]],
             f"{UO_NAME} sets/controls {r['cqa']}.", "Quality attributes in scope",
-            cqa_rows[r["key"]])
+            crow[r["key"]], crow.header)
     # attribute -> method (anchored in the plan, which names the method per attribute)
     if not report:
         for r in CQA_ROWS:
@@ -456,7 +540,7 @@ def build_assertions(doc_id, file_name, report):
     for r in CQA_ROWS:
         add(CQA_CONCEPT[r["key"]], "attribute_has_acceptance_criterion",
             f"lit:{r['key']}_acc", f"{r['cqa']} acceptance: {r['acc_low']:g}–{r['acc_high']:g} {r['unit']}.",
-            "Quality attributes in scope", cqa_rows[r["key"]])
+            "Quality attributes in scope", crow[r["key"]], crow.header)
     # results only in the report: parameter impacts / non-impacts. Each classification
     # sentence of §9 is quoted against the parameter it classifies.
     if report:
@@ -592,6 +676,10 @@ def build_proven_acceptable_ranges(doc_id, file_name):
     same DoE engine (``doe_report.par_table``) that renders @tbl-par in the report."""
     import doe_report as D
     par = D.par_table(UO)
+    # Each combination anchors on its own row of @tbl-par. The per-attribute prose used
+    # before said which attribute was governed but not which parameter's range was proven,
+    # so one span stood in for every parameter of that attribute.
+    rows = par_rows(UO)
     out = []
     for i, r in enumerate(par.to_dict("records"), 1):
         cqa, param, unit = r["CQA"], r["Parameter"], (r["Unit"] or "")
@@ -604,30 +692,43 @@ def build_proven_acceptable_ranges(doc_id, file_name):
             par_nor_propagated=f"{r['PAR (NOR)']} {unit}".strip(),
             acceptance_basis=par_basis_text(UO, cqa),
             source_references=[ref(doc_id, file_name, f"{doc_id}_sec_par", PAR_SEC,
-                                   PAR_CQA_QUOTE.get(cqa, _PAR_GENERAL_QUOTE))],
+                                   rows[(cqa, param)], table_id=f"{doc_id}_tab_par",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
 
 def _document_text(file_name):
-    """Whitespace-collapsed text of the RENDERED document, for presence checks.
+    """Text of the RENDERED document in ``check_grounding``'s comparison form.
 
     Must be the ``.docx``, not the ``.qmd``: ``check_grounding.py`` is the authority and it
     reads the rendered file. A quote carrying a number exists only in the rendered text (the
     source has a ``{python}`` inline expression there), so matching against the ``.qmd``
     would silently drop exactly the quotes that ground perfectly well. Falls back to the
     source only when nothing has been rendered yet, and says so.
+
+    Compare candidate quotes with :func:`_present`, never with a bare ``in``: this text is
+    normalised (whitespace collapsed, script digits folded) and a raw quote is not, so a
+    span carrying "log₁₀" tests absent against a document that plainly contains it. That
+    mismatch cost a build — the curated PCR-003 rhetorical layer failed wholesale.
     """
     docx = os.path.join(HERE, file_name)
     if os.path.exists(docx):
         from check_grounding import docx_text
-        return re.sub(r"\s+", " ", docx_text(docx))
+        return docx_text(docx)
     qmd = os.path.join(HERE, os.path.splitext(file_name)[0] + ".qmd")
     if os.path.exists(qmd):
+        from check_grounding import normalize
         print(f"note  {file_name} not rendered yet; presence checks fall back to the .qmd, "
               f"which will under-count any quote containing a rendered number.")
-        return re.sub(r"\s+", " ", open(qmd, encoding="utf-8").read())
+        return normalize(open(qmd, encoding="utf-8").read())
     return ""
+
+
+def _present(quote, text):
+    """Is ``quote`` in ``text``, under the same normalisation ``check_grounding`` applies?"""
+    from check_grounding import normalize
+    return normalize(quote) in text
 
 
 def build_weak_claims(doc_id, file_name):
@@ -655,7 +756,7 @@ def build_weak_claims(doc_id, file_name):
     for c in data.get("claims", {}).get(doc_id, []):
         sec = c.get("section")
         quote = " ".join(c["quote"].split())
-        if prose and quote not in prose:
+        if prose and not _present(quote, prose):
             skipped.append(c["id"])
             continue
         out.append(S.WeakClaim(
@@ -693,7 +794,7 @@ def build_rhetorical_spans(doc_id, file_name):
     for s in data.get("spans", []):
         sec = s.get("section")
         quote = " ".join(s["quote"].split())
-        if prose and quote not in prose:
+        if prose and not _present(quote, prose):
             skipped += 1
             continue
         out.append(S.RhetoricalSpan(
@@ -1025,6 +1126,9 @@ def h_params(doc_id, file_name, sec, classified):
                if classified else
                "Parameters to be studied, with set-points, characterization ranges, normal "
                "operating ranges and study type.")
+    # PCP-004 renders this table with floatfmt=".0f" (the rcf column); PCR-004 takes the
+    # automatic format. Each parameter anchors on its own row, not on the shared caption.
+    rows = h_param_rows(classified)
     out = []
     for r in HPARAM_ROWS:
         name = r["parameter"]
@@ -1039,10 +1143,16 @@ def h_params(doc_id, file_name, sec, classified):
             source_references=[ref(doc_id, file_name, sec,
                                    "Parameters, ranges and the knowledge space" if classified
                                    else "Factors, ranges and study type",
-                                   caption, table_title=caption,
-                                   table_id=f"{doc_id}_tab_params")],
+                                   rows[name], table_title=caption,
+                                   table_id=f"{doc_id}_tab_params",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
+
+
+def h_param_rows(classified):
+    """Rendered ``@tbl-params`` rows of the harvest pair, keyed by parameter name."""
+    return param_rows(HUO, classified, floatfmt=None if classified else ".0f")
 
 
 def h_methods(doc_id, file_name, sec, report):
@@ -1112,22 +1222,22 @@ def h_assertions(doc_id, file_name, report):
     A = []
     n = [0]
 
-    def add(subj, pred, obj, text, sec, quote):
+    def add(subj, pred, obj, text, sec, quote, header=None):
         n[0] += 1
         A.append(EvidenceBackedAssertion(
             assertion_id=f"{doc_id}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
             assertion_text=text,
-            source_references=[ref(doc_id, file_name, sec, sec, quote)], metadata=meta()))
+            source_references=[ref(doc_id, file_name, sec, sec, quote, table_header=header)],
+            metadata=meta()))
 
-    param_quote = ("The parameters, their set-points, their normal operating ranges and the "
-                   "ranges over which they were characterized" if report
-                   else "gives the parameters, their set-points, the ranges to be studied, the "
-                        "normal operating ranges and the study type")
+    # step -> parameter, each on its own row of @tbl-params. The sentence that introduces the
+    # table says the step has parameters; the row says WHICH parameter, at which set-point.
+    prow = h_param_rows(report)
     param_sec = ("Parameters, ranges and the knowledge space" if report
                  else "Factors, ranges and study type")
     for name, cid in HPARAM_CONCEPT.items():
         add("step:harvest_clarification", "step_has_parameter", cid,
-            f"{HUO_NAME} has process parameter {name}.", param_sec, param_quote)
+            f"{HUO_NAME} has process parameter {name}.", param_sec, prow[name], prow.header)
     # The step FORMS and CLEARS none of these: it carries the upstream-formed impurity and
     # aggregate burden forward to capture, and monitors turbidity as the feed-clarity measure.
     for key, cid in HATTR_CONCEPT.items():
@@ -1256,6 +1366,15 @@ HPAR_CAPTION = ("Proven acceptable ranges for the harvest and clarification para
 
 
 def h_proven_acceptable_ranges(doc_id, file_name):
+    """One PAR per parameter, each anchored on its row of @tbl-par.
+
+    The step runs no designed experiment, so PCR-004 builds @tbl-par by renaming the
+    characterization range of the parameter table: the PAR *is* the characterized range
+    here. Rebuilt from the same expression so each record anchors on its own row.
+    """
+    df = P.report_params(HUO).rename(columns={"Char. range": "Proven acceptable range"})
+    df = df[["Parameter", "Unit", "Set-point", "NOR", "Proven acceptable range", "Class"]]
+    rows = row_quotes(df, df["Parameter"])
     out = []
     for i, r in enumerate(HPARAM_ROWS, 1):
         name = r["parameter"]
@@ -1268,10 +1387,10 @@ def h_proven_acceptable_ranges(doc_id, file_name):
             par_nor_propagated=None,      # no fitted model to propagate through
             acceptance_basis=HPAR_BASIS,
             source_references=[ref(doc_id, file_name, f"{doc_id}_sec_par",
-                                   "Proven acceptable ranges",
-                                   HPAR_QUOTE.get(name, _HPAR_GENERAL_QUOTE),
+                                   "Proven acceptable ranges", rows[name],
                                    table_title=HPAR_CAPTION,
-                                   table_id=f"{doc_id}_tab_par")],
+                                   table_id=f"{doc_id}_tab_par",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -1732,6 +1851,7 @@ def pa_params(doc_id, file_name, sec, classified):
                    "attribute this step sets.",
             "GPP": "Held within a narrow band by equipment design or fixed at column packing, and "
                    "ranked below the threshold for multivariate study."}
+    rows = param_rows(PAUO, classified)   # each parameter on its own @tbl-params row
     out = []
     for r in PAPARAM_ROWS:
         name = r["parameter"]
@@ -1746,8 +1866,9 @@ def pa_params(doc_id, file_name, sec, classified):
             source_references=[ref(doc_id, file_name, sec,
                                    "Factors, ranges and the knowledge space" if classified
                                    else "Factors, ranges and study type",
-                                   caption, table_title=caption,
-                                   table_id=f"{doc_id}_tab_params")],
+                                   rows[name], table_title=caption,
+                                   table_id=f"{doc_id}_tab_params",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -1761,10 +1882,10 @@ def pa_cqas(doc_id, file_name, sec, report):
     deliver. The DS acceptance is still recorded as the attribute's criterion, and the
     step-level position is carried by the assertions and report_sections.
     """
+    rows = pa_cqa_rows(report)
     out = []
     for key in PA_CQA_KEYS:
         r = _pa_cqa_row(key)
-        quote = PA_CQA_QUOTE[key][1 if report else 0]
         table_title = PA_CQA_TABLE_REPORT[key] if report else PA_CQA_TABLE_PLAN
         out.append(S.QualityAttribute(
             attribute_id=PAATTR_CONCEPT[key], attribute_name=r["cqa"], attribute_type="CQA",
@@ -1775,10 +1896,25 @@ def pa_cqas(doc_id, file_name, sec, report):
             rationale_for_criticality=f"A-Mab Tool #1 Risk Score = Impact × Uncertainty = {r['tool1_score']}.",
             criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
             tool2_severity=int(r["tool2_severity"]),
-            source_references=[ref(doc_id, file_name, sec, "Quality attributes in scope", quote,
-                                   table_title=table_title, table_id=f"{doc_id}_tab_cqa")],
+            source_references=[ref(doc_id, file_name, sec, "Quality attributes in scope",
+                                   rows[key], table_title=table_title,
+                                   table_id=f"{doc_id}_tab_cqa", table_header=rows.header)],
             metadata=meta()))
     return out
+
+
+def pa_cqa_rows(report):
+    """Rendered attribute rows of the Protein A pair, keyed by attribute key.
+
+    The report splits the register in two: the attribute the step SETS (``cqas_for``) and the
+    ones it clears (``cqas_by_keys``), each its own table. The plan renders one table in its
+    own order. Both tables share a header, so the rows can be merged into one lookup.
+    """
+    if report:
+        rows = cqa_rows(["leached_protein_a"], uo_key=PAUO)
+        rows.update(cqa_rows(["hcp", "residual_dna"]))
+        return rows
+    return cqa_rows(["leached_protein_a", "hcp", "residual_dna", "aggregates_hmw"])
 
 
 def pa_methods(doc_id, file_name, sec, report):
@@ -1872,32 +2008,31 @@ def pa_assertions(doc_id, file_name, report):
     A = []
     n = [0]
 
-    def add(subj, pred, obj, text, sec, quote):
+    def add(subj, pred, obj, text, sec, quote, header=None):
         n[0] += 1
         A.append(EvidenceBackedAssertion(
             assertion_id=f"{doc_id}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
             assertion_text=text,
-            source_references=[ref(doc_id, file_name, sec, sec, quote)], metadata=meta()))
+            source_references=[ref(doc_id, file_name, sec, sec, quote, table_header=header)],
+            metadata=meta()))
 
-    param_sec = "Executive summary" if report else "Purpose and scope"
-    param_quote = ("The step carries 6 process parameters" if report else
-                   "This plan covers the 4 process parameters that RA-001 assigned to multivariate "
-                   "study and the 2 parameters it assigned to univariate study")
+    # step -> parameter on the parameter's own row. The summary sentence counts the
+    # parameters; only the row names one.
+    prow = param_rows(PAUO, report)
+    param_sec = ("Factors, ranges and the knowledge space" if report
+                 else "Factors, ranges and study type")
     for name, cid in PAPARAM_CONCEPT.items():
         add("step:protein_a", "step_has_parameter", cid,
-            f"{PAUO_NAME} has process parameter {name}.", param_sec, param_quote)
+            f"{PAUO_NAME} has process parameter {name}.", param_sec, prow[name], prow.header)
     # The step SETS leached Protein A and clears HCP and DNA.
+    crow = pa_cqa_rows(report)
     add("step:protein_a", "step_has_quality_attribute", "attr:leached_protein_a",
         f"{PAUO_NAME} sets leached Protein A, the only quality attribute it forms.",
-        "Quality attributes in scope", PA_CQA_QUOTE["leached_protein_a"][1 if report else 0])
-    clearance_quote = ("it is the principal clearance step for host cell protein (HCP) and "
-                       "residual DNA" if report else
-                       "It sets one quality attribute, leached Protein A, and it is the principal "
-                       "point of host cell protein and residual DNA removal in the process")
+        "Quality attributes in scope", crow["leached_protein_a"], crow.header)
     for key in ["hcp", "residual_dna"]:
         add("step:protein_a", "step_has_quality_attribute", PAATTR_CONCEPT[key],
             f"{PAUO_NAME} is the principal clearance step for {PAATTR_NAME[key]}.",
-            "Executive summary" if report else "Purpose and scope", clearance_quote)
+            "Quality attributes in scope", crow[key], crow.header)
     # attribute -> method (plan only; the report links method to response, not to CQA)
     if not report:
         for key in PA_CQA_METHOD:
@@ -1940,12 +2075,15 @@ def pa_assertions(doc_id, file_name, report):
                 f"{name} is not an operating variable of the multivariate design (GPP).",
                 "Parameter classification", PA_CLASS_QUOTE[name])
         # The headline robustness finding: NO parameter affects the attribute the step sets.
+        # The sentence that says so quantifies over the parameters and names none of them, so
+        # each record takes §9's per-parameter classification sentence, which states the same
+        # null result for one named parameter. The effect tables are no use here: they key on
+        # the coded factor letters, so a row names "A", not "Protein load".
         for name in PA_MULTIVARIATE:
             add(PAPARAM_CONCEPT[name], "parameter_does_not_significantly_impact_attribute",
                 "attr:leached_protein_a",
                 f"{name} had no significant effect on leached Protein A over the ranges studied.",
-                "Response-surface models",
-                "No process parameter had a significant effect on leached Protein A")
+                "Parameter classification", PA_CLASS_QUOTE[name])
     else:
         # Plan: the prior-knowledge expectation stated for each parameter before execution.
         for name in PA_WCCPP:
@@ -2064,6 +2202,7 @@ def pa_proven_acceptable_ranges(doc_id, file_name):
     step. Before that limit existed the analysis reported "none (set-point breaches)" here,
     against a limit the step never claimed to meet."""
     import doe_report as D
+    rows = par_rows(PAUO)   # one row per governed attribute x parameter
     out = []
     for i, r in enumerate(D.par_table(PAUO).to_dict("records"), 1):
         cqa, param, unit = r["CQA"], r["Parameter"], (r["Unit"] or "")
@@ -2077,8 +2216,9 @@ def pa_proven_acceptable_ranges(doc_id, file_name):
             if not str(r["PAR (NOR)"]).startswith("none") else str(r["PAR (NOR)"]),
             acceptance_basis=par_basis_text(PAUO, cqa),
             source_references=[ref(doc_id, file_name, f"{doc_id}_sec_par",
-                                   "Proven acceptable ranges", PA_PAR_QUOTE[cqa],
-                                   table_title=PA_PAR_TABLE, table_id=f"{doc_id}_tab_par")],
+                                   "Proven acceptable ranges", rows[(cqa, param)],
+                                   table_title=PA_PAR_TABLE, table_id=f"{doc_id}_tab_par",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -2528,6 +2668,7 @@ def vi_params(doc_id, file_name, sec, classified):
                    "range is its entire characterization range, so it places no constraint on the "
                    "eluate delivered by Protein A."}
     out = []
+    rows = param_rows(VIUO, classified)   # each parameter on its own @tbl-params row
     for r in VIPARAM_ROWS:
         name = r["parameter"]
         ptype = r["classification"] if classified else "unclassified"
@@ -2541,8 +2682,9 @@ def vi_params(doc_id, file_name, sec, classified):
             source_references=[ref(doc_id, file_name, sec,
                                    "Factors, ranges and the knowledge space" if classified
                                    else "Factors, ranges and study type",
-                                   caption, table_title=caption,
-                                   table_id=f"{doc_id}_tab_params")],
+                                   rows[name], table_title=caption,
+                                   table_id=f"{doc_id}_tab_params",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -2552,6 +2694,7 @@ def vi_cqas(doc_id, file_name, sec, report):
     caption = ("Quality attributes measured across the low-pH viral inactivation step." if report
                else "Quality attributes in scope for the low-pH viral inactivation step.")
     out = []
+    rows = cqa_rows(VI_CQA_KEYS)   # each attribute on its own @tbl-cqa row
     for key in VI_CQA_KEYS:
         r = _vi_cqa_row(key)
         out.append(S.QualityAttribute(
@@ -2564,8 +2707,9 @@ def vi_cqas(doc_id, file_name, sec, report):
             criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
             tool2_severity=int(r["tool2_severity"]),
             source_references=[ref(doc_id, file_name, sec, "Quality attributes in scope",
-                                   quotes[key], table_title=caption,
-                                   table_id=f"{doc_id}_tab_cqa")],
+                                   rows[key], table_title=caption,
+                                   table_id=f"{doc_id}_tab_cqa",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -2660,21 +2804,21 @@ def vi_assertions(doc_id, file_name, report):
     A = []
     n = [0]
 
-    def add(subj, pred, obj, text, sec, quote):
+    def add(subj, pred, obj, text, sec, quote, header=None):
         n[0] += 1
         A.append(EvidenceBackedAssertion(
             assertion_id=f"{doc_id}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
             assertion_text=text,
-            source_references=[ref(doc_id, file_name, sec, sec, quote)], metadata=meta()))
+            source_references=[ref(doc_id, file_name, sec, sec, quote,
+                                   table_header=header)],
+            metadata=meta()))
 
     param_sec = "Factors, ranges and the knowledge space" if report else "Factors, ranges and study type"
-    param_quote = ("the four parameters of the step with their set-points, normal operating "
-                   "ranges, characterized ranges and final classifications" if report else
-                   "the parameters, their set-points, the ranges to be studied, the normal "
-                   "operating ranges and the study type")
+    prow = param_rows(VIUO, report)   # the row that NAMES this parameter
     for name, cid in VIPARAM_CONCEPT.items():
         add("step:viral_inactivation", "step_has_parameter", cid,
-            f"{VIUO_NAME} has process parameter {name}.", param_sec, param_quote)
+            f"{VIUO_NAME} has process parameter {name}.", param_sec, prow[name],
+            prow.header)
     # step sets the XMuLV clearance CQA and carries the aggregate / acidic-variant risk
     add("step:viral_inactivation", "step_has_quality_attribute", "attr:lrv_xmulv",
         f"{VIUO_NAME} sets the cumulative XMuLV clearance.", "Quality attributes in scope",
@@ -2904,6 +3048,10 @@ def vi_proven_acceptable_ranges(doc_id, file_name):
     import doe_report as D
     par = D.par_table(VIUO)
     out = []
+    # Each attribute x parameter combination on its own @tbl-par row: the
+    # per-attribute prose said which attribute was governed, never which
+    # parameter's range was proven.
+    rows = par_rows(VIUO)
     for i, r in enumerate(par.to_dict("records"), 1):
         cqa, param, unit = r["CQA"], r["Parameter"], (r["Unit"] or "")
         char = f"{r['Char. range']} {unit}".strip()
@@ -2916,7 +3064,9 @@ def vi_proven_acceptable_ranges(doc_id, file_name):
             par_nor_propagated=f"{r['PAR (NOR)']} {unit}".strip(),
             acceptance_basis=basis,
             source_references=[ref(doc_id, file_name, f"{doc_id}_sec_par", VI_PAR_SEC,
-                                   VI_PAR_CQA_QUOTE.get(cqa, _VI_PAR_GENERAL_QUOTE))],
+                                   rows[(cqa, param)],
+                                   table_id=f"{doc_id}_tab_par",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -3259,6 +3409,7 @@ def cx_params(doc_id, file_name, sec, classified):
             "GPP": "No effect on any governed attribute across the characterization range; its "
                    "action is on cycle time."}
     out = []
+    rows = param_rows(CXUO, classified)   # each parameter on its own @tbl-params row
     for r in CXPARAM_ROWS:
         name = r["parameter"]
         ptype = r["classification"] if classified else "unclassified"
@@ -3272,8 +3423,9 @@ def cx_params(doc_id, file_name, sec, classified):
             source_references=[ref(doc_id, file_name, sec,
                                    "Factors, ranges and the knowledge space" if classified
                                    else "Factors, ranges and study type",
-                                   caption, table_title=caption,
-                                   table_id=f"{doc_id}_tab_params")],
+                                   rows[name], table_title=caption,
+                                   table_id=f"{doc_id}_tab_params",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -3314,6 +3466,7 @@ def cx_cqas(doc_id, file_name, sec, report):
     quotes = CX_CQA_QUOTE[report]
     caption = CX_CQA_TABLE_CAPTION[report]
     out = []
+    rows = cqa_rows(CX_CQA_KEYS)   # each attribute on its own @tbl-cqa row
     for key in CX_CQA_KEYS:
         r = _cx_cqa_row(key)
         out.append(S.QualityAttribute(
@@ -3326,8 +3479,9 @@ def cx_cqas(doc_id, file_name, sec, report):
             criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
             tool2_severity=int(r["tool2_severity"]),
             source_references=[ref(doc_id, file_name, sec, "Quality attributes in scope",
-                                   quotes[key], table_title=caption,
-                                   table_id=f"{doc_id}_tab_cqa")],
+                                   rows[key], table_title=caption,
+                                   table_id=f"{doc_id}_tab_cqa",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -3441,21 +3595,21 @@ def cx_assertions(doc_id, file_name, report):
     A = []
     n = [0]
 
-    def add(subj, pred, obj, text, sec, quote):
+    def add(subj, pred, obj, text, sec, quote, header=None):
         n[0] += 1
         A.append(EvidenceBackedAssertion(
             assertion_id=f"{doc_id}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
             assertion_text=text,
-            source_references=[ref(doc_id, file_name, sec, sec, quote)], metadata=meta()))
+            source_references=[ref(doc_id, file_name, sec, sec, quote,
+                                   table_header=header)],
+            metadata=meta()))
 
     param_sec = "Factors, ranges and the knowledge space" if report else "Factors, ranges and study type"
-    param_quote = ("gives the set-point, the normal operating range, the characterization range, "
-                   "the final classification and the study type for each" if report else
-                   "The parameters, their set-points, their characterization ranges, their normal "
-                   "operating ranges and their assigned study type are given in")
+    prow = param_rows(CXUO, report)   # the row that NAMES this parameter
     for name, cid in CXPARAM_CONCEPT.items():
         add("step:cex", "step_has_parameter", cid,
-            f"{CXUO_NAME} has process parameter {name}.", param_sec, param_quote)
+            f"{CXUO_NAME} has process parameter {name}.", param_sec, prow[name],
+            prow.header)
     # The step SETS no CQA. Aggregate is the one it carries alone (no downstream step
     # reduces it); HCP, DNA and leached Protein A are cleared here and again downstream.
     add("step:cex", "step_has_quality_attribute", "attr:aggregates_hmw",
@@ -3528,9 +3682,7 @@ def cx_assertions(doc_id, file_name, report):
             add(CXPARAM_CONCEPT[name], "parameter_impacts_attribute", "attr:aggregates_hmw",
                 f"{name} was ranked for multivariate study on its potential impact on the "
                 f"attributes this step governs and on its potential to interact.",
-                "Risk-based prioritization of parameters",
-                "each parameter was ranked there for its potential impact on quality attributes "
-                "and for its potential to interact with other parameters")
+                "Risk-based prioritization of parameters", prow[name], prow.header)
         add("param:cex_flow", "parameter_does_not_significantly_impact_attribute",
             "attr:aggregates_hmw",
             "Elution flow rate is expected to act through residence time and pressure drop and "
@@ -3684,6 +3836,10 @@ def cx_proven_acceptable_ranges(doc_id, file_name):
     import doe_report as D
     par = D.par_table(CXUO)
     out = []
+    # Each attribute x parameter combination on its own @tbl-par row: the
+    # per-attribute prose said which attribute was governed, never which
+    # parameter's range was proven.
+    rows = par_rows(CXUO)
     for i, r in enumerate(par.to_dict("records"), 1):
         cqa, param, unit = r["CQA"], r["Parameter"], (r["Unit"] or "")
         char = f"{r['Char. range']} {unit}".strip()
@@ -3708,7 +3864,9 @@ def cx_proven_acceptable_ranges(doc_id, file_name):
             else r["PAR (NOR)"],
             acceptance_basis=par_basis_text(CXUO, cqa),
             source_references=[ref(doc_id, file_name, f"{doc_id}_sec_par", CX_PAR_SEC,
-                                   CX_PAR_QUOTE.get(cqa, _CX_PAR_GENERAL_QUOTE))],
+                                   rows[(cqa, param)],
+                                   table_id=f"{doc_id}_tab_par",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -4046,6 +4204,7 @@ def ax_params(doc_id, file_name, sec, classified):
                       "design space, since the region is wide relative to the control capability "
                       "of the equipment."}
     out = []
+    rows = param_rows(AXUO, classified)   # each parameter on its own @tbl-params row
     for r in AXPARAM_ROWS:
         name = r["parameter"]
         ptype = r["classification"] if classified else "unclassified"
@@ -4059,8 +4218,9 @@ def ax_params(doc_id, file_name, sec, classified):
             source_references=[ref(doc_id, file_name, sec,
                                    "Factors, ranges and the knowledge space" if classified
                                    else "Factors, ranges and study type",
-                                   caption, table_title=caption,
-                                   table_id=f"{doc_id}_tab_params")],
+                                   rows[name], table_title=caption,
+                                   table_id=f"{doc_id}_tab_params",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -4080,6 +4240,7 @@ AX_CQA_CLEARED_CAPTION = {
 
 def ax_cqas(doc_id, file_name, sec, report):
     out = []
+    rows = cqa_rows(AX_CQA_KEYS)   # each attribute on its own @tbl-cqa row
     for key in AX_CQA_KEYS:
         r = _ax_cqa_row(key)
         sets_it = key == "lrv_mvm"
@@ -4094,9 +4255,10 @@ def ax_cqas(doc_id, file_name, sec, report):
             criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
             tool2_severity=int(r["tool2_severity"]),
             source_references=[ref(doc_id, file_name, sec, "Quality attributes in scope",
-                                   caption, table_title=caption,
+                                   rows[key], table_title=caption,
                                    table_id=f"{doc_id}_tab_cqa_set" if sets_it
-                                   else f"{doc_id}_tab_cqa_cleared")],
+                                   else f"{doc_id}_tab_cqa_cleared",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -4107,10 +4269,11 @@ AXMETHOD_QUOTE = {
         "AMV-3012": "Pool host cell protein will be measured by ELISA (AMV-3012)",
         "AMV-3014": "residual DNA by qPCR (AMV-3014)",
         "AMV-3016": "leached Protein A by ELISA (AMV-3016)",
+        # Both viral methods are named in one sentence; each takes the shortest contiguous
+        # slice of it that names itself (see CQA_METHOD_QUOTE for the same treatment).
         "AMV-3017": ("Retrovirus and parvovirus titres will be measured by infectivity assay in "
-                     "the containment laboratory (AMV-3017 and AMV-3018)"),
-        "AMV-3018": ("Retrovirus and parvovirus titres will be measured by infectivity assay in "
-                     "the containment laboratory (AMV-3017 and AMV-3018)"),
+                     "the containment laboratory (AMV-3017"),
+        "AMV-3018": "the containment laboratory (AMV-3017 and AMV-3018)",
     },
     True: {  # PCR-008
         "AMV-3012": ("Pool HCP was measured by the process-specific enzyme-linked immunosorbent "
@@ -4214,33 +4377,34 @@ def ax_assertions(doc_id, file_name, report):
     A = []
     n = [0]
 
-    def add(subj, pred, obj, text, sec, quote):
+    def add(subj, pred, obj, text, sec, quote, header=None):
         n[0] += 1
         A.append(EvidenceBackedAssertion(
             assertion_id=f"{doc_id}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
             assertion_text=text,
-            source_references=[ref(doc_id, file_name, sec, sec, quote)], metadata=meta()))
+            source_references=[ref(doc_id, file_name, sec, sec, quote,
+                                   table_header=header)],
+            metadata=meta()))
 
     param_sec = "Factors, ranges and the knowledge space" if report else "Factors, ranges and study type"
-    param_quote = ("with their set-points, their normal operating ranges, the ranges studied and "
-                   "their final classification" if report else
-                   "The parameters to be studied, their set-points, their characterization ranges "
-                   "and their normal operating ranges are given in")
+    prow = param_rows(AXUO, report)   # the row that NAMES this parameter
     for name, cid in AXPARAM_CONCEPT.items():
         add("step:aex", "step_has_parameter", cid,
-            f"{AXUO_NAME} has process parameter {name}.", param_sec, param_quote)
+            f"{AXUO_NAME} has process parameter {name}.", param_sec, prow[name],
+            prow.header)
     # step sets the MVM clearance CQA; clears XMuLV, HCP, DNA and leached Protein A
     add("step:aex", "step_has_quality_attribute", "attr:lrv_mvm",
         f"{AXUO_NAME} sets the cumulative MVM (parvovirus) clearance claim.",
         "Quality attributes in scope",
         "The step sets one critical quality attribute (CQA)" if report
         else "This step sets one quality attribute")
-    cleared_quote = ("The step also clears four attributes that it does not set" if report else
-                     "The step also governs several attributes that are formed or set elsewhere")
+    # Each cleared attribute on its own row of the cleared-attribute table. The sentence that
+    # says the step clears four attributes names none of them.
+    crow = cqa_rows(AX_CQA_KEYS)
     for key in ["lrv_xmulv", "hcp", "residual_dna", "leached_protein_a"]:
         add("step:aex", "step_has_quality_attribute", AXATTR_CONCEPT[key],
             f"{AXUO_NAME} clears {AXATTR_NAME[key]}.", "Quality attributes in scope",
-            cleared_quote)
+            crow[key], crow.header)
     # attribute -> method (plan only; the report does not restate the linkage)
     if not report:
         for key in AX_CQA_METHOD:
@@ -4293,9 +4457,7 @@ def ax_assertions(doc_id, file_name, report):
             add(AXPARAM_CONCEPT[name], "parameter_impacts_attribute", "attr:hcp",
                 f"{name} was ranked for multivariate study on its potential impact on a CQA and "
                 f"its potential to interact with other parameters.",
-                "Risk-based prioritization of parameters",
-                "the potential impact of the parameter on a critical quality attribute, and its "
-                "potential to interact with other parameters")
+                "Risk-based prioritization of parameters", prow[name], prow.header)
         add("param:aex_flow", "parameter_impacts_attribute", "attr:lrv_mvm",
             "Operating flow rate acts on this step through residence time and is assessed "
             "univariately.",
@@ -4415,6 +4577,10 @@ def ax_proven_acceptable_ranges(doc_id, file_name):
     import doe_report as D
     par = D.par_table(AXUO)
     out = []
+    # Each attribute x parameter combination on its own @tbl-par row: the
+    # per-attribute prose said which attribute was governed, never which
+    # parameter's range was proven.
+    rows = par_rows(AXUO)
     for i, r in enumerate(par.to_dict("records"), 1):
         cqa, param, unit = r["CQA"], r["Parameter"], (r["Unit"] or "")
         char = f"{r['Char. range']} {unit}".strip()
@@ -4434,7 +4600,9 @@ def ax_proven_acceptable_ranges(doc_id, file_name):
             par_nor_propagated=f"{r['PAR (NOR)']} {unit}".strip(),
             acceptance_basis=par_basis_text(AXUO, cqa),
             source_references=[ref(doc_id, file_name, f"{doc_id}_sec_par", AX_PAR_SEC,
-                                   AX_PAR_CQA_QUOTE.get(cqa, _AX_PAR_GENERAL_QUOTE))],
+                                   rows[(cqa, param)],
+                                   table_id=f"{doc_id}_tab_par",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -4743,6 +4911,7 @@ def vf_params(doc_id, file_name, sec, classified):
                       "the risk of leaving the range is low because the parameter is measured "
                       "directly during the run."}
     out = []
+    rows = param_rows(VFUO, classified)   # each parameter on its own @tbl-params row
     for r in VFPARAM_ROWS:
         name = r["parameter"]
         ptype = r["classification"] if classified else "unclassified"
@@ -4756,8 +4925,9 @@ def vf_params(doc_id, file_name, sec, classified):
             source_references=[ref(doc_id, file_name, sec,
                                    "Factors, ranges and the knowledge space" if classified
                                    else "Factors, ranges and study type",
-                                   caption, table_title=caption,
-                                   table_id=f"{doc_id}_tab_params")],
+                                   rows[name], table_title=caption,
+                                   table_id=f"{doc_id}_tab_params",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -4774,6 +4944,7 @@ VF_CQA_CAPTION = {
 def vf_cqas(doc_id, file_name, sec, report):
     caption = VF_CQA_CAPTION[report]
     out = []
+    rows = cqa_rows(VF_CQA_KEYS)   # each attribute on its own @tbl-cqa row
     for key in VF_CQA_KEYS:
         r = _vf_cqa_row(key)
         out.append(S.QualityAttribute(
@@ -4786,8 +4957,9 @@ def vf_cqas(doc_id, file_name, sec, report):
             criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
             tool2_severity=int(r["tool2_severity"]),
             source_references=[ref(doc_id, file_name, sec, "Quality attributes in scope",
-                                   caption, table_title=caption,
-                                   table_id=f"{doc_id}_tab_cqa")],
+                                   rows[key], table_title=caption,
+                                   table_id=f"{doc_id}_tab_cqa",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -4886,21 +5058,21 @@ def vf_assertions(doc_id, file_name, report):
     A = []
     n = [0]
 
-    def add(subj, pred, obj, text, sec, quote):
+    def add(subj, pred, obj, text, sec, quote, header=None):
         n[0] += 1
         A.append(EvidenceBackedAssertion(
             assertion_id=f"{doc_id}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
             assertion_text=text,
-            source_references=[ref(doc_id, file_name, sec, sec, quote)], metadata=meta()))
+            source_references=[ref(doc_id, file_name, sec, sec, quote,
+                                   table_header=header)],
+            metadata=meta()))
 
     param_sec = "Factors, ranges and the knowledge space" if report else "Factors, ranges and study type"
-    param_quote = ("The parameters, their set-points, their normal operating ranges, their "
-                   "characterized ranges and their final classification are given in Table 6"
-                   if report else
-                   "The design covers the two parameters that RA-001 assigned to multivariate study")
+    prow = param_rows(VFUO, report)   # the row that NAMES this parameter
     for name, cid in VFPARAM_CONCEPT.items():
         add("step:virus_filtration", "step_has_parameter", cid,
-            f"{VFUO_NAME} has process parameter {name}.", param_sec, param_quote)
+            f"{VFUO_NAME} has process parameter {name}.", param_sec, prow[name],
+            prow.header)
     # step is the principal MVM-removal mechanism; a major clearance step for XMuLV
     add("step:virus_filtration", "step_has_quality_attribute", "attr:lrv_mvm",
         f"{VFUO_NAME} is the principal contributor to the cumulative MVM (parvovirus) clearance.",
@@ -5074,6 +5246,10 @@ def vf_proven_acceptable_ranges(doc_id, file_name):
     import doe_report as D
     par = D.par_table(VFUO)
     out = []
+    # Each attribute x parameter combination on its own @tbl-par row: the
+    # per-attribute prose said which attribute was governed, never which
+    # parameter's range was proven.
+    rows = par_rows(VFUO)
     for i, r in enumerate(par.to_dict("records"), 1):
         cqa, param, unit = r["CQA"], r["Parameter"], (r["Unit"] or "")
         out.append(S.ProvenAcceptableRange(
@@ -5084,7 +5260,9 @@ def vf_proven_acceptable_ranges(doc_id, file_name):
             par_nor_propagated=f"{r['PAR (NOR)']} {unit}".strip(),
             acceptance_basis=par_basis_text(VFUO, cqa),
             source_references=[ref(doc_id, file_name, f"{doc_id}_sec_par", VF_PAR_SEC,
-                                   VF_PAR_CQA_QUOTE.get(cqa, _VF_PAR_GENERAL_QUOTE))],
+                                   rows[(cqa, param)],
+                                   table_id=f"{doc_id}_tab_par",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -5482,6 +5660,7 @@ def uf_params(doc_id, file_name, sec, classified):
                    "the final drug-substance concentration — process performance only; no failure "
                    "mode at this step reaches a critical quality attribute."}
     out = []
+    rows = param_rows(UFUO, classified)   # each parameter on its own @tbl-params row
     for r in UFPARAM_ROWS:
         name = r["parameter"]
         ptype = r["classification"] if classified else "unclassified"
@@ -5495,8 +5674,9 @@ def uf_params(doc_id, file_name, sec, classified):
             source_references=[ref(doc_id, file_name, sec,
                                    "Study design" if classified
                                    else "Factors, ranges and study type",
-                                   caption, table_title=caption,
-                                   table_id=f"{doc_id}_tab_params")],
+                                   rows[name], table_title=caption,
+                                   table_id=f"{doc_id}_tab_params",
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
 
@@ -5570,21 +5750,21 @@ def uf_assertions(doc_id, file_name, report):
     A = []
     n = [0]
 
-    def add(subj, pred, obj, text, sec, quote):
+    def add(subj, pred, obj, text, sec, quote, header=None):
         n[0] += 1
         A.append(EvidenceBackedAssertion(
             assertion_id=f"{doc_id}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
             assertion_text=text,
-            source_references=[ref(doc_id, file_name, sec, sec, quote)], metadata=meta()))
+            source_references=[ref(doc_id, file_name, sec, sec, quote,
+                                   table_header=header)],
+            metadata=meta()))
 
-    param_quote = ("The parameters, their set-points, their normal operating ranges, their "
-                   "characterization ranges and their final classification" if report else
-                   "gives the parameters, their set-points, the ranges to be studied, the normal "
-                   "operating ranges and the study type assigned to each")
+    prow = param_rows(UFUO, report)   # the row that NAMES this parameter
     param_sec = "Study design" if report else "Factors, ranges and study type"
     for name, cid in UFPARAM_CONCEPT.items():
         add("step:ufdf", "step_has_parameter", cid,
-            f"{UFUO_NAME} has process parameter {name}.", param_sec, param_quote)
+            f"{UFUO_NAME} has process parameter {name}.", param_sec, prow[name],
+            prow.header)
     # UF/DF monitors the two attributes of its own AMV panel; it neither forms nor clears
     # them. The table caption of each document states exactly that, so it is the anchor.
     for key, cid in UFATTR_CONCEPT.items():
@@ -5680,7 +5860,10 @@ def uf_proven_acceptable_ranges(doc_id, file_name):
     response-surface model, so ``par_nor_propagated`` is deliberately null."""
     sec = "Operating ranges and proven acceptable ranges"
     sid = f"{doc_id}_sec_par"
-    general = "The proven acceptable range of each parameter is its characterization range"
+    # The report has no @tbl-par: it states that the PAR of each parameter IS its
+    # characterization range in @tbl-params, so that row is where the range lives. The
+    # sentence saying so held every record before, and named no parameter.
+    rows = param_rows(UFUO, True)
     out = []
     for i, r in enumerate(UFPARAM_ROWS, 1):
         name, unit = r["parameter"], r["unit"]
@@ -5696,7 +5879,9 @@ def uf_proven_acceptable_ranges(doc_id, file_name):
                              "concentration, step yield and mass balance); no fitted "
                              "response-surface model exists for this step, so no NOR-propagated "
                              "analysis was run.",
-            source_references=[ref(doc_id, file_name, sid, sec, general),
+            source_references=[ref(doc_id, file_name, sid, sec, rows[name],
+                                   table_id=f"{doc_id}_tab_params",
+                                   table_header=rows.header),
                                ref(doc_id, file_name, sid, sec, UFPAR_QUOTE[name])],
             metadata=meta()))
     return out
@@ -6065,6 +6250,9 @@ def ptp_steps():
 
 
 def ptp_cqas():
+    # PTP-001 renders the whole register as @tbl-cqa. The bare attribute name grounded and
+    # attested nothing: it names the record and says none of what the record claims.
+    rows = cqa_rows(list(P.cqa_reg["key"]))
     out = []
     for r in PTP_CQA_ROWS:
         out.append(S.QualityAttribute(
@@ -6073,7 +6261,8 @@ def ptp_cqas():
             criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
             tool2_severity=int(r["tool2_severity"]),
             source_references=[ref("PTP-001", PTP_FILE, "PTP-001_sec_process",
-                                   "Product and process description", r["cqa"],
+                                   "Product and process description", rows[r["key"]],
+                                   table_header=rows.header,
                                    table_title="A-Mab drug substance quality attributes, "
                                                "acceptance criteria and criticality",
                                    table_id="PTP-001_tab_cqa")],
@@ -6122,13 +6311,15 @@ def ptp_assertions():
     A = []
     n = [0]
 
-    def add(subj, pred, obj, text, sec, quote, table_title=None, table_id=None):
+    def add(subj, pred, obj, text, sec, quote, table_title=None, table_id=None,
+            table_header=None):
         n[0] += 1
         A.append(EvidenceBackedAssertion(
             assertion_id=f"PTP-001-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
             assertion_text=text,
             source_references=[ref("PTP-001", PTP_FILE, "PTP-001_sec", sec, quote,
-                                   table_title=table_title, table_id=table_id)],
+                                   table_title=table_title, table_id=table_id,
+                                   table_header=table_header)],
             metadata=meta()))
 
     train_rows = train_row_quotes()
@@ -6138,6 +6329,7 @@ def ptp_assertions():
         add("process:amab_ds", "process_has_step", f"step:{key}",
             f"The A-Mab drug-substance process has the step {title}.",
             "Product and process description", train_rows[key],
+            table_header=train_rows.header,
             table_title="The A-Mab drug substance process train and the principal role of each step",
             table_id="PTP-001_tab_train")
     # transfer -> gap, anchored on the closing action recorded for the gap in Table 10.
@@ -6245,6 +6437,12 @@ RA_FILE = "RA-001_risk_assessment.docx"
 RA_ATTR_NAME = {r["key"]: r["cqa"] for _, r in P.cqa_reg.iterrows()}
 # The two steps whose parameters reach no quality attribute state that fact in their own
 # §4 subsection; those sentences anchor the performance-only (non-impact) assertions.
+# Header of the leading columns each RA-001 partial row covers. A partial row needs a
+# partial header: the two must have the same number of cells or the header mislabels them.
+RA_RANK_HEADER = _join_cells(["Parameter", "Potential failure mode", "Attribute(s) at risk"])
+RA_ASSIGN_HEADER = _join_cells(["Unit operation", "Parameter"])
+RA_CQA_HEADER_3 = _join_cells(["Quality attribute", "Category", "Acceptance"])
+
 RA_PERF_STEP_QUOTE = {
     "harvest": "No parameter of the harvest step can change a product quality attribute",
     "ufdf": "No parameter of the ultrafiltration and diafiltration step forms or clears a "
@@ -6271,7 +6469,7 @@ def ra_cqa_entities():
                 ref("RA-001", RA_FILE, "RA-001_sec_cqa", "Quality attributes at risk",
                     rows[r["key"]],
                     table_title="Quality attributes, criticality and the severity each confers",
-                    table_id="RA-001_tab_cqa"),
+                    table_id="RA-001_tab_cqa", table_header=rows.header),
             ],
             metadata=meta()))
     return out
@@ -6299,14 +6497,14 @@ def ra_param_entities(rows):
                 # failure mode and the attribute(s) that failure mode could reach
                 ref("RA-001", RA_FILE, "RA-001_sec_rank",
                     "Parameter risk ranking by unit operation",
-                    f"{r['param']} {r['fm']} {r['cqa_label']}",
+                    _join_cells([r["param"], r["fm"], r["cqa_label"]]),
                     table_title=f"Pre-characterization risk ranking, {r['unit_op']}",
-                    table_id=f"RA-001_tab_rank_{r['key']}"),
+                    table_id=f"RA-001_tab_rank_{r['key']}", table_header=RA_RANK_HEADER),
                 # the parameter's row of the campaign-wide assignment table
                 ref("RA-001", RA_FILE, "RA-001_sec_assign", "Characterization study assignment",
-                    f"{r['unit_op']} {r['param']}",
+                    _join_cells([r["unit_op"], r["param"]]),
                     table_title="Characterization study assignment for every parameter",
-                    table_id="RA-001_tab_assign"),
+                    table_id="RA-001_tab_assign", table_header=RA_ASSIGN_HEADER),
             ],
             metadata=meta()))
     return out
@@ -6337,9 +6535,9 @@ def ra_assertions(quality_rows, perf_rows):
     A = []
     n = [0]
 
-    def rref(sec_id, sec_title, quote, table_title=None, table_id=None):
+    def rref(sec_id, sec_title, quote, table_title=None, table_id=None, table_header=None):
         return ref("RA-001", RA_FILE, sec_id, sec_title, quote,
-                   table_title=table_title, table_id=table_id)
+                   table_title=table_title, table_id=table_id, table_header=table_header)
 
     def add(subj, pred, obj, text, refs):
         n[0] += 1
@@ -6348,18 +6546,22 @@ def ra_assertions(quality_rows, perf_rows):
             assertion_text=text, source_references=refs, metadata=meta()))
 
     def rank_ref(r):
-        """The parameter's row of its step ranking table: parameter, failure mode, attributes."""
+        """The parameter's row of its step ranking table: parameter, failure mode, attributes.
+
+        The leading cells of the rendered row, joined the way the document reads back
+        (``_join_cells``); the trailing severity and RPN cells are outside the relation this
+        reference attests."""
         return rref("RA-001_sec_rank", "Parameter risk ranking by unit operation",
-                    f"{r['param']} {r['fm']} {r['cqa_label']}",
+                    _join_cells([r["param"], r["fm"], r["cqa_label"]]),
                     table_title=f"Pre-characterization risk ranking, {r['unit_op']}",
-                    table_id=f"RA-001_tab_rank_{r['key']}")
+                    table_id=f"RA-001_tab_rank_{r['key']}", table_header=RA_RANK_HEADER)
 
     def assign_ref(r):
         """The parameter's row of the campaign-wide study-assignment table."""
         return rref("RA-001_sec_assign", "Characterization study assignment",
-                    f"{r['unit_op']} {r['param']}",
+                    _join_cells([r["unit_op"], r["param"]]),
                     table_title="Characterization study assignment for every parameter",
-                    table_id="RA-001_tab_assign")
+                    table_id="RA-001_tab_assign", table_header=RA_ASSIGN_HEADER)
 
     # step -> parameter: every parameter assessed here belongs to a named unit operation and
     # leaves this document with a study type (the assessment's actual output).
@@ -6372,9 +6574,10 @@ def ra_assertions(quality_rows, perf_rows):
         add(f"attr:{r['key']}", "attribute_has_acceptance_criterion", f"lit:{r['key']}_acc",
             f"{r['cqa']} acceptance: {r['acc_low']:g}–{r['acc_high']:g} {r['unit']}.",
             [rref("RA-001_sec_cqa", "Quality attributes at risk",
-                  f"{r['cqa']} {r['category']} {r['acc_low']:g}–{r['acc_high']:g} {r['unit']}",
+                  _join_cells([r["cqa"], r["category"],
+                               f"{r['acc_low']:g}–{r['acc_high']:g} {r['unit']}"]),
                   table_title="Quality attributes, criticality and the severity each confers",
-                  table_id="RA-001_tab_cqa")])
+                  table_id="RA-001_tab_cqa", table_header=RA_CQA_HEADER_3)])
     # parameter -> attribute AT RISK. Prospective only: the failure mode is postulated and the
     # attribute is the one it could reach, not one the parameter is shown to move.
     for r in quality_rows:
@@ -6535,11 +6738,19 @@ def _corpus_steps(doc, file, sec_id, sec_title):
         out.append(S.ProcessStep(
             step_id=f"step:{key}", step_name=title, step_number=str(uo.step),
             unit_operation=title, description=P.UNIT_OP_ROLE.get(key, ""),
-            source_references=[ref(doc, file, sec_id, sec_title, rows[key])], metadata=meta()))
+            source_references=[ref(doc, file, sec_id, sec_title, rows[key],
+                                   table_header=rows.header)], metadata=meta()))
     return out
 
 
-def _corpus_cqas(doc, file, sec_id, sec_title, table_title, table_id):
+def _corpus_cqas(doc, file, sec_id, sec_title, table_title, table_id, rows=None):
+    """The whole CQA register, as the corpus-spanning documents carry it.
+
+    ``rows`` is the rendered @tbl-cqa of that document, keyed by attribute key. The anchor was
+    the bare attribute name before — a span that names the record and attests nothing about
+    it, since the acceptance criterion and criticality the record carries are in the row.
+    """
+    rows = rows if rows is not None else cqa_rows(list(P.cqa_reg["key"]))
     out = []
     for r in P.cqa_reg.to_dict("records"):
         out.append(S.QualityAttribute(
@@ -6547,10 +6758,22 @@ def _corpus_cqas(doc, file, sec_id, sec_title, table_title, table_id):
             unit=r["unit"], acceptance_criteria=[f"{r['acc_low']:g}–{r['acc_high']:g} {r['unit']}"],
             criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
             tool2_severity=int(r["tool2_severity"]),
-            source_references=[ref(doc, file, sec_id, sec_title, r["cqa"],
-                                   table_title=table_title, table_id=table_id)],
+            source_references=[ref(doc, file, sec_id, sec_title, rows[r["key"]],
+                                   table_title=table_title, table_id=table_id,
+                                   table_header=rows.header)],
             metadata=meta()))
     return out
+
+
+def _master_plan_cqa_rows():
+    """PCMP-001's @tbl-cqa: the register with the setting step inserted as column 2.
+
+    The master plan is the only document that renders the register this way, so its rows
+    differ from every other document's and have to be rebuilt from its own expression.
+    """
+    df = P.cqas_by_keys(list(P.cqa_reg["key"]))
+    df.insert(1, "Set by", [P.UNIT_OP_TITLES[s] for s in P.cqa_reg["set_by"]])
+    return row_quotes(df, P.cqa_reg["key"])
 
 
 def _corpus_step_concepts():
@@ -6581,11 +6804,12 @@ def build_master_plan():
     n_params, n_steps = _ra["n"], len(P.CFG.train_order)
     n_multi, n_uni = _ra["n_multivariate"], _ra["n_univariate"]
 
-    def add(subj, pred, obj, text, sec, quote):
+    def add(subj, pred, obj, text, sec, quote, header=None):
         n[0] += 1
         A.append(EvidenceBackedAssertion(
             assertion_id=f"{doc}-A{n[0]:03d}", subject_id=subj, predicate=pred, object_id=obj,
-            assertion_text=text, source_references=[ref(doc, f, f"{doc}_sec", sec, quote)],
+            assertion_text=text,
+            source_references=[ref(doc, f, f"{doc}_sec", sec, quote, table_header=header)],
             metadata=meta()))
     train_rows = train_row_quotes()
     for key in P.CFG.train_order:
@@ -6593,7 +6817,7 @@ def build_master_plan():
         title = P.UNIT_OP_TITLES.get(key, uo.name)
         add("process:amab_ds", "process_has_step", f"step:{key}",
             f"The A-Mab drug-substance process has the step {title}.",
-            "Purpose and scope", train_rows[key])
+            "Purpose and scope", train_rows[key], train_rows.header)
     for key in ["lrv_mvm", "hcp", "aggregates_hmw"]:
         r = P.cqa_reg[P.cqa_reg.key == key].iloc[0].to_dict()
         add(f"attr:{key}", "attribute_has_acceptance_criterion", f"lit:{key}_acc",
@@ -6693,7 +6917,7 @@ def build_master_plan():
                                       "Quality attributes in scope for the characterization "
                                       "campaign, with the step at which each is set, its acceptance "
                                       "criterion, its criticality level and its Tool #1 criticality score.",
-                                      f"{doc}_tab_cqa")),
+                                      f"{doc}_tab_cqa", rows=_master_plan_cqa_rows())),
     ]
     inv = S.DocumentInventoryItem(
         document_id=doc, file_name=f, predicted_document_type="process_characterization_master_plan",
@@ -6766,18 +6990,26 @@ PCMR_TAB = {
 
 
 def _md_rows(df, floatfmt=None):
-    """Every rendered row of a ``_pcpkg.show``-style table, whitespace-collapsed.
+    """Every rendered row of a ``_pcpkg.show``-style table, cells joined by ``CELL_SEP``.
 
     ``show`` emits ``df.to_markdown(index=False, floatfmt=...)`` and Quarto turns each markdown
-    row into a docx table row, whose cells are read back separated by whitespace. Rebuilding the
-    row from the same DataFrame therefore reproduces the rendered row verbatim — which is what
-    lets a per-record quote span the whole relation instead of a generic sentence about it.
+    row into a docx table row, which ``check_grounding.docx_text`` reads back with its cell
+    boundaries marked as ``" | "``. Rebuilding the row from the same DataFrame therefore
+    reproduces the rendered row verbatim — which is what lets a per-record quote span the whole
+    relation instead of a generic sentence about it.
+
+    The separator is the cell boundary, not decoration: without it "3 Production Bioreactor
+    Forms the glycan ... CQAs" is one undifferentiated span, and a consumer cannot tell which
+    token is the step number and which is the role the row assigns it.
+
+    ``floatfmt`` defaults to whatever ``show`` would have chosen for this table
+    (``_pcpkg._auto_floatfmt``), because a row rebuilt in a different format is a row that
+    does not ground: a 9,000 g set-point rendered as ``9,000`` by the document and as
+    ``9e+03`` here matches nothing. Pass it explicitly only where the ``.qmd`` does.
     """
-    rows = []
-    for line in df.to_markdown(index=False, floatfmt=floatfmt or ".3g").splitlines()[2:]:
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        rows.append(" ".join(c for c in cells if c))
-    return rows
+    fmt = floatfmt or P._auto_floatfmt(df)
+    return [_join_cells(line.strip().strip("|").split("|"))
+            for line in df.to_markdown(index=False, floatfmt=fmt).splitlines()[2:]]
 
 
 def _grid_rows(df, maxcolwidths):
@@ -6785,7 +7017,8 @@ def _grid_rows(df, maxcolwidths):
 
     tabulate wraps each cell to ``maxcolwidths`` and pandoc joins the wrapped lines of a cell
     into one paragraph, so the rendered row is the wrapped cells concatenated column by column
-    (a cell broken at a hyphen therefore renders as e.g. "re- assayed", which this reproduces).
+    (a cell broken at a hyphen therefore renders as e.g. "re- assayed", which this reproduces)
+    and then separated by ``CELL_SEP`` like any other row.
     """
     blocks, cur = [], []
     for line in df.to_markdown(index=False, tablefmt="grid",
@@ -6805,7 +7038,7 @@ def _grid_rows(df, maxcolwidths):
             for i, part in enumerate(c.strip() for c in line.strip().strip("|").split("|")):
                 if part:
                     cells[i] = f"{cells[i]} {part}".strip()
-        rows.append(" ".join(c for c in cells if c))
+        rows.append(_join_cells(cells))
     return rows
 
 
@@ -6818,25 +7051,26 @@ def _pcmr_registers():
     out["Set by"] = out.set_by.map(P.UNIT_OP_TITLES)
     out["Drug substance"] = out.apply(lambda r: f"{r['mean']:.3g} ± {r['sd']:.2g}", axis=1)
     out["Cpk"] = out.Cpk.map(lambda v: f"{v:.2f}")
-    cqa = dict(zip(out.key, _md_rows(
-        out.rename(columns={"cqa": "CQA", "criticality": "Criticality"})
-           [["CQA", "Criticality", "Acceptance", "Set by", "Drug substance", "Cpk"]], ".2f")))
+    cqa_df = (out.rename(columns={"cqa": "CQA", "criticality": "Criticality"})
+                 [["CQA", "Criticality", "Acceptance", "Set by", "Drug substance", "Cpk"]])
+    cqa = row_quotes(cqa_df, out.key, ".2f")
 
     keys = list(P.cqa_reg["key"])
     cap_tbl = P.cap_for(keys).copy()
     cap_tbl["Spec"] = cap_tbl["Spec"].str.replace("_", "-", regex=False)
     cap_tbl["Cpk"] = cap_tbl["Cpk"].map(lambda v: f"{v:.2f}")
-    cap = dict(zip(P.cap[P.cap.key.isin(keys)].key, _md_rows(cap_tbl, ".2f")))
+    cap = row_quotes(cap_tbl, P.cap[P.cap.key.isin(keys)].key, ".2f")
 
     q = P.param_reg[P.param_reg.classification.isin(["CPP", "WC-CPP"])]
-    par = dict(zip(zip(q.unit_operation, q.parameter), _md_rows(P.cpp_params())))
+    par = row_quotes(P.cpp_params(), zip(q.unit_operation, q.parameter))
 
     vt = P.csv("viral_clearance.csv").copy()
     vt["Mechanism"] = vt.step.map(PCMR_VC_MECH)
     vt["Report"] = vt.step.map(PCMR_VC_REPORT)
-    viral = dict(zip(vt.step, _md_rows(
-        vt.rename(columns={"step": "Step", "XMuLV": "XMuLV (log₁₀)", "MVM": "MVM (log₁₀)"})
-          [["Step", "Mechanism", "XMuLV (log₁₀)", "MVM (log₁₀)", "Report"]], ".2f")))
+    viral_df = (vt.rename(columns={"step": "Step", "XMuLV": "XMuLV (log₁₀)",
+                                   "MVM": "MVM (log₁₀)"})
+                  [["Step", "Mechanism", "XMuLV (log₁₀)", "MVM (log₁₀)", "Report"]])
+    viral = row_quotes(viral_df, vt.step, ".2f")
 
     dv = P.csv("deviations.csv").copy()
     dv["Deviation"] = dv["dev_id"] + " (" + dv["doc_id"] + ")"
@@ -6845,10 +7079,10 @@ def _pcmr_registers():
                         .str.replace("uv ", "UV ", regex=False))
     dv["Disposition"] = (dv["disposition"].str.replace("_", " ", regex=False)
                          .str.replace("re executed", "re-executed", regex=False))
-    dev = dict(zip(dv.dev_id, _grid_rows(
-        dv.rename(columns={"summary": "What happened"})
-          [["Deviation", "Step", "What happened", "Root cause", "Disposition"]],
-        [20, 16, 30, 24, 18])))
+    dev_df = (dv.rename(columns={"summary": "What happened"})
+                [["Deviation", "Step", "What happened", "Root cause", "Disposition"]])
+    dev = RowQuotes(zip(dv.dev_id, _grid_rows(dev_df, [20, 16, 30, 24, 18])))
+    dev.header = _join_cells(dev_df.columns)
     return train, cqa, cap, par, viral, dev
 
 
@@ -6991,6 +7225,7 @@ def pcmr_steps(doc, f):
             unit_operation=title, description=P.UNIT_OP_ROLE.get(key, ""),
             source_references=[ref(doc, f, f"{doc}_sec_process",
                                    "Process description and performance", PCMR_TRAIN_ROW[key],
+                                   table_header=PCMR_TRAIN_ROW.header,
                                    table_title=PCMR_TAB["train"][1],
                                    table_id=PCMR_TAB["train"][0])],
             metadata=meta()))
@@ -7015,8 +7250,10 @@ def pcmr_cqas(doc, f):
             source_references=[
                 ref(doc, f, f"{doc}_sec_cqa", "Consolidated quality attribute outcomes",
                     PCMR_CQA_ROW[key], table_title=PCMR_TAB["cqa"][1],
+                    table_header=PCMR_CQA_ROW.header,
                     table_id=PCMR_TAB["cqa"][0]),
                 ref(doc, f, f"{doc}_sec_cap", "Process capability", PCMR_CAP_ROW[key],
+                    table_header=PCMR_CAP_ROW.header,
                     table_title=PCMR_TAB["cap"][1], table_id=PCMR_TAB["cap"][0]),
             ],
             metadata=meta()))
@@ -7060,6 +7297,7 @@ def pcmr_params(doc, f, rows):
                 f"re-derived."),
             source_references=[ref(doc, f, f"{doc}_sec_class", "Parameter classification summary",
                                    r["row"], table_title=PCMR_TAB["cpp"][1],
+                                   table_header=PCMR_PAR_ROW.header,
                                    table_id=PCMR_TAB["cpp"][0])],
             metadata=meta()))
     return out
@@ -7103,6 +7341,7 @@ def build_master_report():
         """The step's row of @tbl-train: number, unit operation and its role in the strategy."""
         return ref(doc, f, f"{doc}_sec_process", "Process description and performance",
                    PCMR_TRAIN_ROW[key], table_title=PCMR_TAB["train"][1],
+                   table_header=PCMR_TRAIN_ROW.header,
                    table_id=PCMR_TAB["train"][0])
 
     def cqa_ref(key):
@@ -7110,12 +7349,14 @@ def build_master_report():
         register assigns it to, and the simulated drug-substance result."""
         return ref(doc, f, f"{doc}_sec_cqa", "Consolidated quality attribute outcomes",
                    PCMR_CQA_ROW[key], table_title=PCMR_TAB["cqa"][1],
+                    table_header=PCMR_CQA_ROW.header,
                    table_id=PCMR_TAB["cqa"][0])
 
     def viral_ref(step_key):
         """The step's row of @tbl-viral: mechanism claimed and the log10 credited per virus."""
         return ref(doc, f, f"{doc}_sec_viral", "Viral clearance summary",
                    PCMR_VC_ROW_FOR[step_key], table_title=PCMR_TAB["viral"][1],
+                   table_header=PCMR_VC_ROW.header,
                    table_id=PCMR_TAB["viral"][0])
 
     for key in P.CFG.train_order:
@@ -7151,6 +7392,7 @@ def build_master_report():
             f"{r['unit_operation']} has quality-linked process parameter {r['parameter']}, "
             f"consolidated here as {r['classification']}.",
             [ref(doc, f, f"{doc}_sec_class", "Parameter classification summary", r["row"],
+                 table_header=PCMR_PAR_ROW.header,
                  table_title=PCMR_TAB["cpp"][1], table_id=PCMR_TAB["cpp"][0])])
 
     def stx(i, text, sec, quote):
@@ -7317,7 +7559,14 @@ def main():
     ):
         path = os.path.join(OUT, f"{annex.document_id}.json")
         with open(path, "w") as fh:
-            json.dump(annex.model_dump(mode="json"), fh, indent=2, ensure_ascii=False)
+            # serialize_as_any: the vendored models annotate `list[SourceReference]` against
+            # the CONTRACT class, and pydantic serializes to the declared annotation — so
+            # `table_header`, which lives on the schema_ext subclass, is dropped from every
+            # such reference with no warning. Duck-typed serialization keeps it. Verified on
+            # pydantic 2.13.4; check_grounding gates the field, so a silent drop would show
+            # up there rather than in a silently thinner annex.
+            json.dump(annex.model_dump(mode="json", serialize_as_any=True), fh,
+                      indent=2, ensure_ascii=False)
         ne = sum(len(s.process_steps) + len(s.parameters) + len(s.quality_attributes)
                  + len(s.analytical_methods) + len(s.equipment) + len(s.sites) for s in annex.entities)
         print(f"wrote {path}: {ne} entities, {len(annex.studies)} studies, "

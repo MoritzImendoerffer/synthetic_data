@@ -55,7 +55,9 @@ rendered tables and left a document contradicting itself.
 2. `python authoring/build_brief.py <DOC>` for the plan and the report.
 3. Author each document in one pass from the brief and the `authoring/` artifacts.
 4. Add the pair's entities and assertions to `build_ground_truth.py`. Anchor each record on
-   its rendered table row with `row_quotes()`, not on a caption — see
+   its rendered table row with `param_rows()` / `cqa_rows()` / `par_rows()`, not on a caption;
+   pass `table_header=rows.header`; and keep the `" | "` cell separator (`_join_cells()`) if
+   you build a partial row by hand, with a matching partial header — see
    [`GROUND_TRUTH.md`](GROUND_TRUTH.md) §1.
 5. `make corpus` discovers new `PCP-*` / `PCR-*` documents automatically.
 

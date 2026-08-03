@@ -77,7 +77,11 @@ Invoke as:
                A caption grounds while attesting nothing: one span then stands in for every
                row of the table. The rendered row carries both ends of the relation (the
                parameter and its set-point, the attribute and its acceptance criterion),
-               which is what makes the annex usable for attribution. check_grounding reports
+               which is what makes the annex usable for attribution. Cells are joined by
+               " | " (check_grounding.CELL_SEP) so the row can be split back into columns,
+               and table_header=rows.header names those columns; a hand-built partial row
+               must use _join_cells() and a partial header. Use param_rows() / cqa_rows() /
+               par_rows(), which rebuild the table the .qmd renders. check_grounding reports
                quotes that fail this; GROUNDING_STRICT_ANCHORS=1 makes it a gate, and the
                corpus is at zero. See pc_package/GROUND_TRUTH.md §1.
 

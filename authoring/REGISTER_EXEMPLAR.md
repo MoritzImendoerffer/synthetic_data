@@ -702,6 +702,41 @@ carries a *decision* rather than just a fact:
 > downstream processing and is mainly influenced by the upstream process conditions.
 > — A-Mab, p. 116
 
+### The step after the full stop
+
+Where the connective sits matters as much as which one it is. In all four sources the premise
+finishes as a sentence and the consequence opens the next one. The corpus does the opposite: it
+joins the two with ", so " in 6 to 11 % of its sentences and opens 0 to 2 % of them with a
+connective, against 3.7 to 6.1 % in the sources. Read these as pairs, not as single sentences.
+
+> At an early stage of process development, the information available on product attributes may
+> be limited. For this reason, the first set of CQAs may come from prior knowledge obtained
+> during early development and/or from similar products rather than from extensive product
+> characterization.
+> — PDA TR 60, printed p. 13 / extract p. 21
+
+> The specifics of the CPV sampling/testing strategy may not be finalized until completion of
+> PPQ. Therefore, the process validation master plan may include general commitments to the
+> planned CPV strategy.
+> — PDA TR 60, printed p. 44 / extract p. 52
+
+> Results also showed that there are no Critical Process Parameters (CPPs) in Step 3 since all
+> parameters are well controlled within their acceptable limits and have demonstrated robust
+> process operation. Thus, all quality-linked process parameters for Step 3 were classified as
+> WC-CPPs.
+> — A-Mab, p. 87
+
+> In many regulatory regions, a minimum of three successful, consecutive lots are used. However,
+> other regulatory bodies may accept more (or less) lots depending on the knowledge available for
+> the product.
+> — ISPE Technology Transfer, printed p. 93 / extract p. 95
+
+**Note.** Each first sentence is complete on its own and each second sentence carries one step,
+not two. The A-Mab pair is the one to study: the finding and its evidence sit in sentence one,
+including a "since" clause, and the classification that follows from them gets its own sentence
+and its own connective. A corpus author would have written all of it as one sentence with
+", so … , and …".
+
 ## Introducing and discussing a table or figure
 
 The move is short. Almost always *[object] + verb + what it shows*, with the discussion

@@ -155,8 +155,39 @@ shape: the human examples in this section and the next run 14 to 24 words, with 
 ### 2d. A sentence
 
 Begin with information the reader already has and end with the new information. Keep the
-subject next to its verb. One sentence, one point; if a sentence carries two claims, make
-it two sentences.
+subject next to its verb. **One argument step per sentence.** When the next step is a
+consequence, a contrast or a recommendation, end the sentence and open the next one with the
+connective: "Therefore, …", "However, …", "As a result, …", "For this reason, …". Do not join
+the steps inside one sentence with ", so …" or with ", and …" carrying a second claim, and do
+not carry a new claim in a ", which …" clause.
+
+**This is a substitution. Check it in your draft.** Search for `, so ` and for `, and ` that
+introduces a second clause. Each one is a place where the sources would have written a full stop
+and a connective. Measured over the pages the self-test reads (2026-08-17): the four sources
+carry a mid-sentence ", so " in 0.1 to 0.4 % of their sentences and open 3.7 to 6.1 % of their
+sentences with a connective. The corpus carries ", so " in 6 to 11 % of sentences and opens 0 to
+2 % with a connective. `check_style.py` prints both figures on every run, and neither is gated.
+
+**Correction 0 — three steps in one sentence.** From `PCR-003`, *Discussion*, as it stood on
+2026-08-17. The project owner quoted it as "hard to understand, too many arguments in one
+sentence, including a recommendation in the last part":
+
+> ✗ The lack-of-fit tests rest on `` `{python} f"{cp_rsm}"` `` centre-point replicates, so a
+> non-significant result bounds the evidence for the model form without establishing it, and
+> `` `{python} lof_p_lo_resp.lower()` `` is the case to watch (p = `` `{python} f"{lof_p_lo:.2f}"` ``).
+
+A premise, a consequence and a recommendation, joined by ", so … , and …". The reader has to hold
+all three to the end.
+
+> ✓ The lack-of-fit tests rest on `` `{python} f"{cp_rsm}"` `` centre-point replicates.
+> Therefore, a non-significant result bounds the evidence for the model form without
+> establishing it. For this reason the weakest case is `` `{python} lof_p_lo_resp.lower()` ``
+> (p = `` `{python} f"{lof_p_lo:.2f}"` ``), and it is the one to watch at scale.
+
+Three sentences, one step each, and the second and third open on the connective that carries
+the step. Note the third: the response name is a runtime value. It can therefore never be the
+subject of a verb that has to agree with it, and "acidic variants is the case to watch" came
+from exactly that. Put a runtime name after "is" or after a preposition, never before the verb.
 
 > ✗ A 1.4-fold increase in pool aggregate, which is consistent with the descending-edge
 > mechanism described above and was also seen at bench scale, resulted from the highest
@@ -205,8 +236,8 @@ capability*:
 The second sentence has a perfectly good given to start from and starts somewhere else instead.
 It also stacks three possessives on referents the reader has to bind.
 
-> ✓ The remaining attributes sit far from their limits, so the capability indices show only that
-> none of them constrains the process. The furthest is leached Protein A, at
+> ✓ The remaining attributes sit far from their limits. Their capability indices therefore show
+> only that none of them constrains the process. The furthest is leached Protein A, at
 > `` `{python} f"{lpa_ratio:,.0f}"` ``-fold below the limit, and @tbl-cap reports its index for
 > completeness.
 
@@ -229,6 +260,17 @@ be asked to carry.
 One possessive survives, and it is the one that marks a real relationship: the range belongs to
 the parameter. The rest became "the".
 
+**Name the set you count.** "The four that matter", "both", "the three" ask the reader to bind a
+number to things named somewhere else. If the paragraph has not named them, the sentence does.
+From `PCR-003`, *Discussion*, as it stood on 2026-08-17 (the four factors were last named 270
+lines earlier):
+
+> ✗ … a screening design that ranked the factors and a response-surface design that models the
+> four that matter.
+
+> ✓ … a screening design that ranked the five factors and a response-surface design in the four
+> that screening retained: culture pH, temperature, culture duration and dissolved CO2.
+
 ### 2d bis. Prefer the definite article or the noun itself
 
 The same defect at word level. A possessive makes the reader bind a referent; an article or the
@@ -249,6 +291,16 @@ reader would otherwise mistake — "its characterization range" when two paramet
 the range belongs to one of them. Do not use one for every attribute of a thing already under
 discussion. This was the largest single divergence any method found between the corpus and the
 sources, and it was found by ranking word frequencies, not by reading.
+
+**The substitution is the definite article or the noun, and never "it is".** Round one of the
+register pilot applied this rule two ways. `PCR-003` replaced possessives with articles and
+nouns and its copula rate barely moved. `PCP-003` replaced 25 possessives with 23 expletive
+subjects ("it is", "it was", "it will be" went from 7 to 21) and its copula rate rose from
+18.4 % to 27.6 %, outside all four sources. Same rule, opposite cost.
+
+**The target is a band, not a minimum.** The sources sit at 0.27 to 0.40 *its* and 0.50 to 0.96
+*their* per 1000 words. Aim inside those bands; a document at 0.02 has driven out the licensed
+exception too, and paid for it somewhere else.
 
 **The same licensed exception applies here**, and for the same reason as in §2c. One point per
 sentence stays the default. A claim and its qualification are one sentence when the
@@ -303,8 +355,8 @@ of freedom, order of magnitude, significance. Nothing tells the reader what it m
 material. Say the consequence and attach the statistics to it.
 
 > ✓ Culture temperature and osmolality do not reach significance at α =
-> `` `{python} alpha` ``, but their effects are of the same order as the terms that do, so
-> neither can be called inactive on this design. Temperature is carried into the
+> `` `{python} alpha` ``, but their effects are of the same order as the terms that do. Neither
+> can therefore be called inactive on this design. Temperature is carried into the
 > response-surface stage on that basis. Osmolality is not, and its range rests on the screening
 > result and on the classification rationale in §9.
 
@@ -345,13 +397,27 @@ enumerated run is the surest way to make four related mechanisms read as four un
 > of its nucleotide sugar donor, both of which decline as a culture ages. High mannose is
 > enzymatic in the same way, and reflects how completely mannosidase trimming has run, which
 > makes it sensitive to lumenal pH and to temperature. Afucosylation is set by a competition
-> instead, between core fucosyltransferase activity and the rate of antibody transit, so it was
-> expected to fall as the culture progresses. Aggregate is the one expectation that is not
-> enzymatic: antibody that sits longer in an ageing broth aggregates more.
+> instead, between core fucosyltransferase activity and the rate of antibody transit. It was
+> therefore expected to fall as the culture progresses. Aggregate is the one expectation that is
+> not enzymatic: antibody that sits longer in an ageing broth aggregates more.
 
 The counters are gone and each sentence now says how it relates to the one before it: in the
 same way, instead, the one that is not. The reader learns why these four expectations belong in
 one paragraph, which "First, Second, Third, Fourth" never told them.
+
+**Second correction — write the frame instead of deleting one.** From `PCR-003`,
+*Response-surface design*, as it stood on 2026-08-17:
+
+> ✗ The response-surface model does not carry osmolality, so the interaction between temperature
+> and osmolality that screening resolved on galactosylation (@tbl-eff-gal) is represented in
+> this report by the screening estimate alone.
+
+> ✓ Because the response-surface model does not carry osmolality, the interaction between
+> temperature and osmolality that screening resolved on galactosylation (@tbl-eff-gal) is
+> represented in this report by the screening estimate alone.
+
+The condition moves into the front field and the main clause is the claim. One word changed and
+the sentence now has the shape 29.5 % of A-Mab's clauses have.
 
 ---
 
@@ -427,6 +493,8 @@ in the middle.
 | "rather than" | ≤ 0.8 per 1000 words | 0.3 | 0.1 | 0.1 | 0.0 |
 | *Connectives, per 1000 words — not gated* | *diagnostic* | *2.7* | *2.7* | *2.2* | *2.6* |
 | *…of the nine in §4b, how many are used* | *diagnostic* | *9* | *7* | *7* | *6* |
+| *Sentences with a mid-sentence ", so " — not gated* | *diagnostic* | *0.1 %* | *0.3 %* | *0.4 %* | *0.4 %* |
+| *Sentences opening with a connective — not gated* | *diagnostic* | *4.8 %* | *6.1 %* | *4.2 %* | *3.7 %* |
 
 The four human columns are what the sources actually measure. **Aim for those numbers, not
 for the edge of the band.** The band is now the union of four house styles and no single
@@ -440,6 +508,9 @@ gate had about connectives pushed down on the last one left. The last two rows r
 **fail nothing**: they are printed so the gap is visible. Across the 20 corpus documents the
 median is 1.5 per 1000 words and 3 of the 9 connectives; the four sources sit at 2.2 to 2.7
 and use 6 to 9. "However" occurs twice in the whole corpus and 59 times in the four sources.
+
+The two clause-packing rows were added on 2026-08-17; the corpus measured 6–11 % and 0–2 % on
+them, and round one of the register pilot made both worse. They fail nothing.
 
 The gate also rejects a short list of phrases that appear nowhere in either human source:
 "stated first", "it is worth noting", "this warrants comment", "the distinction that matters
@@ -497,6 +568,10 @@ what makes a paragraph sound assembled rather than argued. The remedy is not to 
 other seven in: a connective typed to satisfy a count is a worse tell than a missing one.
 It is to write the sentence that needs one — a concession, a contrast, a consequence — which
 is what §2c licenses and what the moves catalogue in `REGISTER_EXEMPLAR.md` shows.
+
+And say where the connective goes: at the head of the sentence, after the full stop that ends
+the previous step. The sources open 3.7 to 6.1 % of their sentences that way; the corpus opens
+0 to 2 %, and puts the same step after a comma instead (", so …" in 6 to 11 % of sentences).
 
 **Prefer the shorter word.** "used" over "utilised", "about" over "approximately" when
 approximating loosely, "shows" over "demonstrates" unless the evidence is strong enough to

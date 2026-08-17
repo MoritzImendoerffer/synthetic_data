@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-17_01_register-second-round]]** · **1 of 9 done** · 8 todo
+**[[epic|2026-08-17_01_register-second-round]]** · **2 of 9 done** · 7 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -31,7 +31,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-002]] | `todo` | the assistant | mechanism | Rewrite the guide's sentence rule as a substitution, fix the ✓ text that teaches the fault, and add the referent and Shape 4 examples |
 | [[TASK-003]] | `todo` | the assistant | mechanism | Add authoring/check_discourse.py with spaCy as an optional extra that the build never needs |
 | [[TASK-004]] | `todo` | the assistant | mechanism | Give the brief a §5d that prints the discourse targets and the document's own current numbers |
 | [[TASK-005]] | `todo` | the assistant | document | Re-author PCP-003 in one pass from the amended artifacts, as a DRAFT |
@@ -45,6 +44,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
 | [[TASK-001]] | `done` | — | mechanism | Print clause packing and sentence-initial connectives in check_style.py, gated by nothing |
+| [[TASK-002]] | `done` | — | mechanism | Rewrite the guide's sentence rule as a substitution, fix the ✓ text that teaches the fault, and add the referent and Shape 4 examples |
 
 ---
 

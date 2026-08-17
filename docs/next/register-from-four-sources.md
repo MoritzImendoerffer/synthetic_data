@@ -1,8 +1,11 @@
 # The corpus states facts. It does not argue. — what remains
 
-**Status: partly delivered 2026-08-17.** Work unit `2026-08-16_01_register-from-four-sources`
+**Status: partly delivered 2026-08-17; Track 1 being worked on since 2026-08-17 in work unit
+`2026-08-17_01_register-second-round`.** Work unit `2026-08-16_01_register-from-four-sources`
 shipped nine of its ten tasks, and this proposal is rewritten down to what is still open rather
-than deleted, because 18 of 20 documents have not been touched.
+than deleted, because 18 of 20 documents have not been touched. The second unit opened after the
+project owner read the re-authored `PCR-003` and named a defect the pilot did not measure; its
+`exploration.md` records the reading and the count that confirms it.
 
 Raised by the project owner: "currently, the prose is written in a way no SME would write", and on
 one passage, "hard to read, nearly not understandable, makes vague statements formulated not like a
@@ -100,15 +103,31 @@ essay" — point at the floor this corpus is already stuck at.
 
 ## Open questions
 
-1. **Blocking Track 1. Does spaCy become a dependency?** `check_discourse.py` needs a parser. The
-   original proposal deliberately kept spaCy out and ran the analyses through
-   `uv run --with spacy`. An optional extra in `pyproject.toml` is the least invasive route, but
-   `CLAUDE.md` requires `pyproject.toml` + `uv.lock` and `requirements.txt` to agree, so this is
-   the project owner's call and not an implementation detail.
-2. **The discrimination test still has no valid result, so the acceptance test of this proposal
-   is unmet.** Three rounds scored 64 of 64 and every round was decided by something other than
-   register — PDF extraction damage, typed measurements, subject matter, document identifiers —
-   and the reader had already read both documents in the same session. It needs a reader who has
-   not.
+1. ~~**Blocking Track 1. Does spaCy become a dependency?**~~ **Answered by the project owner,
+   2026-08-17: yes, as an OPTIONAL dependency.** Not a hard one — the corpus must still build,
+   render, annex and ground on a checkout that has never installed a parser. What that commits
+   the implementation to:
+   - an optional group in `pyproject.toml` (`[project.optional-dependencies]`, e.g. `discourse`),
+     installed with `uv sync --extra discourse`, carrying spaCy and the `en_core_web_sm` model.
+     The model is a wheel URL, so it needs a direct reference rather than a plain version pin.
+   - the same group mirrored in the pip path, since `CLAUDE.md` requires the two declarations to
+     agree. A separate `requirements-discourse.txt` keeps `requirements.txt` installable
+     unchanged; a marked optional block inside it would also do.
+   - **`check_discourse.py` must degrade, not fail.** With spaCy absent it prints one line saying
+     how to install the extra and exits 0. It is advisory, so nothing in `make test`, `make style`
+     or `make corpus` may start depending on a parser being present.
+   - `uv.lock` is regenerated when the group lands. Land it **with** `check_discourse.py`, not
+     before: a lock change with no consumer is churn on the tested path.
+2. ~~**The discrimination test still has no valid result, so the acceptance test of this proposal
+   is unmet.**~~ **Answered by the project owner, 2026-08-17: the discrimination test is dropped
+   as the acceptance criterion.** Three rounds scored 64 of 64 and every round was decided by
+   something other than register, and the owner's own reading of the re-authored `PCR-003` was
+   that "it is immediately obvious that the text is AI generated" — so a blind test would score
+   at ceiling and add nothing. The human check for Track 1 is the owner reading the re-authored
+   pair and quoting what gives it away, as recorded in work unit
+   `2026-08-17_01_register-second-round/exploration.md` §9. Two further decisions taken there:
+   clause packing (mid-sentence `, so `, sentence-initial connectives) is the round's primary
+   target and topic chaining a no-regression condition; and the guide is amended minimally
+   (§2d Correction 2, Shape 4), with a full rewrite of its commentary held as a hypothesis.
 3. Which source is the reference for which document type? PDA hedges at 24.5 per 1000 words
    because it is guidance. A-Mab sits at 6.6 and is the closer genre for a report.

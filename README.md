@@ -171,3 +171,5 @@ PDFs used to parameterize the model, re-creatable with
 | Understand the DoE statistics | [`pc_package/DOE_ENGINE.md`](pc_package/DOE_ENGINE.md) |
 | Write or regenerate a document | [`authoring/RUNNER.md`](authoring/RUNNER.md) and [`authoring/WRITING_GUIDE.md`](authoring/WRITING_GUIDE.md) |
 | Work on this repo as a coding agent | [`CLAUDE.md`](CLAUDE.md) |
+| See what is open and what is being worked on | [`docs/ROADMAP.md`](docs/ROADMAP.md), then [`docs/pm/_Board.md`](docs/pm/_Board.md) |
+| Change the machinery rather than the corpus | [`docs/PROJECT_WORKFLOW.md`](docs/PROJECT_WORKFLOW.md) — `/explore` → `/plan` → `/next` → `/ship` |

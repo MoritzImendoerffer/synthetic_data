@@ -96,11 +96,18 @@ Straight from `config/parameters.yaml`. "DoE?" decides whether `doe_report.py` a
    reports 26–28, plans 23–31. Achieve depth with grounded analysis and full appendices, never
    with filler, and never invent a DoE for a step that does not have one.
 
-## Open item
+## Open items
 
-- **Flag only, do not change `nlp_reports`.** Its `regex_matchers.py` DOCUMENT_ID pattern
-  recognizes `PCR/PVR/PPQ/TT/VAL/AMV/SOP/CS` but not `PTP/PCP/PCMP/PCMR/RA`. Adding those
-  prefixes there would let it recognize this corpus's IDs deterministically.
+They live in [`../docs/ROADMAP.md`](../docs/ROADMAP.md), with one proposal per item in
+[`../docs/next/`](../docs/next/). What is being worked on right now is
+[`../docs/pm/_Board.md`](../docs/pm/_Board.md).
+
+**Closed by verification, 2026-08-16.** This section used to say that `nlp_reports`'
+`regex_matchers.py` recognizes `PCR/PVR/PPQ/TT/VAL/AMV/SOP/CS` but not `PTP/PCP/PCMP/PCMR/RA`. It
+builds the pattern from `settings.document_id_prefixes`, whose default is
+`PCMP,PCMR,PCP,PCR,PPQ,PTP,PVR,AMV,SOP,VAL,CS,RA,TT` — every one of the five is there, sorted
+longest first so `PCP` cannot shadow `PCMP-001`. Nothing to add, and nothing to change in a
+read-only repository.
 
 ## Verification checklist
 

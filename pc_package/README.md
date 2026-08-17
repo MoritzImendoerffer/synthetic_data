@@ -64,16 +64,21 @@ numbers whose prefixes the `nlp_reports` document-ID matcher recognizes.
 ## Register
 
 The documents are written in **plain technical English at about C1 level**, modelled on the
-two published human sources in `refs/text/`: the A-Mab case study and PDA Technical Report
-No. 60. Verbatim exemplar passages are in
+four published human sources in `refs/text/`: the A-Mab case study, PDA Technical Report
+No. 60, and the two 2023 ISPE Good Practice Guides. Verbatim exemplar passages are in
 [`authoring/REGISTER_EXEMPLAR.md`](../authoring/REGISTER_EXEMPLAR.md); the measurable targets
 are in [`authoring/WRITING_GUIDE.md`](../authoring/WRITING_GUIDE.md) §4.
 
 This is enforced rather than aspirational. `authoring/check_style.py` — run by `make style`
 and by the authoring gate — measures the sentence-length distribution, the density of
 em-dashes, semicolons and coined compounds, and a list of banned tics. Its thresholds are
-calibrated so that **both human sources pass** (`check_style.py --selftest`). If a threshold
-ever fails the self-test, the threshold is wrong, not the source.
+calibrated so that **all four human sources pass** (`check_style.py --selftest`), and a source
+missing from `refs/text/` fails the self-test rather than being skipped. If a threshold ever
+fails the self-test, the threshold is wrong, not the source.
+
+The gate does not measure the connective repertoire, and that is deliberate. It counts the
+nine connectives `WRITING_GUIDE.md` §4b recommends and prints the rate, but fails nothing on
+it: a connective typed to satisfy a floor is a worse tell than a missing one.
 
 No document in this directory is a voice reference for writing a new one. The exemplar is
 built only from the published sources, so the corpus cannot drift by imitating itself — which

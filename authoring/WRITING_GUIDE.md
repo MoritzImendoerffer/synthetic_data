@@ -88,6 +88,62 @@ point two sentences ago. Some paragraphs correctly end on a fact.
 
 Do not open a paragraph with a number or a table reference.
 
+**The one licensed exception: a point may be held together with its counter-consideration.**
+One point per paragraph remains the default, and it governs almost every paragraph you write.
+But a claim that has a real counter-consideration keeps it in the same paragraph, marked. The
+rule was read for a while as forbidding that, and the corpus complied: across roughly 30,000
+words of it there was not one "However". A document that never concedes reads as a sequence of
+unrelated assertions, which is the thing an assessor notices first.
+
+**Shape 1: rule → instance → counter-move → quantified resolution.** State the effect, give the
+case, mark the turn, then settle it with the number that settles it.
+
+> "For example, it is seen that medium concentration had a statistically significant effect on
+> aFucosylation (p = 0.001). However, by reviewing Figure 3.4 it is seen that its effect was
+> very shallow. In this case, changing the medium concentration from 0.8 to 1.6 X only changed
+> the aFucosylation levels by 0.3 %."
+> — A-Mab
+
+Worked correction, from `PCR-003` §5.2:
+
+> ✗ These are large and well-resolved effects of limited practical consequence, because the
+> attribute is of very low criticality and its acceptance criterion is applied as an upper
+> limit that lies far above the observed range. The point is quantified as a capability index
+> (§8).
+
+The turn is there, but it is carried by "because" inside a single copula sentence whose subject
+is a bare demonstrative pointing at a table, and the number that would settle the doubt is
+deferred to another section. The reader has to take "far above" on trust for five more pages.
+
+> ✓ Raising dissolved CO₂ across its characterized range lowers acidic variants by
+> `` `{python} f"{abs(eff('acidic_variants','C')):.1f}"` `` percentage points, and the effect is
+> well resolved. However, the attribute is of very low criticality, and its acceptance
+> criterion applies only as an upper limit. The highest level any screening run reached was
+> `` `{python} f"{acid_max:.1f}"` `` %, against a limit of
+> `` `{python} f"{D.acceptance_for(UO,'acidic_variants')[1]:.0f}"` `` %.
+
+Three sentences, three lexical main verbs, one "However", and the resolving number given in
+place instead of promised for later.
+
+`acid_max` is not an existing helper. Derive it in the setup chunk, the way that report already
+derives `cv_scr_max` before quoting it in the results:
+
+```python
+acid_max = csv(f"doe_{UO}_screening.csv")["acidic_variants"].max()
+```
+
+Typing the number itself is what §6 forbids, and the exception in this section relaxes
+nothing about that.
+
+**What this exception must not become.** It licenses a tension pair. It does not license a long
+sentence, and it is not permission to reach for an em-dash. The failure it must not cause is
+the first-pass corpus, which ran to a 34-word mean sentence against a human 24 to 30, 10 to 13
+em-dashes per 1000 words against A-Mab's zero, and a semicolon splice in every fourth sentence.
+The correction to that overshot in the other direction, into 17-word averages with 40 % of
+sentences under 15 words, which is why §4a bands are two-sided. Both failures are visible from
+across the room. If a tension pair is making your sentences longer, you are writing the wrong
+shape: the human examples in this section and the next run 14 to 24 words, with one at 40.
+
 ### 2d. A sentence
 
 Begin with information the reader already has and end with the new information. Keep the
@@ -99,6 +155,195 @@ it two sentences.
 > load.
 > ✓ The highest load raised pool aggregate 1.4-fold. This is consistent with the
 > descending-edge mechanism described above, and it reproduces the bench-scale result.
+
+**This first rule is the one the corpus misses most, and it is not close.** A sentence carries
+the topic forward when its subject names something the sentence before it mentioned, or is a
+pronoun. Measured across the pages the self-test reads, the four sources chain **57.0 to 61.9 %**
+of their sentences. The 20 corpus documents chain a median of **36.3 %**, in a range of 29.2 to
+42.2 %. So two sentences in three open a fresh topic and the reader is re-oriented on almost
+every one. Three worked corrections, all from documents in this corpus.
+
+**Correction 1 — a parallel block, one fresh subject per sentence.** From `PCR-004`, *Quality
+attributes in scope*:
+
+> ✗ Host cell protein is the most consequential of the three, at moderate to high criticality,
+> because it is the impurity present in the largest amount in the clarified harvest. Aggregate
+> is of high criticality and is the one attribute with a plausible mechanism at this step, since
+> shear at the centrifuge feed zone could in principle raise it. Residual DNA is of very low
+> criticality on its own, and is cleared by a large margin downstream.
+
+Three sentences, three brand-new subjects, three copulas. The reader is handed a list and has to
+work out for themselves that it is a ranking. Nothing in sentence two says it follows from
+sentence one.
+
+> ✓ Host cell protein is the most consequential of the three, at moderate to high criticality,
+> because it is the impurity present in the largest amount in the clarified harvest. The second
+> of the three, aggregate, is of high criticality for a different reason: shear at the centrifuge
+> feed zone could in principle raise it. The third, residual DNA, is of very low criticality here
+> and clears by a large margin downstream.
+
+Each subject now opens on something the previous sentence established — "the three" — and the new
+information lands at the end where it belongs. The ranking is on the page instead of in the
+reader's head. Nothing was added and nothing was dropped except one possessive.
+
+**Correction 2 — a fresh subject where the chain was already there.** From `PCMR-001`, *Process
+capability*:
+
+> ✗ The remaining attributes sit far from their limits, and their indices should be read as
+> showing that the attribute does not constrain the process, and not as meaningful precision.
+> Leached Protein A is the extreme case, at `` `{python} f"{lpa_ratio:,.0f}"` ``-fold below its
+> limit, and its index is reported in @tbl-cap for completeness only.
+
+The second sentence has a perfectly good given to start from and starts somewhere else instead.
+It also stacks three possessives on referents the reader has to bind.
+
+> ✓ The remaining attributes sit far from their limits, so the capability indices show only that
+> none of them constrains the process. The furthest is leached Protein A, at
+> `` `{python} f"{lpa_ratio:,.0f}"` ``-fold below the limit, and @tbl-cap reports its index for
+> completeness.
+
+**Correction 3 — the referent hidden four times over.** From `PCP-004`, *Factors, ranges and
+study type*:
+
+> ✗ Each settable parameter will be studied at its low characterization edge, at its set-point
+> and at its high characterization edge, with the other settable parameter held at its set-point,
+> which gives `` `{python} n_conditions` `` clarification conditions in all, listed in @tbl-cond.
+
+One sentence, four possessives, and by the fourth the reader has to decide which parameter "its"
+belongs to. The answer is the other one, which is exactly the binding a possessive should never
+be asked to carry.
+
+> ✓ Each settable parameter will be studied at three levels: the low edge of its characterization
+> range, the set-point and the high edge. While one parameter moves, the other is held at the
+> set-point. That gives `` `{python} n_conditions` `` clarification conditions in all, listed in
+> @tbl-cond.
+
+One possessive survives, and it is the one that marks a real relationship: the range belongs to
+the parameter. The rest became "the".
+
+### 2d bis. Prefer the definite article or the noun itself
+
+The same defect at word level. A possessive makes the reader bind a referent; an article or the
+noun just says what is meant. Measured per 1000 words of prose:
+
+| | corpus, 20 documents | PDA TR 60 | A-Mab | ISPE TT | ISPE PV |
+|---|---|---|---|---|---|
+| *its* | **5.73** | 0.40 | 0.32 | 0.27 | 0.36 |
+| *their* | **2.29** | 0.96 | 0.50 | 0.63 | 0.69 |
+| *it* | **9.59** | 3.12 | 1.75 | 3.33 | 3.19 |
+
+*its* runs at **fourteen times** the highest of the four sources, and `PCR-003` reaches 6.66. The
+corpus writes "its acceptance criterion", "its characterized range", "its set-point", "its
+limit". The sources write "the acceptance criterion", or name the thing.
+
+**Rule.** Use the definite article or the noun. Keep a possessive for a genuine relationship the
+reader would otherwise mistake — "its characterization range" when two parameters are in play and
+the range belongs to one of them. Do not use one for every attribute of a thing already under
+discussion. This was the largest single divergence any method found between the corpus and the
+sources, and it was found by ranking word frequencies, not by reading.
+
+**The same licensed exception applies here**, and for the same reason as in §2c. One point per
+sentence stays the default. A claim and its qualification are one sentence when the
+qualification is what bounds the claim, because splitting them lets a reader carry the claim
+away without the bound. Three shapes do this, and none of them is long.
+
+**Shape 2: concede first, then commit.** The concession goes in the front field, subordinated.
+The commitment is the main clause, so it is the part that survives being skimmed.
+
+> "Although key process parameters and key process attributes have been shown not to impact
+> product quality, they are included in the control strategy because their monitoring and
+> control ensures that the process is operated in a consistent and predictable manner."
+> — A-Mab
+
+> "Although the extent of the effects may differ slightly, viral clearance decreases as pH
+> decreases and conductivity increases."
+> — A-Mab
+
+The second is 18 words and carries a concession, a hedge and two lexical verbs at once.
+The first runs to 40, which is the upper end of what this shape should ever need.
+
+Worked correction, from `PCP-003` §6:
+
+> ✗ The response-surface design assumes that screening identifies the factors that matter, and
+> if screening identifies a different set the matrix in Appendix B will be re-issued before
+> execution. That is an amendment to this plan and not a deviation from it.
+
+The commitment is buried in a conditional clause at the end of a 28-word sentence, and the
+qualification that matters is stranded in a separate copula sentence whose subject is "That".
+
+> ✓ Although the matrix in Appendix B is written on the assumption that screening identifies
+> the factors that matter, screening may identify a different set. The matrix is then re-issued
+> before execution, which is an amendment to this plan and not a deviation from it.
+
+**Shape 3: a finding and its limit in one sentence, with the limit in consequence terms.**
+A limit stated only in statistical terms is not a limit a reviewer can act on.
+
+> "Grey arrows indicate the effect was detected statistically but is too small to have an
+> appreciable effect on the quality of the material produced."
+> — A-Mab
+
+Worked correction, from `PCR-003` §5.2:
+
+> ✗ `` `{python} n_sig_scr('afucosylation')` `` terms reach significance at α =
+> `` `{python} alpha` ``, and the main effects of culture temperature and osmolality do not,
+> although both are of the same order as the significant terms. That is a consequence of the
+> residual degrees of freedom available in this design and not evidence that the two factors
+> are inactive.
+
+The finding is reported, and its limit is real, but the limit is entirely statistical: degrees
+of freedom, order of magnitude, significance. Nothing tells the reader what it means for the
+material. Say the consequence and attach the statistics to it.
+
+> ✓ Culture temperature and osmolality do not reach significance at α =
+> `` `{python} alpha` ``, but their effects are of the same order as the terms that do, so
+> neither can be called inactive on this design. Temperature is carried into the
+> response-surface stage on that basis. Osmolality is not, and its range rests on the screening
+> result and on the classification rationale in §9.
+
+Check a rewrite against the data before you keep it. An earlier draft of this example ended
+"and both are carried into the response-surface stage", which is false: the response-surface
+design for this step carries pH, temperature, duration and dissolved CO₂, and drops osmolality.
+A shape is not a licence to write a tidier sentence than the study supports.
+
+**Shape 4: the frame comes before the subject.** A real front field opens 29.5 % of A-Mab's
+clauses and 25.4 % of PDA TR 60's, against 9.1 to 13.6 % of the corpus documents measured. The
+difference is not the slot, it is what fills it: the sources put a connective or a condition
+there, the corpus puts a counter.
+
+> "In this case, changing the medium concentration from 0.8 to 1.6 X only changed the
+> aFucosylation levels by 0.3 %."
+> — A-Mab
+
+> "Based on process understanding, no further process development studies were deemed necessary
+> for A-Mab seed culture expansion up to the N-2 step."
+> — A-Mab
+
+> "Since screening designs do not always clearly identify interactions, the reduced number of
+> parameters identified by the screening experiment will be included in further experiments."
+> — PDA TR 60
+
+Worked correction, from `PCR-003` §2.1:
+
+> ✗ Four mechanistic expectations were carried into the study. First, galactosylation tracks
+> the activity of the Golgi galactosyltransferase … Second, high mannose reflects the
+> completeness of mannosidase trimming … Third, afucosylation reflects the competition …
+> Fourth, aggregate formed in culture reflects the residence of secreted antibody …
+
+Every front field holds a number. "First" tells the reader that three more are coming and
+nothing else. A list of four expectations does not need to be announced or counted, and an
+enumerated run is the surest way to make four related mechanisms read as four unrelated ones.
+
+> ✓ Galactosylation tracks the activity of the Golgi galactosyltransferase and the availability
+> of its nucleotide sugar donor, both of which decline as a culture ages. High mannose is
+> enzymatic in the same way, and reflects how completely mannosidase trimming has run, which
+> makes it sensitive to lumenal pH and to temperature. Afucosylation is set by a competition
+> instead, between core fucosyltransferase activity and the rate of antibody transit, so it was
+> expected to fall as the culture progresses. Aggregate is the one expectation that is not
+> enzymatic: antibody that sits longer in an ageing broth aggregates more.
+
+The counters are gone and each sentence now says how it relates to the one before it: in the
+same way, instead, the one that is not. The reader learns why these four expectations belong in
+one paragraph, which "First, Second, Third, Fourth" never told them.
 
 ---
 
@@ -136,43 +381,57 @@ Apply the obligations the section plan lists for each section. Several apply eve
 This is the section that most often goes wrong, so it is specified in measurable terms.
 
 Write **simple technical English at roughly C1 level**. The reference is not academic
-prose and not literary prose. It is the register of the two published documents this
-corpus is built on, both of which are in `refs/text/`:
+prose and not literary prose. It is the register of the four published documents this
+corpus is built on, all of which are in `refs/text/`:
 
 - PDA Technical Report No. 60, *Process Validation: A Lifecycle Approach* (2013)
 - *A-Mab: A Case Study in Bioprocess Development*, CMC Biotech Working Group (2009)
+- ISPE Good Practice Guide: *Technology Transfer*, third edition (2023)
+- ISPE Good Practice Guide: *Practical Implementation of the Lifecycle Approach to Process
+  Validation* (2023)
 
 Read `authoring/REGISTER_EXEMPLAR.md` before writing. It is a collection of verbatim
-passages from those two documents, arranged by the job each one does.
+passages from those documents, arranged by the job each one does.
 
 ### 4a. The measurable targets
 
 `authoring/check_style.py` measures these and **fails the build** if they are missed. The
-thresholds are read off the two human documents above, and `check_style.py --selftest`
-proves that both of them pass.
+thresholds are read off the four human documents above, and `check_style.py --selftest`
+proves that all four pass.
 
 Several of these are **bands, not ceilings**. Writing that is too short and too choppy is
 just as unlike a real regulatory document as writing that sprawls. Human technical prose sits
 in the middle.
 
-| Property | Band | PDA TR 60 | A-Mab |
-|---|---|---|---|
-| Mean sentence length | 20 – 28 words | 24.2 | 26.6 |
-| Median sentence length | 18 – 25 words | 21.0 | 23.0 |
-| Sentences over 40 words | 3 – 16 % | 9.8 | 13.4 |
-| Sentences over 55 words | ≤ 7.5 % | 2.9 | 5.2 |
-| Sentences under 15 words | 15 – 32 % | 20.5 | 19.5 |
-| Parenthetical openings | 3 – 14 per 1000 words | 11.9 | 12.3 |
-| Em-dashes | ≤ 2.5 per 1000 words | 1.2 | 0.0 |
-| Semicolons | ≤ 4.5 per 1000 words | 1.9 | 1.1 |
-| Colons | ≤ 5.5 per 1000 words | 2.1 | 3.3 |
-| Bold spans | ≤ 1.0 per 1000 words | 0.0 | 0.0 |
-| Coined 3-part hyphenated compounds | ≤ 1.5 per 1000 words | 0.5 | 0.2 |
-| "rather than" | ≤ 0.8 per 1000 words | 0.3 | 0.1 |
-| "therefore" | ≤ 1.2 per 1000 words | 0.3 | 1.0 |
+| Property | Band | PDA TR 60 | A-Mab | ISPE TT | ISPE PV |
+|---|---|---|---|---|---|
+| Mean sentence length | 20 – 30.5 words | 24.2 | 26.6 | 28.0 | 30.2 |
+| Median sentence length | 18 – 26.5 words | 21.0 | 23.0 | 24.0 | 26.0 |
+| Sentences over 40 words | 3 – 21.5 % | 9.8 | 13.4 | 14.8 | 20.8 |
+| Sentences over 55 words | ≤ 9.5 % | 2.9 | 5.2 | 5.8 | 9.0 |
+| Sentences under 15 words | 15 – 32 % | 20.5 | 19.5 | 16.3 | 16.2 |
+| Parenthetical openings | 3 – 14.5 per 1000 words | 11.9 | 12.3 | 14.2 | 10.7 |
+| Em-dashes | ≤ 2.5 per 1000 words | 1.2 | 0.0 | 0.0 | 0.0 |
+| Semicolons | ≤ 4.5 per 1000 words | 1.9 | 1.1 | 1.8 | 0.9 |
+| Colons | ≤ 5.5 per 1000 words | 2.1 | 3.3 | 4.3 | 2.9 |
+| Bold spans | ≤ 1.0 per 1000 words | 0.0 | 0.0 | 0.0 | 0.0 |
+| Coined 3-part hyphenated compounds | ≤ 1.5 per 1000 words | 0.5 | 0.2 | 0.4 | 0.0 |
+| "rather than" | ≤ 0.8 per 1000 words | 0.3 | 0.1 | 0.1 | 0.0 |
+| *Connectives, per 1000 words — not gated* | *diagnostic* | *2.7* | *2.7* | *2.2* | *2.6* |
+| *…of the nine in §4b, how many are used* | *diagnostic* | *9* | *7* | *7* | *6* |
 
-The two human columns are what the sources actually measure. Aim for those numbers, not for
-the edge of the band.
+The four human columns are what the sources actually measure. **Aim for those numbers, not
+for the edge of the band.** The band is now the union of four house styles and no single
+source writes at its edge: PDA TR 60 averages 24 words a sentence and ISPE PV averages 30,
+so a document sitting at 30.5 is not "within the envelope" in any useful sense — it is
+writing longer than the longest-winded of the four.
+
+There was a `"therefore" ≤ 1.2 per 1000 words` row here until 2026-08-16. It was removed
+because "therefore" had become the only connective the corpus still used, so the one rule the
+gate had about connectives pushed down on the last one left. The last two rows replace it and
+**fail nothing**: they are printed so the gap is visible. Across the 20 corpus documents the
+median is 1.5 per 1000 words and 3 of the 9 connectives; the four sources sit at 2.2 to 2.7
+and use 6 to 9. "However" occurs twice in the whole corpus and 59 times in the four sources.
 
 The gate also rejects a short list of phrases that appear nowhere in either human source:
 "stated first", "it is worth noting", "this warrants comment", "the distinction that matters
@@ -220,9 +479,16 @@ a rephrasing.
 finding rather than an omission". Just state the thing. `check_style.py` bans these
 outright.
 
-**Prefer plain connectives.** The human sources use: "However", "Therefore", "In
+**Prefer plain connectives.** The human sources use these nine: "However", "Therefore", "In
 addition", "For this reason", "Since", "Once", "As a result", "By contrast", "Consequently".
 They rarely use "rather than", and almost never build "not X but Y" constructions.
+
+This is the rule the corpus breaks hardest. "However" appears twice in twenty documents and
+59 times in the four sources. Most documents run on "therefore" and "since" alone, which is
+what makes a paragraph sound assembled rather than argued. The remedy is not to sprinkle the
+other seven in: a connective typed to satisfy a count is a worse tell than a missing one.
+It is to write the sentence that needs one — a concession, a contrast, a consequence — which
+is what §2c licenses and what the moves catalogue in `REGISTER_EXEMPLAR.md` shows.
 
 **Prefer the shorter word.** "used" over "utilised", "about" over "approximately" when
 approximating loosely, "shows" over "demonstrates" unless the evidence is strong enough to

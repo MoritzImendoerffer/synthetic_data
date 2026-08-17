@@ -6,7 +6,7 @@
 PY ?= python3
 PKG_DIR := pc_package
 
-.PHONY: all data figures fmea corpus style test clean env help
+.PHONY: all data figures fmea corpus style test clean env help pm
 
 help:
 	@echo "Targets:"
@@ -17,6 +17,7 @@ help:
 	@echo "  make style    - register gate (plain technical English) over every corpus doc"
 	@echo "  make fmea     - build the post-PC FMEA workbook (content source for RA-001)"
 	@echo "  make test     - run reproducibility tests"
+	@echo "  make pm       - regenerate docs/pm/ (the board) from the active work unit"
 	@echo "  make env      - install Python dependencies"
 	@echo "  make clean    - remove generated outputs and rendered documents"
 
@@ -42,9 +43,11 @@ figures: data
 fmea:
 	$(PY) risk_assessment/build_fmea.py
 
-# Register gate over every corpus document: plain technical English, measured against the
-# two published human sources (PDA TR 60, A-Mab). --selftest proves the thresholds are ones
-# real human regulatory prose passes; if it ever fails, the threshold is wrong, not the source.
+# Register gate over every corpus document: plain technical English, measured against the four
+# published human sources (PDA TR 60, A-Mab, and the two 2023 ISPE Good Practice Guides).
+# --selftest proves the thresholds are ones real human regulatory prose passes; if it ever
+# fails, the threshold is wrong, not the source. A source missing from refs/text/ fails too,
+# so a run that measures nothing cannot report the same success as a run that measures four.
 style:
 	$(PY) authoring/check_style.py --selftest
 	$(PY) authoring/check_exemplar_quotes.py
@@ -68,6 +71,12 @@ corpus: figures
 
 test:
 	$(PY) -m pytest -q tests/
+
+# The visible half of the planning workflow: docs/pm/ is .claude/work/<id>/state.json rendered
+# as notes a person can read. Generated notes are overwritten; the hand-written ones beside
+# them (epic.md, decisions/, the READMEs) are never touched. See docs/PROJECT_WORKFLOW.md.
+pm:
+	$(PY) scripts/pm_notes.py
 
 clean:
 	rm -rf outputs/data/* outputs/figures/* outputs/report_values.json outputs/figure_manifest.json

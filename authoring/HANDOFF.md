@@ -166,8 +166,12 @@ ground. Tracked as a gate to add.
 the acidic-variants acceptance range is printed as 18–40 but only the ceiling is enforced
 (making it two-sided would move the headline min Cpk from 1.51 to 1.03); the three equipment
 `cal_due` dates pre-date `EFFECTIVE_DATE`, so calibration reads as overdue while
-`calibration_status` says otherwise; and `DEV-005-01` says a buffer was prepared *below* target
-at pH 3.38 but is tied to an RSM run whose design target is 3.20.
+`calibration_status` says otherwise; and ~~`DEV-005-01` says a buffer was prepared *below* target
+at pH 3.38 but is tied to an RSM run whose design target is 3.20~~ — **that third one is fixed**:
+`LOT-BUF-5290` is bound to RSM run 23, with the reason recorded at `config/parameters.yaml:559`.
+The two live ones are neither registered nor resolved, which is the one state `CLAUDE.md` does not
+allow; the argument is in
+[`../docs/next/seeded-data-tensions.md`](../docs/next/seeded-data-tensions.md).
 
 **Registered discrepancies (`authoring/DISCREPANCIES.md`).** One finding was promoted from
 "defect to fix" to "benchmark item to keep": the PAR analysis holds the other factors at the
@@ -184,24 +188,29 @@ registered one deletes a benchmark item.
 first-pass reports read as machine-written, and the cause was a feedback loop in the
 artifacts themselves: `REGISTER_EXEMPLAR.md` had been distilled *from* `PCR-008_aex.qmd`,
 which was itself AI-authored against an early `WRITING_GUIDE.md`. The guide then taught the
-voice back to the next author. Measured against the two published human sources, the
+voice back to the next author. Measured against the two human sources committed at the time
+(PDA TR 60 and A-Mab; two more were added on 2026-08-16 and moved several ceilings up), the
 first-pass prose ran to a 34-word mean sentence (human: 23–27), 10–13 em-dashes per 1000
 words (PDA TR 60: 1.9; A-Mab: **zero**), 9–15 semicolons per 1000 (human: 2), and coined
 compounds like "the quality-attribute-richest characterization in the campaign". What was
 done about it:
 
-- `REGISTER_EXEMPLAR.md` is rebuilt entirely from **verbatim** PDA TR 60 and A-Mab passages
-  (88 of them, arranged by the reporting job each performs). No corpus report is a source for
-  voice, ever. `authoring/check_exemplar_quotes.py` re-verifies every quote against
-  `refs/text/`, so the exemplar cannot silently drift into paraphrase.
+- `REGISTER_EXEMPLAR.md` is rebuilt entirely from **verbatim** source passages, arranged by
+  the reporting job each performs. No corpus report is a source for voice, ever.
+  `authoring/check_exemplar_quotes.py` re-verifies every quote against `refs/text/`, so the
+  exemplar cannot silently drift into paraphrase. It carried 88 quotes from PDA TR 60 and
+  A-Mab; on 2026-08-16 a seven-pattern argument-moves catalogue took it to 120, drawn from
+  all four sources, with the two 2023 ISPE Good Practice Guides supplying the plan-genre
+  passages that neither original source could.
 - `WRITING_GUIDE.md` §4 is a new, measurable register spec with worked corrections taken
   from the superseded prose. Several older rules were softened because they *manufactured*
   the tells: mandatory per-paragraph significance codas, mandatory restatement in fresh
   words (which produced elegant variation), and "length is defensive" (which grew subordinate
   clauses).
 - `authoring/check_style.py` is a new **hard gate**, wired into `check_render.py`. Its
-  thresholds are calibrated so that both human sources pass `--selftest`. Rule of thumb: if a
-  threshold fails the self-test, the threshold is wrong, not the source.
+  thresholds are calibrated so that **all four** human sources pass `--selftest`, and a source
+  missing from `refs/text/` fails rather than being skipped. Rule of thumb: if a threshold
+  fails the self-test, the threshold is wrong, not the source.
 - **The bands are two-sided, and that was learned the hard way.** The gate shipped with
   sentence length capped but not floored. The first regeneration promptly over-corrected into
   staccato: mean sentence 17 words (human: 24–27), 41 % of sentences under 15 words (human:
@@ -223,14 +232,22 @@ Full reasoning and the condition for reviving it: `authoring/WEAK_CLAIMS.md`. Th
 it establishes is now in CLAUDE.md: **nothing is added to a document after authoring.**
 
 **Next**
-- **Re-curate the rhetorical layer** (`authoring/rhetorical/PCR-003.spans.yaml`). Its curated
-  spans quote the superseded text; 34 of 37 no longer match and are dropped with a warning.
-  This layer is *annotation over existing prose*, so it does not modify the document and is
-  unaffected by the weak-claim decision — it simply needs re-curating against the new text.
-- **PCR-008 rhetorical layer** (neither report has one that matches the current text).
-- Then the remaining reports/plans, each with its PAR + rhetorical layer.
+
+What is open now lives in [`../docs/ROADMAP.md`](../docs/ROADMAP.md), with a proposal per item in
+[`../docs/next/`](../docs/next/) and the active epic on
+[`../docs/pm/_Board.md`](../docs/pm/_Board.md). This list is kept for the record of what it said.
+
+- ~~**Re-curate the rhetorical layer** (`authoring/rhetorical/PCR-003.spans.yaml`); 34 of 37 spans
+  quote superseded text and are dropped with a warning.~~ **Done, and verified 2026-08-16**:
+  `build_rhetorical_annex.py --doc PCR-003` writes 35 spans and drops none.
+- ~~**PCR-008 rhetorical layer** (neither report has one that matches the current text).~~
+  **Done**: PCR-008 carries 25 spans, built by `ax_rhetorical_spans()` in `build_ground_truth.py`.
+- **The remaining plans**, each with its rhetorical layer. Eleven documents still carry none — the
+  eight `PCP-00N`, plus `PTP-001`, `RA-001` and `PCMP-001` — and the layer is built two ways.
+  Proposal: [`../docs/next/rhetorical-layer-coverage.md`](../docs/next/rhetorical-layer-coverage.md).
 - Optional, deliberate: if labeled benchmark negatives are wanted again, name them in the
   brief so the single author writes them into the argument in one pass (`WEAK_CLAIMS.md`).
+  Proposal: [`../docs/next/weak-claims-branch.md`](../docs/next/weak-claims-branch.md).
 
 ---
 

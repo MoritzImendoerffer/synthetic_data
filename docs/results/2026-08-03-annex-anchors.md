@@ -1,6 +1,14 @@
-# Delivery — annex anchor quality
+# Annex anchor quality — every record on the row that names it
 
-Status: **implemented, verified, not yet committed** (2026-08-03)
+Run on 2026-08-03. Shipped on `main` as `02a170a`, "Anchor every annex record on the row that
+names it". Work unit `.claude/work/2026-08-03_01_annex-anchors/`.
+
+**Why the run happened.** Three properties matter for an annex quote — grounded, distinctive,
+self-sufficient — and the corpus checked only the first two. Fourteen annexes anchored their
+parameter and attribute records on a table caption, which grounds while attesting nothing.
+
+The figures below were re-verified on 2026-08-16: 20/20 annexes valid and 2084/2084 quotes
+grounded with `GROUNDING_STRICT_ANCHORS=1`, from an unmodified checkout.
 
 ## What changed
 

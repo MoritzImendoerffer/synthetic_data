@@ -14,15 +14,22 @@ machine idiom: 34-word average sentences, an em-dash aside in every third senten
 semicolon splice in every fourth, coined compound superlatives, and a "what this means"
 coda welded onto every paragraph.
 
-The thresholds below are not taste. They are read off the two published human documents
+The thresholds below are not taste. They are read off the four published human documents
 the corpus is built on:
 
-    refs/text/pda60.txt   PDA Technical Report No. 60, Process Validation (2013)
-    refs/text/amab.txt    A-Mab: A Case Study in Bioprocess Development (2009)
+    refs/text/pda60.txt    PDA Technical Report No. 60, Process Validation (2013)
+    refs/text/amab.txt     A-Mab: A Case Study in Bioprocess Development (2009)
+    refs/text/ispe_tt.txt  ISPE Good Practice Guide: Technology Transfer (2023)
+    refs/text/ispe_pv.txt  ISPE GPG: Practical Implementation of the Lifecycle Approach (2023)
 
-``--selftest`` runs the gate against both of them. **Any threshold this file asserts must
-be one that real human regulatory prose passes** — if a rule fails the self-test, the rule
-is wrong, not the source. Tighten a threshold only after re-running the self-test.
+``--selftest`` runs the gate against all four. **Any threshold this file asserts must be one
+that real human regulatory prose passes** — if a rule fails the self-test, the rule is wrong,
+not the source. Tighten a threshold only after re-running the self-test.
+
+The two ISPE guides were added on 2026-08-16 and they write longer sentences than the first
+two, so several ceilings moved up. Read the numbers per source in the self-test output rather
+than the band: the band is now the union of four house styles, and writing at its edge is not
+the same as writing like any of them.
 
 Scope: prose only. Code chunks, YAML, tables, captions, cross-reference labels, the
 abbreviations run and inline ``{python}`` expressions are stripped before measuring, so
@@ -41,6 +48,24 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
 # --------------------------------------------------------------------------------------
+# The human sources the envelope is read off
+# --------------------------------------------------------------------------------------
+# Four, not two. Ten of the twenty corpus documents are plans and neither original source is
+# a plan, which is why the two ISPE guides were extracted.
+#
+# The page ranges are the running-prose chapters, taken from each guide's own contents page
+# rather than estimated. Front matter is title pages and acknowledgement lists; the
+# appendices are case studies and statistical tables, and reading into them measures table
+# cells as though they were sentences. Appendix 1 begins on extract page 97 of ISPE TT and
+# page 113 of ISPE PV, so the body ends just before each.
+HUMAN_SOURCES = [
+    ("PDA TR 60",        "pda60.txt",   18,  80),
+    ("A-Mab case study", "amab.txt",    60, 175),
+    ("ISPE TT",          "ispe_tt.txt", 30,  96),
+    ("ISPE PV",          "ispe_pv.txt", 30, 112),
+]
+
+# --------------------------------------------------------------------------------------
 # Thresholds. Every one of these is satisfied by BOTH human sources (see --selftest).
 # --------------------------------------------------------------------------------------
 # Each entry is (lo, hi, description); None means unbounded on that side.
@@ -49,24 +74,43 @@ ROOT = os.path.dirname(HERE)
 # into staccato prose — 17-word averages and 40 % of sentences under 15 words — which is
 # just as unlike real regulatory writing as the 34-word sprawl it replaced. Human technical
 # prose sits in a band, not at a minimum, so the gate enforces a band.
+# Five ceilings moved up on 2026-08-16 when the two ISPE guides joined the self-test. Each
+# is set to clear the widest source, which is ISPE PV on four of the five: it measures 30.2
+# mean, 26.0 median, 20.8 % over 40 words and 9.0 % over 55. ISPE TT sets the parenthesis
+# ceiling at 14.2. The old values were 28.0 / 25.0 / 16.0 / 7.5 / 14.0 and were read off two
+# sources that both happen to write shorter than the ISPE house style.
 LIMITS = {
     # sentence-length distribution ------------------------------------------------
-    "mean_len":      (20.0, 28.0, "mean sentence length (words)"),
-    "median_len":    (18.0, 25.0, "median sentence length (words)"),
-    "pct_over_40":   ( 3.0, 16.0, "% of sentences over 40 words"),
-    "pct_over_55":   ( None, 7.5, "% of sentences over 55 words"),
+    "mean_len":      (20.0, 30.5, "mean sentence length (words)"),
+    "median_len":    (18.0, 26.5, "median sentence length (words)"),
+    "pct_over_40":   ( 3.0, 21.5, "% of sentences over 40 words"),
+    "pct_over_55":   ( None, 9.5, "% of sentences over 55 words"),
     "pct_under_15":  (15.0, 32.0, "% of sentences under 15 words"),
     # punctuation habits, per 1000 words -------------------------------------------
     "em_dash":       (None,  2.5, "em-dashes per 1k words"),
     "semicolon":     (None,  4.5, "semicolons per 1k words"),
     "colon":         (None,  5.5, "colons per 1k words"),
-    "paren":         ( 3.0, 14.0, "parenthetical openings per 1k words"),
+    "paren":         ( 3.0, 14.5, "parenthetical openings per 1k words"),
     "bold":          (None,  1.0, "**bold** spans per 1k words"),
     # lexical habits, per 1000 words -----------------------------------------------
     "multi_hyphen":  (None,  1.5, "coined 3+-part hyphenated compounds per 1k words"),
     "rather_than":   (None,  0.8, '"rather than" per 1k words'),
-    "therefore":     (None,  1.2, '"therefore" per 1k words'),
 }
+
+# The connectives WRITING_GUIDE 4b recommends. Counted and printed on every run, and gated by
+# nothing.
+#
+# There used to be a `"therefore": (None, 1.2)` entry in LIMITS. Measured across the corpus on
+# 2026-08-16, "therefore" was the ONLY connective still in service — "However", "For example",
+# "By contrast", "In addition", "Consequently" and "Note that" came to zero in all twenty
+# documents, against 46 and 12 for the first two in A-Mab alone. So the one rule the gate had
+# about connectives pushed down on the last one left, and removing it is the whole of the fix.
+#
+# It is not replaced by a rate over the other eight. A floor on a connective is met by typing
+# the word, not by writing the sentence that needs it, and a produced connective is a worse
+# tell than an absent one. This stays a diagnosis for a human to read.
+CONNECTIVES = ("however", "therefore", "in addition", "for this reason", "since",
+               "once", "as a result", "by contrast", "consequently")
 
 
 def _band(lo, hi) -> str:
@@ -121,6 +165,26 @@ PROTECT = [
 # --------------------------------------------------------------------------------------
 SKIP_HEADINGS = ("abbreviation", "approval", "reference", "appendix")
 
+# Per-page furniture in the source extracts. Left in, it is measured as prose: the two ISPE
+# guides stamp a four-line DRM footer on every page, which alone put 300 of ISPE TT's 470
+# short sentences into the count and pushed "under 15 words" to 41 % against a human band of
+# 15-32 %. These strings cannot occur inside a real sentence, so a substring test is safe.
+EXTRACT_BOILER = (
+    "Licensed to", "Technical Report No", "© 20",                  # PDA TR 60
+    "CMC Biotech Working Group", "Case Study A-Mab",               # A-Mab
+    "Downloaded from", "For personal use only",                    # ISPE, both guides
+    "No other uses without permission", "For individual use only",
+    "Copyright ISPE", "guidance-docs.ispe.org",
+)
+
+# Running headers, which DO occur inside real sentences ("... the ISPE Good Practice Guide:
+# Technology Transfer [41] provides ..."), so they are matched as a whole line only.
+EXTRACT_HEADERS = frozenset({
+    "Practical Implementation of the Lifecycle Approach to Process Validation",
+    "Technology Transfer",
+    "ISPE Good Practice Guide:",
+})
+
 
 def prose_from_qmd(path: str) -> str:
     """The text a reader actually reads: no YAML, code, tables, captions or xref labels."""
@@ -161,11 +225,11 @@ def prose_from_extract(path: str, page_lo: int, page_hi: int) -> str:
         if not (page_lo <= page <= page_hi):
             continue
         s = line.strip()
+        if s in EXTRACT_HEADERS:
+            continue
         if len(s) < 30 or s.startswith(("•", "-", "|")):
             continue
-        if "Licensed to" in s or "Technical Report No" in s or "© 20" in s:
-            continue
-        if "CMC Biotech Working Group" in s or "Case Study A-Mab" in s:
+        if any(b in s for b in EXTRACT_BOILER):
             continue
         if re.match(r"^\d+(\.\d+)*\s", s) or re.match(r"^(Page|Table|Figure)\s", s):
             continue
@@ -224,9 +288,11 @@ def measure(text: str) -> tuple[dict, list, Counter, list]:
         "bold": per1k(r"\*\*"),
         "multi_hyphen": 1000.0 * sum(compounds.values()) / words,
         "rather_than": per1k(r"\brather than\b"),
-        "therefore": per1k(r"\btherefore\b"),
         "_n_sent": n,
         "_n_words": words,
+        "_connectives": Counter(
+            {c: len(re.findall(rf"\b{c}\b", scan, re.I)) for c in CONNECTIVES}
+        ),
     }
     hits = []
     for pat, label in BANNED:
@@ -256,6 +322,19 @@ def evaluate(m: dict) -> list[tuple[str, float, str, str]]:
     return bad
 
 
+def connective_line(m: dict) -> str:
+    """The connective repertoire, as one advisory line. Nothing here can fail a document.
+
+    Printed because the absence is invisible otherwise: a document using "therefore" nine
+    times and nothing else reads as monotonous long before a reader can say why.
+    """
+    used = {c: n for c, n in m["_connectives"].items() if n}
+    rate = 1000.0 * sum(used.values()) / m["_n_words"]
+    detail = ", ".join(f"{c} {n}" for c, n in m["_connectives"].most_common() if n) or "none"
+    return (f"{'connectives (diagnostic, never gated)':<48s} {rate:6.1f}  "
+            f"per 1k words, {len(used)}/{len(CONNECTIVES)} distinct: {detail}")
+
+
 def render(name: str, m: dict, hits: list, compounds: Counter, longest: list,
            verbose: bool) -> list:
     print(f"== {name} ==")
@@ -270,6 +349,7 @@ def render(name: str, m: dict, hits: list, compounds: Counter, longest: list,
         if key in bad_keys and lo is not None and m[key] < lo:
             note = "  <- TOO LOW"
         print(f"   {flag}  {desc:<48s} {m[key]:6.1f}  ({_band(lo, hi)}){note}")
+    print(f"   --    {connective_line(m)}")
     bad = evaluate(m)
     if hits:
         print(f"\n   BANNED PHRASES ({len(hits)}):")
@@ -304,39 +384,50 @@ def check_file(path: str, verbose: bool, report_only: bool) -> int:
 
 
 def selftest(verbose: bool) -> int:
-    """The gate must pass real human regulatory prose. If it does not, the gate is wrong."""
-    sources = [
-        ("PDA TR 60 (human)", os.path.join(ROOT, "refs", "text", "pda60.txt"), 18, 80),
-        ("A-Mab case study (human)", os.path.join(ROOT, "refs", "text", "amab.txt"), 60, 175),
-    ]
-    rc = 0
-    for name, path, lo, hi in sources:
+    """The gate must pass real human regulatory prose. If it does not, the gate is wrong.
+
+    A source that is not on disk is a FAILURE, not a skip. The extracts are committed, so a
+    missing one means the tree is broken — and the old behaviour was to print SKIP and exit 0,
+    which meant a run that measured nothing at all reported the same success as a run that
+    measured everything.
+    """
+    rc, measured, missing = 0, [], []
+    for name, fname, lo, hi in HUMAN_SOURCES:
+        path = os.path.join(ROOT, "refs", "text", fname)
         if not os.path.exists(path):
-            print(f"SKIP  {name}: {os.path.relpath(path, ROOT)} missing "
-                  f"(run scripts/extract_sources.py)")
+            print(f"MISS  {name} (human): {os.path.relpath(path, ROOT)} missing "
+                  f"(run scripts/extract_sources.py)\n")
+            missing.append(name)
             continue
         m, hits, compounds, longest = measure(prose_from_extract(path, lo, hi))
-        bad = render(name, m, hits, compounds, longest, verbose)
+        bad = render(f"{name} (human), extract pp. {lo}-{hi}",
+                     m, hits, compounds, longest, verbose)
         if bad or hits:
             print(f"\nFAIL  {name} does not pass its own gate — RELAX the threshold(s) "
                   f"above; human prose defines the envelope.\n")
             rc = 1
         else:
             print("\nOK    human source passes.\n")
+            measured.append(name)
+
+    print(f"self-test: {len(measured)} of {len(HUMAN_SOURCES)} human sources measured and "
+          f"passing ({', '.join(measured) or 'none'})")
+    if missing:
+        print(f"FAIL  {len(missing)} source(s) not on disk: {', '.join(missing)}. "
+              f"The envelope is only as wide as what was measured.")
+        rc = 1
     return rc
 
 
 def compare(paths: list[str]) -> int:
-    """Side-by-side table: the given documents against both human sources.
+    """Side-by-side table: the given documents against all four human sources.
 
     This is the diagnostic that motivated the gate. It makes the register gap legible in
-    one screen instead of thirteen pass/fail lines.
+    one screen instead of twelve pass/fail lines.
     """
     cols = []
-    for name, path, lo, hi in [
-        ("PDA TR 60", os.path.join(ROOT, "refs", "text", "pda60.txt"), 18, 80),
-        ("A-Mab", os.path.join(ROOT, "refs", "text", "amab.txt"), 60, 175),
-    ]:
+    for name, fname, lo, hi in HUMAN_SOURCES:
+        path = os.path.join(ROOT, "refs", "text", fname)
         if os.path.exists(path):
             cols.append((name + " (human)", measure(prose_from_extract(path, lo, hi))[0]))
     for p in paths:
@@ -353,6 +444,12 @@ def compare(paths: list[str]) -> int:
         for _, m in cols:
             row += f"{m[key]:>{width}.1f}"
         print(row)
+    print(f"{'connectives per 1k words (not gated)':<50s}{'':>11s}"
+          + "".join(f"{1000.0 * sum(m['_connectives'].values()) / m['_n_words']:>{width}.1f}"
+                   for _, m in cols))
+    print(f"{'  of the nine, how many are used at all':<50s}{'':>11s}"
+          + "".join(f"{sum(1 for n in m['_connectives'].values() if n):>{width}d}"
+                   for _, m in cols))
     print(f"{'(sentences of prose)':<50s}{'':>9s}"
           + "".join(f"{m['_n_sent']:>{width}d}" for _, m in cols))
     return 0
@@ -364,7 +461,7 @@ def main() -> int:
     ap.add_argument("--selftest", action="store_true",
                     help="run the gate against the human source documents")
     ap.add_argument("--compare", action="store_true",
-                    help="table of the given documents against both human sources")
+                    help="table of the given documents against all four human sources")
     ap.add_argument("--report", action="store_true",
                     help="print metrics but always exit 0")
     ap.add_argument("-v", "--verbose", action="store_true",

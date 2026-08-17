@@ -3,19 +3,28 @@
 This file teaches the **voice** of an A-Mab characterization document. Read it before you
 write, and keep it open while you write.
 
-Every passage below is **verbatim** from one of the two published human documents this
-corpus is modelled on. Both are in the repository as page-marked text:
+Every passage below is **verbatim** from one of the four published human documents this
+corpus is modelled on. All four are in the repository as page-marked text:
 
 - `refs/text/amab.txt` — *A-Mab: A Case Study in Bioprocess Development*, CMC Biotech
-  Working Group, v2.1 (2009). **This is the closer model.** It narrates real data and
-  defends real conclusions, which is what you are doing.
+  Working Group, v2.1 (2009). **This is the closer model for a report.** It narrates real
+  data and defends real conclusions, which is what you are doing.
 - `refs/text/pda60.txt` — PDA Technical Report No. 60, *Process Validation: A Lifecycle
   Approach*, Parenteral Drug Association (2013). Guidance, so it says "should" where a
   report says "was". Take its sentence rhythm, not its modality.
+- `refs/text/ispe_tt.txt` — ISPE Good Practice Guide: *Technology Transfer*, third edition
+  (2023). **This is the closer model for a plan.** Ten of the twenty corpus documents are
+  plans, `PTP-001` is a technology transfer plan, and until 2026-08-16 no source here was
+  plan-shaped at all. It commits, permits and conditions in three different modalities,
+  which is the move a plan lives on.
+- `refs/text/ispe_pv.txt` — ISPE Good Practice Guide: *Practical Implementation of the
+  Lifecycle Approach to Process Validation* (2023). Also guidance. It writes the longest
+  sentences of the four, so take its moves rather than its length.
 
 **Citations.** A-Mab page numbers are the document's own, and match the `PAGE N` markers in
-the extract. PDA TR 60 printed pages differ from the extract markers by a constant 8, so
-both are given: printed p. 23 is `PAGE 31` in `refs/text/pda60.txt`.
+the extract. The other three number their printed pages differently from the extract markers,
+by a constant 8 for PDA TR 60 and a constant 2 for both ISPE guides, so both are given:
+printed p. 23 is `PAGE 31` in `refs/text/pda60.txt`.
 
 **Transcription.** Words are unchanged. Where the PDF layer split a word across a line
 break it has been rejoined, and curly quotes have been normalised. Real typos in the
@@ -47,7 +56,9 @@ them. They were written in a machine register: 34-word average sentences, an em-
 every third sentence, coined compounds such as "the quality-attribute-richest
 characterization in the campaign", and a "what this means" clause welded to every paragraph.
 `authoring/check_style.py` exists to catch that drift, and its thresholds are the measured
-properties of the two documents quoted below.
+properties of the four documents quoted below. Note what that does and does not buy you: the
+band is the union of four house styles, so writing at its edge matches none of them. Aim at the
+per-source columns in `WRITING_GUIDE.md` §4a.
 
 ---
 
@@ -787,3 +798,274 @@ sources put roughly one sentence in five under 15 words, and fewer than one in t
 
 If you have written a 45-word sentence, it is almost always two sentences with a full stop
 missing from the middle.
+
+---
+
+# Part 3 — The argument moves
+
+Parts 1 and 2 teach what a section says and how a sentence sounds. This part teaches the seven
+moves that carry an **argument**, which is the layer the corpus was missing. They were found by
+parsing the four sources and pulling out the sentences that instantiate each construction, so
+every example here is a real sentence somebody published, not a shape invented to illustrate a
+rule.
+
+Read this part beside `WRITING_GUIDE.md` §2c and §2d. Four of the seven have a worked correction
+there, built from a real corpus sentence. Here you get the passages.
+
+## 16. The frame comes before the subject
+
+Human sentences carry about nine tokens before the main verb; corpus documents carry six. The
+difference is not length, it is what the opening slot holds. The sources put the case in hand,
+the condition, the basis or the contrast there. The corpus puts a counter: *First*, *Second*,
+*For galactosylation*.
+
+> In order to meet anticipated commercial demand, Process 1 was further optimized to increase
+> product titers while ensuring no significant impact on product quality.
+> — A-Mab, p. 71
+
+> For the purposes of this case study, only a subset of quality attributes was considered in
+> the analysis of drug substance and drug product development; these include aggregate,
+> galactosylation, a-fucosylation, deamidation, and HCP.
+> — A-Mab, p. 64
+
+> Occasionally, the science behind a process will be understood well enough to skip screening
+> and 2-level factorial experiments and start with response surface experiments.
+> — PDA TR 60, printed p. 58 / extract p. 66
+
+> Once the overall risk level is estimated for each gap, the team should determine the need
+> for risk mitigation based on acceptability of risk and then prioritize activities.
+> — ISPE Technology Transfer, printed p. 40 / extract p. 42
+
+> When designing experiments to determine the multivariate ranges or PARs of CPPs, both
+> measurement uncertainty and common cause variability of the commercial manufacturing
+> equipment should be considered.
+> — ISPE Practical Implementation, printed p. 37 / extract p. 39
+
+**Note.** *In order to*, *For the purposes of*, *Occasionally*, *Once*, *When designing*. Each
+tells the reader what kind of sentence is coming before the sentence arrives. None of them is a
+number.
+
+---
+
+## 17. The main verb names the event
+
+`be` is the root verb of about one sentence in six in the human sources and of one in three in
+`PCR-003`. When something happened, a lexical verb says so.
+
+> Collectively, these steps typically remove 4-8 logs of XMuLV, resulting in an overall 12-18
+> log safety margin with a minimal risk to patient safety.
+> — A-Mab, p. 167
+
+> Longer culture times resulted in higher titers and lower a-fucosylation levels.
+> — A-Mab, p. 73
+
+> Increasing airflow rate strips carbon dioxide and thus reduces pH and potentially leads to
+> an overall reduction of caustic addition.
+> — A-Mab, p. 103
+
+> Protein loads on the AEX Membrane uniformly exceeded 10 gram/ml in these studies, providing
+> a worst case value for the maximum AEX Membrane load in the manufacturing process.
+> — A-Mab, p. 148
+
+> The use of media such as hydrolysates or that contain animal components can introduce more
+> variability into a process, which can affect process comparability between sites.
+> — ISPE Technology Transfer, printed p. 79 / extract p. 81
+
+**Note.** *remove*, *resulted in*, *strips*, *reduces*, *leads to*, *exceeded*, *introduce*,
+*affect*. Not one of these passages says *X is a Y of Z*. This is the move a screening-effects
+section needs most, and it is the one most often replaced by a copula.
+
+---
+
+## 18. Concede first, then commit
+
+The concession goes first and subordinated. The commitment is the main clause, so it is what
+survives a skim. Over the pages measured by `check_style.py --selftest`, `However` appears 59
+times across the four sources. It appears twice in the whole corpus.
+
+> However, sialylation variants are only present at very low levels in A-Mab and thus are not
+> considered critical to product quality.
+> — A-Mab, p. 116
+
+> While these parameters are very valuable to describe bioreactor performance, on their own
+> they do not provide sufficient information to predict possible non-homogeneity in the
+> culture environment.
+> — A-Mab, p. 97
+
+> While univariate approaches are appropriate for some variables to establish a proven
+> acceptable range (PAR), multivariate studies account for interactions between process
+> parameters/material attributes (1).
+> — PDA TR 60, printed p. 23 / extract p. 31
+
+> Although site selection is not discussed in this Guide, facility fit and site expertise are
+> important factors to consider as they can have significant impact on the timeline and costs.
+> — ISPE Technology Transfer, printed p. 38 / extract p. 40
+
+> The measured output of each step is preferable as an intermediate CQA or a final product
+> CQA; however, if these cannot be measured directly, other measurements might be possible
+> that indicate the performance and quality of the process.
+> — ISPE Practical Implementation, printed p. 39 / extract p. 41
+
+**Note.** The A-Mab sialylation passage does the whole job in 21 words: a turn, a reason and a
+classification decision. The ISPE PV passage is the one to study for a caveat that has to stay
+attached to its claim.
+
+---
+
+## 19. A finding is reported by a verb, and the qualification rides with it
+
+*show*, *indicate*, *demonstrate*, *confirm*. The qualification stays in the same sentence
+instead of being deferred to a later section, and it is stated in consequence terms.
+
+> Results showed worst case at the following bioreactor conditions: High pH, high Temp, high
+> iVCC, and late harvest.
+> — A-Mab, p. 73
+
+> Moreover, results show that process performance has been consistent and robust demonstrating
+> that all three options may be used to culture cells in the seed expansion stage.
+> — A-Mab, p. 65
+
+> This prior information has demonstrated that the cell culture expansion steps are robust and
+> reproducible in different scale of operations and bioreactor configurations.
+> — A-Mab, p. 66
+
+> Qualification should demonstrate that the equipment is designed appropriately, built to suit
+> user and process requirements, and fit for its intended use.
+> — ISPE Practical Implementation, printed p. 50 / extract p. 52
+
+**Note.** The A-Mab worst-case sentence is 18 words and settles a question. Compare it with the
+same finding reported as *the worst case was found to be associated with*, which is longer, has a
+copula for a main verb and commits to less.
+
+---
+
+## 20. Modality carries the risk posture
+
+**This is the plan-genre gap, and it is the largest one measured.** `should` runs at 11.5 per
+1000 words in ISPE Technology Transfer and 11.2 in PDA TR 60. Across all twenty corpus documents
+it runs at **0.23**, which is 27 occurrences in 119,000 words, and twelve documents never use it
+at all. `may` shows the same collapse: 7.9 and 7.8 in the two guides, 0.13 in the corpus.
+`PCP-003` answers with `will` at 19.7 per 1000 words against a human 2.0 to 3.3.
+
+A plan does three different things and needs three different modals. `will` commits. `may`
+permits and leaves the choice open. `should` recommends and admits a considered exception.
+Flattening all three into `will` reads as a machine issuing instructions.
+
+> Specific success criteria should be documented in the technology transfer plan.
+> — ISPE Technology Transfer, printed p. 28 / extract p. 30
+
+> Depending upon the complexity of the project, a technical lead and project manager may be
+> the same person.
+> — ISPE Technology Transfer, printed p. 32 / extract p. 34
+
+> If the process or analytical method qualification does not meet the acceptance criteria, the
+> cause of the failure should be investigated and addressed before repeating the exercise.
+> — ISPE Technology Transfer, printed p. 47 / extract p. 49
+
+> Due to the dependence of aggregation on pH, the formulation range for pH should not exceed
+> 5.6.
+> — A-Mab, p. 186
+
+> CQAs for commercial products should be defined prior to initiation of Stage 2 activities.
+> — PDA TR 60, printed p. 14 / extract p. 22
+
+**Note.** Four sentences, four postures: a documentation requirement, a permission, a
+conditional obligation, a hard limit with its mechanism given, and a deadline. Only the A-Mab
+one states a number, and it is the only one that needs to.
+
+---
+
+## 21. The author manages the reader
+
+The sources steer attention. They say what to skip, what to notice and what a chapter is for.
+Across the whole corpus, *we*/*our* and *Note that*/*Notice that* are **zero**, and *For example*
+occurs **once** in 119,000 words against 0.2 to 1.3 per 1000 words in the four sources.
+
+> If the reader is not interested in studying the data and rationale that support the above
+> statement, the reader can skip this section and go to Step 3 (Production Bioreactor).
+> — A-Mab, p. 65
+
+> However for purpose of brevity, only data for MVM and XMuLV are provided in the case study.
+> — A-Mab, p. 116
+
+> This chapter can be read as a stand-alone guide for drug substance technology transfer.
+> — ISPE Technology Transfer, printed p. 67 / extract p. 69
+
+> Note that many of the principles of drug substance transfer, covered in Chapter 5, are
+> applicable to drug products.
+> — ISPE Technology Transfer, printed p. 83 / extract p. 85
+
+**Note.** The A-Mab "skip this section" passage is worth reading twice. A published case study
+tells its reader not to read part of it. A document that treats every attribute identically
+forces the reader to weigh them all, which is the uniformity §7 of the writing guide already
+calls a signal of machine authorship.
+
+---
+
+## 22. State the scope you are not covering
+
+Name the limit of the method inside the section that uses it, not in a general caveat at the
+end.
+
+> In a real-life case scenario, the examples and approaches described here would include all
+> relevant product quality and material attributes.
+> — A-Mab, p. 64
+
+> This type of experimental design is not able to resolve all the interactions between
+> parameters and it would have to be augmented on the subset of parameters shown to impact
+> CQAs.
+> — A-Mab, p. 77
+
+> This "one-factor-at-a-time" type of experimentation cannot determine process parameter
+> interactions, where the effect of one parameter on a quality attribute differs depending on
+> the level of the other parameters.
+> — PDA TR 60, printed p. 57 / extract p. 65
+
+> The focus of this chapter is on the product and process specific requirements of the
+> technology transfer (from the initial high level technology transfer proposal to operational
+> readiness and process/procedure qualification) as analytical method requirements are covered
+> in Chapter 4.
+> — ISPE Technology Transfer, printed p. 67 / extract p. 69
+
+**Note.** *is not able to resolve*, *cannot determine*, *would include*, *are covered in Chapter
+4*. Three of the four name what the reader should go and read instead. The corpus does this well
+once, in `PCR-003`'s "Three bounds apply to this claim", and almost nowhere else.
+
+---
+
+## 23. Carrying the topic forward
+
+The subject of a sentence opens on something the sentence before it established. Measured over
+the pages the self-test reads, the four sources do this in 57.0 to 61.9 % of their sentences.
+The 20 corpus documents manage a median of 36.3 %, so two sentences in three start a fresh
+topic. `WRITING_GUIDE.md` §2d states the rule and now carries three worked corrections; these
+are the passages to imitate.
+
+> The cultures from this study were subsequently passaged into the production bioreactor stage
+> also performed in a 2L scaled-down bioreactor. The production bioreactor stage was operated
+> at the set-point conditions. The harvest samples from the production bioreactor were tested
+> for product quality.
+> — A-Mab, p. 67
+
+> This assessment identified the production bioreactor as the only upstream process step that
+> posed a significant risk to product quality. The other process steps (seed expansion and
+> harvest) had a low risk of impact to product quality.
+> — A-Mab, p. 64
+
+> Team leads should assemble the technology transfer core team by including required SMEs. The
+> composition of the core team is determined by the process being transferred and the required
+> expertise to support the transfer.
+> — ISPE Technology Transfer, printed p. 32 / extract p. 34
+
+> Measurement uncertainty is commonly managed by reducing the PAR or multivariate limits (as
+> applicable) to a value inside the limit determined during development. These tighter limits
+> can be included in the batch records as alert limits or decision limits. Typically, these
+> new limits are determined based on a selected level of statistical assurance that the actual
+> value is within the PAR or multivariate range for interacting parameters.
+> — ISPE Practical Implementation, printed p. 37 / extract p. 39
+
+**Note.** Watch what the subjects do. *The cultures* → *The production bioreactor stage* → *The
+harvest samples from the production bioreactor*. *Team leads* → *the core team*. *the PAR or
+multivariate limits* → *These tighter limits* → *these new limits*. Every one of them repeats a
+noun from the sentence before rather than reaching for a synonym, which is the habit §2 of this
+file's opening notes already asks for. Chaining and noun repetition are the same discipline.

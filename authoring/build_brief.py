@@ -156,6 +156,73 @@ HELPERS_BY_JOB = [
 ]
 
 
+def _discrepancy_assignments(doc_id: str) -> str:
+    """The registered discrepancies this document is required to carry, if any.
+
+    A registered discrepancy lives in prose, so it survives only as long as nobody
+    re-authors the document holding it. Nothing surfaced D-001 or D-002 to an author before
+    this section existed: re-author PCR-003 and the sentence is simply not written again,
+    while `authoring/DISCREPANCIES.md` goes on calling the item open. Nothing fails, because
+    no gate reads that registry and `check_grounding.py` only inspects
+    ``SourceReference.quote``.
+
+    Losing the prose half alone is worse than losing the item. D-002's other half is a
+    generated ``ProcessStep.description``, so it survives a re-author and the annex is left
+    asserting something the document no longer says.
+
+    **The section is always emitted, empty when the document carries nothing.** An absent
+    section cannot be told apart from a mechanism that has silently stopped working, and
+    "my brief has no discrepancies section" is exactly what an author would have seen while
+    this was broken.
+
+    Assignments come from ``authoring/discrepancies.yaml``. This is not the weak-claims
+    layer, which lives only on ``feature/weak-claims-via-brief``; see that file's header.
+    """
+    b = io.StringIO()
+    b.write("## 5c. Registered discrepancies — this document must carry these\n\n")
+
+    path = os.path.join(HERE, "discrepancies.yaml")
+    data = yaml.safe_load(open(path)) if os.path.exists(path) else {}
+    items = ((data or {}).get("items") or {}).get(doc_id) or []
+
+    if not items:
+        b.write("**None.** No registered discrepancy is assigned to this document, so every "
+                "claim you write must be internally consistent, consistent with the other "
+                "documents in the corpus, and consistent with the data. The registry is "
+                "`authoring/DISCREPANCIES.md`; an *unregistered* inconsistency is a bug.\n\n")
+        return b.getvalue()
+
+    b.write("> `authoring/DISCREPANCIES.md` registers a small number of **genuine "
+            "inconsistencies** that a competent review should catch. They are deliberate "
+            "benchmark items, and each one lives in the prose of a particular document. "
+            "Yours carries the following.\n>\n"
+            "> Write each in your own words, in register, where the assignment says. Then "
+            "leave it alone. **Do not reconcile it** with another document, with the data, "
+            "or with a later section of your own report, and do not qualify it into "
+            "something true. Correcting one deletes a benchmark item.\n>\n"
+            "> These are not labeled in the annex, so nothing in the document or its ground "
+            "truth reveals them. Every other claim you write is still grounded.\n\n")
+    for it in items:
+        a = it.get("assignment") or {}
+        b.write(f"### {it['id']} — `{it.get('kind', '?')}`\n\n")
+        if a.get("registered_sentence"):
+            # The sentence as the registry records it. Quoted rather than described, because
+            # a paraphrase of a registered discrepancy is very easily a *qualified* version,
+            # and a qualified D-002 is true and therefore no longer a benchmark item.
+            b.write("> " + ' '.join(a["registered_sentence"].split()) + "\n>\n"
+                    "> — the sentence this document currently carries. Write this claim. Your "
+                    "wording may differ; its strength may not.\n\n")
+        b.write(f"- **State:** {' '.join((a.get('state') or '').split())}\n")
+        if a.get("write_next"):
+            b.write(f"- **Then write:** {' '.join(a['write_next'].split())}\n")
+        b.write(f"- **Why it is there:** {' '.join((a.get('why') or '').split())}\n")
+        b.write(f"- **Placement:** {' '.join((a.get('placement') or '').split())}\n")
+        if a.get("do_not"):
+            b.write(f"- **Do not:** {' '.join(a['do_not'].split())}\n")
+        b.write("\n")
+    return b.getvalue()
+
+
 def _helper_by_job():
     out = ["**Find a helper by the job you are doing.** The full alphabetical listing "
            "follows; this is an index into it.\n"]
@@ -340,6 +407,11 @@ def build(doc_id: str) -> str:
               f"helper variants (§7). State the anomaly, that designs were invalidated and "
               f"re-executed, and confirm root cause from the requalified data.\n")
         w("\n")
+
+    # 5c. Registered discrepancies ----------------------------------------------
+    # Always emitted, empty when none. A section that disappears when a document carries
+    # nothing is indistinguishable from a section that stopped being generated.
+    w(_discrepancy_assignments(doc_id))
 
     # 6. Cross-references -------------------------------------------------------
     w("## 6. Cross-references\n\n")

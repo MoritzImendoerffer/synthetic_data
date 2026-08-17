@@ -29,6 +29,12 @@ knowledge that a plausible-looking label can be wrong.
 3. **Do not fix a registered discrepancy without removing its entry**, and do not remove an
    entry without agreement — that silently deletes a benchmark item.
 4. Conversely, **an unregistered inconsistency is a bug**, not a feature. Fix it.
+5. **Every entry here has a machine-readable half in `authoring/discrepancies.yaml`**, which
+   `authoring/build_brief.py` emits as §5c of the affected document's authoring brief. That is
+   what makes an entry survive a re-authoring: a registered discrepancy lives in prose, so
+   before §5c existed, rewriting a document simply deleted the item while this file went on
+   calling it open, and no gate noticed. Adding an entry here without one there, or removing
+   one there without removing it here, re-creates that drift.
 
 ---
 

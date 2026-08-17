@@ -6,8 +6,13 @@
 The register exemplar's whole value is that its passages are real human regulatory prose.
 If a quote is paraphrased, the corpus is being taught a voice that nobody actually writes in
 — which is precisely the failure mode the exemplar was rebuilt to fix. This script re-checks
-every blockquote against ``refs/text/{pda60,amab}.txt`` and reports the extract page each one
-was found on. Run it after editing the exemplar.
+every blockquote against the four source extracts in ``refs/text/`` and reports the extract
+page each one was found on. Run it after editing the exemplar.
+
+The source is chosen by the name in the attribution line, so an attribution must carry
+exactly one of the names in ``SRC`` below: "A-Mab", "PDA TR 60", "ISPE Technology Transfer",
+"ISPE Practical Implementation". A quote naming none or several is skipped, as a passage
+that two sources share cannot be attributed to one of them.
 
 Matching tolerates PDF-extraction artifacts only, never word changes: collapsed whitespace,
 line-break hyphenation, the Symbol-font private-use glyphs (U+F0B0 degree, U+F0B7 bullet),
@@ -20,8 +25,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = {
-    'PDA TR 60': ROOT / 'refs/text/pda60.txt',
-    'A-Mab':     ROOT / 'refs/text/amab.txt',
+    'PDA TR 60':                    ROOT / 'refs/text/pda60.txt',
+    'A-Mab':                        ROOT / 'refs/text/amab.txt',
+    'ISPE Technology Transfer':     ROOT / 'refs/text/ispe_tt.txt',
+    'ISPE Practical Implementation': ROOT / 'refs/text/ispe_pv.txt',
 }
 
 
@@ -32,6 +39,17 @@ BOILER = [
     r'Product Development and Realisation Case Study A-Mab',
     r'CMC Biotech Working Group',
     r'The CMC Biotech Working Group',
+    # The ISPE guides stamp a four-line DRM footer on every page. A quote that spans a
+    # page break has the whole block sitting inside it.
+    r'Downloaded from https://guidance-docs\.ispe\.org/[^\n]*',
+    r'For personal use only\. No other uses without permission\.',
+    r'Copyright © 20\d\d International Society for Pharmaceutical Engineering\. All rights reserved\.',
+    r'For individual use only\. © Copyright ISPE 20\d\d\. All rights reserved\.',
+    # Running headers. Anchored to a whole line, because both phrases also occur inside
+    # real sentences and stripping them there would let a paraphrase through.
+    r'^\s*ISPE Good Practice Guide:\s*$',
+    r'^\s*Technology Transfer\s*$',
+    r'^\s*Practical Implementation of the Lifecycle Approach to Process Validation\s*$',
     r'Page \d+ of \d+',
     r'===== \[\w+\] PAGE \d+ =====',
     r'^\s*\d{1,3}\s*$',
@@ -93,9 +111,10 @@ for b in blocks:
     body = ' '.join(l for l in lines if not l.startswith('—') and l)
     if len(body) < 55:
         continue
-    if 'PDA' in attrib[-1] and 'A-Mab' in attrib[-1]:
-        continue
-    src = 'PDA TR 60' if 'PDA' in attrib[-1] else 'A-Mab'
+    named = [name for name in SRC if name in attrib[-1]]
+    if len(named) != 1:
+        continue                      # unattributed, or shared between two sources
+    src = named[0]
     claimed = attrib[-1]
     checked += 1
     q = norm(body)

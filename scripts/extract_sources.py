@@ -31,6 +31,14 @@ SRC = {
     # PDA Technical Report No. 60 — the human register reference for the authoring
     # guide (authoring/REGISTER_EXEMPLAR.md) and the style gate's self-test.
     "pda60": "pda_60_PV.pdf",
+    # The two 2023 ISPE Good Practice Guides, added as further human register
+    # references. Both carry a per-page DRM footer that survives extraction;
+    # authoring/check_style.py:prose_from_extract filters it out before measuring.
+    "ispe_pv": (
+        "2023-ispe-good-practice-guide-practical-implementation-of-the-"
+        "lifecycle-approach-to-process-validation.pdf"
+    ),
+    "ispe_tt": "2023-ispe-good-practice-guide-technology-transfer-(third-edition).pdf",
 }
 
 

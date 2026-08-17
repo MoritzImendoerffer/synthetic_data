@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-17_01_register-second-round]]** · **3 of 9 done** · 6 todo
+**[[epic|2026-08-17_01_register-second-round]]** · **4 of 9 done** · 5 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -31,7 +31,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-004]] | `todo` | the assistant | mechanism | Give the brief a §5d that prints the discourse targets and the document's own current numbers |
 | [[TASK-005]] | `todo` | the assistant | document | Re-author PCP-003 in one pass from the amended artifacts, as a DRAFT |
 | [[TASK-006]] | `todo` | the assistant | document | Re-author PCR-003 in one pass from the amended artifacts, as a DRAFT |
 | [[TASK-007]] | `todo` | the assistant | annex | Promote both drafts, render both formats, re-anchor the annexes and re-ground the corpus |
@@ -45,6 +44,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-001]] | `done` | — | mechanism | Print clause packing and sentence-initial connectives in check_style.py, gated by nothing |
 | [[TASK-002]] | `done` | — | mechanism | Rewrite the guide's sentence rule as a substitution, fix the ✓ text that teaches the fault, and add the referent and Shape 4 examples |
 | [[TASK-003]] | `done` | — | mechanism | Add authoring/check_discourse.py with spaCy as an optional extra that the build never needs |
+| [[TASK-004]] | `done` | — | mechanism | Give the brief a §5d that prints the discourse targets and the document's own current numbers |
 
 ---
 

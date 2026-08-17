@@ -10,15 +10,21 @@ inline expressions. Every number in the authored document comes from here; witho
 author emits ``<<NEEDS:>>``.
 
 The brief is generated from ``config`` -> the model -> ``outputs/`` via the ``_pcpkg`` /
-``doe_report`` helpers ONLY. It never reads a ``pc_package/*.qmd``: the corpus reports are
-prior knowledge (distilled once into ``authoring/``), not a runtime dependency. The
-pipeline therefore runs on a blank repo with no first-pass documents present.
+``doe_report`` helpers ONLY. It never reads a ``pc_package/*.qmd`` for content: the corpus
+reports are prior knowledge (distilled once into ``authoring/``), not a runtime dependency.
+Since 2026-08-17 §5d measures the previous revision's register (numbers only, through
+``check_style.measure``) so the author starts knowing where it stood; on a blank repo it
+prints "no previous revision". The pipeline therefore runs on a blank repo with no
+first-pass documents present.
 """
 from __future__ import annotations
 
+import glob
 import inspect
 import io
+import json
 import os
+import subprocess
 import sys
 
 import yaml
@@ -29,8 +35,11 @@ PCPKG = os.path.join(ROOT, "pc_package")
 OUT = os.path.join(HERE, "out")
 if PCPKG not in sys.path:
     sys.path.insert(0, PCPKG)
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
 
 import _pcpkg as P          # noqa: E402
+import check_style as cs    # noqa: E402
 import doe_report as D      # noqa: E402
 from amab_process import studies as st  # noqa: E402
 
@@ -154,6 +163,122 @@ HELPERS_BY_JOB = [
         ("equipment_df()", "instrumented scale-down systems"),
      ]),
 ]
+
+
+# The four source columns of the register measures. Read through check_style so the brief
+# cannot drift from the gate; check_style prints the packing figures on every run.
+def _register_columns() -> dict:
+    cols = {}
+    for name, fname, lo, hi in cs.HUMAN_SOURCES:
+        path = os.path.join(ROOT, "refs", "text", fname)
+        if os.path.exists(path):
+            cols[name] = cs.measure(cs.prose_from_extract(path, lo, hi))[0]
+    return cols
+
+
+def _previous_revision_path(doc_id: str, key) -> str | None:
+    """This document's committed source, or None. Used ONLY to measure its register.
+
+    Not a content input and not a voice model: §5d prints numbers from it and never a word
+    of its prose. On a blank repo there is nothing here and the section says so.
+    """
+    if key is not None:
+        p = os.path.join(PCPKG, f"{doc_id}_{key}.qmd")
+        return p if os.path.exists(p) else None
+    hits = sorted(glob.glob(os.path.join(PCPKG, f"{doc_id}_*.qmd")))
+    return hits[0] if hits else None
+
+
+def _discourse_measures(path: str | None) -> tuple[dict, dict | None]:
+    """``check_discourse.py --json --cap``: the four source columns and this document.
+
+    Measured live rather than carried as constants, so the row cannot go stale against a
+    re-extraction of the sources. One subprocess covers all five columns; it costs about 35 s
+    of parsing per brief, which is the price of the numbers being current.
+
+    Returns ({} , None) when spaCy is absent — the extra is optional and the brief still
+    builds (CLAUDE.md, Environment).
+    """
+    argv = [sys.executable, os.path.join(HERE, "check_discourse.py"), "--json", "--cap"]
+    out = subprocess.run(argv + ([path] if path else []),
+                         capture_output=True, text=True).stdout
+    if not out.lstrip().startswith("{"):
+        return {}, None                      # the one-line degrade message
+    cols = json.loads(out)["columns"]
+    mine = cols.pop(os.path.basename(path)) if path else None
+    return cols, mine
+
+
+def _discourse_section(doc_id: str, key) -> str:
+    """§5d — the numbers this document is written against, and the rules as substitutions.
+
+    **No generated example sentence.** The proposal suggested the brief could build worked
+    chains from the document's own facts; a template-generated chain is machine prose handed
+    to the author, which is the self-reference loop this repository has already paid for once.
+    Worked corrections live in `WRITING_GUIDE.md`, written by a person. This section prints
+    numbers and rules only.
+
+    It is the pilot's finding made concrete: an author can execute and self-verify a
+    substitution and cannot self-verify a rate. So the brief gives the substitution AND the
+    rate, and `check_style.py` prints the rate back on every `check_render.py` run.
+    """
+    b = io.StringIO()
+    w = b.write
+    w("## 5d. Discourse targets — the numbers this document is written against\n\n")
+    w("> Added 2026-08-17 (register round two). The previous revision of this document is "
+      "measured here and nothing more: not a word of it is quoted, and it is not a voice "
+      "model. `check_style.py` prints the first three rows back to you on every "
+      "`check_render.py` run.\n\n")
+
+    src = _register_columns()
+    names = list(src)
+    prev = _previous_revision_path(doc_id, key)
+    mine = cs.measure(cs.prose_from_qmd(prev))[0] if prev else None
+
+    w("| measure | " + " | ".join(names) + " | this document, previous revision |\n")
+    w("|---|" + "---|" * (len(names) + 1) + "\n")
+    rows = [("mid-sentence `, so ` (% of sentences) — target <= 1.0", "_pct_so_mid"),
+            ("opens with a connective (% of sentences) — target >= 3.0", "_pct_initial_conn"),
+            ("2+ clause coordinators (% of sentences)", "_pct_coord2"),
+            ("sentences under 15 words (%) — band 15-32", "pct_under_15"),
+            ("sentences over 40 words (%) — band 3-21.5", "pct_over_40")]
+    for label, k in rows:
+        cells = [f"{src[n][k]:.1f}" for n in names]
+        cells.append(f"{mine[k]:.1f}" if mine else "no previous revision")
+        w(f"| {label} | " + " | ".join(cells) + " |\n")
+
+    dsrc, dmine = _discourse_measures(prev)
+    if dsrc:
+        disc_rows = [("topic chaining (%) — must not fall more than 2 pt", "chaining"),
+                     ("copula main verb (%) — must not rise more than 2 pt", "copula"),
+                     ("adjunct front field (%)", "front")]
+        for label, k in disc_rows:
+            cells = [f"{dsrc[n][k + '_pct']:.1f}" for n in names if n in dsrc]
+            cells.append(f"{dmine[k + '_pct']:.1f} ({dmine[k][0]}/{dmine[k][1]})"
+                         if dmine else "no previous revision")
+            w(f"| {label} | " + " | ".join(cells) + " |\n")
+        w("\n_Chaining, copula and front field are `check_discourse.py --cap`: the sentence "
+          "caps (600 chaining, 450 copula/front) the pilot's figures were measured under, so "
+          "the columns are comparable with `docs/results/`. The corpus documents sit under "
+          "both caps; only the source columns are affected._\n")
+    else:
+        w("| topic chaining / copula / front field | "
+          + " | ".join("—" for _ in names)
+          + " | not measured — `uv sync --extra discourse` |\n")
+
+    w("\n**The rules, as substitutions (WRITING_GUIDE §2d, §2d bis):**\n\n")
+    w("- One argument step per sentence. The next step opens the NEXT sentence with the "
+      "connective (Therefore, However, As a result, For this reason). Search your draft for "
+      "`, so ` and for `, and ` that starts a second clause; each is a full stop the sources "
+      "would have written.\n")
+    w("- The definite article or the noun, never `it is` / `it was`. Possessives sit in a band "
+      "(its 0.27-0.40, their 0.50-0.96 per 1000 words), not at zero.\n")
+    w("- Name the set you count: \"the four\", \"both\", \"the three\" are named in the "
+      "sentence, or the paragraph has already named them.\n")
+    w("- A `{python}` expression yielding a response or parameter NAME is never the subject of "
+      "a verb that must agree with it. Put it after \"is\" or after a preposition.\n")
+    w("- Do not produce a connective to hit a count. Write the sentence that needs one.\n\n")
+    return b.getvalue()
 
 
 def _discrepancy_assignments(doc_id: str) -> str:
@@ -290,6 +415,9 @@ def build(doc_id: str) -> str:
         w(f"- **Unit operation:** {uo_title} · key `{key}`\n")
         w(f"- **Role in control strategy:** {role}\n")
         w(f"- **DoE step:** {'yes' if doe else 'no (univariate / qualitative — do NOT fabricate a DoE)'}\n")
+        w("- **Commercial scale:** state it in the introduction, via "
+          "`V[\"commercial_scale_l\"]` (config `meta.commercial_scale_l`). The round-one "
+          "PCR-003 never stated the scale it characterizes.\n")
     else:
         w("- **Scope:** corpus-level document (no single unit operation)\n")
     w(f"- **Doc-type outline:** `section_plan.yaml` -> "
@@ -412,6 +540,10 @@ def build(doc_id: str) -> str:
     # Always emitted, empty when none. A section that disappears when a document carries
     # nothing is indistinguishable from a section that stopped being generated.
     w(_discrepancy_assignments(doc_id))
+
+    # 5d. Discourse targets ------------------------------------------------------
+    # Also always emitted, for the same reason as 5c.
+    w(_discourse_section(doc_id, key))
 
     # 6. Cross-references -------------------------------------------------------
     w("## 6. Cross-references\n\n")

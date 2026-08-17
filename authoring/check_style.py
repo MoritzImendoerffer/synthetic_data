@@ -112,6 +112,19 @@ LIMITS = {
 CONNECTIVES = ("however", "therefore", "in addition", "for this reason", "since",
                "once", "as a result", "by contrast", "consequently")
 
+# Clause packing. The corpus reasons INSIDE the sentence — a premise, a consequence and a
+# recommendation joined by ", so … , and …" — where the four sources end the sentence and open
+# the next one with a connective. Measured 2026-08-17 over the same prose this gate reads:
+# mid-sentence ", so " in 6-11 % of corpus sentences against 0.1-0.4 % in all four sources;
+# sentence-initial connectives in 0-2 % against 3.7-6.1 %. Printed, gated by nothing: a
+# ceiling on ", so " is met by writing ", and" or ";", so the whole family is printed together.
+CLAUSE_COORD = re.compile(r",\s+(?:so|and|but|since|because|which|while|whereas|yet)\s+", re.I)
+SO_MID = re.compile(r",\s+so\s+", re.I)
+INITIAL_CONNECTIVE = re.compile(
+    r"^(?:However|Therefore|Consequently|As a result|In addition|For this reason|By contrast|"
+    r"In contrast|For example|Thus|Hence|Nevertheless|Nonetheless|Moreover|Furthermore|"
+    r"Instead|Rather|First|Second|Third|Finally|Overall)\b,?", re.I)
+
 
 def _band(lo, hi) -> str:
     if lo is None:
@@ -275,6 +288,9 @@ def measure(text: str) -> tuple[dict, list, Counter, list]:
         w for w in re.findall(r"\b[a-z]+(?:-[a-z]+){2,}\b", scan.lower())
         if w not in HYPHEN_ALLOW
     )
+    n_so = sum(1 for s in sents if SO_MID.search(s))
+    n_init = sum(1 for s in sents if INITIAL_CONNECTIVE.match(s))
+    n_coord = sum(1 for s in sents if len(CLAUSE_COORD.findall(s)) >= 2)
     m = {
         "mean_len": stat.mean(lens),
         "median_len": stat.median(lens),
@@ -293,6 +309,10 @@ def measure(text: str) -> tuple[dict, list, Counter, list]:
         "_connectives": Counter(
             {c: len(re.findall(rf"\b{c}\b", scan, re.I)) for c in CONNECTIVES}
         ),
+        "_pct_so_mid":       100.0 * n_so / n,
+        "_pct_initial_conn": 100.0 * n_init / n,
+        "_pct_coord2":       100.0 * n_coord / n,
+        "_n_so_mid": n_so, "_n_initial_conn": n_init, "_n_coord2": n_coord,
     }
     hits = []
     for pat, label in BANNED:
@@ -335,6 +355,17 @@ def connective_line(m: dict) -> str:
             f"per 1k words, {len(used)}/{len(CONNECTIVES)} distinct: {detail}")
 
 
+def packing_line(m: dict) -> str:
+    """Clause packing, as one advisory line. Nothing here can fail a document."""
+    return (f"{'clause packing (diagnostic, never gated)':<48s} "
+            f"', so ' mid-sentence {m['_pct_so_mid']:4.1f} % of sentences "
+            f"({m['_n_so_mid']}/{m['_n_sent']}), "
+            f"opens with a connective {m['_pct_initial_conn']:4.1f} % "
+            f"({m['_n_initial_conn']}/{m['_n_sent']}), "
+            f"2+ clause coordinators {m['_pct_coord2']:4.1f} %  "
+            f"[sources: 0.1-0.4 / 3.7-6.1 / 1.2-3.1]")
+
+
 def render(name: str, m: dict, hits: list, compounds: Counter, longest: list,
            verbose: bool) -> list:
     print(f"== {name} ==")
@@ -350,6 +381,7 @@ def render(name: str, m: dict, hits: list, compounds: Counter, longest: list,
             note = "  <- TOO LOW"
         print(f"   {flag}  {desc:<48s} {m[key]:6.1f}  ({_band(lo, hi)}){note}")
     print(f"   --    {connective_line(m)}")
+    print(f"   --    {packing_line(m)}")
     bad = evaluate(m)
     if hits:
         print(f"\n   BANNED PHRASES ({len(hits)}):")
@@ -450,6 +482,10 @@ def compare(paths: list[str]) -> int:
     print(f"{'  of the nine, how many are used at all':<50s}{'':>11s}"
           + "".join(f"{sum(1 for n in m['_connectives'].values() if n):>{width}d}"
                    for _, m in cols))
+    for key, label in (("_pct_so_mid",       "% sentences with mid-sentence ', so ' (not gated)"),
+                       ("_pct_initial_conn", "% sentences opening with a connective (not gated)"),
+                       ("_pct_coord2",       "% sentences with 2+ clause coordinators (not gated)")):
+        print(f"{label:<50s}{'':>11s}" + "".join(f"{m[key]:>{width}.1f}" for _, m in cols))
     print(f"{'(sentences of prose)':<50s}{'':>9s}"
           + "".join(f"{m['_n_sent']:>{width}d}" for _, m in cols))
     return 0

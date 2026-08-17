@@ -1,65 +1,49 @@
 ---
 type: pm-task
-epic: 2026-08-16_01_register-from-four-sources
-sprint: 2026-08-16_01_register-from-four-sources
+epic: 2026-08-17_01_register-second-round
+sprint: 2026-08-17_01_register-second-round
 task: TASK-009
-status: done
-kind: measurement
-title: "Measure both pilot documents and put them in front of a reader"
+status: todo
+kind: documentation
+title: "Move the findings into docs, settle the decision, and rewrite or retire the proposal on the stopping rule's verdict"
 generated: true
-waiting_on: —
-tags: [pm/task, pm/done]
-about: ["PCP-003", "PCR-003"]
+waiting_on: the assistant
+tags: [pm/task, pm/todo]
 ---
 
-> [!warning] Generated from `.claude/work/2026-08-16_01_register-from-four-sources/state.json` by `scripts/pm_notes.py`.
+> [!warning] Generated from `.claude/work/2026-08-17_01_register-second-round/state.json` by `scripts/pm_notes.py`.
 > Anything written here by hand is lost on the next run.
 
-# TASK-009 — Measure both pilot documents and put them in front of a reader
+# TASK-009 — Move the findings into docs, settle the decision, and rewrite or retire the proposal on the stopping rule's verdict
 
-**Epic:** [[epic]] · **Status:** `done` · **Waiting on:** — · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
-TWO DOCUMENTS NOW, one plan and one report, so the results page can say whether the amendment works in both genres. A result that holds for the report and not the plan, or the reverse, is the most useful thing this pilot can produce and the current plan would not have found it.
-
-THE FIVE MEASURES, with the before-values measured on 2026-08-16/17 and the human reference now spanning four sources:
-  1. topic chaining: PCP-003 30.0 %, PCR-003 37.2 % -> sources 57.0 to 61.9 (PDA 59.4, A-Mab 59.0, ISPE TT 61.9, ISPE PV 57.0). Notebook section 8.
-  2. connectives: corpus median 1.5 per 1000 words using 3 of the 9 -> sources 2.2 to 2.7 using 6 to 9. 'However' twice in the whole corpus against 59 in the sources. This is now printed by check_style.py on every run, so it needs no notebook.
-  3. copula rate, 'X is <noun phrase>': PCR-003 33.3 % -> reference 14.7 and 18.2. Notebook section 4.
-  4. possessives per 1000 words: PCP-003 its 5.72 their 3.18 it 7.42; PCR-003 its 6.66 their 4.15 it 10.62 -> sources its 0.27-0.40, their 0.50-0.96, it 1.75-3.33.
-  5. adjunct front field: 9.1 to 13.6 % of clauses -> sources 29.5 and 25.4. scratchpad/front.py, or notebook section 4.
-
-RUN THE NOTEBOOK, do not quote this plan. It runs clean under: uv run --with spacy --with 'https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl' --with jupyter jupyter lab. Note the double --with: 'uv run --with spacy' alone builds a fresh environment each call and a separately downloaded model is not in it. Add four before/after target columns.
-
-ALSO REPORT THE GATE'S OWN NUMBERS. TASK-002 raised mean_len to 30.5, pct_over_40 to 21.5 and pct_over_55 to 9.5 to accommodate ISPE PV, whose extraction fuses list items into pseudo-sentences. If either re-authored document lands near those ceilings rather than near the per-source columns, the band is doing harm and the results page must say so. That is a finding about the gate, not about the author.
-
-THE ACCEPTANCE TEST IS DISCRIMINATION, NOT COUNTS. Show a reader passages from the two re-authored documents and from the human sources, unlabelled, and ask which is which. Report correct identifications over total passages. A connective count is a diagnosis and would be gamed as a target.
-
-A NULL RESULT IS A RESULT. If the shape moves and the prose still does not read as SME prose, say so. That would mean the discourse hypothesis is wrong or TASK-003's amendment was too timid, and it stops the campaign before eighteen more documents are re-authored. Every rate carries its denominator; never quote a bare percentage.
+PROCEDURE: procedures/TASK-009.md in this work unit — numbered steps, code, commands and the output each must print. Follow it top to bottom.  THIS IS /ship's WORK and the plan leaves room for it; do not do it early.  THE VERDICT DECIDES THE SHAPE OF THE PROPOSAL. Two branches, both prepared here so /ship does not improvise: (a) stopping rule holds → the proposal becomes 'Track 2 — the remaining eighteen', with the budget from the pilot page and the round-two per-document re-anchoring counts, and D1 asks the owner whether Track 2 starts without another decision; (b) it does not → the proposal is rewritten to the target the owner's reading names, and the guide's-own-register hypothesis (decisions.guide_scope) is written up as its first candidate, with the numbers from exploration.md §4 (guide commentary 0 % initial connectives, ', so ' 1.5–11.5 %).  HANDOFF §3a is two tables ('Model / world-canon changes', 'Tooling changes'); everything here is tooling.  TASKS.md's list was six, then seven after round one (the discrepancy trap); these are eight and nine.  pm_notes.py archives the previous epic when ACTIVE_WORK changes; the _Archive.md row is /ship's, written before the notes move.
 
 ## Acceptance criteria
 
-- [x] the five shape measures are reported before and after for BOTH PCP-003 and PCR-003, each with its denominator
-- [x] the figures are produced by re-running register_analysis.ipynb rather than quoted from this plan
-- [x] the four human sources are the reference columns, not two
-- [x] a discrimination test is run and reported: unlabelled corpus and source passages, with the count of correct identifications over the number of passages
-- [x] the register gate's own numbers are reported for both documents, and the report says whether either drifted into the headroom TASK-002 opened
-- [x] the results page states plainly whether the change is worth extending to the remaining EIGHTEEN documents
-- [x] a row is added to docs/results/README.md saying why the run happened
+- [ ] authoring/HANDOFF.md §3a 'Tooling changes' gains rows for: the advisory packing measures in check_style.py, check_discourse.py + the optional extra, brief §5d, and the guide's rule-as-substitution rewrite — each saying what it did
+- [ ] pc_package/TASKS.md 'Things that will catch you out' gains two: (a) an inline expression that yields a NAME must not be an agreeing subject; (b) the guide's own commentary is written in the register it forbids — verify against the sources, not against the guide's prose
+- [ ] CLAUDE.md's Voice bullet says the packing measures exist and are advisory, in one sentence, if TASK-003 has not already covered it
+- [ ] docs/ROADMAP.md's register row says what is now true; if Track 2 opens it names the eighteen and the per-document budget (~40 spans, explicit pdf render); if not, it names the next target from the owner's reading
+- [ ] docs/next/register-from-four-sources.md is rewritten to Track 2 alone (if the verdict is 'open') or to the new target (if 'stop'), or deleted if nothing remains; docs/next/README.md's row agrees
+- [ ] docs/pm/decisions/D1-track-two-on-the-verdict.md is settled with the owner's answer and status: settled
+- [ ] docs/pm/epic.md carries the shipped summary and docs/pm/_Archive.md gains this epic's row before the notes move
+- [ ] `docs/results/` page is linked from ROADMAP, README and the proposal or its successor
 
 **Depends on:** [[TASK-008]]
 
-## Documents it is about
-
-- **PCP-003** — `pc_package/PCP-003_bioreactor.qmd`
-- **PCR-003** — `pc_package/PCR-003_bioreactor.qmd`
-
 ## Files it touched
 
-- [[2026-08-17-register-pilot]] — `docs/results/2026-08-17-register-pilot.md`
 - [[README]] — `docs/results/README.md`
-- `.claude/work/2026-08-16_01_register-from-four-sources/register_analysis.ipynb`
-- `.claude/work/2026-08-16_01_register-from-four-sources/pre-rewrite/`
+- [[HANDOFF]] — `authoring/HANDOFF.md`
+- [[TASKS]] — `pc_package/TASKS.md`
+- [[ROADMAP]] — `docs/ROADMAP.md`
 - [[register-from-four-sources]] — `docs/next/register-from-four-sources.md`
 - [[README]] — `docs/next/README.md`
+- [[D1-track-two-on-the-verdict]] — `docs/pm/decisions/D1-track-two-on-the-verdict.md`
+- [[epic]] — `docs/pm/epic.md`
+- [[_Archive]] — `docs/pm/_Archive.md`
+- `CLAUDE.md`

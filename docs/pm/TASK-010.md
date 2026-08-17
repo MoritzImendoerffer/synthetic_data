@@ -3,12 +3,12 @@ type: pm-task
 epic: 2026-08-16_01_register-from-four-sources
 sprint: 2026-08-16_01_register-from-four-sources
 task: TASK-010
-status: todo
+status: done
 kind: documentation
 title: "Move the findings into docs and retire what is finished"
 generated: true
-waiting_on: the assistant
-tags: [pm/task, pm/todo]
+waiting_on: —
+tags: [pm/task, pm/done]
 ---
 
 > [!warning] Generated from `.claude/work/2026-08-16_01_register-from-four-sources/state.json` by `scripts/pm_notes.py`.
@@ -16,7 +16,7 @@ tags: [pm/task, pm/todo]
 
 # TASK-010 — Move the findings into docs and retire what is finished
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `done` · **Waiting on:** — · **Board:** [[_Board]]
 
 ## Why it exists
 
@@ -32,12 +32,12 @@ THE NOTEBOOK MOVES to authoring/register_analysis.ipynb, beside the guide it exp
 
 ## Acceptance criteria
 
-- [ ] the results page has a row in docs/results/README.md saying why the run happened
-- [ ] authoring/HANDOFF.md 3a gains perturbation rows for the guide amendment, the source extraction and the discrepancy carrier
-- [ ] pc_package/TASKS.md gains the trap: a re-authored document loses a registered discrepancy unless the brief carries it
-- [ ] the notebook moves to authoring/ and still runs from its new location
-- [ ] docs/ROADMAP.md says what is now true
-- [ ] the proposal is rewritten down to the remaining EIGHTEEN documents rather than deleted
+- [x] the results page has a row in docs/results/README.md saying why the run happened
+- [x] authoring/HANDOFF.md 3a gains perturbation rows for the guide amendment, the source extraction and the discrepancy carrier
+- [x] pc_package/TASKS.md gains the trap: a re-authored document loses a registered discrepancy unless the brief carries it
+- [x] the notebook moves to authoring/ and still runs from its new location
+- [x] docs/ROADMAP.md says what is now true
+- [x] the proposal is rewritten into TWO TRACKS - a second two-document round, and the remaining eighteen blocked on it - rather than deleted, carrying TASK-009's stopping rule and its four prerequisites. CORRECTED 2026-08-17: the planned wording said 'down to the remaining EIGHTEEN', which TASK-009 falsified. The pilot returned one clean win in five, so a proposal that went straight to the eighteen would state a plan the measurement does not support.
 
 **Depends on:** [[TASK-009]]
 

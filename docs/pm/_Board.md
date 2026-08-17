@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-16_01_register-from-four-sources]]** · **7 of 10 done** · 3 todo
+**[[epic|2026-08-16_01_register-from-four-sources]]** · **10 of 10 done**
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -27,11 +27,7 @@ None of them blocks the work below.
 Nothing in this table needs the project owner. It is what the coding assistant has still to do,
 and it is here so the state is visible, not so anyone else acts on it.
 
-| Task | Status | Waiting on | Kind | What it is |
-|---|---|---|---|---|
-| [[TASK-008]] | `todo` | the assistant | annex | Promote both pilot documents, re-anchor their annexes, and fix what the rewrite falsified |
-| [[TASK-009]] | `todo` | the assistant | measurement | Measure both pilot documents and put them in front of a reader |
-| [[TASK-010]] | `todo` | the assistant | documentation | Move the findings into docs and retire what is finished |
+*None.*
 
 ## Done
 
@@ -44,6 +40,9 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-005]] | `done` | — | mechanism | Exemplify the given-new rule WRITING_GUIDE 2d already states |
 | [[TASK-006]] | `done` | — | mechanism | Give the brief a discrepancies section, so a re-authored document keeps its registered defects |
 | [[TASK-007]] | `done` | — | document | Re-author PCP-003 and PCR-003, one pass each, from the amended artifacts |
+| [[TASK-008]] | `done` | — | annex | Promote both pilot documents, re-anchor their annexes, and fix what the rewrite falsified |
+| [[TASK-009]] | `done` | — | measurement | Measure both pilot documents and put them in front of a reader |
+| [[TASK-010]] | `done` | — | documentation | Move the findings into docs and retire what is finished |
 
 ---
 

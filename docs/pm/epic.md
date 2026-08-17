@@ -1,21 +1,25 @@
 ---
 type: pm-epic
 sprint: 2026-08-16_01_register-from-four-sources
-status: active
+status: shipped
 started: 2026-08-16
 proposal: docs/next/register-from-four-sources.md
 tags: [pm/epic]
 ---
 
-# Epic — make the corpus argue, then test it on one document
+# Epic — make the corpus argue, then test it on two documents
 
 Board: [[_Board]] · proposal:
 [`docs/next/register-from-four-sources.md`](../next/register-from-four-sources.md) · exploration:
 `.claude/work/2026-08-16_01_register-from-four-sources/exploration.md` · plan:
 `.claude/work/2026-08-16_01_register-from-four-sources/implementation-plan.md` · method:
-`.claude/work/2026-08-16_01_register-from-four-sources/register_analysis.ipynb`
+[`authoring/register_analysis.ipynb`](../../authoring/register_analysis.ipynb)
 
-**The finding.** The project owner rejected the corpus prose: no subject matter expert would write
+**Shipped 2026-08-17: nine of ten tasks, and the tenth is this delivery.** All four sources extracted and the register band recalibrated on them; the `therefore` cap removed; `WRITING_GUIDE.md` §2c/§2d/§2d bis amended; a 120-quote moves catalogue in the exemplar; `authoring/discrepancies.yaml` + brief §5c; and **`PCP-003` and `PCR-003` re-authored, promoted, re-anchored and measured** — the pilot was widened from one document to two by the project owner, which is why the title changed.
+
+**What did not ship: the campaign.** The pilot returned **one clean win in five** and the remaining 18 documents are blocked on a second two-document round. The possessive result was withdrawn after the owner read `PCR-003`. Numbers, the stopping rule and the four prerequisites are in [`docs/results/2026-08-17-register-pilot.md`](../results/2026-08-17-register-pilot.md); what remains is in [`docs/next/register-from-four-sources.md`](../next/register-from-four-sources.md).
+
+**The finding, as it stood when the epic opened.** The project owner rejected the corpus prose: no subject matter expert would write
 it. Every document passes all thirteen register thresholds, so the gate was measuring the wrong
 thing. A dependency-parse comparison against the human sources found the defect and, more usefully,
 found what it is not. Across roughly 30,000 words of four documents there is **not one "However"

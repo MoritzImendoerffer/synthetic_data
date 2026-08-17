@@ -3,12 +3,12 @@ type: pm-task
 epic: 2026-08-16_01_register-from-four-sources
 sprint: 2026-08-16_01_register-from-four-sources
 task: TASK-008
-status: todo
+status: done
 kind: annex
 title: "Promote both pilot documents, re-anchor their annexes, and fix what the rewrite falsified"
 generated: true
-waiting_on: the assistant
-tags: [pm/task, pm/todo]
+waiting_on: —
+tags: [pm/task, pm/done]
 about: ["PCP-003", "PCP-006", "PCP-008", "PCP-009", "PCR-003"]
 ---
 
@@ -17,7 +17,7 @@ about: ["PCP-003", "PCP-006", "PCP-008", "PCP-009", "PCR-003"]
 
 # TASK-008 — Promote both pilot documents, re-anchor their annexes, and fix what the rewrite falsified
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `done` · **Waiting on:** — · **Board:** [[_Board]]
 
 ## Why it exists
 
@@ -44,15 +44,15 @@ FROM TASK-007. Both drafts exist and gate clean: pc_package/PCP-003_bioreactor.D
 
 ## Acceptance criteria
 
-- [ ] both DRAFTs replace their committed .qmd and render to .docx and .pdf with no errors
-- [ ] cd pc_package && build_ground_truth.py && validate_annex.py reports 20/20 annexes valid
-- [ ] GROUNDING_STRICT_ANCHORS=1 check_grounding.py passes with zero weak anchors, and the new total is reported against the previous 2084/2084
-- [ ] D-002 still stands: the ProcessStep.description for step:production_bioreactor still carries the absolute in BOTH PCR-003.json and PCP-003.json
-- [ ] the four worked corrections in WRITING_GUIDE that quote PCR-003 and PCP-003 are relabelled as superseded prose, since they no longer quote live text
-- [ ] the registered_sentence fields for PCP-003 and PCR-003 in discrepancies.yaml are re-verified against the new text and updated to the new wording
-- [ ] make test PY="uv run python" passes with 85 tests
-- [ ] git diff outputs/ is empty: no number moved, so no dataset may change
-- [ ] make style PY="uv run python" passes over all 20 documents
+- [x] both DRAFTs replace their committed .qmd and render to .docx and .pdf with no errors
+- [x] cd pc_package && build_ground_truth.py && validate_annex.py reports 20/20 annexes valid
+- [x] GROUNDING_STRICT_ANCHORS=1 check_grounding.py passes with zero weak anchors, and the new total is reported against the previous 2084/2084
+- [x] D-002 still stands: the ProcessStep.description for step:production_bioreactor still carries the absolute in BOTH PCR-003.json and PCP-003.json
+- [x] the four worked corrections in WRITING_GUIDE that quote PCR-003 and PCP-003 are relabelled as superseded prose, since they no longer quote live text
+- [x] the registered_sentence fields for PCP-003 and PCR-003 in discrepancies.yaml are re-verified against the new text and updated to the new wording
+- [x] make test PY="uv run python" passes with 85 tests
+- [x] git diff outputs/ is empty: no number moved, so no dataset may change
+- [x] make style PY="uv run python" passes over all 20 documents
 
 **Depends on:** [[TASK-007]]
 

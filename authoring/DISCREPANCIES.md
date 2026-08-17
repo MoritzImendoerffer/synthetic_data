@@ -143,8 +143,8 @@ caught during authoring, during the annex pass, or by any gate.
 
 PCR-003 §1.1 opens its account of the step's role with an absolute:
 
-> "This is the only step of the drug substance process at which product quality attributes
-> are formed."
+> "The production bioreactor is the only step of the drug substance process at which product
+> quality attributes are formed."
 
 ### What the data says
 

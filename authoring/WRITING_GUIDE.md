@@ -95,6 +95,14 @@ rule was read for a while as forbidding that, and the corpus complied: across ro
 words of it there was not one "However". A document that never concedes reads as a sequence of
 unrelated assertions, which is the thing an assessor notices first.
 
+**On the ✗ examples in this section and in §2d bis.** Four worked corrections quote `PCP-003` and
+`PCR-003` **as they stood before 2026-08-17**. Both documents were re-authored from this guide
+on that date and neither contains the ✗ prose any more, and in two of the four the ✓ version is
+close to what the re-authored text now says. The examples stay, because they are real
+machine-register prose produced by a careful author following the unamended rules, which is
+exactly what makes them worth studying. Each carries the date so the guide does not assert
+something false about the corpus as it now stands.
+
 **Shape 1: rule → instance → counter-move → quantified resolution.** State the effect, give the
 case, mark the turn, then settle it with the number that settles it.
 
@@ -104,7 +112,7 @@ case, mark the turn, then settle it with the number that settles it.
 > the aFucosylation levels by 0.3 %."
 > — A-Mab
 
-Worked correction, from `PCR-003` §5.2:
+Worked correction, from `PCR-003` §5.2 as it stood before 2026-08-17:
 
 > ✗ These are large and well-resolved effects of limited practical consequence, because the
 > attribute is of very low criticality and its acceptance criterion is applied as an upper
@@ -262,7 +270,7 @@ The commitment is the main clause, so it is the part that survives being skimmed
 The second is 18 words and carries a concession, a hedge and two lexical verbs at once.
 The first runs to 40, which is the upper end of what this shape should ever need.
 
-Worked correction, from `PCP-003` §6:
+Worked correction, from `PCP-003` §6 as it stood before 2026-08-17:
 
 > ✗ The response-surface design assumes that screening identifies the factors that matter, and
 > if screening identifies a different set the matrix in Appendix B will be re-issued before
@@ -282,7 +290,7 @@ A limit stated only in statistical terms is not a limit a reviewer can act on.
 > appreciable effect on the quality of the material produced."
 > — A-Mab
 
-Worked correction, from `PCR-003` §5.2:
+Worked correction, from `PCR-003` §5.2 as it stood before 2026-08-17:
 
 > ✗ `` `{python} n_sig_scr('afucosylation')` `` terms reach significance at α =
 > `` `{python} alpha` ``, and the main effects of culture temperature and osmolality do not,
@@ -322,7 +330,7 @@ there, the corpus puts a counter.
 > parameters identified by the screening experiment will be included in further experiments."
 > — PDA TR 60
 
-Worked correction, from `PCR-003` §2.1:
+Worked correction, from `PCR-003` §2.1 as it stood before 2026-08-17:
 
 > ✗ Four mechanistic expectations were carried into the study. First, galactosylation tracks
 > the activity of the Golgi galactosyltransferase … Second, high mannose reflects the

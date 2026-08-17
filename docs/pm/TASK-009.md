@@ -3,12 +3,12 @@ type: pm-task
 epic: 2026-08-16_01_register-from-four-sources
 sprint: 2026-08-16_01_register-from-four-sources
 task: TASK-009
-status: todo
+status: done
 kind: measurement
 title: "Measure both pilot documents and put them in front of a reader"
 generated: true
-waiting_on: the assistant
-tags: [pm/task, pm/todo]
+waiting_on: —
+tags: [pm/task, pm/done]
 about: ["PCP-003", "PCR-003"]
 ---
 
@@ -17,7 +17,7 @@ about: ["PCP-003", "PCR-003"]
 
 # TASK-009 — Measure both pilot documents and put them in front of a reader
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `done` · **Waiting on:** — · **Board:** [[_Board]]
 
 ## Why it exists
 
@@ -40,13 +40,13 @@ A NULL RESULT IS A RESULT. If the shape moves and the prose still does not read 
 
 ## Acceptance criteria
 
-- [ ] the five shape measures are reported before and after for BOTH PCP-003 and PCR-003, each with its denominator
-- [ ] the figures are produced by re-running register_analysis.ipynb rather than quoted from this plan
-- [ ] the four human sources are the reference columns, not two
-- [ ] a discrimination test is run and reported: unlabelled corpus and source passages, with the count of correct identifications over the number of passages
-- [ ] the register gate's own numbers are reported for both documents, and the report says whether either drifted into the headroom TASK-002 opened
-- [ ] the results page states plainly whether the change is worth extending to the remaining EIGHTEEN documents
-- [ ] a row is added to docs/results/README.md saying why the run happened
+- [x] the five shape measures are reported before and after for BOTH PCP-003 and PCR-003, each with its denominator
+- [x] the figures are produced by re-running register_analysis.ipynb rather than quoted from this plan
+- [x] the four human sources are the reference columns, not two
+- [x] a discrimination test is run and reported: unlabelled corpus and source passages, with the count of correct identifications over the number of passages
+- [x] the register gate's own numbers are reported for both documents, and the report says whether either drifted into the headroom TASK-002 opened
+- [x] the results page states plainly whether the change is worth extending to the remaining EIGHTEEN documents
+- [x] a row is added to docs/results/README.md saying why the run happened
 
 **Depends on:** [[TASK-008]]
 
@@ -57,4 +57,9 @@ A NULL RESULT IS A RESULT. If the shape moves and the prose still does not read 
 
 ## Files it touched
 
-- [[2026-08-XX-register-pilot]] — `docs/results/2026-08-XX-register-pilot.md`
+- [[2026-08-17-register-pilot]] — `docs/results/2026-08-17-register-pilot.md`
+- [[README]] — `docs/results/README.md`
+- `.claude/work/2026-08-16_01_register-from-four-sources/register_analysis.ipynb`
+- `.claude/work/2026-08-16_01_register-from-four-sources/pre-rewrite/`
+- [[register-from-four-sources]] — `docs/next/register-from-four-sources.md`
+- [[README]] — `docs/next/README.md`

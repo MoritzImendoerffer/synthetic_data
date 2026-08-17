@@ -31,3 +31,4 @@ date, whenever you lean on one.
 | Page | What it measured |
 |---|---|
 | [2026-08-03-annex-anchors.md](2026-08-03-annex-anchors.md) | row anchors 285 → 653, annexes with ≤1 row anchor 14 → 0, gated spans 1476 → 2084, and the two-tier reuse rule |
+| [2026-08-17-register-pilot.md](2026-08-17-register-pilot.md) | whether the amended writing guide changes what an author writes. `PCP-003` and `PCR-003` re-authored and measured on five shapes against four human sources: **one clean win** (connective repertoire 3/9 → 6/9 distinct in both genres), one result withdrawn on a reader's judgement (possessives — a ratio artefact that cost 23 added copulas in the plan), and three that did not move, two of them backwards. Run because the owner said the prose "is written in a way no SME would write" and six tasks had changed the guide, the exemplar, the gate and the brief without a single paragraph having been written from them |

@@ -95,6 +95,18 @@ Straight from `config/parameters.yaml`. "DoE?" decides whether `doe_report.py` a
 6. **Depth follows the design, not a target.** Reports with a DoE run 41–55 pages, non-DoE
    reports 26–28, plans 23–31. Achieve depth with grounded analysis and full appendices, never
    with filler, and never invent a DoE for a step that does not have one.
+7. **A re-authored document loses its registered discrepancy unless the brief carries it.**
+   D-001 and D-002 live in *prose*, so an author who never hears about one simply does not write
+   it again — and nothing fails. `authoring/DISCREPANCIES.md` goes on calling the item open,
+   and `check_grounding.py` cannot see it because it inspects `SourceReference.quote` and never
+   a description field. It is worse than losing the item: D-002's other half is a generated
+   `ProcessStep.description`, so the annex would be left asserting something the document no
+   longer says. **Run `build_brief.py` before authoring** — §5c quotes the registered sentence
+   verbatim — and after re-authoring, re-verify `registered_sentence` in
+   `authoring/discrepancies.yaml` against the new text and update both it and
+   `DISCREPANCIES.md`. The two files must agree. Same rule as the retired weak-claims feature:
+   anything that changes what a document *claims* has to be present while the argument is being
+   built, never restored afterwards.
 
 ## Open items
 

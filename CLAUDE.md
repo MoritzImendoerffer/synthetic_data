@@ -215,7 +215,11 @@ from the result. All 20 documents had to be re-authored to break the loop.
 Python ≥ 3.11, Quarto 1.7+ with a LaTeX engine (PDF), `statsmodels`/`scipy` for the
 DoE engine, `jupyter`/`nbclient` for Quarto's Python engine. Dependencies are declared
 twice and must agree: `pyproject.toml` + `uv.lock` (`uv sync`, the tested path) and
-`requirements.txt` (pip). The Makefile calls `python3`; if your environment is not on
+`requirements.txt` (pip). spaCy is an **optional** extra (`uv sync --extra discourse`,
+mirrored in `requirements-discourse.txt`) used only by the advisory
+`authoring/check_discourse.py`; the corpus builds, renders, annexes and grounds without it,
+and nothing on the `test`, `style` or `corpus` path may start depending on a parser.
+The Makefile calls `python3`; if your environment is not on
 `PATH`, pass it in: `make test PY="uv run python"`. **`PY=` is not enough for `make
 corpus`.** Quarto starts its own Jupyter kernel and resolves `python3` from `PATH`, not
 from `PY`, so with a conda `python3` first on `PATH` every render dies with "Jupyter is

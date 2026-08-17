@@ -6,7 +6,7 @@
 PY ?= python3
 PKG_DIR := pc_package
 
-.PHONY: all data figures fmea corpus style test clean env help pm
+.PHONY: all data figures fmea corpus style discourse test clean env help pm
 
 help:
 	@echo "Targets:"
@@ -15,6 +15,7 @@ help:
 	@echo "  make figures  - render figures          -> outputs/figures/"
 	@echo "  make corpus   - render pc_package docs + build/validate ground-truth annexes"
 	@echo "  make style    - register gate (plain technical English) over every corpus doc"
+	@echo "  make discourse- advisory discourse diagnostics (needs: uv sync --extra discourse)"
 	@echo "  make fmea     - build the post-PC FMEA workbook (content source for RA-001)"
 	@echo "  make test     - run reproducibility tests"
 	@echo "  make pm       - regenerate docs/pm/ (the board) from the active work unit"
@@ -55,6 +56,11 @@ style:
 		[ -e "$$f" ] || continue; \
 		$(PY) authoring/check_style.py "$$f" || rc=1; \
 	done; exit $$rc
+
+# Advisory discourse diagnostics (topic chaining, copula, front field). Needs the optional
+# extra: uv sync --extra discourse. Wired to nothing; without spaCy it prints one line.
+discourse:
+	$(PY) authoring/check_discourse.py $(PKG_DIR)/*.qmd
 
 # Render every corpus document (docx + pdf) then build & validate the ground-truth
 # annexes. All content derives from outputs/, so this stays consistent with the model.

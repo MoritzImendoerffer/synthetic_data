@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-18_02_register-track-d]]** · **0 of 30 done** · 30 todo
+**[[epic|2026-08-18_02_register-track-d]]** · **1 of 30 done** · 29 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -31,7 +31,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-001]] | `todo` | the assistant | mechanism | Unify the rhetorical layer onto one gated mechanism: 280 code-built spans become YAML |
 | [[TASK-002]] | `todo` | the assistant | mechanism | Freeze the Track D measurement as a script that reproduces the baseline |
 | [[TASK-003]] | `todo` | the assistant | document | Re-author PCP-007 in one pass, as a DRAFT |
 | [[TASK-004]] | `todo` | the assistant | document | Re-author PCR-005 in one pass, as a DRAFT |
@@ -64,7 +63,9 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 ## Done
 
-*None.*
+| Task | Status | Waiting on | Kind | What it is |
+|---|---|---|---|---|
+| [[TASK-001]] | `done` | — | mechanism | Unify the rhetorical layer onto one gated mechanism: 280 code-built spans become YAML |
 
 ---
 

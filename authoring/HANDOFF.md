@@ -255,9 +255,11 @@ What is open now lives in [`../docs/ROADMAP.md`](../docs/ROADMAP.md), with a pro
   quote superseded text and are dropped with a warning.~~ **Done, and verified 2026-08-16**:
   `build_rhetorical_annex.py --doc PCR-003` writes 35 spans and drops none.
 - ~~**PCR-008 rhetorical layer** (neither report has one that matches the current text).~~
-  **Done**: PCR-008 carries 25 spans, built by `ax_rhetorical_spans()` in `build_ground_truth.py`.
+  **Done**: PCR-008 carries 25 spans, in `authoring/rhetorical/PCR-008.spans.yaml` since the
+  mechanism was unified on 2026-08-18.
 - **The remaining plans**, each with its rhetorical layer. Eleven documents still carry none — the
-  eight `PCP-00N`, plus `PTP-001`, `RA-001` and `PCMP-001` — and the layer is built two ways.
+  eight `PCP-00N`, plus `PTP-001`, `RA-001` and `PCMP-001`. ~~and the layer is built two ways~~ —
+  one mechanism since 2026-08-18, all of it YAML.
   Proposal: [`../docs/next/rhetorical-layer-coverage.md`](../docs/next/rhetorical-layer-coverage.md).
 - Optional, deliberate: if labeled benchmark negatives are wanted again, name them in the
   brief so the single author writes them into the argument in one pass (`WEAK_CLAIMS.md`).

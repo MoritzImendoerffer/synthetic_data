@@ -811,6 +811,11 @@ def build_rhetorical_spans(doc_id, file_name):
         return []
     with open(path) as fh:
         data = yaml.safe_load(fh)
+    # One section id for the whole layer, when the file asks for one. The eight documents
+    # converted from Python builders in 2026-08 all bucketed their spans under a flat
+    # ``<DOC>_sec_rhet``; the key keeps that so the conversion moved no byte of any annex.
+    # Without it the id is per section, which is what PCR-003 uses.
+    flat_sec_id = data.get("section_id")
     prose = _document_text(file_name)
     out, skipped = [], 0
     for s in data.get("spans", []):
@@ -821,7 +826,8 @@ def build_rhetorical_spans(doc_id, file_name):
             continue
         out.append(S.RhetoricalSpan(
             span_id=s["id"], section=sec, role=s["role"],
-            source_reference=ref(doc_id, file_name, f"{doc_id}_sec_{sec}", sec or "body", quote),
+            source_reference=ref(doc_id, file_name, flat_sec_id or f"{doc_id}_sec_{sec}",
+                                 sec or "body", quote),
             supported_by=s.get("supported_by") or [],
             restates=s.get("restates"), bounds=s.get("bounds")))
     if skipped:
@@ -1417,154 +1423,6 @@ def h_proven_acceptable_ranges(doc_id, file_name):
     return out
 
 
-# --------------------------------------------------------------------------- #
-# Report-only discourse layer (PCR-004 only).                                   #
-# --------------------------------------------------------------------------- #
-# Argument-structure spans over the PCR-004 report. Each quote is a verbatim,    #
-# plain-prose fragment of the RENDERED report (checked against the .docx, not    #
-# the .qmd: inline expressions render to numbers), chosen number-free wherever   #
-# possible so a reseed cannot break grounding. Harvest is the corpus's clearest  #
-# negative argument — no design was run, no design space is claimed, no CQA is   #
-# set — so the layer is dominated by claims about what the step does NOT do,     #
-# the mechanistic warrants that license them, and the credit handed to           #
-# PCR-005 / PCR-007 / PCR-008. PCR-004 carries NO weak_claims. Tuple fields:     #
-# (suffix, role, section, quote, supported_by-suffixes, restates, bounds).       #
-# --------------------------------------------------------------------------- #
-H_RHET_SPANS = [
-    ("R00", "claim", "Executive summary",
-     "The step forms no product-quality attribute and is credited with no impurity clearance",
-     ["R05", "R10"], None, None),
-    ("R01", "claim", "Executive summary",
-     "What it delivers is product recovery and a consistent, low-solids feed to Protein A capture",
-     [], None, None),
-    ("R02", "bounded_conclusion", "Executive summary",
-     "Both results were obtained over the characterized ranges given in §7 and in a scale-down "
-     "model, so they are bounded by that model and by those ranges", [], None, "R01"),
-    ("R03", "deviation_disposition", "Executive summary",
-     "Two deviations were recorded, investigated and closed. Both were retained without altering "
-     "a parameter classification or a characterized range", [], None, None),
-    ("R04", "deferral", "Executive summary",
-     "its outcome rolls up into PCMR-001", [], None, None),
-    ("R05", "mechanistic_warrant", "Product and unit operation",
-     "The step forms no critical quality attribute and reduces none, because it has no "
-     "chromatographic, chemical or size-based mechanism that acts on the antibody",
-     [], None, None),
-    ("R06", "cross_step_credit", "Product and unit operation",
-     "Their clearance is the work of the purification steps, and the credit for it is given in "
-     "PCR-005, PCR-007 and PCR-008", [], None, None),
-    ("R07", "cross_step_credit", "Regulatory and scientific basis",
-     "the cumulative viral-clearance claim for the drug substance rests on low-pH inactivation "
-     "(PCR-006), anion exchange (PCR-008) and small-virus retentive filtration (PCR-009)",
-     [], None, None),
-    ("R08", "mechanistic_warrant", "Platform and prior-product knowledge",
-     "As that capacity is consumed, retained solids begin to pass and the turbidity of the "
-     "filtrate rises", [], None, None),
-    ("R09", "problem_statement", "Platform and prior-product knowledge",
-     "Two expectations follow from these mechanisms, and the study was designed to test them",
-     [], None, None),
-    ("R10", "mechanistic_warrant", "Risk-based prioritization and parameter selection",
-     "No parameter of the step has a mechanism by which it can act on a quality attribute, so the "
-     "risk it carries is a process-performance risk and not a quality risk", [], None, None),
-    ("R11", "hedge", "Scale-down model and its qualification",
-     "found no difference that the analytical methods could resolve", [], None, None),
-    ("R12", "bounded_conclusion", "Scale-down model and its qualification",
-     "It reproduces the sedimentation and capacity duties, but it does not reproduce the full "
-     "shear history of a commercial disk-stack machine, and it operates at hold times shorter "
-     "than those of a commercial harvest", [], None, None),
-    ("R13", "deferral", "Scale-down model and its qualification",
-     "The qualification record is held under SOP-1001 and is not reproduced here", [], None, None),
-    ("R14", "justification", "Statistical methods",
-     "A response surface is the predictive model that defines a design space, and it is worth "
-     "building only where a parameter acts on a quality attribute, which at this step is true of "
-     "none of them, so there is no response to model and no design space to define",
-     [], None, None),
-    ("R15", "claim", "Univariate assessment",
-     "No designed experiment was executed at this step, and none is reported",
-     ["R14", "R10"], None, None),
-    ("R16", "problem_statement", "Univariate assessment",
-     "The limitation of a univariate design is that it cannot resolve an interaction between the "
-     "two settings", [], None, None),
-    ("R17", "mechanistic_warrant", "Univariate assessment",
-     "That limitation is accepted here because the two act on different solids populations, the "
-     "centrifuge on the sedimentable fraction and the filter on the fine fraction, and because "
-     "neither acts on product quality", [], None, None),
-    ("R18", "claim", "Clarification performance and filter capacity",
-     "Clarification met its in-process expectation across the ranges studied, with one excursion "
-     "that is described below", ["R19", "R08"], None, None),
-    ("R19", "justification", "Clarification performance and filter capacity",
-     "Turbidity rose as depth-filter loading approached the top of its characterized range, which "
-     "is the expected consequence of consuming filter capacity and is the mechanism set out in §2.1",
-     [], None, None),
-    ("R20", "hedge", "Clarification performance and filter capacity",
-     "which is consistent with sedimentation being complete well below the upper edge of that range",
-     [], None, None),
-    ("R21", "claim", "Product quality across the step",
-     "No quality attribute changed across clarification, and aggregate, charge-variant and glycan "
-     "levels measured in the clarified harvest were the same as those in the bioreactor broth "
-     "within the variability of the methods", ["R05", "R22"], None, None),
-    ("R22", "justification", "Product quality across the step",
-     "That null result is a finding, and it is retained in the knowledge space. It is the evidence "
-     "that supports classifying both settable parameters as key and not critical", [], None, None),
-    ("R23", "claim", "Design space",
-     "This step contributes no design space, since a design space is the multivariate region of "
-     "parameter settings that is known to give acceptable values of the critical quality "
-     "attributes, and it can only be defined for a step whose parameters act on such an attribute",
-     ["R05", "R22", "R14"], None, None),
-    ("R24", "claim", "Proven acceptable ranges",
-     "Each parameter was assessed univariately over its characterized range, and each range is "
-     "proven acceptable over its full width for the process-performance criteria of the step",
-     [], None, None),
-    ("R25", "bounded_conclusion", "Proven acceptable ranges",
-     "These are univariate ranges and not a multivariate region", [], None, "R24"),
-    ("R26", "claim", "Process capability and robustness",
-     "The step has no process capability of its own to report, because it governs no quality "
-     "attribute and therefore has no acceptance limit to be capable against", [], None, None),
-    ("R27", "bounded_conclusion", "Process capability and robustness",
-     "Neither margin is earned here, and this report claims none of it", [], None, "R26"),
-    ("R28", "claim", "Parameter classification",
-     "The step carries no critical process parameter and no well-controlled critical process "
-     "parameter", ["R29", "R22"], None, None),
-    ("R29", "justification", "Parameter classification",
-     "The absence of an effect is not a gap in the study, and it is the evidence, gathered over "
-     "ranges two to three times the width of the routine control ranges, that supports the "
-     "classification above", [], None, None),
-    ("R30", "cross_step_credit", "Contribution to the control strategy",
-     "It takes no viral-clearance credit, and the cumulative claim rests on PCR-006, PCR-008 and "
-     "PCR-009", [], None, None),
-    ("R31", "deferral", "Contribution to the control strategy",
-     "The contributions above roll up into the overall control strategy in PCMR-001",
-     [], None, None),
-    ("R32", "restatement", "Conclusions",
-     "The step forms no critical quality attribute and changes none, and its parameters were shown "
-     "to have no effect on product quality over ranges two to three times the width of the routine "
-     "control ranges", [], "R00", None),
-    ("R33", "deviation_disposition", "DEV-004-01 — pre-use flush turbidity above alert",
-     "The root cause is an insufficient initial flush volume and not a defect in the media, and "
-     "the lot was released for use and the run was retained", [], None, None),
-    ("R34", "deviation_disposition", "DEV-004-02 — post-clarification turbidity excursion",
-     "The run was retained and its data were used, and the disposition rests on two findings",
-     [], None, None),
-    ("R35", "justification", "DEV-004-02 — post-clarification turbidity excursion",
-     "The excursion occurred outside the normal operating range of depth-filter loading, so it "
-     "does not describe routine operation, and the material remained acceptable for capture",
-     [], None, None),
-]
-
-
-def h_rhetorical_spans(doc_id, file_name):
-    """Rhetorical / argument-structure spans over the PCR-004 report (report-only)."""
-    out = []
-    for suffix, role, sec, quote, sup, res, bnd in H_RHET_SPANS:
-        out.append(S.RhetoricalSpan(
-            span_id=f"{doc_id}-{suffix}", section=sec, role=role,
-            source_reference=ref(doc_id, file_name, f"{doc_id}_sec_rhet", sec,
-                                 " ".join(quote.split())),
-            supported_by=[f"{doc_id}-{s}" for s in sup],
-            restates=(f"{doc_id}-{res}" if res else None),
-            bounds=(f"{doc_id}-{bnd}" if bnd else None)))
-    return out
-
-
 def h_inventory(doc_id, file_name, dtype):
     return S.DocumentInventoryItem(
         document_id=doc_id, file_name=file_name, predicted_document_type=dtype,
@@ -1644,7 +1502,7 @@ def build_report_harvest():
         proven_acceptable_ranges=h_proven_acceptable_ranges(doc, f),
         report_sections=h_report_sections(doc, f, report=True),
         assertions=h_assertions(doc, f, report=True), concepts=h_concepts(),
-        rhetorical_spans=h_rhetorical_spans(doc, f))
+        rhetorical_spans=build_rhetorical_spans(doc, f))
 
 
 # =========================================================================== #
@@ -2245,168 +2103,6 @@ def pa_proven_acceptable_ranges(doc_id, file_name):
     return out
 
 
-# --------------------------------------------------------------------------- #
-# Report-only discourse layer (PCR-005 only).                                   #
-# --------------------------------------------------------------------------- #
-# Argument-structure spans over the PCR-005 report. Each quote is a verbatim,    #
-# plain-prose fragment of the RENDERED report (checked against the .docx, not    #
-# the .qmd: inline expressions render to numbers), chosen number-free wherever   #
-# possible so a reseed cannot break grounding. The centrepiece is the leached    #
-# Protein A robustness argument: a null screening fit, a response-surface model  #
-# whose predicted coefficient of determination is negative, a non-significant    #
-# lack-of-fit test, the model explicitly RETAINED as knowledge-space evidence    #
-# and not used predictively, and the operative claim made model-free from the    #
-# assayed pools. That cluster is a claim + justifications + bounded_conclusion.  #
-# The second thread is the in-process framing of pool host cell protein, whose   #
-# drug-substance limit is met only after anion exchange (cross_step_credit).     #
-# PCR-005 carries NO weak_claims. Tuple fields:                                  #
-# (suffix, role, section, quote, supported_by-suffixes, restates, bounds).       #
-# --------------------------------------------------------------------------- #
-PA_RHET_SPANS = [
-    ("R00", "claim", "Executive summary",
-     "Pool host cell protein and step yield are well described by the response-surface models",
-     ["R22"], None, None),
-    ("R01", "problem_statement", "Executive summary",
-     "Leached Protein A behaves differently.", [], None, None),
-    ("R02", "claim", "Executive summary",
-     "No process parameter had a significant effect on it, and the fitted surface predicts a run "
-     "it has not seen no better than the mean of the response does", ["R19", "R20"], None, None),
-    ("R03", "bounded_conclusion", "Executive summary",
-     "so the study reports the attribute as robust to the operating parameters over the ranges "
-     "studied and does not treat its model as predictive", [], None, "R02"),
-    ("R04", "cross_step_credit", "Executive summary",
-     "The pool host cell protein handed forward is not judged against the drug-substance "
-     "specification, because the polishing steps reported in PCR-007 and PCR-008 carry that "
-     "reduction.", [], None, None),
-    ("R05", "deferral", "Executive summary",
-     "This report supports the transfer scope in PTP-001 and rolls up into the master report "
-     "PCMR-001.", [], None, None),
-    ("R06", "mechanistic_warrant", "Product and unit operation",
-     "Small quantities of Protein A ligand are released from the resin during elution and enter "
-     "the pool, so the step sets the leached Protein A attribute and does not clear it.",
-     [], None, None),
-    ("R07", "mechanistic_warrant", "Platform and prior-product knowledge",
-     "Ligand release from a Protein A resin is driven by hydrolysis and proteolysis of the "
-     "immobilised ligand, which depend on the base matrix, the packing quality, the sanitisation "
-     "regime and the number of cycles the column has seen.", [], None, None),
-    ("R08", "deferral", "Platform and prior-product knowledge",
-     "Prior campaign experience with an alternate resin is recorded in RA-004, which concluded "
-     "that independent characterization would be required for any resin change and that no "
-     "bridging from platform data would be accepted.", [], None, None),
-    ("R09", "bounded_conclusion", "Scale-down model and its qualification",
-     "The operating region defined in §6 is therefore a claim about the scale-down model, "
-     "verified at commercial scale only at the set-point.", [], None, None),
-    ("R10", "justification", "Statistical methods",
-     "The predicted coefficient of determination is the decisive one for a predictive claim, "
-     "because it measures how well the fitted surface predicts an observation that was not used "
-     "to fit it.", [], None, None),
-    ("R11", "justification", "Statistical methods",
-     "A response for which no factor is active and for which the lack-of-fit test is not "
-     "significant is reported as robust, and its model is retained as evidence of that robustness "
-     "rather than used for prediction.", [], None, None),
-    ("R12", "claim", "Response-surface design",
-     "The response-surface model is the predictive model of this report and is the basis of the "
-     "operating region in §6 and the proven acceptable ranges in §7.", [], None, None),
-    ("R13", "claim", "Screening: factor effects",
-     "Leached Protein A showed no significant effect from any factor or interaction.",
-     ["R14"], None, None),
-    ("R14", "justification", "Screening: factor effects",
-     "The screening model is not significant as a whole", [], None, None),
-    ("R15", "claim", "Response-surface models",
-     "Two of the three responses are adequately modelled and one is not, and the distinction "
-     "governs how each is used in the rest of this report.", ["R22", "R10"], None, None),
-    ("R16", "claim", "Response-surface models",
-     "No process parameter had a significant effect on leached Protein A.",
-     ["R19", "R20", "R21", "R11"], None, None),
-    ("R17", "mechanistic_warrant", "Response-surface models",
-     "The remainder is run-to-run variation in ligand release from the resin itself, which is "
-     "governed by the resin life cycle (packing, cycle number and sanitisation) and is controlled "
-     "under SOP-2008.", [], None, None),
-    ("R18", "bounded_conclusion", "Response-surface models",
-     "The response-surface model for leached Protein A is retained in the knowledge space as "
-     "evidence that the attribute does not depend on protein load, elution buffer pH, load flow "
-     "rate or end of pool collect over the ranges studied, and it is not used as a predictive "
-     "model.", [], None, "R16"),
-    ("R19", "justification", "Response-surface models",
-     "The response-surface model is not significant as a whole", [], None, None),
-    ("R20", "justification", "Response-surface models",
-     "A negative predicted coefficient of determination means the fitted surface predicts a "
-     "held-out run less well than the mean of the response does.", [], None, None),
-    ("R21", "justification", "Response-surface models",
-     "so the residual variation is consistent with pure error and there is no evidence of "
-     "structure the quadratic form has missed", [], None, None),
-    ("R22", "justification", "Response-surface models",
-     "which is close enough to the adjusted value to support prediction rather than description "
-     "alone", [], None, None),
-    ("R23", "claim", "Response-surface models",
-     "The operative result for this attribute is the direct one: all 47 pools assayed across the "
-     "screening and response-surface designs met the acceptance criterion of 5 ppm",
-     [], None, None),
-    ("R24", "mechanistic_warrant", "Mechanistic interpretation",
-     "Host cell protein enters the pool by co-adsorption to the resin and to the product, so it "
-     "rises with the mass of product bound, and it is released preferentially at the harsher "
-     "low-pH desorption condition.", [], None, None),
-    ("R25", "claim", "Design space",
-     "Leached Protein A does not bound it", ["R23"], None, None),
-    ("R26", "bounded_conclusion", "Design space",
-     "All runs used a single clarified-harvest pool at nominal titre and impurity burden, so the "
-     "region is defined for that feed state and the study does not bound the effect of feed "
-     "variability.", [], None, "R25"),
-    ("R27", "cross_step_credit", "Proven acceptable ranges",
-     "The limit is met after anion exchange and not before.", [], None, None),
-    ("R28", "hedge", "Proven acceptable ranges",
-     "That bound comes from the quadratic term discussed in §5.3, which is the only term in the "
-     "model to reach nominal significance and which the study does not regard as established.",
-     [], None, None),
-    ("R29", "hedge", "Process capability and robustness",
-     "The capability index for this attribute is very large and carries no discriminating "
-     "information, because the mean is orders of magnitude below the limit.", [], None, None),
-    ("R30", "claim", "Parameter classification",
-     "No parameter of this step required designation as a critical process parameter.",
-     ["R31"], None, None),
-    ("R31", "justification", "Parameter classification",
-     "The only quality attribute the step sets is insensitive to all four multivariate parameters "
-     "over the ranges studied, and the attribute that does respond strongly to them is one whose "
-     "drug-substance level is set by later steps.", [], None, None),
-    ("R32", "deferral", "Contribution to the control strategy",
-     "The cumulative position across all steps is consolidated in PCMR-001.", [], None, None),
-    ("R33", "restatement", "Discussion",
-     "Leached Protein A has no model, and that is the result rather than a gap in the study, "
-     "because the attribute the step sets does not respond to the parameters the step controls.",
-     [], "R16", None),
-    ("R34", "bounded_conclusion", "Discussion",
-     "It does not extend to a different resin, and RA-004 has already determined that a resin "
-     "change would require independent characterization with no bridging from platform data.",
-     [], None, "R16"),
-    ("R35", "deviation_disposition", "DEV-005-01 — elution buffer prepared below target",
-     "The non-conforming lot was rejected, a replacement lot was prepared and released within its "
-     "pH acceptance limit, and the affected run was executed with the replacement.",
-     [], None, None),
-    ("R36", "claim", "DEV-005-01 — elution buffer prepared below target",
-     "The impact on the study is therefore none.", ["R37"], None, None),
-    ("R37", "justification", "DEV-005-01 — elution buffer prepared below target",
-     "The deviation was detected at buffer release testing, before the lot was issued to the "
-     "column.", [], None, None),
-    ("R38", "deviation_disposition", "DEV-005-02 — leached Protein A determination out of trend",
-     "Because carryover was suspected but not confirmed, the original determination could not be "
-     "invalidated, and it was retained in the reported data set.", [], None, None),
-]
-
-
-def pa_rhetorical_spans(doc_id, file_name):
-    """Rhetorical / argument-structure spans over the PCR-005 report (report-only)."""
-    out = []
-    for suffix, role, sec, quote, sup, res, bnd in PA_RHET_SPANS:
-        out.append(S.RhetoricalSpan(
-            span_id=f"{doc_id}-{suffix}", section=sec, role=role,
-            source_reference=ref(doc_id, file_name, f"{doc_id}_sec_rhet", sec,
-                                 " ".join(quote.split())),
-            supported_by=[f"{doc_id}-{s}" for s in sup],
-            restates=(f"{doc_id}-{res}" if res else None),
-            bounds=(f"{doc_id}-{bnd}" if bnd else None)))
-    return out
-
-
 def pa_inventory(doc_id, file_name, dtype):
     return S.DocumentInventoryItem(
         document_id=doc_id, file_name=file_name, predicted_document_type=dtype,
@@ -2492,7 +2188,7 @@ def build_report_protein_a():
         proven_acceptable_ranges=pa_proven_acceptable_ranges(doc, f),
         report_sections=pa_report_sections(doc, f, report=True),
         assertions=pa_assertions(doc, f, report=True), concepts=pa_concepts(),
-        rhetorical_spans=pa_rhetorical_spans(doc, f))
+        rhetorical_spans=build_rhetorical_spans(doc, f))
 
 
 # =========================================================================== #
@@ -3093,112 +2789,6 @@ def vi_proven_acceptable_ranges(doc_id, file_name):
     return out
 
 
-# Argument-structure spans over the PCR-006 report. Each quote is a verbatim, plain-prose
-# fragment of the rendered report (no inline expressions, no bold). Tuple fields:
-# (suffix, role, section, quote, supported_by-suffixes, restates-suffix, bounds-suffix).
-VI_RHET_SPANS = [
-    ("R00", "problem_statement", "Executive summary",
-     "Low-pH viral inactivation is a hold step, and it is the operation on which the "
-     "enveloped-virus clearance claim for A-Mab drug substance principally rests", [], None, None),
-    ("R01", "claim", "Executive summary",
-     "Inactivation pH is classified as a critical process parameter, and it is the only parameter "
-     "in the drug substance process to carry that classification", [], None, None),
-    ("R02", "bounded_conclusion", "Executive summary",
-     "Its characterized range fails in both directions.", [], None, None),
-    ("R03", "bounded_conclusion", "Executive summary",
-     "the range stops where platform data place the onset of acid-induced aggregation, and no run "
-     "was executed below that pH", [], None, "R02"),
-    ("R04", "claim", "Executive summary",
-     "Two claims are explicitly not made here.", [], None, None),
-    ("R05", "deferral", "Executive summary",
-     "the outcome rolls up into PCMR-001", [], None, None),
-    ("R06", "bounded_conclusion", "Regulatory and scientific basis",
-     "the claim rests on the qualification of the scale-down model and never on a manufacturing "
-     "measurement", [], None, None),
-    ("R07", "justification", "Risk-based prioritization and parameter selection",
-     "because a range that does not reach an edge of failure cannot distinguish a critical "
-     "parameter from a well-controlled one", [], None, None),
-    ("R08", "claim", "Screening: factor effects",
-     "That null result carries information", [], None, None),
-    ("R09", "bounded_conclusion", "Screening: factor effects",
-     "the onset was not reached, and pH is retained in the knowledge space for aggregate as "
-     "evidence that the attribute is robust to it down to pH 3.2", ["R08"], None, None),
-    ("R10", "bounded_conclusion", "Screening: factor effects",
-     "The screening study is used for identification and for nothing else.", [], None, None),
-    ("R11", "justification", "Response-surface models",
-     "The model is therefore fitting to the limit of what the infectivity assay can resolve",
-     [], None, None),
-    ("R12", "hedge", "Response-surface models",
-     "Its sign and size suggest that the surface is not linear in pH and that the decline in "
-     "clearance steepens as pH rises toward the top of the range", [], None, None),
-    ("R13", "hedge", "Response-surface models",
-     "It is a reason to treat the p-values of the marginal terms, and the pH quadratic in "
-     "particular, as approximate", [], None, None),
-    ("R14", "mechanistic_warrant", "Mechanistic interpretation",
-     "The surfaces behave as acid denaturation kinetics predict, and that agreement is the main "
-     "evidence that the models describe chemistry and not noise", [], None, None),
-    ("R15", "claim", "Mechanistic interpretation",
-     "Almost all of the sensitivity of the step to pH lies above the set-point.",
-     ["R14"], None, None),
-    ("R16", "mechanistic_warrant", "Mechanistic interpretation",
-     "The two mechanisms pull in opposite directions on hold time, and this is why the step needs "
-     "a multivariate region rather than three independent ranges", [], None, None),
-    ("R17", "hedge", "Design space",
-     "the corner is not shown to fail so much as shown to provide no assurance of passing, and it "
-     "lies outside the operating region for that reason", [], None, None),
-    ("R18", "bounded_conclusion", "Design space",
-     "Three statements bound the region, and each is a limit on what the assessor should read "
-     "into it.", [], None, None),
-    ("R19", "bounded_conclusion", "Design space",
-     "Nothing in this report supports operation below pH 3.2.", [], None, "R18"),
-    ("R20", "bounded_conclusion", "Proven acceptable ranges",
-     "These ranges are univariate statements and the design space is not, and the two must not be "
-     "read as alternatives.", [], None, None),
-    ("R21", "cross_step_credit", "Process capability and robustness",
-     "The three mechanisms are orthogonal, which is what allows the contributions to be added "
-     "under ICH Q5A(R2)", [], None, None),
-    ("R22", "cross_step_credit", "Contribution to the control strategy",
-     "a change at anion exchange or virus filtration that reduces their credited contributions "
-     "raises the floor required of this step", [], None, None),
-    ("R23", "deferral", "Contribution to the control strategy",
-     "The consolidated position across all steps is given in PCMR-001.", [], None, None),
-    ("R24", "restatement", "Discussion",
-     "The step is well understood over the ranges studied, and the understanding is narrower than "
-     "the volume of data might suggest", [], "R00", None),
-    ("R25", "bounded_conclusion", "Discussion",
-     "Four limitations bound what has been shown, and they are stated together because they "
-     "compound.", [], None, None),
-    ("R26", "hedge", "Discussion",
-     "The report treats the first as a real margin and the second as an absence of assurance "
-     "rather than a demonstrated failure.", ["R17"], None, None),
-    ("R27", "justification", "Discussion",
-     "That difference, and not the size of the effect, is what separates the two classes at this "
-     "step.", [], None, None),
-    ("R28", "deviation_disposition", "Deviations from the plan",
-     "Neither deviation invalidated a run, and no design point was re-executed.", [], None, None),
-    ("R29", "deviation_disposition", "DEV-006-01 — hold-time record discrepancy",
-     "The run was retained with its control system duration, and re-fitting is not warranted",
-     [], None, None),
-    ("R30", "deviation_disposition", "DEV-006-02 — infectivity assay cytotoxicity at low dilution",
-     "the affected log reduction factors are lower bounds and the fitted model is conservative in "
-     "that direction", [], None, None),
-]
-
-
-def vi_rhetorical_spans(doc_id, file_name):
-    """Rhetorical / argument-structure spans over the PCR-006 report (report-only)."""
-    out = []
-    for suffix, role, sec, quote, sup, res, bnd in VI_RHET_SPANS:
-        out.append(S.RhetoricalSpan(
-            span_id=f"{doc_id}-{suffix}", section=sec, role=role,
-            source_reference=ref(doc_id, file_name, f"{doc_id}_sec_rhet", sec,
-                                 " ".join(quote.split())),
-            supported_by=[f"{doc_id}-{s}" for s in sup],
-            restates=(f"{doc_id}-{res}" if res else None),
-            bounds=(f"{doc_id}-{bnd}" if bnd else None)))
-    return out
-
-
 def vi_inventory(doc_id, file_name, dtype):
     return S.DocumentInventoryItem(
         document_id=doc_id, file_name=file_name, predicted_document_type=dtype,
@@ -3288,7 +2878,7 @@ def build_report_viral_inactivation():
         proven_acceptable_ranges=vi_proven_acceptable_ranges(doc, f),
         report_sections=vi_report_sections(doc, f, report=True),
         assertions=vi_assertions(doc, f, report=True), concepts=vi_concepts(),
-        rhetorical_spans=vi_rhetorical_spans(doc, f))
+        rhetorical_spans=build_rhetorical_spans(doc, f))
 
 
 # =========================================================================== #
@@ -3893,117 +3483,6 @@ def cx_proven_acceptable_ranges(doc_id, file_name):
     return out
 
 
-# Argument-structure spans over the PCR-007 report. Each quote is a verbatim, plain-prose
-# fragment of the rendered report (no inline expressions, no bold). Tuple fields:
-# (suffix, role, section, quote, supported_by-suffixes, restates-suffix, bounds-suffix).
-CX_RHET_SPANS = [
-    ("R00", "problem_statement", "Executive summary",
-     "it is the only step in the train that reduces aggregate", [], None, None),
-    ("R01", "claim", "Executive summary",
-     "The step sets no quality attribute of its own.", [], None, None),
-    ("R02", "claim", "Executive summary",
-     "Aggregate stays within its limit at every corner of the ranges studied", [], None, None),
-    ("R03", "claim", "Executive summary",
-     "the step is judged on the clearance factor it delivers and not on a drug substance release "
-     "criterion", [], None, None),
-    ("R04", "justification", "Executive summary",
-     "which is the expected position for an intermediate, because the drug substance does not "
-     "exist until anion exchange chromatography has run", [], None, None),
-    ("R05", "cross_step_credit", "Executive summary",
-     "Anion exchange clears a further factor of 6.2 to 18.9 ng/mg (PCR-008)", [], None, None),
-    ("R06", "deferral", "Executive summary",
-     "the cumulative position across the train is consolidated in PCMR-001", [], None, None),
-    ("R07", "mechanistic_warrant", "Mechanistic interpretation",
-     "Host cell protein species retained by low avidity contacts are released and washed out, "
-     "while the antibody, which binds through many contacts at once, stays on the column",
-     [], None, None),
-    ("R08", "mechanistic_warrant", "Mechanistic interpretation",
-     "The wash is worth roughly twice as much at the top of the load range as at the bottom",
-     [], None, None),
-    ("R09", "claim", "Screening: factor effects",
-     "Pool host cell protein is affected by the conductivity of the load and wash buffer, by "
-     "protein load, and by the interaction between them", ["R07", "R08"], None, None),
-    ("R10", "hedge", "Centre-point performance and reproducibility",
-     "so most of the centre-point spread in that response is analytical variation and not process "
-     "variation", [], None, None),
-    ("R11", "bounded_conclusion", "Screening: factor effects",
-     "The screening block is used to identify the active factors and nothing more.", [], None, None),
-    ("R12", "justification", "Response-surface models",
-     "The closeness of the predicted value to the adjusted value in both models is the property "
-     "that matters for a predictive claim", [], None, None),
-    ("R13", "hedge", "Response-surface models",
-     "The yield model is therefore used to state the direction and the approximate size of the "
-     "load effect, and it is not used to predict yield at any given condition", [], None, None),
-    ("R14", "claim", "Response-surface models",
-     "No quadratic term is significant for any of the three responses", [], None, None),
-    ("R15", "justification", "Response-surface models",
-     "the change should be read as better resolution and not as a different result", [], None, None),
-    ("R16", "claim", "Design space",
-     "The design space for this step is the part of the characterized four-dimensional region in",
-     ["R12", "R14"], None, None),
-    ("R17", "cross_step_credit", "Design space",
-     "What this step must deliver instead is a clearance factor, and a pool that anion exchange "
-     "chromatography can finish", [], None, None),
-    ("R18", "bounded_conclusion", "Design space",
-     "Three bounds apply to this claim, and none of them is removed by the data in this report",
-     [], None, "R16"),
-    ("R19", "claim", "Proven acceptable ranges",
-     "For aggregate the two analyses separate, and the separation is the informative part",
-     [], None, None),
-    ("R20", "bounded_conclusion", "Proven acceptable ranges",
-     "That corner is therefore outside the operating region this step claims", [], None, None),
-    ("R21", "deferral", "Proven acceptable ranges",
-     "This conclusion is conditional on the anion exchange clearance factor holding, which is a "
-     "claim of PCR-008 and not of this report", [], None, None),
-    ("R22", "cross_step_credit", "Process capability and robustness",
-     "That figure is a whole-train result and the credit for it is shared across three steps",
-     [], None, None),
-    ("R23", "bounded_conclusion", "Process capability and robustness",
-     "Two bounds apply to the capability figures.", [], None, None),
-    ("R24", "claim", "Parameter classification",
-     "No parameter at this step is a critical process parameter, and none is a key process "
-     "parameter", [], None, None),
-    ("R25", "bounded_conclusion", "Contribution to the control strategy",
-     "It does not deliver the host cell protein, DNA or leached Protein A criteria on its own, and "
-     "the credit for those is shared as described in Section 8", [], None, None),
-    ("R26", "deferral", "Contribution to the control strategy",
-     "All four contributions and the three non-claims are consolidated in PCMR-001", [], None, None),
-    ("R27", "hedge", "Discussion",
-     "That is a comfortable position for the attribute on which this step has sole responsibility, "
-     "and it should not be read as a claim that the step is robust without qualification",
-     [], None, None),
-    ("R28", "deviation_disposition", "Deviations from the plan",
-     "Both were dispositioned as retained, which means the affected run stayed in the analysis "
-     "rather than being excluded or repeated", [], None, None),
-    ("R29", "deviation_disposition",
-     "DEV-007-01 — expired buffer lot used in a screening run",
-     "The run was accordingly retained in the analysis.", [], None, None),
-    ("R30", "deviation_disposition",
-     "DEV-007-02 — column inlet temperature excursion in a response-surface run",
-     "The excursion accordingly produced no aggregate signal the study could detect, and the run "
-     "was retained", [], None, None),
-    ("R31", "restatement", "Conclusions",
-     "bounded by the in-process limits on pool aggregate and pool host cell protein", [], "R16", None),
-    ("R32", "bounded_conclusion", "Conclusions",
-     "These conclusions hold over the ranges studied, for the scale-down model as qualified, and "
-     "for load material of the character used here", [], None, None),
-]
-
-
-def cx_rhetorical_spans(doc_id, file_name):
-    """Rhetorical / argument-structure spans over the PCR-007 report (report-only)."""
-    out = []
-    for suffix, role, sec, quote, sup, res, bnd in CX_RHET_SPANS:
-        out.append(S.RhetoricalSpan(
-            span_id=f"{doc_id}-{suffix}", section=sec, role=role,
-            source_reference=ref(doc_id, file_name, f"{doc_id}_sec_rhet", sec,
-                                 " ".join(quote.split())),
-            supported_by=[f"{doc_id}-{s}" for s in sup],
-            restates=(f"{doc_id}-{res}" if res else None),
-            bounds=(f"{doc_id}-{bnd}" if bnd else None)))
-    return out
-
-
 def cx_inventory(doc_id, file_name, dtype):
     return S.DocumentInventoryItem(
         document_id=doc_id, file_name=file_name, predicted_document_type=dtype,
@@ -4082,7 +3561,7 @@ def build_report_cex():
         proven_acceptable_ranges=cx_proven_acceptable_ranges(doc, f),
         report_sections=cx_report_sections(doc, f, report=True),
         assertions=cx_assertions(doc, f, report=True), concepts=cx_concepts(),
-        rhetorical_spans=cx_rhetorical_spans(doc, f))
+        rhetorical_spans=build_rhetorical_spans(doc, f))
 
 
 # =========================================================================== #
@@ -4629,99 +4108,6 @@ def ax_proven_acceptable_ranges(doc_id, file_name):
     return out
 
 
-# Argument-structure spans over the PCR-008 report. Each quote is a verbatim, plain-prose
-# fragment of the rendered report (no inline expressions, no bold). Tuple fields:
-# (suffix, role, section, quote, supported_by-suffixes, restates-suffix, bounds-suffix).
-AX_RHET_SPANS = [
-    ("R00", "claim", "Executive summary",
-     "The step now provides a defined multivariate operating region over which viral clearance "
-     "and pool purity both meet their criteria", [], None, None),
-    ("R01", "problem_statement", "Executive summary",
-     "The step sets the cumulative clearance claim for minute virus of mice (MVM)", [], None, None),
-    ("R02", "claim", "Executive summary",
-     "all of them were classified as well-controlled critical process parameters (WC-CPP)",
-     [], None, None),
-    ("R03", "claim", "Parameter classification",
-     "No parameter at this step is classified as a critical process parameter, and none is "
-     "classified as a key process parameter or a general process parameter", [], None, None),
-    ("R04", "mechanistic_warrant", "Mechanistic interpretation",
-     "Viral clearance behaves as a charge partitioning process, in which both model viruses are "
-     "more strongly retained when they carry more negative charge and when fewer competing "
-     "counter-ions are present", [], None, None),
-    ("R05", "cross_step_credit", "Executive summary",
-     "the cumulative MVM claim also rests on small-virus retentive filtration and the cumulative "
-     "XMuLV claim rests on the low-pH hold as well", [], None, None),
-    ("R06", "deviation_disposition", "Executive summary",
-     "The most serious of them invalidated the first execution of both designs, because the load "
-     "material carried an elevated acidic charge variant burden and was not representative of the "
-     "commercial feed", [], None, None),
-    ("R07", "bounded_conclusion", "Executive summary",
-     "None of the three altered a parameter classification or a boundary of the operating region",
-     [], None, None),
-    ("R08", "deferral", "Executive summary",
-     "contribution is consolidated with the rest of the train in PCMR-001", [], None, None),
-    ("R09", "mechanistic_warrant", "Mechanistic interpretation",
-     "at a higher pH the weakly acidic species carry more negative charge and remain bound even "
-     "when the wash conductivity is raised, which is why the two sets of contours converge",
-     [], None, None),
-    ("R10", "mechanistic_warrant", "Mechanistic interpretation",
-     "Its governing parameter is the conductivity of the equilibration and wash-1 buffer and not "
-     "the conductivity of the load", [], None, None),
-    ("R11", "claim", "Screening: factor effects",
-     "Pool HCP is governed by two factors and by their interaction", ["R09", "R10"], None, None),
-    ("R12", "justification", "Response-surface models",
-     "because it is estimated with curvature in the model and on a design that supports it",
-     [], None, None),
-    ("R13", "hedge", "Response-surface models",
-     "which suggests a slight flattening of the surface at high pH without providing evidence "
-     "for it", [], None, None),
-    ("R14", "hedge", "Centre-point performance and reproducibility",
-     "most of the observed centre-point scatter in this response is analytical and not processing "
-     "variation", [], None, None),
-    ("R15", "bounded_conclusion", "Design space",
-     "Three bounds apply to the design space claim.", [], None, None),
-    ("R16", "claim", "Proven acceptable ranges",
-     "Neither viral attribute is restricted anywhere",
-     [], None, None),
-    ("R17", "bounded_conclusion", "Proven acceptable ranges",
-     "That result is not a statement that any combination of extremes is acceptable",
-     [], None, "R16"),
-    ("R18", "cross_step_credit", "Contribution to the control strategy",
-     "the cumulative MVM claim requires small-virus retentive filtration and the cumulative XMuLV "
-     "claim requires the low-pH hold as well", [], None, None),
-    ("R19", "deferral", "Contribution to the control strategy",
-     "All contributions are consolidated in PCMR-001", [], None, None),
-    ("R20", "deviation_disposition", "Non-representative load material in the first execution",
-     "The first execution is retained as a controlled record and is referenced here only to "
-     "confirm the root cause. It is not used in any analysis in this report", [], None, None),
-    ("R21", "justification", "Collection criterion on the descending edge",
-     "The verification demonstrates that the region holds at the corrected collection criterion",
-     [], None, None),
-    ("R22", "restatement", "Conclusions",
-     "The anion exchange step is well characterized and robust over the ranges studied",
-     [], "R00", None),
-    ("R23", "bounded_conclusion", "Conclusions",
-     "The step does not assure viral safety on its own, and it makes no claim for glycan variants, "
-     "charge variants or aggregate", [], None, None),
-    ("R24", "deviation_disposition", "Equilibration and wash-1 buffer pH excursion",
-     "The deviation was retained with no re-execution", [], None, None),
-]
-
-
-def ax_rhetorical_spans(doc_id, file_name):
-    """Rhetorical / argument-structure spans over the PCR-008 report (report-only)."""
-    out = []
-    for suffix, role, sec, quote, sup, res, bnd in AX_RHET_SPANS:
-        out.append(S.RhetoricalSpan(
-            span_id=f"{doc_id}-{suffix}", section=sec, role=role,
-            source_reference=ref(doc_id, file_name, f"{doc_id}_sec_rhet", sec,
-                                 " ".join(quote.split())),
-            supported_by=[f"{doc_id}-{s}" for s in sup],
-            restates=(f"{doc_id}-{res}" if res else None),
-            bounds=(f"{doc_id}-{bnd}" if bnd else None)))
-    return out
-
-
 def ax_inventory(doc_id, file_name, dtype):
     return S.DocumentInventoryItem(
         document_id=doc_id, file_name=file_name, predicted_document_type=dtype,
@@ -4797,7 +4183,7 @@ def build_report_aex():
         proven_acceptable_ranges=ax_proven_acceptable_ranges(doc, f),
         report_sections=ax_report_sections(doc, f, report=True),
         assertions=ax_assertions(doc, f, report=True), concepts=ax_concepts(),
-        rhetorical_spans=ax_rhetorical_spans(doc, f))
+        rhetorical_spans=build_rhetorical_spans(doc, f))
 
 
 # =========================================================================== #
@@ -5289,149 +4675,6 @@ def vf_proven_acceptable_ranges(doc_id, file_name):
     return out
 
 
-# --------------------------------------------------------------------------- #
-# Report-only rhetorical layer (PCR-009 only).                                  #
-# --------------------------------------------------------------------------- #
-# Argument-structure spans over the PCR-009 report. Each quote is a verbatim,    #
-# plain-prose fragment of the RENDERED report (no inline expressions, no bold);  #
-# number-free wherever the argument allows, so a reseed cannot break grounding.  #
-# The spine of the report is adverse-first: the only resolved effect is the      #
-# decline of MVM clearance with volumetric load, which is stated, mechanistically #
-# warranted, then bounded three ways (worst characterized corner, worst NOR       #
-# corner, NOR-propagated lower band). Tuple fields:                               #
-# (suffix, role, section, quote, supported_by-suffixes, restates-suffix,          #
-#  bounds-suffix).                                                                #
-# --------------------------------------------------------------------------- #
-VF_RHET_SPANS = [
-    ("R01", "claim", "Executive summary",
-     "volumetric load is the only parameter whose effect on MVM clearance was resolved",
-     ["R08"], None, None),
-    ("R02", "bounded_conclusion", "Executive summary",
-     "The trend is bounded by the acceptance criterion for the step.", ["R03"], None, "R01"),
-    ("R03", "justification", "Executive summary",
-     "At the worst corner of the characterized region, which is the highest load at the highest "
-     "pressure", [], None, None),
-    ("R04", "claim", "Executive summary",
-     "XMuLV clearance and step yield were robust to both parameters over the ranges studied.",
-     ["R10"], None, None),
-    ("R05", "problem_statement", "Response-surface design",
-     "The division of labour between the two designs needs to be stated plainly, because it is "
-     "not the usual one.", [], None, None),
-    ("R06", "claim", "Response-surface design",
-     "The response-surface model is still the predictive model and the basis of the design space, "
-     "for two reasons.", ["R07"], None, None),
-    ("R07", "justification", "Response-surface design",
-     "It uses the axial runs to test whether the response is linear in load across the full range, "
-     "and it carries a larger replicated centre and therefore a better estimate of pure error.",
-     [], None, None),
-    ("R08", "justification", "Screening: factor effects",
-     "The load term is significant on its own, and that is the finding the screening study was run "
-     "to produce.", [], None, None),
-    ("R10", "justification", "Screening: factor effects",
-     "Neither XMuLV clearance nor step yield gave a significant term", [], None, None),
-    ("R11", "claim", "Response-surface models",
-     "Only the MVM model is adequate for prediction.", ["R12"], None, None),
-    ("R12", "justification", "Response-surface models",
-     "The residuals show no trend against the predicted value and no funnel, the normal quantile "
-     "plot is close to a straight line", [], None, None),
-    ("R14", "mechanistic_warrant", "Product and unit operation",
-     "Particles larger than the membrane retention rating are held back while the antibody monomer "
-     "passes, so the mechanism does not depend on solution chemistry and is orthogonal to the "
-     "mechanisms of the two other clearance steps.", [], None, None),
-    ("R15", "mechanistic_warrant", "Mechanistic interpretation",
-     "As filtration proceeds, protein and particulate matter from the load deposit within the "
-     "membrane and progressively change that distribution, and the fraction of the load that finds "
-     "a path through increases with the volume that has already been filtered.", [], None, None),
-    ("R17", "mechanistic_warrant", "Mechanistic interpretation",
-     "That is consistent with a size-based mechanism, in which pressure sets the flux and hence the "
-     "duration of the run but does not alter the pore size distribution.", [], None, None),
-    ("R18", "mechanistic_warrant", "DEV-009-02 — membrane lot flux below the vendor-typical value",
-     "Permeability is set by the number and the size of the flow paths available and determines how "
-     "fast the load passes, whereas retention is set by the tightest part of the same distribution "
-     "and determines what is held back.", [], None, None),
-    ("R19", "claim", "Mechanistic interpretation",
-     "The practical consequence is that the operating region of this step is effectively "
-     "one-dimensional.", ["R15", "R17"], None, None),
-    ("R20", "hedge", "Mechanistic interpretation",
-     "it is stated here so that the design space in §6 is not read as more complex than the data "
-     "support", [], None, None),
-    ("R21", "cross_step_credit", "Product and unit operation",
-     "Low-pH inactivation (PCR-006) destroys the lipid envelope of enveloped viruses, and anion "
-     "exchange (PCR-008) removes virus by charge-based binding in flow-through mode.",
-     [], None, None),
-    ("R23", "cross_step_credit", "Proven acceptable ranges",
-     "Low-pH inactivation is credited with no MVM clearance at all, because a non-enveloped "
-     "parvovirus is not inactivated by low pH.", [], None, None),
-    ("R24", "claim", "Design space",
-     "The design space of the step is the region of the characterized ranges over which the "
-     "predicted MVM log reduction meets the required step contribution, and that region is the "
-     "whole characterized rectangle.", [], None, None),
-    ("R25", "bounded_conclusion", "Design space",
-     "Three bounds apply to this claim.", [], None, "R24"),
-    ("R27", "problem_statement", "Proven acceptable ranges",
-     "A viral-clearance attribute carries no drug-substance specification that a single step can be "
-     "measured against, so the acceptance basis is derived below before any range is claimed.",
-     [], None, None),
-    ("R28", "claim", "Proven acceptable ranges",
-     "this step does have an edge of failure inside the range it was studied over",
-     ["R29"], None, None),
-    ("R29", "justification", "Proven acceptable ranges",
-     "The result that matters is the ceiling on filtration volume", [], None, None),
-    ("R30", "bounded_conclusion", "Proven acceptable ranges",
-     "Because the proven acceptable ranges were established against a step requirement that is "
-     "itself derived from the clearance credited elsewhere, they are only valid while that credit "
-     "holds.", [], None, "R28"),
-    ("R31", "claim", "Parameter classification",
-     "Both characterized parameters are classified as well-controlled critical process parameters "
-     "under SOP-4001.", ["R32"], None, None),
-    ("R32", "justification", "Parameter classification",
-     "It is classified WC-CPP because the viral clearance claimed for this step was demonstrated "
-     "under the conditions studied", [], None, None),
-    ("R33", "hedge", "Centre-point performance and reproducibility",
-     "should be read as a lower bound on the true run-to-run variation", [], None, None),
-    ("R34", "bounded_conclusion", "Centre-point performance and reproducibility",
-     "Any effect on MVM clearance smaller than about the assay precision is beyond the resolution "
-     "of this study and is not claimed.", [], None, None),
-    ("R35", "problem_statement", "Discussion",
-     "The adverse finding deserves to be read in its own terms before its mitigation.",
-     [], None, None),
-    ("R36", "hedge", "Response-surface models",
-     "and that a small pure error inflates the lack-of-fit ratio", [], None, None),
-    ("R38", "restatement", "Discussion",
-     "Volumetric load reduces MVM clearance by progressively changing the flow-path distribution of "
-     "the membrane", [], "R01", None),
-    ("R39", "restatement", "Conclusions",
-     "XMuLV clearance and step yield are robust to both parameters over the same ranges.",
-     [], "R04", None),
-    ("R41", "deviation_disposition",
-     "DEV-009-01 — filtration pressure excursion above the normal operating range",
-     "The run was retained in the analysis. The corrective action was a revision of the pump ramp "
-     "profile to approach the pressure set-point without overshoot", [], None, None),
-    ("R42", "deviation_disposition", "DEV-009-02 — membrane lot flux below the vendor-typical value",
-     "The affected runs were retained. Three lines of evidence support that disposition.",
-     [], None, None),
-    ("R43", "deferral", "Contribution to the control strategy",
-     "The modular claim is consolidated in PCMR-001, which is where the cumulative arithmetic and "
-     "the orthogonality argument are presented for the process as a whole.", [], None, None),
-    ("R45", "deferral", "Scale-down model and its qualification",
-     "The qualification record is held under SOP-1001 and summarized in PCP-009.", [], None, None),
-]
-
-
-def vf_rhetorical_spans(doc_id, file_name):
-    """Rhetorical / argument-structure spans over the PCR-009 report (report-only)."""
-    out = []
-    for suffix, role, sec, quote, sup, res, bnd in VF_RHET_SPANS:
-        out.append(S.RhetoricalSpan(
-            span_id=f"{doc_id}-{suffix}", section=sec, role=role,
-            source_reference=ref(doc_id, file_name, f"{doc_id}_sec_rhet", sec,
-                                 " ".join(quote.split())),
-            supported_by=[f"{doc_id}-{s}" for s in sup],
-            restates=(f"{doc_id}-{res}" if res else None),
-            bounds=(f"{doc_id}-{bnd}" if bnd else None)))
-    return out
-
-
 def vf_inventory(doc_id, file_name, dtype):
     return S.DocumentInventoryItem(
         document_id=doc_id, file_name=file_name, predicted_document_type=dtype,
@@ -5510,7 +4753,7 @@ def build_report_vf():
         proven_acceptable_ranges=vf_proven_acceptable_ranges(doc, f),
         report_sections=vf_report_sections(doc, f, report=True),
         assertions=vf_assertions(doc, f, report=True), concepts=vf_concepts(),
-        rhetorical_spans=vf_rhetorical_spans(doc, f))
+        rhetorical_spans=build_rhetorical_spans(doc, f))
 
 
 # =========================================================================== #
@@ -5909,125 +5152,6 @@ def uf_proven_acceptable_ranges(doc_id, file_name):
     return out
 
 
-# --------------------------------------------------------------------------- #
-# Report-only rhetorical layer (PCR-010 only).                                  #
-# --------------------------------------------------------------------------- #
-# Argument-structure spans over the PCR-010 report. Each quote is a verbatim,    #
-# plain-prose fragment of the RENDERED report, number-free wherever the argument  #
-# allows. The argument of a non-DoE step that forms and clears nothing is mostly  #
-# about what is NOT claimed: no design space (with the reason), formulation        #
-# characterization DEFERRED and not omitted (with its location named), and KPP     #
-# classification precisely because no CQA is at stake. Tuple fields:               #
-# (suffix, role, section, quote, supported_by-suffixes, restates-suffix,           #
-#  bounds-suffix).                                                                 #
-# --------------------------------------------------------------------------- #
-UF_RHET_SPANS = [
-    ("R00", "claim", "Executive summary",
-     "It takes no viral clearance credit, it takes no impurity clearance credit, and it does not "
-     "characterize the formulation.", ["R01", "R02"], None, None),
-    ("R01", "mechanistic_warrant", "Product and unit operation",
-     "The membrane retains monomer and aggregated forms alike, so no size variant is separated, and "
-     "no charge-based or affinity-based mechanism operates, so no charge variant and no "
-     "glycosylation variant is separated either.", [], None, None),
-    ("R02", "deferral", "Executive summary",
-     "Formulation composition and the stability of A-Mab in it are established in the drug product "
-     "programme, outside the drug substance transfer scope defined in PTP-001.", [], None, None),
-    ("R04", "claim", "Operating ranges and proven acceptable ranges",
-     "This step has no design space.", ["R05", "R06"], None, None),
-    ("R05", "justification", "Operating ranges and proven acceptable ranges",
-     "The characterization was univariate, so what the data support is a proven acceptable range "
-     "for each parameter and not a multivariate region in three parameters", [], None, None),
-    ("R06", "justification", "Operating ranges and proven acceptable ranges",
-     "The substitution follows from the risk-based study assignment in RA-001 (§2.3), and it does "
-     "not follow from an incomplete study.", [], None, None),
-    ("R08", "problem_statement", "Risk-based prioritization and parameter selection",
-     "No interaction between the three parameters has been quantified, so the ranges in §6 are "
-     "single-parameter ranges and not a multivariate region.", [], None, None),
-    ("R09", "bounded_conclusion", "Operating ranges and proven acceptable ranges",
-     "Three bounds apply to these ranges.", [], None, "R10"),
-    ("R10", "claim", "Operating ranges and proven acceptable ranges",
-     "The proven acceptable range of each parameter is its characterization range", [], None, None),
-    ("R11", "bounded_conclusion", "Operating ranges and proven acceptable ranges",
-     "They are single-parameter ranges, so simultaneous movement of two parameters to opposite "
-     "edges is not covered by them.", [], None, "R10"),
-    ("R12", "deferral", "Discussion",
-     "Formulation characterization is deferred and not omitted.", [], None, None),
-    ("R14", "mechanistic_warrant", "Platform and prior-product knowledge",
-     "for a species that passes the membrane freely the residual fraction falls exponentially with "
-     "the diavolume count", [], None, None),
-    ("R15", "claim", "Concentration and buffer exchange",
-     "Buffer exchange is complete at the low edge of the diavolume range.", ["R14"], None, None),
-    ("R16", "bounded_conclusion", "Concentration and buffer exchange",
-     "Two bounds apply to that calculation, and neither of them is removed by the data.",
-     [], None, "R15"),
-    ("R17", "hedge", "Concentration and buffer exchange",
-     "the calculation is the design basis for the diavolume set-point and is not the batch "
-     "acceptance test", [], None, None),
-    ("R19", "cross_step_credit", "Quality attributes in scope",
-     "the credit for them belongs to PCR-005, PCR-007 and PCR-008, and the viral clearance claims "
-     "belong to PCR-006, PCR-008 and PCR-009", [], None, None),
-    ("R20", "claim", "Step yield and the process mass balance",
-     "This is the last step of the drug substance train, so the mass balance closes here.",
-     ["R21"], None, None),
-    ("R21", "justification", "Step yield and the process mass balance",
-     "The loss is attributed to product held in the membrane system and the transfer lines after "
-     "the recovery flush, and that attribution is supported by the investigation of DEV-010-02",
-     [], None, None),
-    ("R23", "mechanistic_warrant", "Scale-down model and its qualification",
-     "Hold-up volume does not scale in proportion to membrane area, and hold-up is the dominant "
-     "term in the step loss, so the model reproduces the commercial recovery less faithfully than "
-     "it reproduces the other two outcomes.", [], None, None),
-    ("R24", "claim", "Discussion",
-     "the model predicts commercial step yield with less confidence than it predicts concentration "
-     "and buffer exchange", ["R21", "R23"], None, None),
-    ("R25", "bounded_conclusion", "Discussion",
-     "The concentration and exchange claims do not depend on hold-up and are unaffected by this "
-     "limitation.", [], None, "R24"),
-    ("R26", "claim", "Parameter classification",
-     "The final drug substance concentration is a key process parameter, and it is the deliverable "
-     "of the step, so a value away from target is a process performance failure and not a quality "
-     "failure.", ["R27"], None, None),
-    ("R27", "justification", "Discussion",
-     "because a step that neither forms nor clears a quality attribute cannot hold a critical "
-     "process parameter under the classification rule in SOP-4001", [], None, None),
-    ("R28", "hedge", "Process capability and robustness",
-     "Neither figure is evidence about this step beyond the absence of a contribution from it.",
-     [], None, None),
-    ("R29", "cross_step_credit", "Process capability and robustness",
-     "it belongs to the cumulative parvovirus clearance, which is credited to anion exchange and "
-     "small-virus retentive filtration (PCR-008 and PCR-009)", [], None, None),
-    ("R31", "deviation_disposition",
-     "DEV-010-01 Transmembrane-pressure excursion during concentration",
-     "The run was retained and its data were used as recorded.", [], None, None),
-    ("R32", "deviation_disposition", "DEV-010-02 Final concentration below target on one run",
-     "The pool was concentrated further to the target and re-assayed by A280 (AMV-3019) before "
-     "release, and the batch was dispositioned as conforming.", [], None, None),
-    ("R34", "restatement", "Conclusions",
-     "No design space, no clearance credit and no viral clearance claim is made for this step, and "
-     "the formulation itself is characterized in the drug product programme.", [], "R00", None),
-    ("R36", "bounded_conclusion", "Operating ranges and proven acceptable ranges",
-     "It was not executed as a single run, since the study was univariate, so it is identified here "
-     "and it is not claimed as characterized.", [], None, "R10"),
-    ("R37", "claim", "Contribution to the control strategy",
-     "What the step does not control matters as much to the assessor as what it does.",
-     [], None, None),
-]
-
-
-def uf_rhetorical_spans(doc_id, file_name):
-    """Rhetorical / argument-structure spans over the PCR-010 report (report-only)."""
-    out = []
-    for suffix, role, sec, quote, sup, res, bnd in UF_RHET_SPANS:
-        out.append(S.RhetoricalSpan(
-            span_id=f"{doc_id}-{suffix}", section=sec, role=role,
-            source_reference=ref(doc_id, file_name, f"{doc_id}_sec_rhet", sec,
-                                 " ".join(quote.split())),
-            supported_by=[f"{doc_id}-{s}" for s in sup],
-            restates=(f"{doc_id}-{res}" if res else None),
-            bounds=(f"{doc_id}-{bnd}" if bnd else None)))
-    return out
-
-
 def uf_inventory(doc_id, file_name, dtype):
     return S.DocumentInventoryItem(
         document_id=doc_id, file_name=file_name, predicted_document_type=dtype,
@@ -6115,7 +5239,7 @@ def build_report_ufdf():
         proven_acceptable_ranges=uf_proven_acceptable_ranges(doc, f),
         report_sections=uf_report_sections(doc, f, report=True),
         assertions=uf_assertions(doc, f, report=True), concepts=uf_concepts(),
-        rhetorical_spans=uf_rhetorical_spans(doc, f))
+        rhetorical_spans=build_rhetorical_spans(doc, f))
 
 
 # =========================================================================== #
@@ -7120,113 +6244,18 @@ PCMR_VC_CREDIT = [
 ]
 PCMR_VC_ROW_FOR = {v: PCMR_VC_ROW[k] for k, v in PCMR_VC_STEP.items()}
 
-# Narrative (non-tabular) argument structure of the report. Verbatim prose, number-free
-# except where the number is the claim; (id, role, section, quote, supported_by, restates, bounds).
-PCMR_RHET_SPANS = [
-    ("R00", "claim", "Executive summary",
-     "Stage 1 characterization of the A-Mab drug substance process is complete and the process "
-     "is ready for Stage 2", [], None, None),
-    ("R01", "deferral", "Purpose and scope",
-     "it does not re-derive their models, their effect estimates or their design spaces",
-     [], None, None),
-    ("R02", "claim", "Study inventory",
-     "The response-surface model is the predictive model and the basis of each step’s design "
-     "space, and no design space in this package rests on a screening fit", [], None, None),
-    ("R03", "cross_step_credit", "Host cell protein",
-     "Credit for host cell protein clearance is therefore shared, and no single step can be "
-     "described as the host cell protein control", ["R04"], None, None),
-    ("R04", "mechanistic_warrant", "Host cell protein",
-     "A change to the load conditions of any one of them shifts the burden onto the others",
-     [], None, None),
-    ("R05", "claim", "Aggregates",
-     "Cation exchange is the only aggregate clearance step in the train", [], None, None),
-    ("R06", "hedge", "Process capability",
-     "their indices should be read as showing that the attribute does not constrain the "
-     "process, and not as meaningful precision", [], None, None),
-    ("R07", "bounded_conclusion", "Process capability",
-     "The step models it propagates were fitted on qualified scale-down models, so the "
-     "capability is inherited from the scale-down qualification of each step", [], None, None),
-    ("R08", "mechanistic_warrant", "Viral clearance summary",
-     "minute virus of mice is a non-enveloped parvovirus with no envelope to disrupt",
-     [], None, None),
-    ("R09", "cross_step_credit", "Viral clearance summary",
-     "No single step carries the cumulative claim", [], None, None),
-    ("R10", "bounded_conclusion", "Viral clearance summary",
-     "No viral clearance is claimed for Protein A capture or for cation exchange",
-     [], None, None),
-    ("R11", "hedge", "Viral clearance summary",
-     "The margins quoted above are therefore conservative", [], None, "R10"),
-    ("R12", "justification", "Parameter classification summary",
-     "the safe course where an interaction has not been estimated is the more stringent class",
-     [], None, None),
-    ("R13", "justification", "Parameter classification summary",
-     "a factor that does nothing over a wide range is evidence of robustness and not an absence "
-     "of information", [], None, None),
-    ("R14", "claim", "Release control",
-     "Release testing confirms the outcome of the control strategy and is not the means by "
-     "which the outcome is achieved", [], None, None),
-    ("R15", "bounded_conclusion", "What the control strategy does not cover",
-     "It does not establish commercial-scale reproducibility, which is the object of Stage 2",
-     [], None, None),
-    ("R16", "problem_statement", "Deviations across the campaign",
-     "One deviation in this campaign invalidated a complete designed experiment", [], None, None),
-    ("R17", "deviation_disposition", "The anion exchange deviations",
-     "Both affected designs were invalidated for the purpose of defining an operating region "
-     "and were re-executed in full", [], None, None),
-    ("R18", "deviation_disposition", "The anion exchange deviations",
-     "The first execution is retained as a controlled record and is referenced there to confirm "
-     "the root cause", ["R17"], None, None),
-    ("R19", "deviation_disposition", "The anion exchange deviations",
-     "The data were not discarded, because the fitted model covers the collection range that "
-     "was actually used", [], None, None),
-    ("R20", "bounded_conclusion", "The retained deviations",
-     "The excursion took the parameter outside its normal operating range but left it inside "
-     "the range over which that parameter was characterized, so the fitted model already covers "
-     "the condition that occurred", [], None, None),
-    ("R21", "deviation_disposition", "The retained deviations",
-     "Neither finding moved the associated attribute outside its limit", [], None, None),
-    ("R22", "claim", "Campaign-level impact",
-     "No deviation changed a parameter classification, an operating region or a viral clearance "
-     "claim", ["R17", "R20"], None, None),
-    ("R23", "claim", "Campaign-level impact",
-     "One control-strategy element did change", [], None, "R22"),
-    ("R24", "justification", "Campaign-level impact",
-     "Both are improvements to the control strategy and neither reflects a defect in the data "
-     "reported here", [], None, None),
-    ("R25", "bounded_conclusion", "Limitations",
-     "Design spaces are not confirmed at commercial scale at the edges of their ranges",
-     [], None, None),
-    ("R26", "bounded_conclusion", "Limitations",
-     "Capability is estimated and not observed", [], None, None),
-    ("R27", "bounded_conclusion", "Limitations",
-     "Viral clearance is measured in small-scale spiking studies", [], None, None),
-    ("R28", "bounded_conclusion", "Limitations",
-     "The campaign ran a limited number of batches at each condition", [], None, None),
-    ("R29", "bounded_conclusion", "Limitations",
-     "One designed experiment exists in superseded form", [], None, None),
-    ("R30", "deferral", "Stage 2 readiness",
-     "the gaps that remain are the ones Stage 2 exists to close", [], None, None),
-    ("R31", "restatement", "Stage 2 readiness",
-     "This report should be read as the evidence that the process is understood well enough to "
-     "be qualified, and not as evidence that it has been", [], "R00", None),
-]
 
+def pcmr_dev_spans(doc, f):
+    """The 17 rows of the campaign deviation register, as ``deviation_disposition`` spans.
 
-def pcmr_rhetorical_spans(doc, f):
-    """Argument-structure spans over PCMR-001, plus the 17-row campaign deviation register.
-
-    Every register row is its own ``deviation_disposition`` span, anchored on the rendered row
-    (identifier, step, what happened, root cause and disposition), so the disposition of each
-    deviation is attested by a span that contains it — not by the section that discusses it.
+    These stay in code while every other rhetorical span moved to
+    ``authoring/rhetorical/*.spans.yaml``: each quote is a rendered row of @tbl-dev built from
+    ``outputs/deviations.csv``, so freezing it into a curated file would hard-code data that
+    a reseed changes. The curated prose spans of PCMR-001 are in its spans file; these are
+    appended to them. Anchoring each row on itself means the disposition of a deviation is
+    attested by a span that contains it, not by the section that discusses it.
     """
     out = []
-    for suffix, role, sec, quote, sup, res, bnd in PCMR_RHET_SPANS:
-        out.append(S.RhetoricalSpan(
-            span_id=f"{doc}-{suffix}", section=sec, role=role,
-            source_reference=ref(doc, f, f"{doc}_sec_rhet", sec, " ".join(quote.split())),
-            supported_by=[f"{doc}-{s}" for s in sup],
-            restates=(f"{doc}-{res}" if res else None),
-            bounds=(f"{doc}-{bnd}" if bnd else None)))
     for dev_id, row in PCMR_DEV_ROW.items():
         out.append(S.RhetoricalSpan(
             span_id=f"{doc}-{dev_id}", section="The register", role="deviation_disposition",
@@ -7555,7 +6584,7 @@ def build_master_report():
         inventory=inv, entities=entities, report_sections=report_sections,
         assertions=AssertionStore(run_id=f"gt-{doc}", assertions=A, rationales=[]),
         concepts=ConceptStore(run_id="gt-pcmr", concepts=pcmr_concepts(q_rows)),
-        rhetorical_spans=pcmr_rhetorical_spans(doc, f))
+        rhetorical_spans=build_rhetorical_spans(doc, f) + pcmr_dev_spans(doc, f))
 
 
 def main():

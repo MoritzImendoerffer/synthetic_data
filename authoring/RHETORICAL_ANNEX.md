@@ -14,16 +14,25 @@ hedge and boundary detection.
 > only on `feature/weak-claims-via-brief`.
 >
 > **Coverage is complete**: all eight `PCR-00N` reports plus `PCMR-001` carry a layer,
-> 315 spans in total. Only `PCR-003`'s live in an external
-> `authoring/rhetorical/PCR-003.spans.yaml`; every other layer is a Python constant inside
-> `pc_package/build_ground_truth.py` (see `AX_RHET_SPANS`).
+> 315 spans in total. **One mechanism, since 2026-08-18**: every curated span lives in
+> `authoring/rhetorical/<DOC>.spans.yaml` and is read by `build_rhetorical_spans()`. The eight
+> Python span tables were converted to YAML in that unification, and the annexes rebuilt with no
+> diff, which is what proved the conversion changed nothing.
 >
-> **Put new layers in the builder, not in a YAML file.** That is not a style preference. The
-> external YAML went stale and shipped an *empty* layer, because the agents re-grounding the
-> annexes fixed every quote they could see in the file they were editing and never opened a
-> registry that sat outside it. Co-location is what keeps a layer current. The builder now
-> hard-fails if any span in a `.spans.yaml` stops matching, which closes the silent-degradation
-> path for the one file that remains.
+> The one exception is not curated prose. `PCMR-001` also carries 17 `deviation_disposition`
+> spans, one per row of the campaign deviation register, and `pcmr_dev_spans()` builds them from
+> `outputs/deviations.csv`. A rendered data row belongs in code, not in a curated file: freezing
+> it would hard-code a value that a reseed changes. So `PCMR-001.spans.yaml` holds 32 spans and
+> the annex holds 49.
+>
+> **Put new layers in a YAML file, not in the builder.** The earlier rule here said the opposite,
+> for a real reason: the external YAML once went stale and shipped an *empty* layer, because the
+> agents re-grounding the annexes fixed every quote they could see in the file they were editing
+> and never opened a registry that sat outside it. What fixed that was not co-location but the
+> hard gate — `build_rhetorical_spans()` now fails the build when any span stops matching its
+> document, so a stale layer cannot ship quietly whichever file it lives in. With the failure
+> mode closed, the Python tables were 994 lines of quoted prose in a 7,000 line builder, editable
+> only by someone reading Python.
 >
 > The spans are tied to a specific revision of a document, so **re-authoring a report
 > invalidates them wholesale** — after the 2026-07 register correction, 34 of PCR-003's 37

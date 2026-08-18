@@ -1,6 +1,8 @@
 # One rhetorical layer, two mechanisms, eleven documents without it
 
-**Status:** proposed 2026-08-16. Not started. No work unit.
+**Status:** proposed 2026-08-16. **Half done 2026-08-18** by TASK-001 of work unit
+`2026-08-18_02_register-track-d`: the mechanism is now one, and it is YAML. The other half —
+eleven documents with no layer at all — is untouched and is what this proposal is still for.
 
 ## The problem
 
@@ -8,33 +10,37 @@ The discourse layer is the part of the annex an NLP consumer cannot get anywhere
 sentence is a claim, which justifies it, which bounds it, which defers. Measured on `main` on
 2026-08-16, it covers **9 of 20 documents and 315 spans**:
 
-| Document | Spans | Built by |
+| Document | Spans | Built by (as of 2026-08-18) |
 |---|---|---|
 | PCR-003 | 35 | `authoring/rhetorical/PCR-003.spans.yaml`, read by `build_rhetorical_spans()` |
-| PCR-004 | 36 | `h_rhetorical_spans()` in `build_ground_truth.py` |
-| PCR-005 | 39 | `pa_rhetorical_spans()` |
-| PCR-006 | 31 | `vi_rhetorical_spans()` |
-| PCR-007 | 33 | `cx_rhetorical_spans()` |
-| PCR-008 | 25 | `ax_rhetorical_spans()` |
-| PCR-009 | 37 | `vf_rhetorical_spans()` |
-| PCR-010 | 30 | `uf_rhetorical_spans()` |
-| PCMR-001 | 49 | `pcmr_rhetorical_spans()` |
+| PCR-004 | 36 | `authoring/rhetorical/PCR-004.spans.yaml` |
+| PCR-005 | 39 | `authoring/rhetorical/PCR-005.spans.yaml` |
+| PCR-006 | 31 | `authoring/rhetorical/PCR-006.spans.yaml` |
+| PCR-007 | 33 | `authoring/rhetorical/PCR-007.spans.yaml` |
+| PCR-008 | 25 | `authoring/rhetorical/PCR-008.spans.yaml` |
+| PCR-009 | 37 | `authoring/rhetorical/PCR-009.spans.yaml` |
+| PCR-010 | 30 | `authoring/rhetorical/PCR-010.spans.yaml` |
+| PCMR-001 | 49 | 32 in `authoring/rhetorical/PCMR-001.spans.yaml`, plus 17 register rows from `pcmr_dev_spans()` |
 
 **Eleven documents carry none**: the eight plans `PCP-003` … `PCP-010`, plus `PTP-001`, `RA-001`
 and `PCMP-001`. Every one of them argues — a plan states what it will accept and why, a risk
 assessment states a ranking and its warrant — and none of that is annotated.
 
-**And one layer is built two ways.** PCR-003 alone is curated in YAML and documented in
-`authoring/RHETORICAL_ANNEX.md`. The other eight are Python functions inside
+~~**And one layer is built two ways.**~~ **Closed 2026-08-18.** It was true when this was
+written: PCR-003 alone was curated in YAML, and the other eight were Python functions inside
 `build_ground_truth.py`, one per unit operation, with the quotes written into the source. A
-consumer cannot tell the two apart in the output, but a maintainer meets a different file, a
+consumer could not tell the two apart in the output, but a maintainer met a different file, a
 different failure mode and a different re-curation cost depending on which document they opened.
 
-The two also fail differently. The YAML path is a hard gate: a span whose quote no longer matches
-the document fails the build for that document with a message naming the file to re-curate
-(`build_ground_truth.py:810`). That is the right behaviour, and it was learned expensively — a
-presence check that skipped normalisation once declared the PCR-003 layer dead and aborted a build
-partway, leaving later annexes stale on disk while the run looked fine under `2>/dev/null`.
+The two also failed differently, and that is what decided the direction. The YAML path is a hard
+gate: a span whose quote no longer matches the document fails the build for that document with a
+message naming the file to re-curate. That is the right behaviour, and it was learned
+expensively — a presence check that skipped normalisation once declared the PCR-003 layer dead and
+aborted a build partway, leaving later annexes stale on disk while the run looked fine under
+`2>/dev/null`. The Python builders had no presence check at all and emitted every span
+unconditionally, so a stale one surfaced only later, as an ungrounded quote in `check_grounding`.
+Converting the 263 curated Python spans to YAML put all nine documents behind that gate. The
+annexes rebuilt byte-identical, which is what proves the conversion changed nothing.
 
 ## What is not the problem
 
@@ -53,12 +59,13 @@ to the vocabulary.
 
 ## What it would take
 
-1. **Decide the mechanism.** YAML is editable by a person who is not reading Python and keeps
-   `build_ground_truth.py` from growing another 300 lines per document. Python keeps the quotes
-   beside the entity builders that already ground against the same rendered text. The measured
-   argument for YAML is size: the eight Python builders are the largest single block in a 7,000
-   line file. The measured argument for Python is that eight of nine layers already use it.
-2. **Migrate the odd one out**, whichever way the decision goes, so the corpus has one path.
+1. ~~**Decide the mechanism.**~~ **Done 2026-08-18: YAML.** The measured argument that decided
+   it was size — the eight Python builders were 994 lines, the largest single block in a 7,000
+   line file — together with the gate, which only the YAML path had.
+2. ~~**Migrate the odd one out.**~~ **Done 2026-08-18**, the other way round from the phrasing
+   here: it was the eight that moved, not PCR-003. 263 curated spans became eight
+   `.spans.yaml` files; the 17 data-derived deviation rows of PCMR-001 stayed in code, because a
+   rendered row of `outputs/deviations.csv` is not curated prose and a reseed rewrites it.
 3. **Author the missing eleven.** A plan's argument is not a report's: it commits rather than
    concludes, so `problem_statement`, `deferral` and `bounded_conclusion` will carry more weight
    than `justification`. Expect the role mix to differ, and do not force a report's shape onto a

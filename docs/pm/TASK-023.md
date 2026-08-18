@@ -3,12 +3,12 @@ type: pm-task
 epic: 2026-08-18_02_register-track-d
 sprint: 2026-08-18_02_register-track-d
 task: TASK-023
-status: todo
+status: cancelled
 kind: document
 title: "Re-author PCR-007 in one pass, as a DRAFT"
 generated: true
-waiting_on: the assistant
-tags: [pm/task, pm/todo]
+waiting_on: ?
+tags: [pm/task, pm/cancelled]
 about: ["PCR-007"]
 ---
 
@@ -17,7 +17,7 @@ about: ["PCR-007"]
 
 # TASK-023 — Re-author PCR-007 in one pass, as a DRAFT
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `cancelled` · **Waiting on:** ? · **Board:** [[_Board]]
 
 ## Why it exists
 
@@ -34,6 +34,10 @@ PROCEDURE: procedures/AUTHOR-A-DOCUMENT.md. Outline `report_doe`. Baseline for t
 - [ ] the committed pc_package/PCR-007_cex.qmd and all 20 annexes are untouched; git status shows only the DRAFT and its untracked renders
 
 **Depends on:** [[TASK-022]]
+
+## What was built
+
+Cancelled 2026-08-18 by decision D3, settled STOP on the owner's reading of the pilot. See docs/results/2026-08-18-track-d-stopped.md.
 
 ## Documents it is about
 

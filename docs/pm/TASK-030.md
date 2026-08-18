@@ -3,12 +3,12 @@ type: pm-task
 epic: 2026-08-18_02_register-track-d
 sprint: 2026-08-18_02_register-track-d
 task: TASK-030
-status: todo
+status: cancelled
 kind: documentation
 title: "Move the findings into docs and close the register campaign or say what remains"
 generated: true
-waiting_on: the assistant
-tags: [pm/task, pm/todo]
+waiting_on: ?
+tags: [pm/task, pm/cancelled]
 ---
 
 > [!warning] Generated from `.claude/work/2026-08-18_02_register-track-d/state.json` by `scripts/pm_notes.py`.
@@ -16,7 +16,7 @@ tags: [pm/task, pm/todo]
 
 # TASK-030 — Move the findings into docs and close the register campaign or say what remains
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `cancelled` · **Waiting on:** ? · **Board:** [[_Board]]
 
 ## Why it exists
 
@@ -31,6 +31,10 @@ PROCEDURE: procedures/TASK-030.md. This is /ship's work. Track C is the only tra
 - [ ] /ship's full reproduction check passes: make clean && make data figures corpus, outputs/ byte-identical, every annex byte-identical, and rendered text compared through docx_text rather than by file hash
 
 **Depends on:** [[TASK-029]]
+
+## What was built
+
+Cancelled 2026-08-18 by decision D3, settled STOP on the owner's reading of the pilot. See docs/results/2026-08-18-track-d-stopped.md.
 
 ## Files it touched
 

@@ -1,9 +1,9 @@
 ---
 type: pm-decision
 sprint: 2026-08-18_02_register-track-d
-status: open — numbers and reading are in; the owner settles it
-waiting_on: project owner
-blocks: TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-014, TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-020, TASK-021, TASK-022, TASK-023, TASK-024, TASK-025, TASK-026, TASK-027, TASK-028, TASK-029, TASK-030
+status: settled 2026-08-18 — STOP
+decided_by: project owner
+cancelled: TASK-008 … TASK-030
 tags: [pm/decision]
 ---
 
@@ -125,3 +125,32 @@ round three drove `, and `+clause from 22.6 % to 0.5 % and paid for it with `, w
 points. Zero would also sit below all four human sources, which is the staccato failure round
 three already made once. What has moved every measure it was applied to is printing the number to
 the author on every run.
+
+
+---
+
+## SETTLED 2026-08-18 — Option B, stop at three
+
+**The project owner's decision, on the fourth part of the reading: "stop the round, document my
+findings and your conclusions."**
+
+`TASK-008` … `TASK-030` are cancelled. The sixteen remaining documents are not re-authored.
+
+The eight numeric conditions all held. The ninth, the reading, did not — the owner quoted eight
+sentences from `PCR-005` across four messages, and the counts taken afterwards put every one of
+them far outside the human-source band.
+
+**The stop is not Option B as this note originally wrote it.** Option B assumed a failure would
+point at Track C, the guide's own register. It does not. `PCR-003` is the untouched control, it
+was authored from the same guide, it was accepted by the owner in round three, and it carries the
+same fault at `, which` 15.3 per 100 sentences. The guide is not what produced this.
+
+What produced it is written up in
+[`docs/results/2026-08-18-track-d-stopped.md`](../../results/2026-08-18-track-d-stopped.md) §5.
+The short version: the register gate penalises the sentence shape the owner asked for — eight
+rewritten sentences measure `mean_len` 13.5 against a gated floor of 20.0 and `pct_under_15`
+55.6 % against a gated ceiling of 32.0, so **good prose fails the gate on two of twelve rows** —
+and the mechanism sections are required by `section_plan.yaml` while no input supplies a
+mechanism.
+
+Nothing is reverted. The three pilot documents ship.

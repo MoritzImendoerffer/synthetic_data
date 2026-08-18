@@ -1,5 +1,15 @@
 # The corpus states facts. It does not argue. — what remains
 
+> **STOPPED 2026-08-18, after a pilot of three (decision D3).** Read
+> [`../results/2026-08-18-track-d-stopped.md`](../results/2026-08-18-track-d-stopped.md) before
+> anything below. Two arguments in this proposal are now false. **Track C is not the leading
+> hypothesis**: the fault the owner's reading names is present in `PCR-003`, which was authored
+> from the same guide and accepted in round three, so the guide did not produce it. And **more
+> re-authoring is not the next step**: the eight sentences the owner quoted, rewritten as a paper
+> would write them, FAIL the register gate on two of its twelve gated rows — `mean_len` 13.5
+> against a floor of 20.0 and `pct_under_15` 55.6 % against a ceiling of 32.0. The gate has to be
+> repaired and the mechanism content supplied before a fourth round is worth running.
+
 **Status: three rounds delivered; Track A and Track B are closed on the reading of 2026-08-18. Track D is being worked on since 2026-08-18 in work unit `2026-08-18_02_register-track-d`, on the project owner's instruction that all documents be re-authored.**
 Round one shipped in work unit `2026-08-16_01_register-from-four-sources`, round two in
 `2026-08-17_01_register-second-round`, round three in `2026-08-18_01_register-third-round`. All

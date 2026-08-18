@@ -3,12 +3,12 @@ type: pm-task
 epic: 2026-08-18_02_register-track-d
 sprint: 2026-08-18_02_register-track-d
 task: TASK-028
-status: todo
+status: cancelled
 kind: annex
 title: "Promote, render, re-anchor and re-ground the master report (PCMR-001)"
 generated: true
-waiting_on: the assistant
-tags: [pm/task, pm/todo]
+waiting_on: ?
+tags: [pm/task, pm/cancelled]
 about: ["PCMR-001"]
 ---
 
@@ -17,7 +17,7 @@ about: ["PCMR-001"]
 
 # TASK-028 — Promote, render, re-anchor and re-ground the master report (PCMR-001)
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `cancelled` · **Waiting on:** ? · **Board:** [[_Board]]
 
 ## Why it exists
 
@@ -33,6 +33,10 @@ PROCEDURE: procedures/ANNEX-A-BATCH.md. Batch exposure: about 273 quotes and 49 
 - [ ] no document outside this batch has its .qmd, .docx, .pdf or annex modified (git status does not list them); `git diff --stat outputs/` empty; make test and make style pass; weak_claims empty in all 20 annexes
 
 **Depends on:** [[TASK-027]]
+
+## What was built
+
+Cancelled 2026-08-18 by decision D3, settled STOP on the owner's reading of the pilot. See docs/results/2026-08-18-track-d-stopped.md.
 
 ## Documents it is about
 

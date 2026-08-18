@@ -3,12 +3,12 @@ type: pm-task
 epic: 2026-08-18_02_register-track-d
 sprint: 2026-08-18_02_register-track-d
 task: TASK-012
-status: todo
+status: cancelled
 kind: annex
 title: "Promote, render, re-anchor and re-ground batch 1 (harvest and viral inactivation)"
 generated: true
-waiting_on: the assistant
-tags: [pm/task, pm/todo]
+waiting_on: ?
+tags: [pm/task, pm/cancelled]
 ---
 
 > [!warning] Generated from `.claude/work/2026-08-18_02_register-track-d/state.json` by `scripts/pm_notes.py`.
@@ -16,7 +16,7 @@ tags: [pm/task, pm/todo]
 
 # TASK-012 — Promote, render, re-anchor and re-ground batch 1 (harvest and viral inactivation)
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `cancelled` · **Waiting on:** ? · **Board:** [[_Board]]
 
 ## Why it exists
 
@@ -32,6 +32,10 @@ PROCEDURE: procedures/ANNEX-A-BATCH.md. Batch exposure: about 284 quotes and 67 
 - [ ] no document outside this batch has its .qmd, .docx, .pdf or annex modified (git status does not list them); `git diff --stat outputs/` empty; make test and make style pass; weak_claims empty in all 20 annexes
 
 **Depends on:** [[TASK-008]], [[TASK-009]], [[TASK-010]], [[TASK-011]]
+
+## What was built
+
+Cancelled 2026-08-18 by decision D3, settled STOP on the owner's reading of the pilot. See docs/results/2026-08-18-track-d-stopped.md.
 
 ## Files it touched
 

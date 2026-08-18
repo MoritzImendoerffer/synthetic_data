@@ -3,12 +3,13 @@ type: pm-task
 epic: 2026-08-18_03_author-facing-apparatus
 sprint: 2026-08-18_03_author-facing-apparatus
 task: TASK-004
-status: todo
+status: doing
 kind: measurement
 title: "The blind reading, recorded verbatim, then the decision rule applied \u2014 HALT for the owner"
 generated: true
 waiting_on: the assistant
-tags: [pm/task, pm/todo]
+tags: [pm/task, pm/doing]
+about: ["PCR-005"]
 ---
 
 > [!warning] Generated from `.claude/work/2026-08-18_03_author-facing-apparatus/state.json` by `scripts/pm_notes.py`.
@@ -16,7 +17,7 @@ tags: [pm/task, pm/todo]
 
 # TASK-004 — The blind reading, recorded verbatim, then the decision rule applied — HALT for the owner
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `doing` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
@@ -31,6 +32,14 @@ This task cannot be finished by the assistant alone; it ends the session's turn 
 - [ ] the outcome states, in one line, what the owner said about the shipped text and about the probe, without paraphrase
 
 **Depends on:** [[TASK-003]]
+
+## What was built
+
+HALTED FOR THE OWNER, 2026-08-18. A.pdf and B.pdf are in the unit, copied under the letters blind-key.md assigns by a shell command that printed neither the key nor the file sizes; PDF metadata (title, author, subject) identical in both. The key has not been opened in the conversation. What is asked of the owner: two versions of the same two subsections of PCR-005 (Response-surface models, Mechanistic interpretation); quote the sentences that read as machine prose, and say which reads as a paper. The answer goes VERBATIM into owner-reading-<date>.md before the key is opened and before any count is taken; then the rule in decisions.decision_rule is applied and D4 settled.
+
+## Documents it is about
+
+- **PCR-005** — `pc_package/PCR-005_protein_a.qmd`
 
 ## Files it touched
 

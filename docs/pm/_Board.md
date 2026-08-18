@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-18_03_author-facing-apparatus]]** · **3 of 12 done** · 9 todo
+**[[epic|2026-08-18_03_author-facing-apparatus]]** · **3 of 12 done** · 1 doing · 8 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -31,7 +31,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-004]] | `todo` | the assistant | measurement | The blind reading, recorded verbatim, then the decision rule applied — HALT for the owner |
+| [[TASK-004]] | `doing` | the assistant | measurement | The blind reading, recorded verbatim, then the decision rule applied — HALT for the owner |
 | [[TASK-005]] | `todo` | the assistant | measurement | Count what the reading named, run the gate on the probe, and write the results page |
 | [[TASK-006]] | `todo` | the assistant | mechanism | Split the register gate into GATED tics and ADVISORY signals; the author sees pass/fail, the reviewer sees the table |
 | [[TASK-007]] | `todo` | the assistant | mechanism | Take scaffold, register and rigor off the author-facing section plan and put them in a reviewer's checklist |

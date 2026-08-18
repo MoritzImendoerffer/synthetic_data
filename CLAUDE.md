@@ -107,9 +107,11 @@ differ only in their `UO` key and unit-specific narrative:
   design · Acceptance & decision criteria · Data management & integrity · Roles &
   responsibilities · Deliverables & schedule · Risks & assumptions · Approvals ·
   References · Appendices (planned design matrices).
-- **Depth follows the design, not a page target.** As built: reports with a DoE run 41–59 pp,
-  reports without one 26–28 pp, plans 23–31 pp. (`PCR-003` reached 59 pp when it was re-authored
-  on 2026-08-18, on flat prose and the same nine figures — table and appendix layout, not filler.) Achieve depth with grounded tables, analysis
+- **Depth follows the design, not a page target.** As built, re-measured from the rendered PDFs on
+  2026-08-18: reports with a DoE run 41–56 pp, reports without one 26–28 pp, plans 23–31 pp.
+  (`PCR-003` is the top of that band at 56 pp, on flat prose and ten figures — table and appendix
+  layout, not filler. It was 59 pp before its third re-author, and the band moved with it because
+  no other report reached 59.) Achieve depth with grounded tables, analysis
   and full appendices — never with filler, and never by inventing a DoE for a step that has
   none.
 - **Voice (gated):** a process scientist writing material to support a BLA: precise,
@@ -124,8 +126,12 @@ differ only in their `UO` key and unit-specific narrative:
   TR 60, A-Mab, and the two 2023 ISPE Good Practice Guides added on 2026-08-16. The band is
   their union, so write to the per-source column in `WRITING_GUIDE.md` §4a, not to its edge.
   `check_style.py` also prints an **advisory** clause-packing line on every run — mid-sentence
-  `, so `, sentences opening with a connective, sentences with two or more clause coordinators —
-  which is gated by nothing and exists so the author can see where the reasoning went.
+  `, so `, sentences opening with a connective, sentences with two or more clause coordinators,
+  `, and ` followed by a second clause (a regex **floor**, not the rate) and mid-sentence `, not `
+  — which is gated by nothing and exists so the author can see where the reasoning went. The
+  passive rate is the sixth, in `check_discourse.py` and in brief §5d, and it is a **band and
+  never a floor**. Three rounds now say the same thing: a measure that is printed back to the
+  author moves, and one that is not drifts.
 - **Framing rule:** the screening model identifies effects; the **response-surface
   model is the predictive/design-space model**. State this; don't over-claim the
   near-saturated screening fit.

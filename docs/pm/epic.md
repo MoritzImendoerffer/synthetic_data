@@ -1,13 +1,27 @@
 ---
 type: pm-epic
 sprint: 2026-08-18_01_register-third-round
-status: planned
+status: shipped
 started: 2026-08-18
 proposal: docs/next/register-from-four-sources.md
 tags: [pm/epic]
 ---
 
 # Epic — round three: measure what the reader named, on PCR-003
+
+> **Shipped 2026-08-18.** All three newly printed measures moved and all eight lines of the
+> stopping rule hold: `, and ` + clause 22.6 → **0.5 %**, `, not ` 4.3 → **0.0 %**, passive
+> 35.4 → **57.4 %** and inside the source range for the first time in the series. The corpus is
+> at 2084/2084 quotes grounded across 20 annexes with strict anchors and 0 weak anchors, and a
+> full `make clean && make data figures corpus` reproduces every document's rendered text
+> byte-identically with `outputs/` unchanged. **The owner's reading names no sentence for the
+> first time** — "The document reads better. Not perfect but ok to me." — which closes Track A
+> and Track B and settles D2. What did **not** ship: `PCP-003` was held at round two as the
+> control, so every move above is a move *in the report*, and the both-genres check is still
+> owed. Measurements:
+> [`docs/results/2026-08-18-register-round-three.md`](../results/2026-08-18-register-round-three.md).
+> What remains: [`docs/next/register-from-four-sources.md`](../next/register-from-four-sources.md)
+> — Track C, Track D, and two count-led candidates the reading could not see.
 
 Board: [[_Board]] · proposal:
 [`docs/next/register-from-four-sources.md`](../next/register-from-four-sources.md), Track A + B ·

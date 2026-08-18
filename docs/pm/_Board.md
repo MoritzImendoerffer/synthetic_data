@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-18_01_register-third-round]]** · **6 of 7 done** · 1 todo
+**[[epic|2026-08-18_01_register-third-round]]** · **7 of 7 done**
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -27,9 +27,7 @@ None of them blocks the work below.
 Nothing in this table needs the project owner. It is what the coding assistant has still to do,
 and it is here so the state is visible, not so anyone else acts on it.
 
-| Task | Status | Waiting on | Kind | What it is |
-|---|---|---|---|---|
-| [[TASK-007]] | `todo` | the assistant | documentation | Move the findings into docs, and rewrite or retire the proposal on the verdict |
+*None.*
 
 ## Done
 
@@ -41,6 +39,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-004]] | `done` | — | document | Re-author PCR-003 in one pass from the amended artifacts, as a DRAFT |
 | [[TASK-005]] | `done` | — | annex | Promote the draft, render both formats, re-anchor the PCR-003 annex and spans, and re-ground the corpus |
 | [[TASK-006]] | `done` | — | measurement | Measure the four-point series by one method, apply the stopping rule, and record the owner's reading |
+| [[TASK-007]] | `done` | — | documentation | Move the findings into docs, and rewrite or retire the proposal on the verdict |
 
 ---
 

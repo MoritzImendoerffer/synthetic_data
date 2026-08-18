@@ -92,8 +92,10 @@ Straight from `config/parameters.yaml`. "DoE?" decides whether `doe_report.py` a
    once.
 5. **`doe_report.fig_rsm_contours(key, xf, yf)` needs the two dominant factors** for the step;
    the default pair is the bioreactor's. Factors come from `studies.RSM_TOP[key]`.
-6. **Depth follows the design, not a target.** Reports with a DoE run 41–59 pages, non-DoE
-   reports 26–28, plans 23–31. Achieve depth with grounded analysis and full appendices, never
+6. **Depth follows the design, not a target.** Reports with a DoE run 41–56 pages, non-DoE
+   reports 26–28, plans 23–31. (Re-measured 2026-08-18 from the rendered PDFs after the
+   third `PCR-003` re-author took it 59 → 56 pp; 59 was that one document and nothing else
+   reached it.) Achieve depth with grounded analysis and full appendices, never
    with filler, and never invent a DoE for a step that does not have one.
 7. **A re-authored document loses its registered discrepancy unless the brief carries it.**
    D-001 and D-002 live in *prose*, so an author who never hears about one simply does not write
@@ -120,6 +122,21 @@ Straight from `config/parameters.yaml`. "DoE?" decides whether `doe_report.py` a
    of that before writing a word. **Verify voice against `refs/text/`, never against the guide's
    prose** — in the exemplar, only the *quotes* are source register, not the sentences around them.
    The same rule `CLAUDE.md` states for sibling `.qmd`s, one level up.
+
+10. **A study, a design, a model or a process is never the AGENT of *retain*, *carry*, *identify*
+    or *select*.** An author avoiding a passive manufactures one: the shipped `PCR-003` said "the
+    factors that screening **retained**" three times, in three different sections. Screening is a
+    study; it retained nothing, and the people who ran it decided. All four human sources report
+    that decision in the passive — "were classified as", "were selected", "were identified as" —
+    and not one of them ever writes a study as the agent of *retain*, *carry* or *select*.
+    Reporting **evidence** is different and is not a fault: the sources do write "Results showed"
+    and "the assessment identified". Verify against the passive rate, which is a **band and never
+    a floor**: the sources sit at 54–60 % of all their sentences, and driving a document above
+    them would be the same overcorrection in the other direction. Search a draft for `screening
+    retained`, `the design carries`, `the study selected`, `the model identifies` —
+    **and know that the list is not the rule.** Round three cleared all four strings and left one
+    instance of the fault standing ("those models **carry** the predictive claim of this report"),
+    because it matched no string anybody had thought to write down.
 
 ## Open items
 

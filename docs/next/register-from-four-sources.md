@@ -1,134 +1,147 @@
 # The corpus states facts. It does not argue. — what remains
 
-**Status: two rounds delivered, target changed 2026-08-18; round three (Track A + B, on `PCR-003`) being worked on since 2026-08-18 in work unit `2026-08-18_01_register-third-round`.** Round one shipped in work unit
-`2026-08-16_01_register-from-four-sources`; round two in `2026-08-17_01_register-second-round`.
-Both are measured: [round one](../results/2026-08-17-register-pilot.md),
-[round two](../results/2026-08-18-register-round-two.md). This proposal is rewritten down to what
-is still open, because 18 of 20 documents have not been touched and the pair that has been touched
-twice is still recognisable on its first sentence.
+**Status: three rounds delivered; Track A and Track B are closed on the reading of 2026-08-18.**
+Round one shipped in work unit `2026-08-16_01_register-from-four-sources`, round two in
+`2026-08-17_01_register-second-round`, round three in `2026-08-18_01_register-third-round`. All
+three are measured: [round one](../results/2026-08-17-register-pilot.md),
+[round two](../results/2026-08-18-register-round-two.md),
+[round three](../results/2026-08-18-register-round-three.md). This proposal is rewritten down to
+what is still open, because **18 of 20 documents have not been touched**.
 
-Raised by the project owner: "currently, the prose is written in a way no SME would write". Twice
-since, on reading the re-authored pair: "hard to read, nearly not understandable"; and on
-2026-08-18, **"yes, it is immediately clear. Already the first sentence gives it away."**
+Raised by the project owner: "currently, the prose is written in a way no SME would write". Then,
+on reading the re-authored pair: "hard to read, nearly not understandable"; then on 2026-08-18,
+"yes, it is immediately clear. Already the first sentence gives it away." And then, after round
+three:
+
+> The document reads better. Not perfect but ok to me.
 
 ## Where this stands
 
-Round two cleared every target it set and every line of a stopping rule fixed before it ran:
-mid-sentence `, so ` 10.6 % and 8.0 % → **0.0 %** in both genres, sentence-initial connectives
-1.8 % and 0.9 % → **4.9 % and 4.0 %**, topic chaining 34.4 % and 30.7 % → **46.0 % and 46.1 %**
-although chaining was never set as a target, copula back inside the source band in both. Five of
-five measures moved, against one of five in the pilot.
+Round three printed the three measures the round-two reading had named, and all three moved, on
+`PCR-003` with `PCP-003` held at round two as the control.
 
-The owner then read the pair and named three faults, none of them measured. Counted afterwards:
-
-| fault | sources | PCP-003 | PCR-003 |
+| measure | sources | r2 | **r3** |
 |---|---|---|---|
-| `, and ` joining a second clause | 1.1–3.4 % of sentences | 18.2 % | 22.6 % |
-| `, not ` contrastive tail | 0.0–0.2 % | 0.0 % | **4.3 %** (was 0.0) |
-| sentences carrying a passive | 54.3–59.8 % | 54.7 % | **34.4 %** |
+| `, and ` joining a second clause (regex) | 1.1–3.4 % | 22.6 | **0.5** |
+| `, and ` joining a second clause (parser) | 1.0–3.4 % | 25.4 | **0.7** |
+| `, not ` contrastive tail | 0.0–0.2 % | 4.3 | **0.0** |
+| sentences carrying a passive | 56.9–64.0 % | 35.4 | **57.4** |
 
-**The finding that matters is not any one of those numbers.** Every measure printed back to the
-author moved. The three faults the owner named are precisely the three that were **not** printed
-back — and two of them are already forbidden, in words, by rules the guide states. So:
+Every line of a stopping rule fixed before the round ran holds, and the reading that follows names
+no sentence for the first time in the series. **That closes Track A and Track B.**
+
+Three rounds now say the same thing, and it is the finding this whole campaign has produced:
 
 > An author executes exactly what is measured and printed back to it, and leaves everything else
 > where it was, including rules it has read.
 
-That is why this proposal is now about the measures rather than about the guide.
+Round three is the third confirmation from both sides at once. The three measures newly printed all
+moved. The two measures nobody printed — `, which` and `its` — both drifted away from the sources
+in the same re-author. And copula and front field, which are printed as context without ever being
+set as goals, both moved a long way in the right direction. Printing the number appears to be
+enough; setting it as a target is not required; and stating it as a *substitution* is what produces
+an overshoot, which has now happened three times out of three.
 
-**Decision D1 was settled by the project owner on 2026-08-18: option B.** Track 2 — the remaining
-eighteen documents — stays blocked. Committing eighteen one-pass re-authors and roughly 700
-re-anchored annex spans to a register the owner still recognises on the first sentence buys
-eighteen documents that need doing again.
+## Track C — the guide's own register, and it is worse than recorded
 
-## Track A — the three measures the reading named
+Still the leading hypothesis, and now the only one with a mechanism behind it. An author reads
+several hundred lines of `WRITING_GUIDE.md`, `REGISTER_EXEMPLAR.md`, `STORY_BIBLE.md` and
+`CLAUDE.md` before writing a word, and every one of them is written in the register the guide
+forbids. Re-measured 2026-08-18, over commentary only, with blockquotes, code blocks, tables and
+headings stripped:
 
-Cheap: two regexes and one spaCy field. All advisory, for the reason this campaign has now proved
-twice — a ceiling on `, so ` is met by writing `, and`, and a ceiling on `, and ` will be met by
-writing a semicolon, so the family is printed together and nothing is gated.
+| artifact | sentences | `, so ` | opens with a connective | `, and ` + clause |
+|---|---|---|---|---|
+| the four human sources | — | 0.1–0.4 % | 3.7–6.1 % | 1.1–3.4 % |
+| `WRITING_GUIDE.md` | 318 | **3.77 %** | 0.31 % | **10.38 %** |
+| `REGISTER_EXEMPLAR.md` | 147 | **6.80 %** | 0.00 % | **10.88 %** |
+| `STORY_BIBLE.md` | 83 | 2.41 % | 0.00 % | 8.43 % |
+| `CLAUDE.md` | 75 | **4.00 %** | 1.33 % | 9.33 % |
 
-1. **`, and ` joining a second clause**, beside the existing packing line in `check_style.py`. This
-   is the round-two blind spot and it is a hole in the *measure*: the gate counts mid-sentence
-   `, so ` and sentences carrying **two or more** coordinators, so a sentence with exactly one
-   `, and ` joining two clauses falls between them. `WRITING_GUIDE.md` §2d already forbids it.
-2. **`, not ` contrastive tail**, same line. `WRITING_GUIDE.md` §4b already says the sources
-   "almost never build 'not X but Y'". Round two created 18 instances in `PCR-003` while that rule
-   sat unenforced, which is the clearest evidence on the page that an unmeasured rule is not a rule.
-3. **Passive rate**, in `check_discourse.py`, as a **band and never a floor**. `PCP-003` is inside
-   the source band at 54.7 % and `PCR-003` is twenty points under it; a floor would push the plan
-   the wrong way. This one needs the optional extra and stays advisory like the rest.
+**Carry this measurement, not the earlier one.** An earlier version of this proposal quoted 1.5 %
+`, so ` for the guide "measured 2026-08-17", by a method that was never saved to a file. The two
+figures are not comparable and the older one cannot be reproduced. That is the same failure
+TASK-001 of round three had to repair for the owner-reading counts, and the fix is the same: **the
+first task of a Track C round writes the measurement as a script** before anything is rewritten.
 
-## Track B — the fault no measure reaches
+Rewriting the commentary of four artifacts in the register they demand is a large task. It is worth
+its size only because of the finding above: the guide is the largest single thing an author is
+shown, and this campaign has three rounds of evidence that what an author is shown and measured on
+is what it writes.
 
-"The 4 factors that **screening retained**" — screening is a study and retains nothing. The author
-invented an agent because it was avoiding a passive, and no counter can see that. This is an
-authoring rule and it belongs in `WRITING_GUIDE.md` beside the runtime-noun rule (§2d,
-Correction 0): **where the sources would write a passive, write the passive.** Do not manufacture
-an agent for a process, a study, a design or a model.
+## Track D — the remaining eighteen
 
-The measurable half is Track A item 3; this is the half that has to be taught.
+The corpus is split 2-of-20 on register, now at two different rounds: `PCR-003` at round three,
+`PCP-003` at round two, and eighteen documents untouched.
 
-## Track C — the guide's own register, now the leading hypothesis
+The budget, from three measured rounds rather than a guess:
 
-Held back deliberately in round two (owner decision, minimum edits) and promoted here by round
-two's own result. Measured 2026-08-17: `WRITING_GUIDE.md` commentary opens **0 %** of its sentences
-with a connective and carries a mid-sentence `, so ` in 1.5 % of them; `REGISTER_EXEMPLAR.md`
-commentary 0 % and 5.4 %; `STORY_BIBLE.md`, the briefs and `CLAUDE.md` all 0 %. An author reads
-several hundred lines of that before writing a word.
+- **one one-pass re-author per document**, one agent, one context, no sibling `.qmd`;
+- **21–44 re-anchored annex quotes per document** — round one moved 80 across the pair, round two
+  44, round three 22 of `PCR-003`'s 177 alone. Every table-row quote survives a re-author
+  untouched, because the row builders rebuild the row from the DataFrame the document renders;
+  only prose moves;
+- **the full curated rhetorical layer where a document has one.** Round two re-cut 33 of 35 spans,
+  round three all 35. Assume all of them, and **test every span against both extractors before the
+  builder runs** — `check_grounding.docx_text` yields `R2` and `build_rhetorical_annex.doc_text`
+  yields `R²` from the same extraction, and that trap cost round two a cycle;
+- **an explicit PDF render per document**, because `check_render.py` glyph-checks whatever PDF is
+  already on disk;
+- **a read of every annex report-summary statement**, not a substring hunt. Round three found two
+  that asserted something the re-authored report no longer says. No gate catches that.
 
-Round two is the evidence that made this worth doing. It showed that an author executes what it is
-shown *and measured on*; the guide is the largest single thing it is shown. Rewriting the guide's
-commentary in the register the guide demands is a real task and a large one, and it is now the
-first candidate rather than the last.
+## The two count-led candidates
 
-## Track D — the remaining eighteen (blocked)
+Round three's reading named nothing, so these came from asking what paid for its wins. They are
+**weaker evidence than anything the campaign has acted on so far**, and the results page says so.
 
-Blocked on A, B and C by decision D1, option B. When it opens, the budget from two measured rounds:
-**one one-pass re-author per document**, and **21–44 re-anchored annex quotes per document** rather
-than the ~40 the pilot guessed — round two moved 21 of `PCP-003`'s 105 quotes and 23 of
-`PCR-003`'s 177, from 37 edited builder strings, because every table-row quote survives a
-re-author untouched. Add the curated rhetorical layer where a document has one: 33 of `PCR-003`'s
-35 spans needed re-cutting. Each document needs `check_render.py --render` **and** an explicit PDF
-render, because `check_render.py` glyph-checks whatever PDF is already on disk.
+1. **`, which` — coordination became subordination.** 9.50 → **15.33 %** of sentences, against
+   0.60–2.35 % in the sources, and 40 → 65 sentences carrying one. Visible inside the guide's own
+   worked correction: the ✗ example it fixes for a false agent and a balanced `, and ` came back
+   carrying a trailing `, which`.
+2. **The staccato — a new measure.** Sentences inside a run of three or more consecutive sentences
+   under fifteen words: **0.00 % at rounds one and two, 6.86 % at round three**, against 0.37–3.94 %
+   in the sources. The sources all have such runs, so the shape is not the fault and the frequency
+   is. "One argument step per sentence" executed to exhaustion.
 
-The corpus stays split 2-of-20 on register until this finishes, which is the argument for not
-leaving A, B and C open for long.
+Both are unprinted measures, which is exactly what the pattern predicts will drift. Neither was
+visible to a reader.
+
+## The open scope question
+
+**Which comes next is the project owner's to set**, and the two options are not compatible in one
+round:
+
+- **Track C**, on the argument above — the guide is the largest thing an author reads and the
+  mechanism is now measured; or
+- **the both-genres check round three gave up.** `PCP-003` was held at round two deliberately, so
+  every round-three move is a move *in the report*. Whether the three measures move a plan the way
+  they moved a report is unknown. Round two could tell a property of the instruction from a
+  property of one draft precisely because it ran both genres, and the plan-genre traps — the
+  copula/expletive trade `PCP-003` fell into twice — are invisible in a report.
+
+Track D follows whichever lands, and the count-led candidates ride along in the same re-author as
+guide edits, since neither is worth a round of its own.
 
 ## What this deliberately does not do
 
-It does not gate any of the new measures. Every one of them is met by typing or avoiding a word,
-and this campaign has now watched that happen twice: `, so ` driven to 0.0 %, below every source,
-and possessives driven to zero in `PCP-003` — both overshoots of a rule stated as a substitution.
+It does not gate any of the new measures. Every one is met by typing or avoiding a word, and this
+campaign has watched that happen three times out of three: `, so ` driven to 0.0 %, possessives
+driven to zero in `PCP-003`, and now the and-clause driven below all four sources.
 
-It does not touch what any document claims. Both registered discrepancies survived two re-authors
-and were re-verified against the new text each time; `authoring/discrepancies.yaml` plus brief §5c
-is what keeps them alive.
+It does not touch what any document claims. Both registered discrepancies have survived every
+re-author and were re-verified against the new text each time; D-002 came through round three
+verbatim, so neither `discrepancies.yaml` nor `DISCREPANCIES.md` needed an edit.
 
-It does not reopen the discrimination test. Three rounds scored 64 of 64 and the owner has now read
-the pair three times, so no blind test involving these documents can be valid. The human check
-stays what it is: the owner reads and quotes what gives it away, and what they quote becomes the
-next target.
-
-## The shape of the next round — settled by the project owner, 2026-08-18
-
-1. ~~**Do the three new measures go first, or does Track C?**~~ **Measures first.** Track A lands
-   before the guide's commentary is touched. The reason is round two's own result: the guide was
-   amended in round one and the author still did only what was printed back to it. Track C stays
-   the leading hypothesis and is taken up after Track A has been measured, not instead of it.
-2. ~~**Is there a document other than the bioreactor pair to test on?**~~ **`PCR-003`, for
-   comparability.** It is the document with the longest series — measured at round zero
-   (`b0361f1`), round one (`f06f1a7`) and round two — so a fourth point on the same file is worth
-   more than a first point on a fresh one. Track B's rule (write the passive) rides along in the
-   same re-author, since it is a guide edit rather than a measure.
-
-**What that costs, stated so it is not discovered later.** Round two ran both genres, and that is
-how it could tell a property of the *instruction* from a property of one draft: `, so ` went to
-0.0 % and chaining to ~46 % in two documents written in separate contexts. A round on `PCR-003`
-alone cannot make that distinction, and the plan-genre traps — the copula/expletive trade that
-`PCP-003` fell into twice — are invisible in a report. If a Track A measure moves only in
-`PCR-003`, the honest reading is "moved in the report", not "moved".
+It does not reopen the discrimination test. Four rounds scored 64 of 64 and the owner has now read
+`PCR-003` four times, so no blind test involving these documents can be valid. The human check
+stays what it is, and its limit is now on the record: the reading that stopped finding things is
+the fourth reading by a reader who has watched the document improve three times.
 
 ## Open questions
 
 1. Which source is the reference for which document type? PDA hedges at 24.5 per 1000 words because
    it is guidance. A-Mab sits at 6.6 and is the closer genre for a report.
+2. Is "reads better, ok to me" a stopping point or a plateau? The count-led sweep says the document
+   moved toward the sources on the three measures it was given and away from them on six others.
+   A reading cannot see a rate, and a rate cannot see whether a document is worth reading.

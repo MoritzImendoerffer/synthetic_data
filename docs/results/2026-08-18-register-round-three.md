@@ -264,16 +264,85 @@ the overshoot.
 
 ## The owner's reading
 
-<!-- PENDING: to be recorded verbatim and dated when the project owner has read
-     pc_package/PCR-003_bioreactor.pdf (56 pp, rendered 2026-08-18). The reading is NOT blind — it
-     is the fourth read of this document — and that was accepted by owner decision
-     (state.json -> decisions.human_check) because a blind reader is not available and the series
-     value of one consistent reader outweighs it. Whatever the reading quotes is counted afterwards,
-     in that order: a reader finds it, the count confirms it. That is how rounds two and three both
-     got their targets. -->
+Recorded verbatim, 2026-08-18, after reading `pc_package/PCR-003_bioreactor.pdf` (56 pp,
+rendered the same day):
 
-_Not yet recorded._ The numbers half of the verdict is complete and every line of the stopping rule
-holds. The reading is the other half, and by owner decision it decides what round four targets.
+> The document reads better. Not perfect but ok to me.
+
+**This is the first reading in the series that names no sentence.** After round one the owner said
+the prose "is written in a way no SME would write". After round two the owner recognised the report
+on its first sentence and named three specific faults, all three of which counted out as real and
+large and became this round's measures. After round three: nothing is named.
+
+The reading is **not blind** — it is the fourth read of the same document by the same reader — and
+that was accepted when the check was set up (`state.json` → `decisions.human_check`), because no
+blind reader is available and one consistent reader across four points is worth more to the series
+than a fresh reader at one point. A reader who has watched a document improve three times is a
+reader disposed to see it improve a fourth. That caveat belongs on this page more than on any
+earlier one, because this is the reading that stopped finding things.
+
+**What follows from it, and what does not.** The rule the series has run on is *a reader finds it,
+the count confirms it* — in that order. This round breaks the order: the reading found nothing, so
+the section below was produced the other way round, by asking the numbers where the document moved
+**away** from the four human sources while the three targeted measures moved toward them. Anything
+that comes out of it is a count-led candidate, not a reading-led one, and round four should treat it
+as the weaker kind of evidence. The distinction is the point of recording it.
+
+## Where it got worse, count-led
+
+The three targeted measures moved a long way toward the sources. Six others moved away from them in
+the same re-author, and two of those crossed from inside the source range to outside it. Every cell
+is from the same `measure_*.txt` files as the rest of the page.
+
+| measure | sources | r2 | **r3** | what happened |
+|---|---|---|---|---|
+| `, which` (% of sentences) | 0.60–2.35 | 9.50 | **15.33** | already six times the sources, now more so |
+| sentences inside a run of 3+ consecutive sentences under 15 words | 0.37–3.94 | **0.00** | **6.86** | from none at all to nearly twice the highest source |
+| % of sentences under 15 words | 16.2–20.5 | 19.5 | **26.1** | inside the source range → above all four |
+| mean sentence length (words) | 24.2–30.2 | 23.3 | **22.1** | below all four → further below |
+| `their` per 1k words | 0.50–0.96 | 0.81 | **1.04** | inside → above all four |
+| `its` per 1k words | 0.27–0.40 | 0.51 | **1.66** | above → four times the highest source |
+| colons per 1k words | 2.1–4.3 | 2.2 | **1.3** | inside → below all four |
+| parenthetical openings per 1k | 10.7–14.2 | 7.5 | **6.6** | below all four → further below |
+| connectives, of the nine distinct | 6–9 | **9** | 8 | the full repertoire, reached once, lost |
+
+Two of these are worth reading as prose rather than as rows.
+
+**The staccato is new, and it is the clearest of them.** Round one and round two contain **zero**
+runs of three or more consecutive sentences under fifteen words. Round three contains **eight**, the
+longest five sentences long. The four human sources all have such runs — 1 to 10 of them, up to
+eight sentences long — so the shape is not itself a fault; the frequency is. The rule "one argument
+step per sentence, and the next step opens the next sentence" was executed to exhaustion, and this
+is what exhaustion sounds like:
+
+> The second tightest capability belongs to Galactosylation (total %Gal), at 2.86. By contrast, the
+> remaining attributes sit far from their limits. Their capability indices therefore show only that
+> none of them constrains the process. The furthest of those attributes from a limit is Aggregates
+> (HMW), at 16.1. The capability index of that attribute is reported in Table 22 for completeness.
+
+Five sentences, 56 words, five full stops. Round two wrote that passage as fewer, longer sentences
+and scored 0.00 % on this measure.
+
+**The subordination is the trade the round made, and it is visible in the sentence the guide itself
+corrected.** The worked correction in `WRITING_GUIDE.md` §2d takes an Executive-summary sentence
+with two faults — a study as agent, and a balanced `, and ` second clause — and fixes both. The
+author applied it. Here is what the sentence became:
+
+| | text |
+|---|---|
+| round two | "The 4 factors **that screening retained** then entered a face centred response surface design of 28 runs, **and** the remaining 4 parameters were assessed one at a time." |
+| round three | "The 4 factors **retained from screening** were then studied in a face centred central composite design of 28 runs, **which** supports a full quadratic model over three levels of every factor it carries." |
+
+The false agent is gone and the coordinated clause is gone. In their place is a trailing relative
+clause. Across the document that trade repeats: 40 sentences carried a `, which` at round two and
+**65** carry one at round three, and one sentence now carries two.
+
+Neither regression was visible to the reading. Both were found by asking what paid for the wins.
+`its` in particular is a count with almost no prose damage behind it — the sixteen instances are
+"its normal operating range", "its own", "its calibration interval", each of them unremarkable. A
+measure can move a long way without a reader ever noticing, which is the argument for measuring and
+against relying on a reading alone. It is also the argument for the reverse: a reader who notices
+nothing has not proved that nothing is there.
 
 ## Verification
 
@@ -299,8 +368,8 @@ grep -cEi '\b(screening|the study|the studies|those studies|the design|the desig
      $R2/PCR-003_bioreactor.qmd pc_package/PCR-003_bioreactor.qmd   # 5 and 2
 ```
 
-Possessives (`$W/measure_possessive.txt`) and the subordination counts (`$W/measure_whatpaid.txt`)
-use the same prose extraction — `check_style.prose_from_qmd` and `check_style.prose_from_extract`
+Possessives (`$W/measure_possessive.txt`), the subordination counts (`$W/measure_whatpaid.txt`)
+and the staccato runs (`$W/measure_staccato.txt`) use the same prose extraction — `check_style.prose_from_qmd` and `check_style.prose_from_extract`
 over `HUMAN_SOURCES` — and count by regex per 1000 words and per sentence respectively.
 
 **The two scripts are the method for these measures.** `authoring/register_analysis.ipynb` §13 is
@@ -322,4 +391,5 @@ bioreactor annexes, `git diff outputs/` empty, `make test` 89 passed, `make styl
 | `…/measure_discourse_cap.txt` | the same under the notebook's 600/450 caps, for comparison with earlier pages |
 | `…/measure_possessive.txt` | `its`, `their`, `it is/was`, `the <noun> is` per 1000 words |
 | `…/measure_whatpaid.txt` | `, which`, `, where`, semicolons, `, because` per sentence |
+| `…/measure_staccato.txt` | runs of 3+ consecutive sentences under 15 words, and the share of sentences inside one |
 | `…/pre-rewrite/PCR-003_bioreactor.qmd` | round two, byte-identical to `e7a4768` |

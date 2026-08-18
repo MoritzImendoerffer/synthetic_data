@@ -3,12 +3,12 @@ type: pm-task
 epic: 2026-08-18_01_register-third-round
 sprint: 2026-08-18_01_register-third-round
 task: TASK-006
-status: partly
+status: done
 kind: measurement
 title: "Measure the four-point series by one method, apply the stopping rule, and record the owner's reading"
 generated: true
-waiting_on: the assistant
-tags: [pm/task, pm/partly]
+waiting_on: —
+tags: [pm/task, pm/done]
 about: ["PCP-003"]
 ---
 
@@ -17,7 +17,7 @@ about: ["PCP-003"]
 
 # TASK-006 — Measure the four-point series by one method, apply the stopping rule, and record the owner's reading
 
-**Epic:** [[epic]] · **Status:** `partly` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `done` · **Waiting on:** — · **Board:** [[_Board]]
 
 ## Why it exists
 
@@ -25,13 +25,13 @@ PROCEDURE: procedures/TASK-006.md — the previous unit's TASK-008 procedure wit
 
 ## Acceptance criteria
 
-- [ ] the page has, per measure, EIGHT columns — PDA TR 60, A-Mab, ISPE TT, ISPE PV, then PCR-003 round zero (b0361f1), one (f06f1a7), two (e7a4768), three (pc_package/) — plus a PCP-003 round-two control column where the measure exists for it, every cell with its denominator; produced by ONE invocation each of `check_style.py --compare` and `check_discourse.py` (uncapped as the numbers, --cap in a footnote), and by nothing else
-- [ ] measures: the three new ones (', and '+clause regex AND parser, ', not ', passive) and the five from round two (', so ', initial connective, 2+ coordinators, chaining, copula) plus front field, connective repertoire, possessives, and the register gate's five length numbers
-- [ ] the stopping rule from decisions.stopping_rule_edges is applied line by line, and the verdict is one sentence naming the line that decided it; the ONE-GENRE caveat is stated: a move in PCR-003 alone is 'moved in the report'
-- [ ] the round-two overshoot prediction is checked: is ', and '+clause at or below the sources (1.1-3.4 %) or below ALL of them (an overshoot)? is passive inside the 54-60 band, or above it? say which and count it
-- [ ] the three 'screening retained' sentences: are they gone, and what replaced them (quote the new sentence)
-- [ ] the owner's reading is recorded verbatim and dated: is PCR-003 still immediately recognisable as machine-written, and which sentences give it away; the page says the reading is not blind (fourth read of this document) and why that was accepted; anything quoted is counted afterwards, in that order
-- [ ] docs/results/README.md gains a row; the page states that the scripts are the method and the notebook is superseded for these measures
+- [x] the page has, per measure, EIGHT columns — PDA TR 60, A-Mab, ISPE TT, ISPE PV, then PCR-003 round zero (b0361f1), one (f06f1a7), two (e7a4768), three (pc_package/) — plus a PCP-003 round-two control column where the measure exists for it, every cell with its denominator; produced by ONE invocation each of `check_style.py --compare` and `check_discourse.py` (uncapped as the numbers, --cap in a footnote), and by nothing else
+- [x] measures: the three new ones (', and '+clause regex AND parser, ', not ', passive) and the five from round two (', so ', initial connective, 2+ coordinators, chaining, copula) plus front field, connective repertoire, possessives, and the register gate's five length numbers
+- [x] the stopping rule from decisions.stopping_rule_edges is applied line by line, and the verdict is one sentence naming the line that decided it; the ONE-GENRE caveat is stated: a move in PCR-003 alone is 'moved in the report'
+- [x] the round-two overshoot prediction is checked: is ', and '+clause at or below the sources (1.1-3.4 %) or below ALL of them (an overshoot)? is passive inside the 54-60 band, or above it? say which and count it
+- [x] the three 'screening retained' sentences: are they gone, and what replaced them (quote the new sentence)
+- [x] the owner's reading is recorded verbatim and dated: is PCR-003 still immediately recognisable as machine-written, and which sentences give it away; the page says the reading is not blind (fourth read of this document) and why that was accepted; anything quoted is counted afterwards, in that order
+- [x] docs/results/README.md gains a row; the page states that the scripts are the method and the notebook is superseded for these measures
 
 **Depends on:** [[TASK-005]]
 
@@ -62,6 +62,32 @@ EVERY CELL ON THE PAGE TRACES TO A MEASURE FILE, verified by script over all 71 
 docs/results/README.md gained its row. The page states that the two scripts are the method and that register_analysis.ipynb §13 is superseded for these measures.
 
 WHAT REMAINS: the owner's reading, recorded verbatim and dated, and the count of whatever it quotes, in that order. The page carries a '_Not yet recorded._' section. This is D2 in docs/pm/decisions/, which is where the machinery says an owner question belongs -- a task never waits on the project owner, a decisions note does.
+
+THE OWNER'S READING IS IN, recorded verbatim and dated 2026-08-18 on the page, and D2 is settled:
+
+  "The document reads better. Not perfect but ok to me."
+
+FIRST READING IN THE SERIES THAT NAMES NO SENTENCE. Round one: "written in a way no SME would write". Round two: recognised on the first sentence, three faults named, all three counted out real and large and became this round's measures. Round three: nothing named. The page states the not-blind caveat harder here than anywhere else, because this is the reading that stopped finding things and it is the fourth read of the same document by the same reader.
+
+THE ORDER REVERSED, AND THE PAGE SAYS SO. The series rule is 'a reader finds it, the count confirms it'. With nothing found, the owner asked where the numbers say it got worse, and the answer was produced count-first. The new section 'Where it got worse, count-led' labels its findings as the weaker kind of evidence for exactly that reason.
+
+SIX MEASURES MOVED AWAY FROM THE SOURCES in the same re-author that moved the three targeted ones toward them, two of them crossing from inside the source range to outside it:
+  ', which'              0.60-2.35 sources   9.50 -> 15.33 %
+  staccato (share of sentences inside a run of 3+ consecutive sentences under 15 words)
+                         0.37-3.94 sources   0.00 -> 6.86 %   <- NEW MEASURE, measure_staccato.txt
+  % under 15 words       16.2-20.5 sources   19.5 -> 26.1     inside -> above all four
+  mean sentence length   24.2-30.2 sources   23.3 -> 22.1     below all -> further below
+  'their' per 1k          0.50-0.96 sources   0.81 -> 1.04     inside -> above all four
+  'its' per 1k            0.27-0.40 sources   0.51 -> 1.66
+  colons per 1k            2.1-4.3  sources    2.2 -> 1.3      inside -> below all four
+  parentheticals per 1k   10.7-14.2 sources    7.5 -> 6.6
+  distinct connectives      6-9     sources      9 -> 8        the full repertoire, reached once, lost
+
+THE STACCATO IS THE FIND. Rounds one and two contain ZERO runs of three or more consecutive sentences under fifteen words; round three contains EIGHT, longest five. All four human sources have such runs (1 to 10, up to eight long), so the shape is not the fault and the frequency is. 'One argument step per sentence' executed to exhaustion. A five-sentence passage is quoted on the page.
+
+THE SUBORDINATION TRADE IS VISIBLE INSIDE THE GUIDE'S OWN WORKED CORRECTION. The Executive-summary sentence the guide fixes for two faults came back with a trailing ', which'; the page prints round two and round three side by side. 40 sentences carried a ', which' at round two, 65 do at round three, and one now carries two.
+
+'its' IS A COUNT WITH ALMOST NO PROSE DAMAGE BEHIND IT -- sixteen instances of 'its normal operating range', 'its own', 'its calibration interval'. Recorded as such, because a measure that moves without a reader noticing cuts both ways: it argues for measuring, and it argues that a reader who notices nothing has not proved nothing is there.
 
 ## Documents it is about
 

@@ -1,7 +1,7 @@
 ---
 type: pm-decision
 sprint: 2026-08-18_01_register-third-round
-status: open
+status: settled
 waiting_on: project owner
 blocks: TASK-006, TASK-007
 tags: [pm/decision]
@@ -48,6 +48,22 @@ names nothing:
 
 Both are unprinted measures, which is what the three-round pattern predicts will drift.
 
-**TASK-006 is `partly_completed` until this is answered.** Everything that does not depend on the
-reading is done, measured and committed; the page carries a `_Not yet recorded._` section and
-nothing else is outstanding.
+**Settled 2026-08-18 by the project owner**, verbatim:
+
+> The document reads better. Not perfect but ok to me.
+
+This is **option B**, and it is the first reading in the series that names no sentence. The
+consequence for the campaign is that the reading has stopped producing targets on this genre, so
+the rule the series ran on — a reader finds it, the count confirms it — has no input this round.
+
+The owner then asked where the numbers say it got worse. That question was answered the other way
+round, from the measures, and the answer is on the page under *Where it got worse, count-led*: six
+measures moved away from the four human sources in the same re-author that moved the three targeted
+ones toward them, and two crossed from inside the source range to outside it. The strongest are a
+new staccato — zero runs of three or more consecutive short sentences at rounds one and two, eight
+at round three against 1 to 10 in the sources — and `, which` at 15.33 % of sentences against
+0.60–2.35 %.
+
+Those are **count-led candidates and the page says so**. Whether round four targets them, or spends
+itself on the both-genres check this round gave up, is the scope question for `/ship` (TASK-007) and
+is not settled here.

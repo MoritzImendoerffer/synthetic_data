@@ -11,18 +11,16 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-18_01_register-third-round]]** · **5 of 7 done** · 1 partly · 1 todo
+**[[epic|2026-08-18_01_register-third-round]]** · **6 of 7 done** · 1 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
 ## Waiting on the project owner
 
 **This is the only section that is yours.** Each is an argument a person has to settle.
-**One of them blocks a task below**, named in its own row: until it is settled that work cannot start.
+None of them blocks the work below.
 
-| Decision | Waiting on | Blocks |
-|---|---|---|
-| [[D2-the-owners-reading-of-round-three|D2 — does round three still read as machine-written, and which sentences give it away?]] | project owner | [[TASK-006]], [[TASK-007]] |
+*None.*
 
 ## Not finished — the assistant's work, not the owner's
 
@@ -31,7 +29,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-006]] | `partly` | the assistant | measurement | Measure the four-point series by one method, apply the stopping rule, and record the owner's reading |
 | [[TASK-007]] | `todo` | the assistant | documentation | Move the findings into docs, and rewrite or retire the proposal on the verdict |
 
 ## Done
@@ -43,6 +40,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-003]] | `done` | — | mechanism | Print the three new measures in brief §5d, and add the write-the-passive rule and the two search strings to the guide |
 | [[TASK-004]] | `done` | — | document | Re-author PCR-003 in one pass from the amended artifacts, as a DRAFT |
 | [[TASK-005]] | `done` | — | annex | Promote the draft, render both formats, re-anchor the PCR-003 annex and spans, and re-ground the corpus |
+| [[TASK-006]] | `done` | — | measurement | Measure the four-point series by one method, apply the stopping rule, and record the owner's reading |
 
 ---
 

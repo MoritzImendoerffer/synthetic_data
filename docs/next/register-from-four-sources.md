@@ -1,6 +1,6 @@
 # The corpus states facts. It does not argue. — what remains
 
-**Status: two rounds delivered, target changed 2026-08-18.** Round one shipped in work unit
+**Status: two rounds delivered, target changed 2026-08-18; round three (Track A + B, on `PCR-003`) being worked on since 2026-08-18 in work unit `2026-08-18_01_register-third-round`.** Round one shipped in work unit
 `2026-08-16_01_register-from-four-sources`; round two in `2026-08-17_01_register-second-round`.
 Both are measured: [round one](../results/2026-08-17-register-pilot.md),
 [round two](../results/2026-08-18-register-round-two.md). This proposal is rewritten down to what

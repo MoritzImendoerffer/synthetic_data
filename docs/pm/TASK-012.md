@@ -1,49 +1,44 @@
 ---
 type: pm-task
-epic: 2026-08-18_02_register-track-d
-sprint: 2026-08-18_02_register-track-d
+epic: 2026-08-18_03_author-facing-apparatus
+sprint: 2026-08-18_03_author-facing-apparatus
 task: TASK-012
-status: cancelled
-kind: annex
-title: "Promote, render, re-anchor and re-ground batch 1 (harvest and viral inactivation)"
+status: todo
+kind: documentation
+title: "Move the findings into docs, update the roadmap, and delete the proposal"
 generated: true
-waiting_on: ?
-tags: [pm/task, pm/cancelled]
+waiting_on: the assistant
+tags: [pm/task, pm/todo]
 ---
 
-> [!warning] Generated from `.claude/work/2026-08-18_02_register-track-d/state.json` by `scripts/pm_notes.py`.
+> [!warning] Generated from `.claude/work/2026-08-18_03_author-facing-apparatus/state.json` by `scripts/pm_notes.py`.
 > Anything written here by hand is lost on the next run.
 
-# TASK-012 — Promote, render, re-anchor and re-ground batch 1 (harvest and viral inactivation)
+# TASK-012 — Move the findings into docs, update the roadmap, and delete the proposal
 
-**Epic:** [[epic]] · **Status:** `cancelled` · **Waiting on:** ? · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
-PROCEDURE: procedures/ANNEX-A-BATCH.md. Batch exposure: about 284 quotes and 67 rhetorical spans. RE-CURATE THE SPANS FIRST or build_ground_truth writes nothing for that document. THE TWO-EXTRACTOR TRAP cost round two a cycle: check_grounding.docx_text yields 'R2', build_rhetorical_annex.doc_text yields 'R²'. Row quotes survive a re-author untouched; only prose moves. READ every annex report-summary statement -- round three found two that asserted something the re-authored report no longer said, and no gate catches that.
+/ship does this. On FAIL the documentation move is small: the results page, the roadmap row, the proposal deletion, and one HANDOFF row saying the hypothesis was tested and how, so a later session does not re-run the same probe.
 
 ## Acceptance criteria
 
-- [ ] each DRAFT replaces its committed .qmd; docx and pdf rendered explicitly with the venv on PATH; check_render.py reports 0 missing glyphs on each FRESH pdf; page counts recorded
-- [ ] for every document in this batch that has a rhetorical layer, its authoring/rhetorical/<DOC>.spans.yaml is re-curated against the new text and EVERY span is tested under BOTH extractors before any builder runs; `build_rhetorical_annex.py --doc <DOC>` writes the same span count as before or states the new one and drops none
-- [ ] `cd pc_package && uv run python build_ground_truth.py && uv run python validate_annex.py` -> 20/20 valid
-- [ ] `GROUNDING_STRICT_ANCHORS=1 uv run python check_grounding.py` -> N/N with 0 weak anchors, N reported against 2084 and the number of quotes re-anchored stated per document
-- [ ] every registered discrepancy carried by a document in this batch is re-verified verbatim against the new text; discrepancies.yaml and DISCREPANCIES.md updated together if a wording moved
-- [ ] no document outside this batch has its .qmd, .docx, .pdf or annex modified (git status does not list them); `git diff --stat outputs/` empty; make test and make style pass; weak_claims empty in all 20 annexes
+- [ ] docs/ROADMAP.md row 0 says what D4 settled, what shipped (which of TASK-006..010) and links the results page; the register-campaign row says whether a fourth round is now unblocked (PASS) or still waits on results §8 (FAIL)
+- [ ] docs/next/author-facing-apparatus.md is deleted and its README row removed; docs/next/register-from-four-sources.md's pointer paragraph is updated to the results page
+- [ ] authoring/HANDOFF.md §3a gains one row per instrument that changed (gate split, section plan, guide, mechanism files, review checklist) or one row saying the probe failed and nothing changed
+- [ ] CLAUDE.md: the Voice rule and the 'Adding a unit-operation Plan/Report pair' step 3 name the current input list and the reviewer-side checklist (PASS), or are untouched (FAIL); pc_package/TASKS.md item on re-authoring names REVIEW_CHECKLIST.md before promotion (PASS)
+- [ ] `uv run python scripts/pm_notes.py` regenerated; metadata.json status = shipped
 
-**Depends on:** [[TASK-008]], [[TASK-009]], [[TASK-010]], [[TASK-011]]
-
-## What was built
-
-Cancelled 2026-08-18 by decision D3, settled STOP on the owner's reading of the pilot. See docs/results/2026-08-18-track-d-stopped.md.
+**Depends on:** [[TASK-011]]
 
 ## Files it touched
 
-- `pc_package/build_ground_truth.py`
-- `authoring/rhetorical/`
-- `authoring/discrepancies.yaml`
-- [[DISCREPANCIES]] — `authoring/DISCREPANCIES.md`
-- `pc_package/PCP-004_harvest.qmd`
-- `pc_package/PCR-004_harvest.qmd`
-- `pc_package/PCP-006_viral_inactivation.qmd`
-- `pc_package/PCR-006_viral_inactivation.qmd`
+- [[2026-08-18-apparatus-probe]] — `docs/results/2026-08-18-apparatus-probe.md`
+- [[ROADMAP]] — `docs/ROADMAP.md`
+- [[README]] — `docs/next/README.md`
+- [[author-facing-apparatus]] — `docs/next/author-facing-apparatus.md`
+- [[register-from-four-sources]] — `docs/next/register-from-four-sources.md`
+- [[HANDOFF]] — `authoring/HANDOFF.md`
+- [[TASKS]] — `pc_package/TASKS.md`
+- `CLAUDE.md`

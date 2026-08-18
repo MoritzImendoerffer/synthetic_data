@@ -1,47 +1,42 @@
 ---
 type: pm-epic
-sprint: 2026-08-18_02_register-track-d
+sprint: 2026-08-18_03_author-facing-apparatus
 status: planned
 started: 2026-08-18
-proposal: docs/next/register-from-four-sources.md
+proposal: docs/next/author-facing-apparatus.md
 tags: [pm/epic]
 ---
 
-# Epic — Track D: bring the whole corpus to one register
+# Epic — the author-facing apparatus, tested on one section first
 
-Board: [[_Board]] · decision: [[D3-does-track-d-continue]] · proposal:
-[`docs/next/register-from-four-sources.md`](../next/register-from-four-sources.md), Track D ·
-exploration: `.claude/work/2026-08-18_02_register-track-d/exploration.md` · plan:
-`.claude/work/2026-08-18_02_register-track-d/implementation-plan.md` · round three:
-[`docs/results/2026-08-18-register-round-three.md`](../results/2026-08-18-register-round-three.md)
+Board: [[_Board]] · decision: [[D4-does-the-probe-pass]] · proposal:
+[`docs/next/author-facing-apparatus.md`](../next/author-facing-apparatus.md) ·
+exploration: `.claude/work/2026-08-18_03_author-facing-apparatus/exploration.md` · plan:
+`.claude/work/2026-08-18_03_author-facing-apparatus/implementation-plan.md` · what it follows:
+[`docs/results/2026-08-18-track-d-stopped.md`](../results/2026-08-18-track-d-stopped.md)
 
-**Why it opened.** On the project owner's instruction, 2026-08-18: all documents should be
-re-authored. Three rounds have now established what to tell an author and proved it on two
-documents; eighteen of the twenty are still at the register the campaign started from. Measured
-today: mid-sentence `, so ` at **6.3–14.6 %** of sentences across those eighteen against 0.1–0.4 %
-in the four human sources, sentences opening with a connective at **0.0–2.4 %** against 3.7–6.1 %,
-and the balanced `, and ` second clause at **16.3–29.3 %** against 1.1–3.4 %.
+**Why it opened.** Track D stopped after three documents: every gated and printed measure was
+inside its band and the owner still quoted eight sentences from `PCR-005`. The evaluation of that
+stop says the four rounds built the thing they were fighting. The author was handed **29,454
+words** of instruction to write a 12,251-word report — 22 counters printed back to it, per-section
+`rigor` obligations that are the rhetorical span taxonomy issued as commands, an 818-line guide of
+✗ examples and round history — and none of it about the physical chemistry of the step. Each of
+the eight sentences maps onto an obligation being *performed* (`explicit_non_claim`, "establish the
+mechanistic expectation now so Results can confirm"). The model is not the variable: the pilot and
+the accepted paper-style rewrites are the same model class.
 
-**What it does.** Re-authors 19 documents, one agent and one pass each, never from a sibling.
-`PCR-003` is the only one left alone: it is already at round three and is the control. `PCP-003` is
-in scope despite its round-two re-author, because it never saw the three measures round three added
-and its `, and ` + clause is still 18.2 %.
+**What it does.** First a probe: the two `PCR-005` Results subsections all eight sentences came
+from (59 sentences, `, which` in 15 of them, every gated row green), re-authored by one agent under
+facts + canon + a one-page positive guide + the role of the scientist who ran the study, and read
+blind by the owner next to the shipped text. The rule is fixed in advance: PASS iff the owner
+prefers the probe and quotes fewer than three of its sentences. Only on PASS: the gate splits into
+gated tics and reviewer-side signals; the obligations leave the section plan for a reviewer's
+checklist; the guide is rewritten short and positive; eight mechanism files are written and the
+owner reads each once; a four-question content review runs before any promotion.
 
-**The shape: a pilot, then a stop.** `PCP-007`, `PCR-005` and `RA-001` run first — one plan, one
-DoE report, and the never-re-authored genre with the largest annex in the corpus at 317 quotes.
-They are also the three the owner reads. Then the round stops at [[D3-does-track-d-continue]]. The
-reason is one risk: the proposal's own leading hypothesis is that `WRITING_GUIDE.md` is written in
-the register it forbids — its commentary measures at **3.77 %** `, so ` and **10.38 %** `, and ` +
-clause — and if the guide is the blocker, every document authored from it needs doing again. Three
-documents is a cheap way to find that out.
+**What it does not do.** Re-author any shipped document, touch an annex, move a band edge, or
+run the fourth round. On FAIL the results page records the test and the proposal retires.
 
-**Thirty tasks.** One machinery task that unifies the rhetorical layer onto one gated mechanism
-before anything is re-authored, and must leave all 20 annexes byte-identical · one that freezes the
-measurement as a script, because two numbers this campaign published could not be reproduced · the
-pilot of three, its annex, and the decision point · the remaining sixteen in five batches, each
-batch four documents authored in parallel then one serial annex task · the corpus measurement · the
-documentation move.
-
-**What it will not do.** Re-author `PCR-003`. Touch Track C — the guide's own commentary — which is
-the argument this round's evidence decides. Extend the rhetorical layer to the eleven documents that
-carry none. Move any number: `git diff outputs/` is empty at ship. Gate any of the new measures.
+**The shape.** TASK-001/002 (script, scaffold) → TASK-003 (one agent, verbatim prompt) →
+TASK-004 (the reading, **hard stop**, D4) → TASK-005 (counts, results page) → on PASS TASK-006..010
+→ TASK-011 (prove the corpus unchanged) → TASK-012 (ship).

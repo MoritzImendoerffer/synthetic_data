@@ -1,50 +1,36 @@
 ---
 type: pm-task
-epic: 2026-08-18_02_register-track-d
-sprint: 2026-08-18_02_register-track-d
+epic: 2026-08-18_03_author-facing-apparatus
+sprint: 2026-08-18_03_author-facing-apparatus
 task: TASK-011
-status: cancelled
-kind: document
-title: "Re-author PCR-006 in one pass, as a DRAFT"
+status: todo
+kind: measurement
+title: "Prove the corpus is unchanged: annexes, grounding, outputs, tests and style at the end of the unit"
 generated: true
-waiting_on: ?
-tags: [pm/task, pm/cancelled]
-about: ["PCR-006"]
+waiting_on: the assistant
+tags: [pm/task, pm/todo]
 ---
 
-> [!warning] Generated from `.claude/work/2026-08-18_02_register-track-d/state.json` by `scripts/pm_notes.py`.
+> [!warning] Generated from `.claude/work/2026-08-18_03_author-facing-apparatus/state.json` by `scripts/pm_notes.py`.
 > Anything written here by hand is lost on the next run.
 
-# TASK-011 — Re-author PCR-006 in one pass, as a DRAFT
+# TASK-011 — Prove the corpus is unchanged: annexes, grounding, outputs, tests and style at the end of the unit
 
-**Epic:** [[epic]] · **Status:** `cancelled` · **Waiting on:** ? · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
-PROCEDURE: procedures/AUTHOR-A-DOCUMENT.md. Outline `report_doe`. Baseline for this document is in measure_baseline_style.txt / measure_baseline_discourse.txt and is printed to the author by brief §5d. Annex exposure at promotion: 102 quotes, 31 rhetorical spans. Currently 44 pp. CARRIES D-001: brief §5c assigns it, and TASKS.md item 7 is the failure mode -- a re-authored document loses it silently. THE PASSIVE IS A BAND AND NEVER A FLOOR.
+This is the rebuild-and-reground task the workflow requires, sized to what this unit touches: nothing upstream of a rendered document changes, so the expectation is 'identical', and the task exists to prove it rather than assume it. Runs whichever way D4 fell, after TASK-005 and after whichever of TASK-006..TASK-010 ran.
 
 ## Acceptance criteria
 
-- [ ] the current text is preserved first: `cp pc_package/PCR-006_viral_inactivation.qmd .claude/work/2026-08-18_02_register-track-d/pre-rewrite/` and it equals `git show HEAD:pc_package/PCR-006_viral_inactivation.qmd`
-- [ ] `uv run --extra discourse python authoring/build_brief.py PCR-006` regenerated first; §5d carries all twelve rows and §5c carries D-001
-- [ ] ONE agent authors the whole document in one pass from WRITING_GUIDE.md, REGISTER_EXEMPLAR.md, STORY_BIBLE.md, section_plan.yaml -> report_doe and the PCR-006 brief; it reads no pc_package/*.qmd and no authoring/rhetorical/*.spans.yaml
-- [ ] `uv run python authoring/check_render.py pc_package/PCR-006_viral_inactivation.DRAFT.qmd --render` passes including the style gate; the pdf is rendered SEPARATELY with the venv on PATH and glyph-checked fresh; the packing line is copied verbatim into the completion note
-- [ ] `grep -c '<<NEEDS' <draft>` is 0 and no typed measurement survives the numeral advisory except statistical conventions
-- [ ] `grep -c 'screening retained\|screening identified\|the design carries\|the model identifies\|the study selected' <draft>` is 0
-- [ ] the committed pc_package/PCR-006_viral_inactivation.qmd and all 20 annexes are untouched; git status shows only the DRAFT and its untracked renders
+- [ ] `cd pc_package && uv run python build_ground_truth.py && uv run python validate_annex.py` → 20/20 annexes valid; `GROUNDING_STRICT_ANCHORS=1 uv run python check_grounding.py` → 2084/2084 quotes grounded, 0 weak anchors
+- [ ] `git diff --stat outputs/ pc_package/ground_truth/ pc_package/*.qmd` is empty — no shipped document, annex or dataset changed anywhere in this unit
+- [ ] `make test PY="uv run python"` passes (89, or the count TASK-006 recorded if it ran); `make style PY="uv run python"` → 24 OK / 0 FAIL
+- [ ] the two untracked probe files and their renders are either deleted or listed in the outcome as deliberately left untracked; `git status --short` shows nothing tracked outside docs/, authoring/, tests/, .claude/work/ and CLAUDE.md
 
-**Depends on:** [[TASK-007]]
-
-## What was built
-
-Cancelled 2026-08-18 by decision D3, settled STOP on the owner's reading of the pilot. See docs/results/2026-08-18-track-d-stopped.md.
-
-## Documents it is about
-
-- **PCR-006** — `pc_package/PCR-006_viral_inactivation.qmd`
+**Depends on:** [[TASK-005]]
 
 ## Files it touched
 
-- `pc_package/PCR-006_viral_inactivation.DRAFT.qmd`
-- [[PCR-006.brief]] — `authoring/out/PCR-006.brief.md`
-- `.claude/work/2026-08-18_02_register-track-d/pre-rewrite/PCR-006_viral_inactivation.qmd`
+- not recorded

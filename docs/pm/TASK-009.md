@@ -1,50 +1,45 @@
 ---
 type: pm-task
-epic: 2026-08-18_02_register-track-d
-sprint: 2026-08-18_02_register-track-d
+epic: 2026-08-18_03_author-facing-apparatus
+sprint: 2026-08-18_03_author-facing-apparatus
 task: TASK-009
-status: cancelled
-kind: document
-title: "Re-author PCR-004 in one pass, as a DRAFT"
+status: todo
+kind: mechanism
+title: "Write the per-unit-operation mechanism files, emit them as brief \u00a72b, and halt for the owner's read"
 generated: true
-waiting_on: ?
-tags: [pm/task, pm/cancelled]
-about: ["PCR-004"]
+waiting_on: the assistant
+tags: [pm/task, pm/todo]
 ---
 
-> [!warning] Generated from `.claude/work/2026-08-18_02_register-track-d/state.json` by `scripts/pm_notes.py`.
+> [!warning] Generated from `.claude/work/2026-08-18_03_author-facing-apparatus/state.json` by `scripts/pm_notes.py`.
 > Anything written here by hand is lost on the next run.
 
-# TASK-009 — Re-author PCR-004 in one pass, as a DRAFT
+# TASK-009 — Write the per-unit-operation mechanism files, emit them as brief §2b, and halt for the owner's read
 
-**Epic:** [[epic]] · **Status:** `cancelled` · **Waiting on:** ? · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
-PROCEDURE: procedures/AUTHOR-A-DOCUMENT.md. Outline `report_nondoe`. Baseline for this document is in measure_baseline_style.txt / measure_baseline_discourse.txt and is printed to the author by brief §5d. Annex exposure at promotion: 85 quotes, 36 rhetorical spans. Currently 28 pp. THE PASSIVE IS A BAND AND NEVER A FLOOR.
+Runs only on D4 = PASS. Written from domain knowledge, NOT from refs/text/ — exploration §2 checked that A-Mab's Protein A section is 'Expect higher HCP at low pH' and carries no mass-transfer explanation. This is the one place in the repository where prose is authored without a source to ground it against, which is why the owner reads every file once and the file says so. Keep it mechanism only: no claim about the seeded data's effect sizes, no set-point, no range, no direction claim that the CSV could contradict — 'lowering the pH protonates … and reduces affinity' is mechanism; 'HCP rises 1.4-fold at pH 3.2' is a number and forbidden.
 
 ## Acceptance criteria
 
-- [ ] the current text is preserved first: `cp pc_package/PCR-004_harvest.qmd .claude/work/2026-08-18_02_register-track-d/pre-rewrite/` and it equals `git show HEAD:pc_package/PCR-004_harvest.qmd`
-- [ ] `uv run --extra discourse python authoring/build_brief.py PCR-004` regenerated first; §5d carries all twelve rows and §5c is empty for this document
-- [ ] ONE agent authors the whole document in one pass from WRITING_GUIDE.md, REGISTER_EXEMPLAR.md, STORY_BIBLE.md, section_plan.yaml -> report_nondoe and the PCR-004 brief; it reads no pc_package/*.qmd and no authoring/rhetorical/*.spans.yaml
-- [ ] `uv run python authoring/check_render.py pc_package/PCR-004_harvest.DRAFT.qmd --render` passes including the style gate; the pdf is rendered SEPARATELY with the venv on PATH and glyph-checked fresh; the packing line is copied verbatim into the completion note
-- [ ] `grep -c '<<NEEDS' <draft>` is 0 and no typed measurement survives the numeral advisory except statistical conventions
-- [ ] `grep -c 'screening retained\|screening identified\|the design carries\|the model identifies\|the study selected' <draft>` is 0
-- [ ] the committed pc_package/PCR-004_harvest.qmd and all 20 annexes are untouched; git status shows only the DRAFT and its untracked renders
+- [ ] eight files, one per unit-operation key in config; each maps every CQA the step sets or clears (cqas_for / the CQA register) and every studied parameter (report_params) to two to four sentences of physical chemistry using the terms of art (for protein_a at least: dynamic binding capacity, mass transfer zone, histidine protonation at the Fc–ligand interface, immobilisation chemistry, cumulative cycle number, sanitisation history)
+- [ ] `grep -cE '[0-9]' authoring/mechanism/*.yaml` on the prose values → 0 for every file (no numbers, so a reseed cannot stale it and golden rule 1 is untouched); a `key:` for the UO and `source: domain knowledge; reviewed by owner <date>` at the top of each
+- [ ] build_brief.py emits the file as `## 2b. Mechanism — how the step works` for every per-UO document (PCP-003..010, PCR-003..010, sixteen briefs) and omits it for PTP/RA/PCMP/PCMR; `uv run --extra discourse python authoring/build_brief.py PCR-005 && grep -c '## 2b' authoring/out/PCR-005.brief.md` → 1; the same for PTP-001 → 0
+- [ ] HALT: the eight files are put in front of the owner and each one's `reviewed by owner` line is filled with the date the owner read it; the task is not completed until all eight carry it — a file the owner corrected records the correction in the outcome
+- [ ] authoring/RUNNER.md preconditions list authoring/mechanism/ as an input the brief carries; `make test` unchanged
 
-**Depends on:** [[TASK-007]]
-
-## What was built
-
-Cancelled 2026-08-18 by decision D3, settled STOP on the owner's reading of the pilot. See docs/results/2026-08-18-track-d-stopped.md.
-
-## Documents it is about
-
-- **PCR-004** — `pc_package/PCR-004_harvest.qmd`
+**Depends on:** [[TASK-004]]
 
 ## Files it touched
 
-- `pc_package/PCR-004_harvest.DRAFT.qmd`
-- [[PCR-004.brief]] — `authoring/out/PCR-004.brief.md`
-- `.claude/work/2026-08-18_02_register-track-d/pre-rewrite/PCR-004_harvest.qmd`
+- `authoring/mechanism/bioreactor.yaml`
+- `authoring/mechanism/harvest.yaml`
+- `authoring/mechanism/protein_a.yaml`
+- `authoring/mechanism/viral_inactivation.yaml`
+- `authoring/mechanism/cex.yaml`
+- `authoring/mechanism/aex.yaml`
+- `authoring/mechanism/virus_filtration.yaml`
+- `authoring/mechanism/ufdf.yaml`
+- `authoring/build_brief.py`

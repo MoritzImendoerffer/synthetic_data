@@ -1,50 +1,43 @@
 ---
 type: pm-task
-epic: 2026-08-18_02_register-track-d
-sprint: 2026-08-18_02_register-track-d
+epic: 2026-08-18_03_author-facing-apparatus
+sprint: 2026-08-18_03_author-facing-apparatus
 task: TASK-008
-status: cancelled
-kind: document
-title: "Re-author PCP-004 in one pass, as a DRAFT"
+status: todo
+kind: mechanism
+title: "Replace WRITING_GUIDE.md with a short positive guide and move its history out"
 generated: true
-waiting_on: ?
-tags: [pm/task, pm/cancelled]
-about: ["PCP-004"]
+waiting_on: the assistant
+tags: [pm/task, pm/todo]
 ---
 
-> [!warning] Generated from `.claude/work/2026-08-18_02_register-track-d/state.json` by `scripts/pm_notes.py`.
+> [!warning] Generated from `.claude/work/2026-08-18_03_author-facing-apparatus/state.json` by `scripts/pm_notes.py`.
 > Anything written here by hand is lost on the next run.
 
-# TASK-008 — Re-author PCP-004 in one pass, as a DRAFT
+# TASK-008 — Replace WRITING_GUIDE.md with a short positive guide and move its history out
 
-**Epic:** [[epic]] · **Status:** `cancelled` · **Waiting on:** ? · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
-PROCEDURE: procedures/AUTHOR-A-DOCUMENT.md. Outline `plan`. Baseline for this document is in measure_baseline_style.txt / measure_baseline_discourse.txt and is printed to the author by brief §5d. Annex exposure at promotion: 42 quotes, 0 rhetorical spans. Currently 24 pp. THE PASSIVE IS A BAND AND NEVER A FLOOR.
+Runs only on D4 = PASS. Positive means: say the thing to do. Never 'do not write X'; the tics are the one exception and they are listed as a gate, not argued. Take no sentence from the old guide's commentary except §6 (the numbers rule) and the reader paragraph. If a rule cannot be stated without a percentage, it is a reviewer's signal and belongs in REVIEW_CHECKLIST.md, not here.
 
 ## Acceptance criteria
 
-- [ ] the current text is preserved first: `cp pc_package/PCP-004_harvest.qmd .claude/work/2026-08-18_02_register-track-d/pre-rewrite/` and it equals `git show HEAD:pc_package/PCP-004_harvest.qmd`
-- [ ] `uv run --extra discourse python authoring/build_brief.py PCP-004` regenerated first; §5d carries all twelve rows and §5c is empty for this document
-- [ ] ONE agent authors the whole document in one pass from WRITING_GUIDE.md, REGISTER_EXEMPLAR.md, STORY_BIBLE.md, section_plan.yaml -> plan and the PCP-004 brief; it reads no pc_package/*.qmd and no authoring/rhetorical/*.spans.yaml
-- [ ] `uv run python authoring/check_render.py pc_package/PCP-004_harvest.DRAFT.qmd --render` passes including the style gate; the pdf is rendered SEPARATELY with the venv on PATH and glyph-checked fresh; the packing line is copied verbatim into the completion note
-- [ ] `grep -c '<<NEEDS' <draft>` is 0 and no typed measurement survives the numeral advisory except statistical conventions
-- [ ] `grep -c 'screening retained\|screening identified\|the design carries\|the model identifies\|the study selected' <draft>` is 0
-- [ ] the committed pc_package/PCP-004_harvest.qmd and all 20 annexes are untouched; git status shows only the DRAFT and its untracked renders
+- [ ] `wc -l authoring/WRITING_GUIDE.md` ≤ 200; `grep -c '✗' authoring/WRITING_GUIDE.md` → 0; `grep -cE '[0-9]+(\.[0-9]+)? ?%' authoring/WRITING_GUIDE.md` → 0; `grep -c '2026-' authoring/WRITING_GUIDE.md` → 0
+- [ ] the new guide contains: the reader; the numbers rule (§6 of the old guide, kept whole); ten rules stated positively, each ≤ 2 sentences; the GATED tic list matching check_style.GATED exactly; the role sentence from probe-guide.md; three to five ✓ passages from REGISTER_EXEMPLAR.md by section reference, not re-quoted; and one line pointing at authoring/history/WRITING_GUIDE-2026-08-18.md
+- [ ] authoring/history/WRITING_GUIDE-2026-08-18.md is the previous guide verbatim (`git show HEAD:authoring/WRITING_GUIDE.md | diff - authoring/history/WRITING_GUIDE-2026-08-18.md` empty at the commit that creates it) with a two-line header saying why it was retired and where its measurements live (docs/results/)
+- [ ] `uv run python authoring/check_style.py --review authoring/WRITING_GUIDE.md` (prose_from_qmd on a .md is close enough) reports GATED OK
+- [ ] CLAUDE.md Voice rule, RUNNER.md step 3, template.qmd's comment block and build_brief.py:423 name the guide's new role in one sentence each; `grep -rn 'WRITING_GUIDE.md §4a\|§4a' authoring/ CLAUDE.md pc_package/` → only hits in authoring/history/ and docs/results/
+- [ ] brief §5d: build_brief.py stops emitting the 'rules as substitutions' bullet list (the guide owns the rules) and the numbers table is kept ONLY under a `--review` flag, so the author's brief carries no counters; `grep -c '## 5d' authoring/out/PCR-005.brief.md` → 0 after `build_brief.py PCR-005`, and 1 after `build_brief.py --review PCR-005`
 
-**Depends on:** [[TASK-007]]
-
-## What was built
-
-Cancelled 2026-08-18 by decision D3, settled STOP on the owner's reading of the pilot. See docs/results/2026-08-18-track-d-stopped.md.
-
-## Documents it is about
-
-- **PCP-004** — `pc_package/PCP-004_harvest.qmd`
+**Depends on:** [[TASK-006]]
 
 ## Files it touched
 
-- `pc_package/PCP-004_harvest.DRAFT.qmd`
-- [[PCP-004.brief]] — `authoring/out/PCP-004.brief.md`
-- `.claude/work/2026-08-18_02_register-track-d/pre-rewrite/PCP-004_harvest.qmd`
+- [[WRITING_GUIDE]] — `authoring/WRITING_GUIDE.md`
+- [[WRITING_GUIDE-2026-08-18]] — `authoring/history/WRITING_GUIDE-2026-08-18.md`
+- `CLAUDE.md`
+- [[RUNNER]] — `authoring/RUNNER.md`
+- `authoring/template.qmd`
+- `authoring/build_brief.py`

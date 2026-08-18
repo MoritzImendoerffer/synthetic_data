@@ -1,26 +1,28 @@
 ---
 type: pm-board
-epic: 2026-08-18_02_register-track-d
-sprint: 2026-08-18_02_register-track-d
+epic: 2026-08-18_03_author-facing-apparatus
+sprint: 2026-08-18_03_author-facing-apparatus
 generated: true
 tags: [pm/board]
 ---
 
-> [!warning] Generated from `.claude/work/2026-08-18_02_register-track-d/state.json` by `scripts/pm_notes.py`.
+> [!warning] Generated from `.claude/work/2026-08-18_03_author-facing-apparatus/state.json` by `scripts/pm_notes.py`.
 > Anything written here by hand is lost on the next run.
 
 # Board — the active epic
 
-**[[epic|2026-08-18_02_register-track-d]]** · **7 of 30 done** · 23 todo
+**[[epic|2026-08-18_03_author-facing-apparatus]]** · **0 of 12 done** · 12 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
 ## Waiting on the project owner
 
 **This is the only section that is yours.** Each is an argument a person has to settle.
-None of them blocks the work below.
+**One of them blocks a task below**, named in its own row: until it is settled that work cannot start.
 
-*None.*
+| Decision | Waiting on | Blocks |
+|---|---|---|
+| [[D4-does-the-probe-pass|D4 — does the one-section probe read as a paper?]] | project owner | [[TASK-006]], [[TASK-007]], [[TASK-008]], [[TASK-009]], [[TASK-010]] |
 
 ## Not finished — the assistant's work, not the owner's
 
@@ -29,41 +31,22 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-008]] | `cancelled` | ? | document | Re-author PCP-004 in one pass, as a DRAFT |
-| [[TASK-009]] | `cancelled` | ? | document | Re-author PCR-004 in one pass, as a DRAFT |
-| [[TASK-010]] | `cancelled` | ? | document | Re-author PCP-006 in one pass, as a DRAFT |
-| [[TASK-011]] | `cancelled` | ? | document | Re-author PCR-006 in one pass, as a DRAFT |
-| [[TASK-012]] | `cancelled` | ? | annex | Promote, render, re-anchor and re-ground batch 1 (harvest and viral inactivation) |
-| [[TASK-013]] | `cancelled` | ? | document | Re-author PCP-008 in one pass, as a DRAFT |
-| [[TASK-014]] | `cancelled` | ? | document | Re-author PCR-008 in one pass, as a DRAFT |
-| [[TASK-015]] | `cancelled` | ? | document | Re-author PCP-009 in one pass, as a DRAFT |
-| [[TASK-016]] | `cancelled` | ? | document | Re-author PCR-009 in one pass, as a DRAFT |
-| [[TASK-017]] | `cancelled` | ? | annex | Promote, render, re-anchor and re-ground batch 2 (aex and virus filtration) |
-| [[TASK-018]] | `cancelled` | ? | document | Re-author PCP-010 in one pass, as a DRAFT |
-| [[TASK-019]] | `cancelled` | ? | document | Re-author PCR-010 in one pass, as a DRAFT |
-| [[TASK-020]] | `cancelled` | ? | document | Re-author PCP-003 in one pass, as a DRAFT |
-| [[TASK-021]] | `cancelled` | ? | document | Re-author PCP-005 in one pass, as a DRAFT |
-| [[TASK-022]] | `cancelled` | ? | annex | Promote, render, re-anchor and re-ground batch 3 (UF/DF, and the bioreactor and Protein A plans) |
-| [[TASK-023]] | `cancelled` | ? | document | Re-author PCR-007 in one pass, as a DRAFT |
-| [[TASK-024]] | `cancelled` | ? | document | Re-author PTP-001 in one pass, as a DRAFT |
-| [[TASK-025]] | `cancelled` | ? | document | Re-author PCMP-001 in one pass, as a DRAFT |
-| [[TASK-026]] | `cancelled` | ? | annex | Promote, render, re-anchor and re-ground batch 4 (CEX report, transfer plan, master plan) |
-| [[TASK-027]] | `cancelled` | ? | document | Re-author PCMR-001 in one pass, as a DRAFT |
-| [[TASK-028]] | `cancelled` | ? | annex | Promote, render, re-anchor and re-ground the master report (PCMR-001) |
-| [[TASK-029]] | `cancelled` | ? | measurement | Measure the whole corpus by one method, apply the stopping rule, record the reading |
-| [[TASK-030]] | `cancelled` | ? | documentation | Move the findings into docs and close the register campaign or say what remains |
+| [[TASK-001]] | `todo` | the assistant | mechanism | Extend the measurement script with the frame counts, and prove it reproduces the results page |
+| [[TASK-002]] | `todo` | the assistant | mechanism | Build the probe scaffold: the setup code, the ten-line guide, the stripped brief, the excerpt, and the blind key |
+| [[TASK-003]] | `todo` | the assistant | document | Author the probe: two subsections, one agent, one pass, minimal regime, no counters |
+| [[TASK-004]] | `todo` | the assistant | measurement | The blind reading, recorded verbatim, then the decision rule applied — HALT for the owner |
+| [[TASK-005]] | `todo` | the assistant | measurement | Count what the reading named, run the gate on the probe, and write the results page |
+| [[TASK-006]] | `todo` | the assistant | mechanism | Split the register gate into GATED tics and ADVISORY signals; the author sees pass/fail, the reviewer sees the table |
+| [[TASK-007]] | `todo` | the assistant | mechanism | Take scaffold, register and rigor off the author-facing section plan and put them in a reviewer's checklist |
+| [[TASK-008]] | `todo` | the assistant | mechanism | Replace WRITING_GUIDE.md with a short positive guide and move its history out |
+| [[TASK-009]] | `todo` | the assistant | mechanism | Write the per-unit-operation mechanism files, emit them as brief §2b, and halt for the owner's read |
+| [[TASK-010]] | `todo` | the assistant | mechanism | Add the four content questions to the reviewer's checklist and calibrate them on the excerpt and the probe |
+| [[TASK-011]] | `todo` | the assistant | measurement | Prove the corpus is unchanged: annexes, grounding, outputs, tests and style at the end of the unit |
+| [[TASK-012]] | `todo` | the assistant | documentation | Move the findings into docs, update the roadmap, and delete the proposal |
 
 ## Done
 
-| Task | Status | Waiting on | Kind | What it is |
-|---|---|---|---|---|
-| [[TASK-001]] | `done` | — | mechanism | Unify the rhetorical layer onto one gated mechanism: 280 code-built spans become YAML |
-| [[TASK-002]] | `done` | — | mechanism | Freeze the Track D measurement as a script that reproduces the baseline |
-| [[TASK-003]] | `done` | — | document | Re-author PCP-007 in one pass, as a DRAFT |
-| [[TASK-004]] | `done` | — | document | Re-author PCR-005 in one pass, as a DRAFT |
-| [[TASK-005]] | `done` | — | document | Re-author RA-001 in one pass, as a DRAFT |
-| [[TASK-006]] | `done` | — | annex | Promote, render, re-anchor and re-ground the pilot batch (PCP-007, PCR-005, RA-001) |
-| [[TASK-007]] | `done` | — | measurement | Measure the pilot, take the owner's reading, and decide whether the remaining 16 run |
+*None.*
 
 ---
 

@@ -11,16 +11,18 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-18_01_register-third-round]]** · **5 of 7 done** · 2 todo
+**[[epic|2026-08-18_01_register-third-round]]** · **5 of 7 done** · 1 partly · 1 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
 ## Waiting on the project owner
 
 **This is the only section that is yours.** Each is an argument a person has to settle.
-None of them blocks the work below.
+**One of them blocks a task below**, named in its own row: until it is settled that work cannot start.
 
-*None.*
+| Decision | Waiting on | Blocks |
+|---|---|---|
+| [[D2-the-owners-reading-of-round-three|D2 — does round three still read as machine-written, and which sentences give it away?]] | project owner | [[TASK-006]], [[TASK-007]] |
 
 ## Not finished — the assistant's work, not the owner's
 
@@ -29,7 +31,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-006]] | `todo` | the assistant | measurement | Measure the four-point series by one method, apply the stopping rule, and record the owner's reading |
+| [[TASK-006]] | `partly` | the assistant | measurement | Measure the four-point series by one method, apply the stopping rule, and record the owner's reading |
 | [[TASK-007]] | `todo` | the assistant | documentation | Move the findings into docs, and rewrite or retire the proposal on the verdict |
 
 ## Done

@@ -127,3 +127,56 @@ version: the very next clause of that sentence does. The frame is what precedes 
 
 The first two are measurable. The third is not, and it is the one that matters most, because it is
 where a sentence claims to explain and does not.
+
+## Fourth quote — and it is a span the annex labels as the good example
+
+> "Leaching of the affinity ligand behaves as a resin property over these ranges, since ligand
+> release depends on the chemistry of the immobilization, on the cumulative cycle count and on the
+> sanitization history, none of which is a parameter of a single run." ... none of which is a
+> parameter of a single run ... Imagine you would write a scientifc article, would you write this
+> way?
+
+**No.** Faults, in order of seriousness:
+
+1. `behaves as a resin property` — a category error. A process does not *behave as* a property.
+   What is meant is that leaching is set by the state of the resin and not by the operating
+   parameters of the run.
+2. Four moves in one sentence: a claim, a causal clause, a three-item list, then a trailing
+   inference. A paper splits these, because each is separately arguable.
+3. `none of which is a parameter of a single run` — the same appositive gloss as the first four
+   quotes, in a different carrier. It performs the reader's inference for them. `parameter of a
+   single run` is also not the term of art; `operating parameter` is.
+4. `the chemistry of the immobilization` — periphrasis for `immobilisation chemistry`.
+
+What a paper would write, in three sentences that are shorter in total and say more:
+
+> Ligand leaching depends on the immobilisation chemistry, the cumulative cycle number and the
+> sanitisation history. None of these varied within this study. No effect of the four operating
+> parameters was therefore expected, and none was resolved.
+
+### The count the first pass understated
+
+`,\s+which` missed `none of which`. The full trailing-relative family, per 100 sentences:
+
+| | PDA | A-Mab | ISPE TT | ISPE PV | corpus (20 docs) |
+|---|---|---|---|---|---|
+| `, which` | 1.10 | 1.44 | 0.60 | 2.35 | **9.82 (513)** |
+| `<quantifier> of which` | 0.12 | 0.00 | 0.00 | 0.00 | **0.38 (20)** |
+| all trailing relatives | 2.44 | 2.02 | 1.20 | 2.97 | **11.39 (595)** |
+
+Sources 1.20–2.97. Corpus 11.39. Four to nine times over, 595 instances.
+
+### The consequence for the benchmark, which is worse than the prose
+
+`rhetorical_spans` is a labelled benchmark layer, not decoration. Across the nine annexed
+documents it carries **26 spans labelled `mechanistic_warrant`**, and **6 of the 26 carry one of
+the flagged frames** — `behaves as`, `acts on/through`, `follows from`, `aggressiveness`. Both
+sentences the owner quoted are among the six. The others are in `PCR-004` and `PCR-008`.
+
+**This sentence is span `PCR-005-R17`, and I chose it.** It was selected during TASK-006 today as
+the canonical `mechanistic_warrant` anchor for the re-authored report, from a shortlist of
+candidates, on the judgement that it was the clearest statement of mechanism in the section. So
+the fault passed the authoring agent, the register gate, and my own review of the annex.
+
+That is the real cost. A benchmark that labels a hollow warrant as a warrant teaches whatever is
+trained on it that naming a category is the same as giving a cause.

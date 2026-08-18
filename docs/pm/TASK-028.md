@@ -2,26 +2,26 @@
 type: pm-task
 epic: 2026-08-18_02_register-track-d
 sprint: 2026-08-18_02_register-track-d
-task: TASK-006
+task: TASK-028
 status: todo
 kind: annex
-title: "Promote, render, re-anchor and re-ground the pilot batch (PCP-007, PCR-005, RA-001)"
+title: "Promote, render, re-anchor and re-ground the master report (PCMR-001)"
 generated: true
 waiting_on: the assistant
 tags: [pm/task, pm/todo]
-about: ["PCP-007", "PCR-005", "RA-001"]
+about: ["PCMR-001"]
 ---
 
 > [!warning] Generated from `.claude/work/2026-08-18_02_register-track-d/state.json` by `scripts/pm_notes.py`.
 > Anything written here by hand is lost on the next run.
 
-# TASK-006 — Promote, render, re-anchor and re-ground the pilot batch (PCP-007, PCR-005, RA-001)
+# TASK-028 — Promote, render, re-anchor and re-ground the master report (PCMR-001)
 
 **Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
-PROCEDURE: procedures/ANNEX-A-BATCH.md. Batch exposure: about 507 quotes and 39 rhetorical spans. RE-CURATE THE SPANS FIRST or build_ground_truth writes nothing for that document. THE TWO-EXTRACTOR TRAP cost round two a cycle: check_grounding.docx_text yields 'R2', build_rhetorical_annex.doc_text yields 'R²'. Row quotes survive a re-author untouched; only prose moves. READ every annex report-summary statement -- round three found two that asserted something the re-authored report no longer said, and no gate catches that.
+PROCEDURE: procedures/ANNEX-A-BATCH.md. Batch exposure: about 273 quotes and 49 rhetorical spans. RE-CURATE THE SPANS FIRST or build_ground_truth writes nothing for that document. THE TWO-EXTRACTOR TRAP cost round two a cycle: check_grounding.docx_text yields 'R2', build_rhetorical_annex.doc_text yields 'R²'. Row quotes survive a re-author untouched; only prose moves. READ every annex report-summary statement -- round three found two that asserted something the re-authored report no longer said, and no gate catches that.
 
 ## Acceptance criteria
 
@@ -32,13 +32,11 @@ PROCEDURE: procedures/ANNEX-A-BATCH.md. Batch exposure: about 507 quotes and 39 
 - [ ] every registered discrepancy carried by a document in this batch is re-verified verbatim against the new text; discrepancies.yaml and DISCREPANCIES.md updated together if a wording moved
 - [ ] no document outside this batch has its .qmd, .docx, .pdf or annex modified (git status does not list them); `git diff --stat outputs/` empty; make test and make style pass; weak_claims empty in all 20 annexes
 
-**Depends on:** [[TASK-003]], [[TASK-004]], [[TASK-005]]
+**Depends on:** [[TASK-027]]
 
 ## Documents it is about
 
-- **PCP-007** — `pc_package/PCP-007_cex.qmd`
-- **PCR-005** — `pc_package/PCR-005_protein_a.qmd`
-- **RA-001** — `pc_package/RA-001_risk_assessment.qmd`
+- **PCMR-001** — `pc_package/PCMR-001_master_report.qmd`
 
 ## Files it touched
 
@@ -46,6 +44,4 @@ PROCEDURE: procedures/ANNEX-A-BATCH.md. Batch exposure: about 507 quotes and 39 
 - `authoring/rhetorical/`
 - `authoring/discrepancies.yaml`
 - [[DISCREPANCIES]] — `authoring/DISCREPANCIES.md`
-- `pc_package/PCP-007_cex.qmd`
-- `pc_package/PCR-005_protein_a.qmd`
-- `pc_package/RA-001_risk_assessment.qmd`
+- `pc_package/PCMR-001_master_report.qmd`

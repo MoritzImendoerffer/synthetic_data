@@ -138,6 +138,17 @@ Straight from `config/parameters.yaml`. "DoE?" decides whether `doe_report.py` a
     instance of the fault standing ("those models **carry** the predictive claim of this report"),
     because it matched no string anybody had thought to write down.
 
+11. **`scripts/pm_notes.py` archives `docs/pm/decisions/` wholesale, ignoring each note's own
+    `sprint:` field.** When `ACTIVE_WORK` moves to a new epic, the script moves *every* file under
+    `docs/pm/decisions/` into `docs/pm/archive/<previous-epic>/decisions/`. A decision note written
+    for the **new** epic before the board is first regenerated is archived with the old one and
+    disappears from the board silently — the section then reads "*None.*" while a note carrying
+    `blocks: TASK-008 …` sits in the archive. Hit on 2026-08-18: `D3` was written for
+    `2026-08-18_02_register-track-d` and landed in the round-three archive. Write decision notes
+    **after** the first `pm_notes.py` run of a new epic, or check `docs/pm/decisions/` afterwards.
+    The note's frontmatter already carries the right `sprint:`, so the script has what it needs to
+    tell them apart and does not use it.
+
 ## Open items
 
 They live in [`../docs/ROADMAP.md`](../docs/ROADMAP.md), with one proposal per item in

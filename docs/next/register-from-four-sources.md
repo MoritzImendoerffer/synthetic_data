@@ -1,6 +1,6 @@
 # The corpus states facts. It does not argue. — what remains
 
-**Status: three rounds delivered; Track A and Track B are closed on the reading of 2026-08-18.**
+**Status: three rounds delivered; Track A and Track B are closed on the reading of 2026-08-18. Track D is being worked on since 2026-08-18 in work unit `2026-08-18_02_register-track-d`, on the project owner's instruction that all documents be re-authored.**
 Round one shipped in work unit `2026-08-16_01_register-from-four-sources`, round two in
 `2026-08-17_01_register-second-round`, round three in `2026-08-18_01_register-third-round`. All
 three are measured: [round one](../results/2026-08-17-register-pilot.md),

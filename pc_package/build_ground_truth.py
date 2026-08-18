@@ -230,13 +230,13 @@ def title_block_quote(doc_id):
 def build_step(doc_id, file_name, sec, report):
     if report:
         src = ref(doc_id, file_name, sec, "Executive summary",
-                  "The production bioreactor is the fed-batch culture step in which A-Mab is "
-                  "expressed, and it establishes the glycan, charge variant and aggregate "
-                  "quality attributes of the drug substance")
+                  "The production bioreactor forms the glycan, charge variant and aggregate "
+                  "quality attributes of A-Mab, and this report bounds the culture "
+                  "conditions that set them")
     else:
         src = ref(doc_id, file_name, sec, "Unit-operation description and prior knowledge",
-                  "The production bioreactor is a fed-batch culture of a recombinant CHO cell "
-                  "line in a stirred tank vessel")
+                  "A-Mab is produced by fed-batch culture of a recombinant Chinese hamster "
+                  "ovary cell line in a stirred tank bioreactor")
     return S.ProcessStep(
         step_id="step:production_bioreactor", step_name=UO_NAME, step_number=str(STEP),
         unit_operation=UO_NAME,
@@ -257,10 +257,12 @@ def build_equipment(doc_id, file_name, sec, report):
         equipment_type="bioreactor (scale-down)", site_name=P.SENDING_SITE,
         source_references=[ref(doc_id, file_name, sec,
                                "Scale-down model and its qualification",
-                               "the qualified bench-scale bioreactor system, a stirred-tank vessel "
-                               "of the same geometry class as the commercial vessel" if report
-                               else "bench-scale stirred tank bioreactors qualified as a model of "
-                                    "the commercial vessel (SOP-1001)")],
+                               "The model and the commercial vessel are both stirred tank "
+                               "bioreactors with equivalent control of pH, dissolved oxygen, "
+                               "temperature and nutrient addition" if report
+                               else "Execution will use bench-scale stirred tank bioreactors of "
+                                    "equivalent design to the commercial vessels, operated "
+                                    "under SOP-2003")],
         metadata=meta())
     vessel = S.Equipment(
         equipment_id="equip:production_bioreactor",
@@ -269,11 +271,9 @@ def build_equipment(doc_id, file_name, sec, report):
         source_references=[ref(doc_id, file_name, sec,
                                "Product and unit operation" if report
                                else "Unit-operation description and prior knowledge",
-                               "The step is a fed-batch culture in a stirred-tank bioreactor, "
-                               "inoculated from the N-1 seed stage and operated under closed-loop "
-                               "control of the culture environment" if report
-                               else "At commercial scale the vessel is operated at 15,000 L "
-                                    "working volume (SOP-2003)")],
+                               "The vessel is operated as a fed batch culture at a working "
+                               "volume of 15,000 L at commercial scale, under SOP-2003" if report
+                               else "The commercial process operates at 15,000 L of culture")],
         metadata=meta())
     return [vessel, sdm]
 
@@ -380,13 +380,12 @@ def build_cqas(doc_id, file_name, sec, report):
 # Per-method grounded fragment from the plan's "Analytical methods" section.
 METHOD_QUOTE = {
     "AMV-3010": ("Released N-glycan mapping by 2-AB HILIC-UPLC (SOP-3010, AMV-3010) reports "
-                 "afucosylation, galactosylation and high mannose from a single analysis"),
-    "AMV-3011": ("Size variants are measured by SEC-HPLC (SOP-3011, AMV-3011), which reports the "
-                 "high molecular weight fraction"),
-    "AMV-3012": "Host cell protein is measured by ELISA (SOP-3012, AMV-3012)",
-    "AMV-3013": ("charge variants by icIEF (SOP-3013, AMV-3013), which reports the acidic "
-                 "fraction"),
-    "AMV-3014": "residual host cell DNA by qPCR (SOP-3014, AMV-3014)",
+                 "afucosylation, galactosylation and high mannose from one chromatogram"),
+    "AMV-3011": ("size variants by SEC-HPLC (SOP-3011, AMV-3011) report aggregates"),
+    "AMV-3012": "Host cell protein by ELISA (AMV-3012)",
+    "AMV-3013": ("charge variants by imaged capillary isoelectric focusing (SOP-3013, "
+                 "AMV-3013) report acidic variants"),
+    "AMV-3014": "residual host cell DNA by qPCR (AMV-3014)",
 }
 # CQA key -> the fragment used for that attribute's attribute -> method assertion.
 #
@@ -407,27 +406,26 @@ CQA_METHOD_QUOTE.update({
 # section. Each span opens on the parameter it classifies and carries the class and the
 # reason, so it names both ends of the relation it anchors.
 CLASS_QUOTE = {
-    "Culture pH": ("Culture pH is a well controlled critical process parameter. It acts on four "
-                   "of the five attributes"),
-    "Culture temperature": ("Culture temperature is a well controlled critical process parameter. "
-                            "It acts on three of the responses (galactosylation, high mannose and "
-                            "acidic charge variants)"),
-    "Dissolved CO2 (pCO2)": ("Dissolved CO2 is a well controlled critical process parameter. It "
-                             "carries the largest single effect in the study, on acidic charge "
-                             "variants"),
-    "Osmolality": ("Osmolality is a well controlled critical process parameter. Screening resolved "
-                   "effects on galactosylation and on acidic charge variants"),
-    "Culture duration": ("Culture duration is a well controlled critical process parameter. It "
-                         "carries the largest main effect on galactosylation"),
-    "Dissolved oxygen": ("Dissolved oxygen is a key process parameter. The univariate assessment "
-                         "linked it to growth and productivity and not to any quality attribute"),
-    "Initial viable cell conc.": ("Initial viable cell concentration is a key process parameter, "
-                                  "for the same reason and on the same evidence"),
-    "Nutrient feed-1 volume": ("Nutrient feed-1 volume is a key process parameter. Feed volume "
-                               "drives titer and the integral of viable cell concentration"),
-    "Basal medium concentration": ("Basal medium concentration is a general process parameter. No "
-                                   "effect on a quality attribute was demonstrated across the "
-                                   "characterization range"),
+    "Culture pH": ("Culture pH is a WC-CPP because it reaches significance on all"),
+    "Culture temperature": ("Culture temperature is a WC-CPP because it moves galactosylation, "
+                            "high mannose and acidic variants"),
+    "Dissolved CO2 (pCO2)": ("Dissolved carbon dioxide is a WC-CPP because it carries the "
+                             "largest effect in the study on acidic variants and a substantial "
+                             "effect on galactosylation"),
+    "Osmolality": ("Osmolality is a WC-CPP because screening resolved effects on "
+                   "galactosylation and acidic variants"),
+    "Culture duration": ("Culture duration is a WC-CPP because it carries the largest main "
+                         "effect on galactosylation and on afucosylation and sets the harvest "
+                         "impurity burden of the step"),
+    "Dissolved oxygen": ("Dissolved oxygen is a KPP because the univariate assessment linked it "
+                         "to growth and productivity with no measurable link to a quality "
+                         "attribute"),
+    "Initial viable cell conc.": ("Initial viable cell concentration is a KPP on the same "
+                                  "basis"),
+    "Nutrient feed-1 volume": ("Nutrient feed-1 volume is a KPP because the feed schedule "
+                               "delivers"),
+    "Basal medium concentration": ("Basal medium concentration is a GPP because the univariate "
+                                   "assessment over"),
 }
 
 SDM = "bench-scale stirred-tank scale-down model"
@@ -461,11 +459,11 @@ def build_studies(doc_id, file_name, report):
                                    ["Culture pH", "Culture temperature", "Dissolved CO2 (pCO2)",
                                     "Osmolality", "Culture duration"]],
             source_references=[ref(doc_id, file_name, sec, "Screening design",
-                                   "The screening study is a two-level Resolution V half fraction "
-                                   "of the multivariate factors" if report
-                                   else "The fraction is a half replicate of Resolution V, so every "
-                                        "main effect and every two-factor interaction is estimable "
-                                        "clear of the others")],
+                                   "The screening design is a two level factorial in the "
+                                   "5 multivariate parameters" if report
+                                   else "The fractional design is of resolution V. Therefore, the "
+                                        "design estimates every main effect clear of every "
+                                        "two-factor interaction")],
             metadata=meta()),
         S.StudyDesign(
             study_id="study:br_rsm", study_type="response_surface_doe",
@@ -478,21 +476,25 @@ def build_studies(doc_id, file_name, report):
                                    ["Culture pH", "Culture temperature", "Culture duration",
                                     "Dissolved CO2 (pCO2)"]],
             source_references=[ref(doc_id, file_name, sec, "Response-surface design",
-                                   "Face-centred axial points keep every run inside the "
-                                   "characterization ranges already agreed" if report
-                                   else "The response-surface study is a face-centred central "
-                                        "composite design (CCD)")],
+                                   "Face centred axial points keep every setting of the design "
+                                   "inside the characterization ranges already justified "
+                                   "above" if report
+                                   else "The response-surface design is a face-centred central "
+                                        "composite in the 4 factors that screening is expected "
+                                        "to retain")],
             metadata=meta()),
         S.StudyDesign(
             study_id="study:br_sdm_qual", study_type="scale_down_qualification", unit_operation=UO_NAME,
             scale_down_model=SDM,
             source_references=[ref(doc_id, file_name, sec,
                                    "Scale-down model and its qualification",
-                                   "Qualification compared growth, viability, titer and the five "
-                                   "quality attributes between the scale-down system and the "
-                                   "commercial-scale engineering runs at target conditions" if report
-                                   else "Qualification compares the model with at-scale data on "
-                                        "inputs and on outputs")],
+                                   "The model qualification compared the model against at-scale "
+                                   "data on the input and output attributes that matter to this "
+                                   "step: growth trajectory, titre, viability and the released "
+                                   "quality attributes" if report
+                                   else "The qualification compares the bench system with"
+                                        " 15,000 L data on the inputs and the outputs that "
+                                        "matter here")],
             metadata=meta()),
         # Both documents carry the univariate assessment of initial viable cell concentration.
         S.StudyDesign(
@@ -500,10 +502,11 @@ def build_studies(doc_id, file_name, report):
             factors=["Initial viable cell conc."], responses=["process performance"],
             associated_parameters=["param:initial_vcc"],
             source_references=[ref(doc_id, file_name, sec, "Univariate assessment",
-                                   "assessed one at a time across the characterization ranges" if report
-                                   else "initial viable cell concentration, basal medium "
-                                        "concentration and nutrient feed volume will be assessed "
-                                        "one parameter at a time")],
+                                   "assessed one parameter at a time across the characterization "
+                                   "ranges" if report
+                                   else "dissolved oxygen, initial viable cell concentration, basal "
+                                        "medium concentration and nutrient feed-1 volume, and "
+                                        "each of the four will be assessed separately")],
             metadata=meta()),
     ]
     return studies
@@ -606,51 +609,50 @@ def build_report_sections(doc_id, file_name, report):
         return [ReportSection(section_id=f"{doc_id}-summary", title="Plan summary", statements=[
             st(1, "PCP-003 defines the Stage 1 characterization of the A-Mab production bioreactor (Step 3).",
                "Purpose and scope",
-               "This plan defines the studies that close that gap, and it defines them before "
-               "they are executed"),
+               "this plan sets out the studies that will define it"),
             st(2, "Nine process parameters are in scope, five studied multivariately and four univariately.",
                "Risk-based prioritization of parameters",
-               "5 of the 9 parameters are therefore studied multivariately and 4 univariately"),
+               "parameters will be studied over the ranges in the same table, one at a time"),
             st(3, "The study uses a screening fractional-factorial design followed by a "
                   "face-centred central composite design on a qualified bench-scale scale-down model.",
                "Response-surface design",
-               "The response-surface study is a face-centred central composite design (CCD)"),
+               "The response-surface design is a face-centred central composite in the 4 "
+               "factors that screening is expected to retain"),
             st(4, "Models are acceptable when there is no significant lack of fit against the center-point pure error.",
                "Acceptance and decision criteria",
-               "A fitted model is adequate when the lack-of-fit test against pure error is not "
-               "significant"),
+               "A response-surface model is adequate for the operating region when the overall "
+               "regression is significant"),
             st(5, "The study must establish a multivariate operating region over which every "
                   "governed attribute is predicted to lie inside its acceptance criterion.",
                "Acceptance and decision criteria",
-               "The operating region will be declared over the part of the characterized space in "
-               "which the response-surface model predicts that every attribute the step governs "
-               "meets acceptance"),
+               "The operating region is acceptable when every attribute the step governs is "
+               "predicted to meet the criterion"),
         ])]
     return [ReportSection(section_id=f"{doc_id}-summary", title="Report summary", statements=[
         st(1, "Culture pH, temperature, dissolved CO2, osmolality and culture duration are classified WC-CPP.",
            "Executive summary",
-           "The outcome is 5 well controlled critical process parameters (WC-CPP)"),
+           "5 are classified as well controlled critical process parameters (WC-CPP)"),
         # The re-authored report states the response set here instead of the peak viable cell
         # density and titre the previous revision gave, so the statement follows the document.
         st(2, "The five attributes measured as responses of the designed experiments are "
               "afucosylation, galactosylation, high mannose, acidic charge variants and aggregate.",
            "Product and unit operation",
-           "The responses measured in this study are afucosylation, galactosylation, high mannose, "
-           "acidic charge variants and aggregate"),
+           "The production bioreactor forms the glycan, charge variant and aggregate quality "
+           "attributes of A-Mab"),
         st(3, "Within the design space the fitted response-surface models predict every measured "
               "attribute inside its in-process limit.",
            "Design space",
-           "define a multivariate region within the characterized space in which all five "
-           "attributes are predicted to stay inside the in-process limits for this step"),
+           "over which the fitted response surface models predict that every attribute the "
+           "step governs stays within the in-process criterion"),
         st(4, "The response-surface models are adequate for all five responses and predictive for four of them.",
            "Response-surface models",
-           "The response-surface models are adequate for all five responses and predictive for "
+           "the response surface models are adequate for all 5 responses and predictive for "
            "four of them"),
         st(5, "There was no significant lack of fit relative to the center-point pure error.",
-           "Response-surface models", "Lack of fit is not significant for any response"),
+           "Response-surface models", "The lack of fit test does not approach significance"),
         st(6, "All bioreactor-set CQAs meet acceptance with margin at commercial scale.",
            "Process capability and robustness",
-           "Commercial-scale capability is comfortable for every attribute this step forms"),
+           "Across those batches, every attribute clears the drug substance criterion"),
     ])]
 
 
@@ -666,10 +668,9 @@ def build_design_spaces(doc_id, file_name):
                    "smaller than the characterized region, and galactosylation is the attribute "
                    "that excludes most of it.",
         source_references=[ref(doc_id, file_name, "Design space", "Design space",
-                               "The four quality-linked parameters carried into the response-"
-                               "surface design define a multivariate region within the "
-                               "characterized space in which all five attributes are predicted to "
-                               "stay inside the in-process limits for this step")],
+                               "The design space of the production bioreactor is a "
+                               "multivariate region in culture pH, culture temperature, culture "
+                               "duration and dissolved CO2 (pCO2)")],
         metadata=meta())]
 
 

@@ -1,8 +1,9 @@
 # The author-facing apparatus is the cause: test it on one section before touching anything else
 
 **Status:** proposed 2026-08-18, from the evaluation of
-[`../results/2026-08-18-track-d-stopped.md`](../results/2026-08-18-track-d-stopped.md). Not
-started. No work unit. **Task 1 is a probe and decides whether tasks 2–6 run at all.**
+[`../results/2026-08-18-track-d-stopped.md`](../results/2026-08-18-track-d-stopped.md).
+**Being worked on since 2026-08-18 in work unit `2026-08-18_03_author-facing-apparatus`.**
+**Task 1 is a probe and decides whether tasks 2–6 run at all.**
 
 ## The problem
 

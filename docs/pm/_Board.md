@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-17_01_register-second-round]]** · **7 of 9 done** · 1 partly · 1 todo
+**[[epic|2026-08-17_01_register-second-round]]** · **8 of 9 done** · 1 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -31,7 +31,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-008]] | `partly` | the assistant | measurement | Measure round two against rounds zero and one with one method, apply the stopping rule, and record the owner's reading |
 | [[TASK-009]] | `todo` | the assistant | documentation | Move the findings into docs, settle the decision, and rewrite or retire the proposal on the stopping rule's verdict |
 
 ## Done
@@ -45,6 +44,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-005]] | `done` | — | document | Re-author PCP-003 in one pass from the amended artifacts, as a DRAFT |
 | [[TASK-006]] | `done` | — | document | Re-author PCR-003 in one pass from the amended artifacts, as a DRAFT |
 | [[TASK-007]] | `done` | — | annex | Promote both drafts, render both formats, re-anchor the annexes and re-ground the corpus |
+| [[TASK-008]] | `done` | — | measurement | Measure round two against rounds zero and one with one method, apply the stopping rule, and record the owner's reading |
 
 ---
 

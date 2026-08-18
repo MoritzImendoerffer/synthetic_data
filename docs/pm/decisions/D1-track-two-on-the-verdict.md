@@ -37,9 +37,22 @@ set before that bar was dropped; copula 21.9 % and 25.7 %, both below round one.
 passes both. No line sits within 0.5 points of its edge. Full page:
 [`docs/results/2026-08-18-register-round-two.md`](../../results/2026-08-18-register-round-two.md).
 
-**What is still outstanding is the reading, and it is the whole of Option B.** The owner has not
-yet read the two rendered PDFs. Under Option A the epic could ship to Track 2 now; under Option B
-it waits for the reading. The plan assumes Option B.
+**Read 2026-08-18: the owner says it is still immediately clear, and named three new faults.**
+Quoted verbatim on the results page. The first sentence of the report gave it away; the other two
+examples are the same balanced `, and ` clause shape, plus a false agency produced by avoiding the
+passive ("the 4 factors that screening retained" — screening does not retain). Counted afterwards:
+the `, and ` clause runs at 18.2 % and 22.6 % of sentences against 1.1–3.4 % in the sources and
+**did not move in this round**; `, not ` went 0.0 % → 4.3 % in the report, a regression this round
+created; the report's passive rate is 34.4 % against 54–60 % in all four sources.
+
+**So the two options now point in opposite directions, and the choice is live.** Option A (the
+numbers decide) opens Track 2 today: every line of the rule holds with room. Option B (the plan's
+assumption) blocks Track 2 and makes the three named faults the next unit's target. The argument
+for B is on the page: the round that clears a measure is the round that exposes the next one, and
+committing eighteen documents to a register the owner still reads as obviously generated buys
+eighteen documents that need doing again. The argument for A is that the eighteen are split from
+the pair on measures that are now proven to move, and that a second re-author of the pair costs
+nothing the eighteen would not also cost later.
 
 **What the plan assumes meanwhile.** Option B. TASK-008 records both the verdict and the reading;
 TASK-009 prepares both shapes of the proposal (Track 2, or the new target) so `/ship` does not

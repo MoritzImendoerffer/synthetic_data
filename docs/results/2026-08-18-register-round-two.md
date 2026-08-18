@@ -11,16 +11,19 @@ for the third time.
 and `check_discourse.py`, because the pilot page's "before" chaining values did not reproduce when
 two runs measured differently.
 
-**Verdict in one line: every line of the stopping rule holds, so Track 2 opens.** The line that
-decided it is the one the round was built on — mid-sentence `, so ` fell from 10.6 % and 8.0 % of
-sentences to **0.0 % in both documents**, while sentence-initial connectives rose from 1.8 % and
-0.9 % to **4.9 % and 4.0 %**, inside the 3.7–6.1 % source band.
+**Verdict in one line: every line of the stopping rule holds and the owner still reads the pair as
+obviously machine-written, so under decision D1 option B Track 2 stays blocked and the target
+changes.** The rule was about the numbers and the numbers are unambiguous — mid-sentence `, so `
+fell from 10.6 % and 8.0 % of sentences to **0.0 % in both documents** and sentence-initial
+connectives rose from 1.8 % and 0.9 % to **4.9 % and 4.0 %** — but the reading found three more
+patterns, and counting them afterwards showed that **the one the owner named first runs at six to
+twenty times the source rate and did not move in this round at all**.
 
-> **One acceptance line of this page is still open.** The human check for this round is the
-> project owner reading the re-authored pair (owner decision, 2026-08-17). That reading is not
-> recorded yet; the section below says so and states what is being asked. The numbers do not
-> depend on it, and the stopping rule is a rule about numbers — but the owner's reading is what
-> decides whether the *target* was the right one, which is a different question.
+> **This is the second time a reader has found what the measures did not.** The pilot measured five
+> shapes and the owner named a sixth. This round cleared both of its targets and the owner named a
+> seventh, an eighth and a ninth. The pattern is not that the measures are wrong. It is that a
+> measure is written against the last reading, so the round that clears it is the round that
+> exposes the next one.
 
 ## Why the run happened
 
@@ -174,27 +177,100 @@ reported and not gated, as the rule says.
 copula fell in both documents and front field roughly doubled in both. The rule that was dropped
 for being unreachable by authoring instructions is cleared by the round that stopped aiming at it.
 
-**Verdict: Track 2 opens.**
+**Verdict on the numbers: the rule holds on every line.** What that settles is decision D1's first
+half. Under option A — the numbers decide — Track 2 opens now. Under option B, which the plan
+assumes, the rule must hold *and* the owner's reading must say the pair is no longer *immediately*
+recognisable. The reading below says it still is. **Under option B, Track 2 stays blocked and the
+sentences the owner quoted become the next target.** The choice between A and B is the owner's and
+is recorded in `docs/pm/decisions/D1-track-two-on-the-verdict.md`.
 
 ## The owner's reading
 
-**Not recorded yet.** The human check for this round, fixed by owner decision on 2026-08-17, is
-the project owner reading the two re-authored PDFs (`pc_package/PCP-003_bioreactor.pdf`, 29 pp;
-`pc_package/PCR-003_bioreactor.pdf`, 59 pp) and answering two questions:
+**Recorded verbatim, 2026-08-18.** The project owner read the two rendered PDFs and was asked
+whether the pair is still *immediately* recognisable as machine-written and, if so, which sentences
+give it away. The answer was yes, on the first sentence of the report.
 
-1. Is the pair still *immediately* recognisable as machine-written?
-2. If so, which sentences give it away?
+> "yes, it is immediately clear. Already the first sentence gives it away "The production
+> bioreactor forms the glycan, charge variant and aggregate quality attributes of A-Mab, and this
+> report bounds the culture conditions that set them" that is a typical way of formulating
+> sentences which seems to be intrinsic to claude models. Or like this one "The screening study
+> covered 5 parameters in a two level design of 19 runs. The 4 factors that screening retained then
+> entered a face centred response surface design of 28 runs, and the remaining 4 parameters were
+> assessed one at a time." The screning does not retain parameters. It seems to me you are trying
+> to avoid passive terms at all costs. As a result the writing style sounds a bit unnatural (at
+> least to me). Or this sentence: "he response surface model built on those factors is the
+> predictive model, and the design space and the proven acceptable ranges reported below rest on
+> it, not on the near saturated screening fit." ... the proven acceptable ranges below rest on it,
+> not the saturated screening fit ... Al these are examples for writing styles not used in
+> technical documents"
 
-**The reading is not blind, and that was accepted in advance.** The owner has now read both
-documents twice, so no discrimination test involving them can be valid. The pilot recorded why the
-blind test was dropped: three rounds scored 64 of 64 and every one was decided by something other
-than register. The reading is worth more than the test precisely because it is not blind — the
-owner is looking for what is wrong, not guessing which of two texts is generated.
+**The reading is not blind, and that was accepted in advance.** The owner has now read these
+documents three times, so no discrimination test involving them can be valid. The pilot recorded
+why the blind test was dropped: three rounds scored 64 of 64 and every one was decided by something
+other than register. The reading is worth more than the test precisely because it is not blind —
+the owner is looking for what is wrong, not guessing which of two texts was generated.
 
-Whatever the owner quotes becomes the next unit's target, the way the two sentences quoted on
-2026-08-17 became this one's. If the reading says the pair is still obviously machine-written
-*after* both stated targets were cleared, that is evidence about the measures rather than about
-the documents, and decision D1 should be settled with it in hand.
+Three distinct faults are named, and all three are new. None is the packing fault this round
+targeted, and none was measured before today.
+
+## What the reading named, counted
+
+Measured after the reading, over the same prose the gate reads, at all three points. This is the
+order the exploration used and the order the pilot's lesson demands: **a reader found it, and the
+count confirms it.**
+
+| | PDA TR 60 | A-Mab | ISPE TT | ISPE PV | PCP-003 r0 | r1 | **r2** | PCR-003 r0 | r1 | **r2** |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `, and ` joining a second clause, % of sentences | 3.4 | 1.1 | 1.3 | 3.1 | 20.8 | 17.7 | **18.2** | 24.9 | 21.0 | **22.6** |
+| count | 28 | 11 | 9 | 25 | 42 | 40 | 37 | 108 | 89 | 95 |
+| `, not ` contrastive tail, % of sentences | 0.2 | 0.0 | 0.1 | 0.0 | 0.0 | 0.4 | **0.0** | 0.0 | 0.0 | **4.3** |
+| count | 2 | 0 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 18 |
+| sentences with a passive construction, % | 54.3 | 59.8 | 59.6 | 58.4 | 70.8 | 58.0 | **54.7** | 44.1 | 41.6 | **34.4** |
+| count | 445 | 622 | 399 | 472 | 143 | 131 | 111 | 191 | 176 | 145 |
+
+Denominators are the sentence counts in the tables above. The passive count is spaCy's: a sentence
+counts if any token carries `nsubjpass` or `auxpass`.
+
+**1. The balanced two-clause sentence is the fault, and this round did not touch it.** All three
+sentences the owner quoted have the same shape: a statement, a comma, `and`, and a second
+independent clause that restates, extends or qualifies the first. The four sources build it in
+1.1 to 3.4 % of their sentences. The corpus builds it in 18 to 23 %, and **it did not move in this
+round — it rose slightly in both documents**, 17.7 → 18.2 % and 21.0 → 22.6 %.
+
+That is the round's blind spot, and it is a blind spot in the measure rather than in the guide.
+`check_style.py` counts mid-sentence `, so ` and it counts sentences carrying **two or more** clause
+coordinators. A sentence with exactly one `, and ` joining two clauses is caught by neither. The
+guide's §2d rule already forbids it in words — "do not join the steps inside one sentence with
+`, so …` or with `, and …` carrying a second claim" — and the author executed the `, so ` half,
+which is the half a printed number made checkable. Nothing printed the `, and ` half back.
+
+**2. The contrastive tail is a regression this round created.** `, not ` appears in 0.0 % of the
+report's sentences at rounds zero and one, and in **4.3 % (18 sentences) at round two**, against
+0.0 to 0.2 % in the sources. `WRITING_GUIDE.md` §4b already says the sources "almost never build
+'not X but Y' constructions"; no gate measures it, so the rule sat unenforced while the document
+broke it eighteen times. The likely mechanism is this round's own substitution: a writer told to
+end the sentence and open the next one with a connective still has to place the contrast, and
+`, not …` is where it went. This is the escape route the exploration predicted for `, so ` — it
+listed `, and`, `; ` and `, which` — appearing in a form nobody listed.
+
+**3. Passive avoidance is real, it is measured, and it produced a factual error.** The owner wrote
+"you are trying to avoid passive terms at all costs", and the count agrees: the four sources put a
+passive construction in 54 to 60 % of their sentences, and `PCR-003` is at **34.4 %**, twenty
+points below every one of them, having fallen at every round (44.1 → 41.6 → 34.4). `PCP-003` is
+inside the source band at 54.7 %.
+
+The cost is not only tonal. To avoid a passive the author has to supply an agent, and where there
+is no agent it invents one: **"the 4 factors that screening retained"** — screening is a study and
+does not retain anything. The passive the sources would have written ("the four factors retained
+from screening", "the four factors carried forward") states the same fact and attributes nothing
+false. `WRITING_GUIDE.md` §4b already says "passive is fine where the object of study matters more
+than who did it — the sources use it heavily", so this too is a rule the guide states and nothing
+measures.
+
+**One consequence for the annex.** The first sentence the owner quotes is the anchor for two
+records in `ground_truth/PCR-003.json` (the process-step entity and report statement 2), re-anchored
+onto it in TASK-007. Rewriting it moves those anchors again. That is the normal cost of a
+re-author, and it is why the anchors are rebuilt rather than the sentence preserved.
 
 ## The hypothesis, answered
 
@@ -219,6 +295,16 @@ chaining and front field were context, not targets, and both moved further than 
 did. The cleanest reading is that one well-stated substitution reorganised the sentence and the
 other measures followed the reorganisation, not the instruction.
 
+**The owner's reading bounds the claim, and the bound matters more than the result.** Every measure
+that was printed back to the author moved. The three faults the owner then named — the balanced
+`, and ` clause, the `, not ` tail, passive avoidance — are precisely the three that were *not*
+printed back, and two of them are forbidden by rules the guide already states in words. So the
+hypothesis is not "telling the author the number works". It is narrower and less comfortable:
+**an author executes exactly what is measured and printed, and leaves everything else where it
+was, including rules it has read.** That is a stronger result than the round set out to get, and
+it says the ceiling on this approach is the coverage of the measures, not the quality of the
+prose.
+
 ## What was found on the way
 
 - **The two findings the pilot left open are both closed.** The round-one `PCR-003` never stated
@@ -240,6 +326,27 @@ other measures followed the reorganisation, not the instruction.
   untouched, because the row builders rebuild the row from the DataFrame the document renders. The
   proposal's Track 2 budget of ~40 spans per document is therefore an overestimate for documents
   without a curated rhetorical layer; 33 of the 35 curated `PCR-003` spans needed a new quote.
+
+## What the next round would have to measure
+
+The three faults are all countable, all cheap, and none needs a parser except the third:
+
+| fault | measure | sources | corpus now |
+|---|---|---|---|
+| balanced two-clause sentence | `, and ` followed by a clause opener, % of sentences | 1.1–3.4 % | 18.2 % / 22.6 % |
+| contrastive tail | `, not ` mid-sentence, % of sentences | 0.0–0.2 % | 0.0 % / 4.3 % |
+| passive avoidance | sentences with `nsubjpass`/`auxpass`, % | 54.3–59.8 % | 54.7 % / 34.4 % |
+
+The first two belong beside the existing packing line in `check_style.py`, printed and gated by
+nothing, for the same reason: a ceiling on `, and ` is met by writing a semicolon. The third needs
+`check_discourse.py` and is a **band, not a floor** — the plan is inside it and the report is
+twenty points under, so a floor would push the plan the wrong way. And the false-agency error the
+passive avoidance produced ("the 4 factors that screening retained") is not reachable by any of
+them; it is an authoring rule, and it belongs in the guide beside the runtime-noun rule.
+
+**Nothing here says the round failed.** Both stated targets were cleared in both genres, five of
+five measures moved, and the corpus is measurably closer to its sources on every one. What the
+reading establishes is that the distance left is not in the shapes this round could see.
 
 ## Verification
 
@@ -271,6 +378,10 @@ PATS = [("its", r"\bits\b"), ("their", r"\btheir\b"),
 # ...one row per source and per revision, rate per 1000 words with the count
 EOF
 ```
+
+The three patterns the owner's reading named (`$W/measure_owner_reading.txt`) were counted with
+the same prose extraction, `, and ` + clause opener and `, not ` by regex and the passive by spaCy
+(`nsubjpass` or `auxpass` on any token).
 
 **These two scripts are the method for these measures.** `authoring/register_analysis.ipynb` §13
 is superseded for clause packing, chaining, copula and front field: it applied 600/450 sentence

@@ -285,7 +285,7 @@ def print_rule_block(paths: list[str], dcols) -> int:
     print("         ', not ' <=0.2 · passive 53.0-68.0 · chaining >= own baseline ·")
     print("         copula <= own baseline + 2.0.  Chaining and copula need the discourse block.")
     base = parse_baseline(BASE_DISC, DISC_LABEL_W) if os.path.exists(BASE_DISC) else {}
-    base_names = (baseline_names(BASE_DISC, DISC_LABEL_W, expected_names(paths, ""))
+    base_names = (baseline_names(BASE_DISC, DISC_LABEL_W, baseline_column_names(""))
                   if os.path.exists(BASE_DISC) else [])
     dmap = {n: m for n, m in (dcols or [])}
     heads = [label for label, _, _, _ in RULE] + ["passive", "chaining", "copula"]
@@ -336,6 +336,22 @@ def expected_names(paths: list[str], human_suffix: str) -> list[str]:
             + [os.path.basename(p) for p in paths])
 
 
+def baseline_column_names(human_suffix: str) -> list[str]:
+    """The column order of the COMMITTED baselines, which is independent of what was passed.
+
+    Both baseline files were produced over the four sources and then every ``pc_package/*.qmd``
+    in sorted order. Deriving the column list from the caller's paths instead works only when
+    the caller passes all twenty; a subset -- the pilot is four documents -- then shifts every
+    column and the header check rejects the whole table, which is how the pilot table came back
+    with "no base" in the chaining and copula cells. Reconstructing the baseline's own column
+    list lets a subset be looked up by name.
+    """
+    import glob
+    docs = sorted(os.path.basename(q) for q in
+                  glob.glob(os.path.join(ROOT, "pc_package", "*.qmd")))
+    return [n + human_suffix for n, _, _, _ in HUMAN_SOURCES] + docs
+
+
 def baseline_names(path: str, col_offset: int, expect: list[str]) -> list[str]:
     """The header columns of a baseline file, VERIFIED against the order we expect.
 
@@ -381,7 +397,7 @@ def check_baseline(paths: list[str], dcols) -> int:
     print("\n== --check-baseline ==")
 
     cols = columns(paths, False)
-    names = baseline_names(BASE_STYLE, STYLE_COL_0, expected_names(paths, " (human)"))
+    names = baseline_names(BASE_STYLE, STYLE_COL_0, baseline_column_names(" (human)"))
     base = parse_baseline(BASE_STYLE, STYLE_LABEL_W)
     got = {n: style_measure(t)[0] for n, t in cols}
     from check_style import LIMITS
@@ -398,12 +414,13 @@ def check_baseline(paths: list[str], dcols) -> int:
             print(f"MISS  style row not in baseline: {desc}")
             bad += 1
             continue
-        for i, (name, _) in enumerate(cols):
-            colname = names[i] if i < len(names) else None
-            if colname is None:
+        for name, _ in cols:
+            if name not in names:
+                print(f"MISS  style column not in baseline: {name}")
                 bad += 1
                 continue
-            want = base[desc][i]
+            colname = name
+            want = base[desc][names.index(name)]
             have = round(got[name][key], 1)
             n_cell += 1
             if abs(want - have) > 0.051:
@@ -415,7 +432,7 @@ def check_baseline(paths: list[str], dcols) -> int:
         print("discourse: SKIPPED, spaCy not installed -- run with `uv run --extra discourse`")
         return 1
     dbase = parse_baseline(BASE_DISC, DISC_LABEL_W)
-    dnames = baseline_names(BASE_DISC, DISC_LABEL_W, expected_names(paths, ""))
+    dnames = baseline_names(BASE_DISC, DISC_LABEL_W, baseline_column_names(""))
     d_bad, d_cell = 0, 0
     for key, row in (("chaining_pct", "topic chaining % (chained/pairs)"),
                      ("copula_pct", "copula main verb % (copula/n)"),

@@ -92,7 +92,7 @@ Straight from `config/parameters.yaml`. "DoE?" decides whether `doe_report.py` a
    once.
 5. **`doe_report.fig_rsm_contours(key, xf, yf)` needs the two dominant factors** for the step;
    the default pair is the bioreactor's. Factors come from `studies.RSM_TOP[key]`.
-6. **Depth follows the design, not a target.** Reports with a DoE run 41–55 pages, non-DoE
+6. **Depth follows the design, not a target.** Reports with a DoE run 41–59 pages, non-DoE
    reports 26–28, plans 23–31. Achieve depth with grounded analysis and full appendices, never
    with filler, and never invent a DoE for a step that does not have one.
 7. **A re-authored document loses its registered discrepancy unless the brief carries it.**
@@ -107,6 +107,19 @@ Straight from `config/parameters.yaml`. "DoE?" decides whether `doe_report.py` a
    `DISCREPANCIES.md`. The two files must agree. Same rule as the retired weak-claims feature:
    anything that changes what a document *claims* has to be present while the argument is being
    built, never restored afterwards.
+8. **An inline `{python}` expression that yields a NAME must never be the subject of a verb that
+   agrees with it.** `` `{python} lof_p_lo_resp.lower()` `` produced "acidic variants **is** the
+   case to watch": the subject is a runtime value, so number agreement cannot be checked while
+   writing and no gate sees it. Put a runtime name after "is" or after a preposition — "the weakest
+   case is `…`", "for `…`" — where the verb agrees with a noun you control. Any expression yielding
+   a response or parameter name has this exposure; as an object it survives.
+9. **The writing guide's own commentary is written in the register it forbids.** Measured
+   2026-08-17: `WRITING_GUIDE.md` commentary opens 0 % of its sentences with a connective and
+   carries a mid-sentence `, so ` in 1.5 % of them; `REGISTER_EXEMPLAR.md`'s commentary 0 % and
+   5.4 %; `STORY_BIBLE.md`, the briefs and `CLAUDE.md` 0 %. An author reads several hundred lines
+   of that before writing a word. **Verify voice against `refs/text/`, never against the guide's
+   prose** — in the exemplar, only the *quotes* are source register, not the sentences around them.
+   The same rule `CLAUDE.md` states for sibling `.qmd`s, one level up.
 
 ## Open items
 

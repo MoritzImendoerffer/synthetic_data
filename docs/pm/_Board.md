@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-17_01_register-second-round]]** · **8 of 9 done** · 1 todo
+**[[epic|2026-08-17_01_register-second-round]]** · **9 of 9 done**
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -20,18 +20,14 @@ tags: [pm/board]
 **This is the only section that is yours.** Each is an argument a person has to settle.
 None of them blocks the work below.
 
-| Decision | Waiting on | Blocks |
-|---|---|---|
-| [[D1-track-two-on-the-verdict|D1 — if the stopping rule holds, does Track 2 start without another decision?]] | project owner | nothing; it decides the next epic's scope |
+*None.*
 
 ## Not finished — the assistant's work, not the owner's
 
 Nothing in this table needs the project owner. It is what the coding assistant has still to do,
 and it is here so the state is visible, not so anyone else acts on it.
 
-| Task | Status | Waiting on | Kind | What it is |
-|---|---|---|---|---|
-| [[TASK-009]] | `todo` | the assistant | documentation | Move the findings into docs, settle the decision, and rewrite or retire the proposal on the stopping rule's verdict |
+*None.*
 
 ## Done
 
@@ -45,6 +41,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-006]] | `done` | — | document | Re-author PCR-003 in one pass from the amended artifacts, as a DRAFT |
 | [[TASK-007]] | `done` | — | annex | Promote both drafts, render both formats, re-anchor the annexes and re-ground the corpus |
 | [[TASK-008]] | `done` | — | measurement | Measure round two against rounds zero and one with one method, apply the stopping rule, and record the owner's reading |
+| [[TASK-009]] | `done` | — | documentation | Move the findings into docs, settle the decision, and rewrite or retire the proposal on the stopping rule's verdict |
 
 ---
 

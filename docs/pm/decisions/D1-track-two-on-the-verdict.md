@@ -1,13 +1,15 @@
 ---
 type: pm-decision
 sprint: 2026-08-17_01_register-second-round
-status: open
-waiting_on: project owner
+status: settled
+waiting_on: —
 blocks: nothing; it decides the next epic's scope
 tags: [pm/decision]
 ---
 
 # D1 — if the stopping rule holds, does Track 2 start without another decision?
+
+**Settled 2026-08-18 by the project owner: option B.** The stopping rule held on every line and the owner's reading said the pair is still immediately recognisable, so Track 2 (the remaining eighteen) stays blocked and the three faults the reading named become the next target. `docs/next/register-from-four-sources.md` is rewritten accordingly: Track A (the three measures), Track B (write the passive), Track C (the guide's own register), then Track D (the eighteen), blocked on A–C.
 
 **What is being asked.** TASK-008 applies a stopping rule fixed in advance: mid-sentence `, so `
 at or under 1.0 % of sentences and sentence-initial connectives at or above 3.0 % in both

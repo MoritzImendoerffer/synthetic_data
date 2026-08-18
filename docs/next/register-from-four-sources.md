@@ -1,133 +1,123 @@
 # The corpus states facts. It does not argue. — what remains
 
-**Status: partly delivered 2026-08-17; Track 1 being worked on since 2026-08-17 in work unit
-`2026-08-17_01_register-second-round`.** Work unit `2026-08-16_01_register-from-four-sources`
-shipped nine of its ten tasks, and this proposal is rewritten down to what is still open rather
-than deleted, because 18 of 20 documents have not been touched. The second unit opened after the
-project owner read the re-authored `PCR-003` and named a defect the pilot did not measure; its
-`exploration.md` records the reading and the count that confirms it.
+**Status: two rounds delivered, target changed 2026-08-18.** Round one shipped in work unit
+`2026-08-16_01_register-from-four-sources`; round two in `2026-08-17_01_register-second-round`.
+Both are measured: [round one](../results/2026-08-17-register-pilot.md),
+[round two](../results/2026-08-18-register-round-two.md). This proposal is rewritten down to what
+is still open, because 18 of 20 documents have not been touched and the pair that has been touched
+twice is still recognisable on its first sentence.
 
-Raised by the project owner: "currently, the prose is written in a way no SME would write", and on
-one passage, "hard to read, nearly not understandable, makes vague statements formulated not like a
-scientific text is formulated".
+Raised by the project owner: "currently, the prose is written in a way no SME would write". Twice
+since, on reading the re-authored pair: "hard to read, nearly not understandable"; and on
+2026-08-18, **"yes, it is immediately clear. Already the first sentence gives it away."**
 
-**What shipped** — measurements in
-[`docs/results/2026-08-17-register-pilot.md`](../results/2026-08-17-register-pilot.md):
-all four published sources extracted and the register band recalibrated on them; the `therefore`
-ceiling removed and nine connectives counted as a diagnostic that fails nothing;
-`WRITING_GUIDE.md` §2c/§2d/§2d bis amended to license a claim beside its counter-consideration
-and to state the given-new and possessive rules with worked corrections; a seven-pattern
-argument-moves catalogue in `REGISTER_EXEMPLAR.md`, 120 verified quotes from four sources;
-`authoring/discrepancies.yaml` plus brief §5c, so a re-authored document keeps its registered
-discrepancies; and **`PCP-003` and `PCR-003` re-authored, promoted, re-anchored and measured**.
+## Where this stands
 
-## What the pilot found
+Round two cleared every target it set and every line of a stopping rule fixed before it ran:
+mid-sentence `, so ` 10.6 % and 8.0 % → **0.0 %** in both genres, sentence-initial connectives
+1.8 % and 0.9 % → **4.9 % and 4.0 %**, topic chaining 34.4 % and 30.7 % → **46.0 % and 46.1 %**
+although chaining was never set as a target, copula back inside the source band in both. Five of
+five measures moved, against one of five in the pilot.
 
-Scored honestly, the amended artifacts produced **one clean win in five**. The connective
-repertoire went from 3 of 9 distinct to 6 of 9 in both genres. Possessives moved furthest and
-**should not be counted**: fourteen times the source rate is 69 instances in 10,354 words, one
-every 6.3 sentences, which no reader experiences as a defect — the project owner read the report
-and said so — and removing them cost the plan 23 added copulas. Topic chaining, copula rate and
-adjunct front field did not move. Chaining fell in the report and copula rose in the plan.
+The owner then read the pair and named three faults, none of them measured. Counted afterwards:
 
-The explanation is not lexical-versus-discourse. §2d taught the given-new rule with three worked
-corrections and §2d bis taught the possessive rule the same way, in adjacent sections of the same
-guide, and only one landed. **An author can execute and self-verify a substitution and cannot
-self-verify a rate.** The connective repertoire is the confirming case: a discourse property that
-moved, because `check_style.py` prints the distinct count back to the author on every run. So the
-lever is feedback at write time, not more examples in the guide.
+| fault | sources | PCP-003 | PCR-003 |
+|---|---|---|---|
+| `, and ` joining a second clause | 1.1–3.4 % of sentences | 18.2 % | 22.6 % |
+| `, not ` contrastive tail | 0.0–0.2 % | 0.0 % | **4.3 %** (was 0.0) |
+| sentences carrying a passive | 54.3–59.8 % | 54.7 % | **34.4 %** |
 
-**This does not refute the discourse hypothesis.** The shapes the guide taught as substitutions
-moved and the shapes it taught by example did not, which points at how the guide teaches rather
-than at what it claims. It does mean the next step is machinery, not prose.
+**The finding that matters is not any one of those numbers.** Every measure printed back to the
+author moved. The three faults the owner named are precisely the three that were **not** printed
+back — and two of them are already forbidden, in words, by rules the guide states. So:
 
-## Track 1 — a second two-document round
+> An author executes exactly what is measured and printed back to it, and leaves everything else
+> where it was, including rules it has read.
 
-**Do this before the eighteen.** Six tasks changed the guide, the exemplar, the gate and the
-brief, and nobody knew what any of it did until a document was written and measured. Committing
-eighteen documents to two untested amendments repeats exactly that, at nine times the cost.
+That is why this proposal is now about the measures rather than about the guide.
 
-Same two documents: they are already split from the corpus, both genres stay covered, and a third
-measurement is directly comparable to the two on the results page.
+**Decision D1 was settled by the project owner on 2026-08-18: option B.** Track 2 — the remaining
+eighteen documents — stays blocked. Committing eighteen one-pass re-authors and roughly 700
+re-anchored annex spans to a register the owner still recognises on the first sentence buys
+eighteen documents that need doing again.
 
-1. **`authoring/check_discourse.py`** — chaining, copula and front field with denominators and
-   the four source columns, reusing `check_style.prose_from_qmd` / `sentences` / `HUMAN_SOURCES`
-   so it measures the same text the gate does. **Advisory, never a gate.** A floor on chaining is
-   met by typing a pronoun, which is the failure this proposal already documented once.
-2. **A discourse section in the brief.** §5d is free — the brief runs 5, 5c, 6. The targets
-   matter less than the worked chains, which `build_brief.py` can generate **from the document's
-   own grounded facts** instead of quoting another document. Pre-authoring, so it respects the
-   rule that nothing is added to a document afterwards.
-3. **§2d bis names the substitution and bounds the target** — the definite article or the noun,
-   never `it is`, and a band rather than a minimum, so the licensed exception shows up in the
-   numbers instead of being driven out of them. The one fix with direct evidence behind it.
-4. **Shape 4 gains a positive front-field example.** The current worked correction only deletes a
-   bad one. Cheap, and not expected to carry load alone.
+## Track A — the three measures the reading named
 
-Then re-author both **in one pass each** with the numbers in the brief. Never patch: a second
-one-pass author is not post-editing, it is what TASK-007 already did.
+Cheap: two regexes and one spaCy field. All advisory, for the reason this campaign has now proved
+twice — a ceiling on `, so ` is met by writing `, and`, and a ceiling on `, and ` will be met by
+writing a semicolon, so the family is printed together and nothing is gated.
 
-**Stopping rule, fixed before the round runs:**
+1. **`, and ` joining a second clause**, beside the existing packing line in `check_style.py`. This
+   is the round-two blind spot and it is a hole in the *measure*: the gate counts mid-sentence
+   `, so ` and sentences carrying **two or more** coordinators, so a sentence with exactly one
+   `, and ` joining two clauses falls between them. `WRITING_GUIDE.md` §2d already forbids it.
+2. **`, not ` contrastive tail**, same line. `WRITING_GUIDE.md` §4b already says the sources
+   "almost never build 'not X but Y'". Round two created 18 instances in `PCR-003` while that rule
+   sat unenforced, which is the clearest evidence on the page that an unmeasured rule is not a rule.
+3. **Passive rate**, in `check_discourse.py`, as a **band and never a floor**. `PCP-003` is inside
+   the source band at 54.7 % and `PCR-003` is twenty points under it; a floor would push the plan
+   the wrong way. This one needs the optional extra and stays advisory like the rest.
 
-- **Go to Track 2** if chaining clears roughly 45 % in *both* genres and neither copula nor front
-  field regresses.
-- **Stop and change the target** otherwise. That would mean the discourse hypothesis is not
-  reachable by authoring instructions, and the better target is the tell the pilot found by
-  reading rather than by measuring: the corpus reads as *edited* and A-Mab reads as *written*.
-  Every corpus paragraph is a finished three-sentence argument, while A-Mab drops a bare label
-  mid-paragraph, repeats itself and leaves a claim half-supported. No measure here covers that.
+## Track B — the fault no measure reaches
 
-## Track 2 — the remaining eighteen
+"The 4 factors that **screening retained**" — screening is a study and retains nothing. The author
+invented an agent because it was avoiding a passive, and no counter can see that. This is an
+authoring rule and it belongs in `WRITING_GUIDE.md` beside the runtime-noun rule (§2d,
+Correction 0): **where the sources would write a passive, write the passive.** Do not manufacture
+an agent for a process, a study, a design or a model.
 
-Blocked on Track 1. Budget roughly **40 annex spans re-anchored per document** — the pilot needed
-80 across two, of which 34 were `PCR-003`'s curated rhetorical layer — plus a `check_render.py
---render` and a separate PDF render each. `check_render.py` renders only the `.docx` and
-glyph-checks whatever `.pdf` is already on disk, so the PDF must be rendered explicitly or the
-glyph check reports on a stale file.
+The measurable half is Track A item 3; this is the half that has to be taught.
 
-The corpus stays split on register until this finishes, which is the argument for not leaving
-Track 1 open for long.
+## Track C — the guide's own register, now the leading hypothesis
+
+Held back deliberately in round two (owner decision, minimum edits) and promoted here by round
+two's own result. Measured 2026-08-17: `WRITING_GUIDE.md` commentary opens **0 %** of its sentences
+with a connective and carries a mid-sentence `, so ` in 1.5 % of them; `REGISTER_EXEMPLAR.md`
+commentary 0 % and 5.4 %; `STORY_BIBLE.md`, the briefs and `CLAUDE.md` all 0 %. An author reads
+several hundred lines of that before writing a word.
+
+Round two is the evidence that made this worth doing. It showed that an author executes what it is
+shown *and measured on*; the guide is the largest single thing it is shown. Rewriting the guide's
+commentary in the register the guide demands is a real task and a large one, and it is now the
+first candidate rather than the last.
+
+## Track D — the remaining eighteen (blocked)
+
+Blocked on A, B and C by decision D1, option B. When it opens, the budget from two measured rounds:
+**one one-pass re-author per document**, and **21–44 re-anchored annex quotes per document** rather
+than the ~40 the pilot guessed — round two moved 21 of `PCP-003`'s 105 quotes and 23 of
+`PCR-003`'s 177, from 37 edited builder strings, because every table-row quote survives a
+re-author untouched. Add the curated rhetorical layer where a document has one: 33 of `PCR-003`'s
+35 spans needed re-cutting. Each document needs `check_render.py --render` **and** an explicit PDF
+render, because `check_render.py` glyph-checks whatever PDF is already on disk.
+
+The corpus stays split 2-of-20 on register until this finishes, which is the argument for not
+leaving A, B and C open for long.
 
 ## What this deliberately does not do
 
-It does not add a syntactic gate. The measures stay diagnostic unless a later decision says
-otherwise, for the reason above: a metric that becomes a target is met by typing the word.
+It does not gate any of the new measures. Every one of them is met by typing or avoiding a word,
+and this campaign has now watched that happen twice: `, so ` driven to 0.0 %, below every source,
+and possessives driven to zero in `PCP-003` — both overshoots of a rule stated as a substitution.
 
-It does not patch paragraphs, and it does not change what any document claims. Both registered
-discrepancies survived the pilot and were re-verified against the new text (D-001 in `PCP-003`,
-D-002 in `PCR-003`); `authoring/discrepancies.yaml` is what keeps them alive across a re-author.
+It does not touch what any document claims. Both registered discrepancies survived two re-authors
+and were re-verified against the new text each time; `authoring/discrepancies.yaml` plus brief §5c
+is what keeps them alive.
 
-It does not import the sibling repository's writing standard wholesale. Two of its rules — "if a
-sentence needs a semicolon, make it two sentences" and "should read like a checklist, not an
-essay" — point at the floor this corpus is already stuck at.
+It does not reopen the discrimination test. Three rounds scored 64 of 64 and the owner has now read
+the pair three times, so no blind test involving these documents can be valid. The human check
+stays what it is: the owner reads and quotes what gives it away, and what they quote becomes the
+next target.
 
 ## Open questions
 
-1. ~~**Blocking Track 1. Does spaCy become a dependency?**~~ **Answered by the project owner,
-   2026-08-17: yes, as an OPTIONAL dependency.** Not a hard one — the corpus must still build,
-   render, annex and ground on a checkout that has never installed a parser. What that commits
-   the implementation to:
-   - an optional group in `pyproject.toml` (`[project.optional-dependencies]`, e.g. `discourse`),
-     installed with `uv sync --extra discourse`, carrying spaCy and the `en_core_web_sm` model.
-     The model is a wheel URL, so it needs a direct reference rather than a plain version pin.
-   - the same group mirrored in the pip path, since `CLAUDE.md` requires the two declarations to
-     agree. A separate `requirements-discourse.txt` keeps `requirements.txt` installable
-     unchanged; a marked optional block inside it would also do.
-   - **`check_discourse.py` must degrade, not fail.** With spaCy absent it prints one line saying
-     how to install the extra and exits 0. It is advisory, so nothing in `make test`, `make style`
-     or `make corpus` may start depending on a parser being present.
-   - `uv.lock` is regenerated when the group lands. Land it **with** `check_discourse.py`, not
-     before: a lock change with no consumer is churn on the tested path.
-2. ~~**The discrimination test still has no valid result, so the acceptance test of this proposal
-   is unmet.**~~ **Answered by the project owner, 2026-08-17: the discrimination test is dropped
-   as the acceptance criterion.** Three rounds scored 64 of 64 and every round was decided by
-   something other than register, and the owner's own reading of the re-authored `PCR-003` was
-   that "it is immediately obvious that the text is AI generated" — so a blind test would score
-   at ceiling and add nothing. The human check for Track 1 is the owner reading the re-authored
-   pair and quoting what gives it away, as recorded in work unit
-   `2026-08-17_01_register-second-round/exploration.md` §9. Two further decisions taken there:
-   clause packing (mid-sentence `, so `, sentence-initial connectives) is the round's primary
-   target and topic chaining a no-regression condition; and the guide is amended minimally
-   (§2d Correction 2, Shape 4), with a full rewrite of its commentary held as a hypothesis.
-3. Which source is the reference for which document type? PDA hedges at 24.5 per 1000 words
-   because it is guidance. A-Mab sits at 6.6 and is the closer genre for a report.
+1. **Do the three new measures go in one work unit with a third re-author of the same pair, or
+   does Track C come first?** Round two's own lesson argues for measures first — the guide was
+   amended in round one and the author still did only what was printed back. But a third re-author
+   of `PCP-003`/`PCR-003` is the fourth measurement of two documents that no longer represent the
+   corpus, and the pair's owner has read them three times.
+2. **Is there a document other than the bioreactor pair to test on?** Every round so far has used
+   the same two. A third round on, say, `PCR-005` would cost the same and would say whether the
+   result generalises, at the price of losing the three-point comparison.
+3. Which source is the reference for which document type? PDA hedges at 24.5 per 1000 words because
+   it is guidance. A-Mab sits at 6.6 and is the closer genre for a report.

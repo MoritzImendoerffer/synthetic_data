@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-18_01_register-third-round]]** · **1 of 7 done** · 6 todo
+**[[epic|2026-08-18_01_register-third-round]]** · **2 of 7 done** · 5 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -29,7 +29,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-002]] | `todo` | the assistant | mechanism | Add the passive rate and the parser's ', and '+clause count to check_discourse.py, as bands with denominators |
 | [[TASK-003]] | `todo` | the assistant | mechanism | Print the three new measures in brief §5d, and add the write-the-passive rule and the two search strings to the guide |
 | [[TASK-004]] | `todo` | the assistant | document | Re-author PCR-003 in one pass from the amended artifacts, as a DRAFT |
 | [[TASK-005]] | `todo` | the assistant | annex | Promote the draft, render both formats, re-anchor the PCR-003 annex and spans, and re-ground the corpus |
@@ -41,6 +40,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
 | [[TASK-001]] | `done` | — | mechanism | Make the round-two owner-reading measure a file that reproduces its table, then move the two regex counts into check_style.py |
+| [[TASK-002]] | `done` | — | mechanism | Add the passive rate and the parser's ', and '+clause count to check_discourse.py, as bands with denominators |
 
 ---
 

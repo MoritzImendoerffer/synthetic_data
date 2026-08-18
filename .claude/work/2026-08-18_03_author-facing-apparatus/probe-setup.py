@@ -220,4 +220,3 @@ lpa_varfrac = float(methods.loc["AMV-3016", "variance_fraction"])
 lpa_loq = float(methods.loc["AMV-3016", "loq"])
 hcp_prec = float(methods.loc["AMV-3012", "precision_pct"])
 hcp_varfrac = float(methods.loc["AMV-3012", "variance_fraction"])
-```

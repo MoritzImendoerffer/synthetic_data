@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-18_03_author-facing-apparatus]]** · **2 of 12 done** · 10 todo
+**[[epic|2026-08-18_03_author-facing-apparatus]]** · **3 of 12 done** · 9 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -31,7 +31,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-003]] | `todo` | the assistant | document | Author the probe: two subsections, one agent, one pass, minimal regime, no counters |
 | [[TASK-004]] | `todo` | the assistant | measurement | The blind reading, recorded verbatim, then the decision rule applied — HALT for the owner |
 | [[TASK-005]] | `todo` | the assistant | measurement | Count what the reading named, run the gate on the probe, and write the results page |
 | [[TASK-006]] | `todo` | the assistant | mechanism | Split the register gate into GATED tics and ADVISORY signals; the author sees pass/fail, the reviewer sees the table |
@@ -48,6 +47,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 |---|---|---|---|---|
 | [[TASK-001]] | `done` | — | mechanism | Extend the measurement script with the frame counts, and prove it reproduces the results page |
 | [[TASK-002]] | `done` | — | mechanism | Build the probe scaffold: the setup code, the ten-line guide, the stripped brief, the excerpt, and the blind key |
+| [[TASK-003]] | `done` | — | document | Author the probe: two subsections, one agent, one pass, minimal regime, no counters |
 
 ---
 

@@ -737,6 +737,52 @@ including a "since" clause, and the classification that follows from them gets i
 and its own connective. A corpus author would have written all of it as one sentence with
 ", so … , and …".
 
+### The study is the patient, not the agent
+
+A decision is made by people and reported in the passive. The study, the design and the model are
+what the decision was made *from*, so they sit in a prepositional phrase or in the subject of a
+verb that reports what they contained, never as the agent that retained, carried or selected
+anything. The four sources put a passive construction in 57 to 64 % of their sentences. The
+corpus report re-authored in round two was at 35 %, and what avoiding the passive produced there
+was "the 4 factors that screening retained".
+
+> The process model included two main effects as well as a non-linear interaction term. Based on
+> these results, flow rate and end collection (CV) were classified as Key Process Parameters
+> (KPPs).
+> — A-Mab, p. 122
+
+> The experimental design used was a fractional factorial in order to determine the critical
+> formulation parameters for further characterization. The critical formulation parameters were
+> identified as pH and protein concentration for aggregation and polysorbate 20 level for
+> particulate matter.
+> — A-Mab, p. 184
+
+> From studies with three other mAbs as well as information supplied by the filter manufacturer,
+> filtration load volume, chase volume, and filtration pressure were identified as process
+> parameters that potentially impact the effectiveness of the virus removal for ―Type F‖ filters.
+> — A-Mab, p. 153
+
+> Potential process parameters that impact the CQAs were identified for each unit operation based
+> on platform information.
+> — PDA TR 60, printed p. 75 / extract p. 83
+
+> Output parameters were classified as IPCs*, IPTs**, or In Process Measurements (IPMs). IPCs and
+> IPTs were further classified as critical or not.
+> — ISPE Practical Implementation, printed p. 152 / extract p. 154
+
+**Note.** Read where the study went in each one. In the first it is the subject of *included*,
+which reports what the model contained and decides nothing; the decision that follows is a
+passive. In the second the design is the subject of a copula. In the third the studies are inside
+"From studies with three other mAbs", a front field, and the parameters they informed are the
+subject. A corpus author would have written "the model identified two main effects", "the
+fractional factorial design determined the critical formulation parameters" and "studies with
+three other mAbs identified filtration load volume", and each of those is a study doing something
+a person did.
+
+Reporting evidence is a different move and the sources do it in the active voice: "Results
+showed", "studies showed", "the data shows", "The analysis shows". The distinction is whether the
+verb reports an observation or a decision.
+
 ## Introducing and discussing a table or figure
 
 The move is short. Almost always *[object] + verb + what it shows*, with the discussion

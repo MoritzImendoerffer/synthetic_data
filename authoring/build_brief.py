@@ -240,6 +240,9 @@ def _discourse_section(doc_id: str, key) -> str:
     rows = [("mid-sentence `, so ` (% of sentences) — target <= 1.0", "_pct_so_mid"),
             ("opens with a connective (% of sentences) — target >= 3.0", "_pct_initial_conn"),
             ("2+ clause coordinators (% of sentences)", "_pct_coord2"),
+            ("mid-sentence `, and ` joining a second clause (%) — regex, a FLOOR; "
+             "target <= 3.4", "_pct_and_clause"),
+            ("mid-sentence `, not ` (%) — target <= 0.2", "_pct_not_tail"),
             ("sentences under 15 words (%) — band 15-32", "pct_under_15"),
             ("sentences over 40 words (%) — band 3-21.5", "pct_over_40")]
     for label, k in rows:
@@ -251,18 +254,25 @@ def _discourse_section(doc_id: str, key) -> str:
     if dsrc:
         disc_rows = [("topic chaining (%) — must not fall more than 2 pt", "chaining"),
                      ("copula main verb (%) — must not rise more than 2 pt", "copula"),
-                     ("adjunct front field (%)", "front")]
+                     ("adjunct front field (%)", "front"),
+                     ("sentences with a passive construction (%) — a BAND, never a floor",
+                      "passive"),
+                     ("`, and ` + a second clause, parser (%) — the other half of the regex row",
+                      "and_clause")]
         for label, k in disc_rows:
             cells = [f"{dsrc[n][k + '_pct']:.1f}" for n in names if n in dsrc]
             cells.append(f"{dmine[k + '_pct']:.1f} ({dmine[k][0]}/{dmine[k][1]})"
                          if dmine else "no previous revision")
             w(f"| {label} | " + " | ".join(cells) + " |\n")
-        w("\n_Chaining, copula and front field are `check_discourse.py --cap`: the sentence "
-          "caps (600 chaining, 450 copula/front) the pilot's figures were measured under, so "
-          "the columns are comparable with `docs/results/`. The corpus documents sit under "
-          "both caps; only the source columns are affected._\n")
+        w("\n_The five parser rows are `check_discourse.py --cap`: the sentence caps (600 "
+          "chaining, 450 for the rest) the pilot's figures were measured under, so the columns "
+          "are comparable with `docs/results/`. The corpus documents sit under both caps; only "
+          "the source columns are affected. All but chaining divide by the sentences that have "
+          "a root and a subject, which is a few fewer than the sentence count above, so the "
+          "passive here reads a few tenths above the round-two page's figure for the same "
+          "text._\n")
     else:
-        w("| topic chaining / copula / front field | "
+        w("| topic chaining / copula / front field / passive / `, and ` parser | "
           + " | ".join("—" for _ in names)
           + " | not measured — `uv sync --extra discourse` |\n")
 
@@ -277,6 +287,16 @@ def _discourse_section(doc_id: str, key) -> str:
       "sentence, or the paragraph has already named them.\n")
     w("- A `{python}` expression yielding a response or parameter NAME is never the subject of "
       "a verb that must agree with it. Put it after \"is\" or after a preposition.\n")
+    w("- A second independent clause after `, and ` becomes its own sentence. Search your "
+      "draft for `, and the`, `, and this`, `, and both`, `, and it`, `, and each`, "
+      "`, and none`; each is a full stop the sources would have written. This is the shape the "
+      "project owner named first on reading round two.\n")
+    w("- Where the sources would write a passive, write the passive. A study, a design or a "
+      "screening does not retain, carry forward or select anything: the people who ran it "
+      "did, and all four sources report that decision in the passive. Search your draft for "
+      "`screening retained`, `the design carries`, `the study selected`, `the model "
+      "identifies`. Reporting evidence is different and is not a fault — the sources do write "
+      "\"Results showed\" and \"the assessment identified\" (WRITING_GUIDE §2d).\n")
     w("- Do not produce a connective to hit a count. Write the sentence that needs one.\n\n")
     return b.getvalue()
 

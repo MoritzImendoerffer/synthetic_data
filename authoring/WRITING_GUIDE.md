@@ -124,9 +124,9 @@ is a bare demonstrative pointing at a table, and the number that would settle th
 deferred to another section. The reader has to take "far above" on trust for five more pages.
 
 > ✓ Raising dissolved CO₂ across its characterized range lowers acidic variants by
-> `` `{python} f"{abs(eff('acidic_variants','C')):.1f}"` `` percentage points, and the effect is
-> well resolved. However, the attribute is of very low criticality, and its acceptance
-> criterion applies only as an upper limit. The highest level any screening run reached was
+> `` `{python} f"{abs(eff('acidic_variants','C')):.1f}"` `` percentage points, a well resolved
+> effect. However, the attribute is of very low criticality, with an acceptance criterion that
+> applies only as an upper limit. The highest level any screening run reached was
 > `` `{python} f"{acid_max:.1f}"` `` %, against a limit of
 > `` `{python} f"{D.acceptance_for(UO,'acidic_variants')[1]:.0f}"` `` %.
 
@@ -161,12 +161,21 @@ connective: "Therefore, …", "However, …", "As a result, …", "For this reas
 the steps inside one sentence with ", so …" or with ", and …" carrying a second claim, and do
 not carry a new claim in a ", which …" clause.
 
-**This is a substitution. Check it in your draft.** Search for `, so ` and for `, and ` that
-introduces a second clause. Each one is a place where the sources would have written a full stop
-and a connective. Measured over the pages the self-test reads (2026-08-17): the four sources
-carry a mid-sentence ", so " in 0.1 to 0.4 % of their sentences and open 3.7 to 6.1 % of their
-sentences with a connective. The corpus carries ", so " in 6 to 11 % of sentences and opens 0 to
-2 % with a connective. `check_style.py` prints both figures on every run, and neither is gated.
+**This is a substitution. Check it in your draft.** Search for `, so `, for `, and ` that
+introduces a second clause (`, and the`, `, and this`, `, and both`, `, and it`), and for
+`, not `. Each one is a place where the sources would have written a full stop and a connective.
+Measured over the pages the self-test reads (2026-08-17): the four sources carry a mid-sentence
+", so " in 0.1 to 0.4 % of their sentences and open 3.7 to 6.1 % of their sentences with a
+connective. The corpus carries ", so " in 6 to 11 % of sentences and opens 0 to 2 % with a
+connective.
+
+The other two were measured a round later, on 2026-08-18, after the project owner read a report
+that had cleared every target above and still read as machine prose. `, and ` joining a second
+clause runs at 18 to 23 % of corpus sentences against 1.1 to 3.4 % in the sources, and it did
+not move at all in the round that drove ", so " to zero. A mid-sentence `, not ` reached 4.3 %
+in that report against 0.0 to 0.2 % in the sources, and the round before it was at zero:
+correcting one habit had produced another. `check_style.py` prints all four figures on every
+run, and none of them is gated.
 
 **Correction 0 — three steps in one sentence.** From `PCR-003`, *Discussion*, as it stood on
 2026-08-17. The project owner quoted it as "hard to understand, too many arguments in one
@@ -181,8 +190,8 @@ all three to the end.
 
 > ✓ The lack-of-fit tests rest on `` `{python} f"{cp_rsm}"` `` centre-point replicates.
 > Therefore, a non-significant result bounds the evidence for the model form without
-> establishing it. For this reason the weakest case is `` `{python} lof_p_lo_resp.lower()` ``
-> (p = `` `{python} f"{lof_p_lo:.2f}"` ``), and it is the one to watch at scale.
+> establishing it. For this reason the weakest case to watch at scale is
+> `` `{python} lof_p_lo_resp.lower()` `` (p = `` `{python} f"{lof_p_lo:.2f}"` ``).
 
 Three sentences, one step each, and the second and third open on the connective that carries
 the step. Note the third: the response name is a runtime value. It can therefore never be the
@@ -193,7 +202,36 @@ from exactly that. Put a runtime name after "is" or after a preposition, never b
 > mechanism described above and was also seen at bench scale, resulted from the highest
 > load.
 > ✓ The highest load raised pool aggregate 1.4-fold. This is consistent with the
-> descending-edge mechanism described above, and it reproduces the bench-scale result.
+> descending-edge mechanism described above and reproduces the bench-scale result.
+
+**Where the sources would write a passive, write the passive.** This is the same failure one
+step further out. Correction 0 is an author supplying a *subject* the fact does not have; this
+is an author supplying an *agent*. A study, a design or a screening does not retain, carry
+forward or select anything. The people who ran it did, and the sources report that decision in
+the passive: "were classified as", "were selected", "were identified as". The four sources put a
+passive construction in 57 to 64 % of their sentences (§4a, §4b); the round-two `PCR-003` was at
+35 %, having fallen at every revision, and the project owner's reading of it named the cost.
+From `PCR-003`, *Executive summary*, as it stood on 2026-08-18:
+
+> ✗ The 4 factors that screening retained then entered a face centred response surface design of
+> 28 runs, and the remaining 4 parameters were assessed one at a time.
+
+Screening is a study. It retained nothing. The sentence also carries the balanced `, and `
+second clause that is its own fault, above.
+
+> ✓ The 4 factors retained from screening then entered a face centred response surface design of
+> 28 runs. The remaining 4 parameters were assessed one at a time.
+
+Every fact survives, the agent is gone, and the two steps are two sentences. Search a draft for
+`screening retained`, `the design carries`, `the study selected`, `the model identifies`.
+
+**Reporting evidence is not the same thing, and it is not a fault.** The rule is about
+decisions, not about observations. Counted in the four sources on 2026-08-18: "Results showed",
+"studies showed", "the data shows" and "The analysis shows" occur about twenty times between
+them, and "the assessment identified" or "studies identified" seven times. Not one of the four
+ever writes a study as the agent of *retain*, *carry* or *select*. So evidence may be the
+subject of a verb that reports what it shows; a study may not be the subject of a verb that
+reports what a person decided.
 
 **This first rule is the one the corpus misses most, and it is not close.** A sentence carries
 the topic forward when its subject names something the sentence before it mentioned, or is a
@@ -357,7 +395,7 @@ material. Say the consequence and attach the statistics to it.
 > ✓ Culture temperature and osmolality do not reach significance at α =
 > `` `{python} alpha` ``, but their effects are of the same order as the terms that do. Neither
 > can therefore be called inactive on this design. Temperature is carried into the
-> response-surface stage on that basis. Osmolality is not, and its range rests on the screening
+> response-surface stage on that basis. Osmolality is not. Its range rests on the screening
 > result and on the classification rationale in §9.
 
 Check a rewrite against the data before you keep it. An earlier draft of this example ended
@@ -495,6 +533,9 @@ in the middle.
 | *…of the nine in §4b, how many are used* | *diagnostic* | *9* | *7* | *7* | *6* |
 | *Sentences with a mid-sentence ", so " — not gated* | *diagnostic* | *0.1 %* | *0.3 %* | *0.4 %* | *0.4 %* |
 | *Sentences opening with a connective — not gated* | *diagnostic* | *4.8 %* | *6.1 %* | *4.2 %* | *3.7 %* |
+| *Sentences with `, and ` + a second clause (regex, a floor) — not gated* | *diagnostic* | *3.4 %* | *1.1 %* | *1.3 %* | *3.1 %* |
+| *Sentences with a mid-sentence `, not ` — not gated* | *diagnostic* | *0.2 %* | *0.0 %* | *0.1 %* | *0.0 %* |
+| *Sentences with a passive construction — a BAND, not gated* | *diagnostic* | *56.9 %* | *64.0 %* | *62.9 %* | *60.1 %* |
 
 The four human columns are what the sources actually measure. **Aim for those numbers, not
 for the edge of the band.** The band is now the union of four house styles and no single
@@ -511,6 +552,16 @@ and use 6 to 9. "However" occurs twice in the whole corpus and 59 times in the f
 
 The two clause-packing rows were added on 2026-08-17; the corpus measured 6–11 % and 0–2 % on
 them, and round one of the register pilot made both worse. They fail nothing.
+
+The three rows added on 2026-08-18 are what the project owner's reading of round two named, after
+a round that had cleared every target above. None of them fails anything either. The passive row
+is a **band**: the plans already sit inside it and a floor would push a genre that is already
+right the wrong way. The first two come from `check_style.py`, which prints them on every run.
+The passive comes from `uv run --extra discourse python authoring/check_discourse.py`, which
+needs the optional parser; its denominator is the sentences that have a root and a subject, so
+the same four sources read 54.3, 59.8, 59.6 and 58.4 % when every sentence is counted instead.
+Compare your own document against the row above using the same command, not against those four
+numbers.
 
 The gate also rejects a short list of phrases that appear nowhere in either human source:
 "stated first", "it is worth noting", "this warrants comment", "the distinction that matters

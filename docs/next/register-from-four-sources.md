@@ -109,15 +109,26 @@ the pair three times, so no blind test involving these documents can be valid. T
 stays what it is: the owner reads and quotes what gives it away, and what they quote becomes the
 next target.
 
+## The shape of the next round — settled by the project owner, 2026-08-18
+
+1. ~~**Do the three new measures go first, or does Track C?**~~ **Measures first.** Track A lands
+   before the guide's commentary is touched. The reason is round two's own result: the guide was
+   amended in round one and the author still did only what was printed back to it. Track C stays
+   the leading hypothesis and is taken up after Track A has been measured, not instead of it.
+2. ~~**Is there a document other than the bioreactor pair to test on?**~~ **`PCR-003`, for
+   comparability.** It is the document with the longest series — measured at round zero
+   (`b0361f1`), round one (`f06f1a7`) and round two — so a fourth point on the same file is worth
+   more than a first point on a fresh one. Track B's rule (write the passive) rides along in the
+   same re-author, since it is a guide edit rather than a measure.
+
+**What that costs, stated so it is not discovered later.** Round two ran both genres, and that is
+how it could tell a property of the *instruction* from a property of one draft: `, so ` went to
+0.0 % and chaining to ~46 % in two documents written in separate contexts. A round on `PCR-003`
+alone cannot make that distinction, and the plan-genre traps — the copula/expletive trade that
+`PCP-003` fell into twice — are invisible in a report. If a Track A measure moves only in
+`PCR-003`, the honest reading is "moved in the report", not "moved".
+
 ## Open questions
 
-1. **Do the three new measures go in one work unit with a third re-author of the same pair, or
-   does Track C come first?** Round two's own lesson argues for measures first — the guide was
-   amended in round one and the author still did only what was printed back. But a third re-author
-   of `PCP-003`/`PCR-003` is the fourth measurement of two documents that no longer represent the
-   corpus, and the pair's owner has read them three times.
-2. **Is there a document other than the bioreactor pair to test on?** Every round so far has used
-   the same two. A third round on, say, `PCR-005` would cost the same and would say whether the
-   result generalises, at the price of losing the three-point comparison.
-3. Which source is the reference for which document type? PDA hedges at 24.5 per 1000 words because
+1. Which source is the reference for which document type? PDA hedges at 24.5 per 1000 words because
    it is guidance. A-Mab sits at 6.6 and is the closer genre for a report.

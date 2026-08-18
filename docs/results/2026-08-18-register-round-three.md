@@ -372,6 +372,31 @@ Possessives (`$W/measure_possessive.txt`), the subordination counts (`$W/measure
 and the staccato runs (`$W/measure_staccato.txt`) use the same prose extraction — `check_style.prose_from_qmd` and `check_style.prose_from_extract`
 over `HUMAN_SOURCES` — and count by regex per 1000 words and per sentence respectively.
 
+**Those three measures now have a script behind them**, written on 2026-08-18 because they did
+not:
+
+```bash
+uv run --extra discourse python .claude/work/2026-08-18_02_register-track-d/measure_trackd.py \
+    $(ls pc_package/*.qmd)
+```
+
+Its third block reproduces every figure in `measure_staccato.txt` and `measure_whatpaid.txt`
+exactly, on all four sources and on both documents those files cover, and three of the four
+possessive rates as well. **One does not.** The `it is/was` row here reads 22 / 28 / 41 / 50 on the
+four sources and 4 on PCP-003; the script's pattern gives 18 / 28 / 40 / 50 and 3. Every candidate
+pattern that lifts PDA TR 60 to 22 overshoots the other three, so the pattern behind the published
+figure cannot be recovered from its output, and it was never written down. That number is not
+stale, it is uncheckable, and it is the reason the script exists. Read the script's figure, not
+this one.
+
+Two definitions the file names did not record, and the script now does. The four subordination
+rows count **occurrences over the whole prose, divided by the sentence count** — a rate per 100
+sentences, not the share of sentences that carry one. PCR-003 carries 67 `, which` in 66
+sentences, and 15.33 % is 67/437. The semicolon row separates the two further: 6 semicolons, only
+1 of them inside a sentence the splitter kept. The possessive rates divide by
+`len(text.split())`, the whole prose, which is up to 19 % larger than the word count
+`check_style` divides by.
+
 **The two scripts are the method for these measures.** `authoring/register_analysis.ipynb` §13 is
 superseded for clause packing, chaining, copula, front field, the passive and the two and-clause
 counts, and it was not re-executed here. The notebook remains the method for the analyses the

@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-18_03_author-facing-apparatus]]** · **0 of 12 done** · 12 todo
+**[[epic|2026-08-18_03_author-facing-apparatus]]** · **1 of 12 done** · 11 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -31,7 +31,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-001]] | `todo` | the assistant | mechanism | Extend the measurement script with the frame counts, and prove it reproduces the results page |
 | [[TASK-002]] | `todo` | the assistant | mechanism | Build the probe scaffold: the setup code, the ten-line guide, the stripped brief, the excerpt, and the blind key |
 | [[TASK-003]] | `todo` | the assistant | document | Author the probe: two subsections, one agent, one pass, minimal regime, no counters |
 | [[TASK-004]] | `todo` | the assistant | measurement | The blind reading, recorded verbatim, then the decision rule applied — HALT for the owner |
@@ -46,7 +45,9 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 ## Done
 
-*None.*
+| Task | Status | Waiting on | Kind | What it is |
+|---|---|---|---|---|
+| [[TASK-001]] | `done` | — | mechanism | Extend the measurement script with the frame counts, and prove it reproduces the results page |
 
 ---
 

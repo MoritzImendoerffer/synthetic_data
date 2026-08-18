@@ -1,57 +1,39 @@
 ---
 type: pm-task
-epic: 2026-08-17_01_register-second-round
-sprint: 2026-08-17_01_register-second-round
+epic: 2026-08-18_01_register-third-round
+sprint: 2026-08-18_01_register-third-round
 task: TASK-004
-status: done
-kind: mechanism
-title: "Give the brief a \u00a75d that prints the discourse targets and the document's own current numbers"
+status: todo
+kind: document
+title: "Re-author PCR-003 in one pass from the amended artifacts, as a DRAFT"
 generated: true
-waiting_on: —
-tags: [pm/task, pm/done]
+waiting_on: the assistant
+tags: [pm/task, pm/todo]
 about: ["PCP-003", "PCR-003"]
 ---
 
-> [!warning] Generated from `.claude/work/2026-08-17_01_register-second-round/state.json` by `scripts/pm_notes.py`.
+> [!warning] Generated from `.claude/work/2026-08-18_01_register-third-round/state.json` by `scripts/pm_notes.py`.
 > Anything written here by hand is lost on the next run.
 
-# TASK-004 — Give the brief a §5d that prints the discourse targets and the document's own current numbers
+# TASK-004 — Re-author PCR-003 in one pass from the amended artifacts, as a DRAFT
 
-**Epic:** [[epic]] · **Status:** `done` · **Waiting on:** — · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
-PROCEDURE: procedures/TASK-004.md in this work unit — numbered steps, code, commands and the output each must print. Follow it top to bottom.  WHERE. authoring/build_brief.py:build() writes sections with w(); §5c is emitted at line ~415 by w(_discrepancy_assignments(doc_id)) and §6 starts at line 417. Insert §5d between them, always emitted (the same rule as 5c: a section that disappears is indistinguishable from one that stopped being generated).  HOW TO GET THE NUMBERS. sys.path already reaches authoring/ — import check_style and call measure(prose_from_qmd(path)) on pc_package/<DOC>_<uokey>.qmd; the uokey→filename map is in _pcpkg's DOC_REGISTRY. For spaCy rows: subprocess `python authoring/check_discourse.py --json --cap <qmd>` and read stdout; if it prints the one degrade line, print 'not measured'. Do not import spacy in build_brief.py itself.  THE DECISION (plan, overrulable): §5d prints numbers and rules and never generates prose. The proposal said the brief 'can generate worked chains from the document's own grounded facts'; a template-generated chain is machine prose handed to the author, which is the loop this repository has already paid for once. Worked corrections stay in the guide (TASK-002).  THIS IS THE PILOT'S HYPOTHESIS MADE CONCRETE: 'an author can execute and self-verify a substitution and cannot self-verify a rate' — so the brief gives the author the substitution AND the number, and check_style prints the number back on every render.  THE SCALE LINE. V is report_values (outputs/report_values.json); PCP-003 line 91 already does scale_l = V["commercial_scale_l"]. Point the author at it; do not type 15,000.
+PROCEDURE: procedures/TASK-004.md — the previous unit's TASK-006 procedure with the round-three brief. ONE GENRE ONLY, by owner decision (proposal, 'shape of the next round'): PCP-003 is NOT re-authored. Its §5d row is generated anyway (it costs nothing) and it is the CONTROL — if a measure moves in PCR-003 the page says 'moved in the report'. THE AUTHOR IS TOLD THE NUMBER for all eight measures now (three new + five from round two) and the two new substitutions. It is NOT told to write more passives to hit a count; the rule is 'where the sources would write a passive, write the passive', and the passive figure is a band the report is under. PREDICTED OVERSHOOT (exploration §3): expect ', and '+clause to go to ~0 %, below the sources' 1.1-3.4, the way ', so ' did. That is a result for TASK-006, not a reason to edit a sentence. NEVER PATCH. Second one-pass author allowed; post-editing is not. pct_under_15 has a 32 % ceiling and round two sits at 19.5 %; splitting the ', and ' clauses adds short sentences — the author should know the ceiling. RENDER THE PDF SEPARATELY with PATH="$PWD/.venv/bin:$PATH"; check_render glyph-checks whatever pdf is on disk.
 
 ## Acceptance criteria
 
-- [x] `uv run python authoring/build_brief.py PCR-003` emits '## 5d. Discourse targets' between §5c and §6, with a table: measure | PDA TR 60 | A-Mab | ISPE TT | ISPE PV | this document as it stands — for the three TASK-001 measures (from check_style.measure on pc_package/PCR-003_bioreactor.qmd: 8.0 / 0.9 / 5.4) and, when spaCy is importable, chaining / copula / front field from check_discourse (30.7 / 32.5 / 9.2 with --cap semantics stated); when spaCy is absent those rows read 'not measured — uv sync --extra discourse' and the brief still builds
-- [x] `uv run python authoring/build_brief.py PCP-003` emits the same section with 10.6 / 1.8 / 9.3
-- [x] §5d restates, verbatim from the guide, the four rules as substitutions with their search strings: one step per sentence → connective opens the next; article or noun, never 'it is'; name the set you count; runtime nouns never as agreeing subjects — and the round's targets (', so ' ≤ 1.0 %, initial connective ≥ 3.0 %, chaining and copula not regressing) with the sentence 'these are printed by check_style.py on every run of check_render.py'
-- [x] §5d contains NO generated example sentence — no template prose; grep for a '> ✓' or '✗' block in the emitted §5d returns nothing
-- [x] §1 Identity gains one line: the report must state the commercial scale, pulled as V["commercial_scale_l"] (config/parameters.yaml line 24, 15000), because the round-one PCR-003 never states it
-- [x] a document with no .qmd on disk gets §5d with 'no previous revision' in the document column rather than a crash
-- [x] `make test PY="uv run python"` passes; `cd pc_package && uv run python build_ground_truth.py && uv run python validate_annex.py` still 20/20 (the brief touches no annex)
+- [ ] before authoring, the round-two text is copied: `cp pc_package/PCR-003_bioreactor.qmd .claude/work/2026-08-18_01_register-third-round/pre-rewrite/` and it equals `git show e7a4768:pc_package/PCR-003_bioreactor.qmd`
+- [ ] `uv run --extra discourse python authoring/build_brief.py PCR-003` regenerated first; §5c carries D-002 and §5d carries the round-two numbers (', and '+clause 22.6, ', not ' 4.3, passive 34.4, plus the five round-two measures)
+- [ ] ONE agent authors the whole document in one pass from WRITING_GUIDE.md, REGISTER_EXEMPLAR.md, STORY_BIBLE.md, section_plan.yaml and the PCR-003 brief; it reads no pc_package/*.qmd and not authoring/rhetorical/PCR-003.spans.yaml
+- [ ] `uv run python authoring/check_render.py pc_package/PCR-003_bioreactor.DRAFT.qmd --render` passes including the style gate; the pdf is rendered SEPARATELY with the venv on PATH and glyph-checked fresh; the packing line (now five figures) is copied verbatim into the completion note
+- [ ] the D-002 absolute appears UNQUALIFIED in the introduction with the true elaboration following; the commercial scale is stated via V["commercial_scale_l"]; the Discussion names the four factors it counts
+- [ ] no inline expression yielding a name is an agreeing subject (grep from the previous unit's TASK-006 §4 returns nothing); `grep -c 'screening retained\|screening identified\|the design carries\|the model identifies' pc_package/PCR-003_bioreactor.DRAFT.qmd` is 0
+- [ ] the committed pc_package/PCR-003_bioreactor.qmd, pc_package/PCP-003_bioreactor.qmd and all 20 annexes are untouched; git status shows only the DRAFT and its untracked renders
 
-**Depends on:** [[TASK-001]], [[TASK-003]]
-
-## What was built
-
-build_brief.py emits '## 5d. Discourse targets' between 5c and 6, always, for the same reason 5c is always emitted: a section that disappears cannot be told apart from a mechanism that stopped working.
-
-PCR-003's table prints 8.0 / 0.9 / 5.4 for the three packing measures and 30.7 (127/414), 32.5 (135/415), 9.2 (38/415) for chaining, copula and front field. PCP-003 prints 10.6 / 1.8 / 9.3 and 34.4 (77/224), 27.6 (62/225), 10.2 (23/225). Every value is the one the procedure predicted. Two more rows carry pct_under_15 and pct_over_40 with their bands, because the round's substitution splits sentences and both bands are where that shows up first.
-
-SOURCE COLUMNS ARE MEASURED, NOT CARRIED. The procedure allowed hard-coding the pilot's 59.4 / 59.0 / 61.9 / 57.0; this reads them live instead, from one check_discourse.py --json --cap subprocess that covers the four sources and the document together, and the packing rows come through check_style.measure on HUMAN_SOURCES. Nothing in the brief can go stale against a re-extraction of refs/text/. The cost is 79 s per two briefs against 8 s, all of it spaCy parsing the four sources; that is the price of the numbers being current, and building a brief is not on the render path.
-
-NO GENERATED PROSE, and this is a decision, not an omission. The proposal suggested the brief could build worked chains from the document's own grounded facts. A template-generated chain is machine prose handed to the author, which is the self-reference loop the corpus already paid for once. §5d prints numbers and the four rules as substitutions, with their search strings; the worked corrections stay in WRITING_GUIDE, written by a person. A grep of the emitted section for a checkmark or cross returns 0 in both briefs.
-
-THE THREE DEGRADED PATHS ALL PROVED, not asserted. (1) spaCy absent, on a base uv sync: the brief builds in 8 s and the discourse row reads 'not measured -- `uv sync --extra discourse`' with em dashes in the source cells. (2) No .qmd on disk: _previous_revision_path returns None, the document column reads 'no previous revision' in all eight rows and the source columns still print. (3) `bash authoring/check_blank_repo.sh` passes both halves -- the static grep finds no authoring/ file reading a document as input (paths are built from variables and the comments say 'the previous revision'), and the functional half runs the whole pipeline with all 20 documents moved aside.
-
-§1 Identity gains the commercial-scale line for every unit-operation document, pointing at V["commercial_scale_l"] and naming the defect it fixes. The value is not typed into the brief; config/parameters.yaml line 24 holds it and PCP-003 already reads it that way.
-
-The module docstring now says the brief never reads a pc_package document FOR CONTENT, and states what §5d does read and that it prints numbers only.
-
-Gates. `make test PY="uv run python"`: 88 passed. build_ground_truth.py + validate_annex.py: 20/20 annexes valid, and `git status pc_package/ground_truth/` is empty -- all 20 rebuilt byte-identical, as expected from a task that touches no document and no annex.
+**Depends on:** [[TASK-003]]
 
 ## Documents it is about
 
@@ -60,4 +42,6 @@ Gates. `make test PY="uv run python"`: 88 passed. build_ground_truth.py + valida
 
 ## Files it touched
 
-- `authoring/build_brief.py`
+- `pc_package/PCR-003_bioreactor.DRAFT.qmd`
+- [[PCR-003.brief]] — `authoring/out/PCR-003.brief.md`
+- `.claude/work/2026-08-18_01_register-third-round/pre-rewrite/PCR-003_bioreactor.qmd`

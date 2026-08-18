@@ -1,17 +1,17 @@
 ---
 type: pm-board
-epic: 2026-08-17_01_register-second-round
-sprint: 2026-08-17_01_register-second-round
+epic: 2026-08-18_01_register-third-round
+sprint: 2026-08-18_01_register-third-round
 generated: true
 tags: [pm/board]
 ---
 
-> [!warning] Generated from `.claude/work/2026-08-17_01_register-second-round/state.json` by `scripts/pm_notes.py`.
+> [!warning] Generated from `.claude/work/2026-08-18_01_register-third-round/state.json` by `scripts/pm_notes.py`.
 > Anything written here by hand is lost on the next run.
 
 # Board — the active epic
 
-**[[epic|2026-08-17_01_register-second-round]]** · **9 of 9 done**
+**[[epic|2026-08-18_01_register-third-round]]** · **1 of 7 done** · 6 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -27,21 +27,20 @@ None of them blocks the work below.
 Nothing in this table needs the project owner. It is what the coding assistant has still to do,
 and it is here so the state is visible, not so anyone else acts on it.
 
-*None.*
+| Task | Status | Waiting on | Kind | What it is |
+|---|---|---|---|---|
+| [[TASK-002]] | `todo` | the assistant | mechanism | Add the passive rate and the parser's ', and '+clause count to check_discourse.py, as bands with denominators |
+| [[TASK-003]] | `todo` | the assistant | mechanism | Print the three new measures in brief §5d, and add the write-the-passive rule and the two search strings to the guide |
+| [[TASK-004]] | `todo` | the assistant | document | Re-author PCR-003 in one pass from the amended artifacts, as a DRAFT |
+| [[TASK-005]] | `todo` | the assistant | annex | Promote the draft, render both formats, re-anchor the PCR-003 annex and spans, and re-ground the corpus |
+| [[TASK-006]] | `todo` | the assistant | measurement | Measure the four-point series by one method, apply the stopping rule, and record the owner's reading |
+| [[TASK-007]] | `todo` | the assistant | documentation | Move the findings into docs, and rewrite or retire the proposal on the verdict |
 
 ## Done
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-001]] | `done` | — | mechanism | Print clause packing and sentence-initial connectives in check_style.py, gated by nothing |
-| [[TASK-002]] | `done` | — | mechanism | Rewrite the guide's sentence rule as a substitution, fix the ✓ text that teaches the fault, and add the referent and Shape 4 examples |
-| [[TASK-003]] | `done` | — | mechanism | Add authoring/check_discourse.py with spaCy as an optional extra that the build never needs |
-| [[TASK-004]] | `done` | — | mechanism | Give the brief a §5d that prints the discourse targets and the document's own current numbers |
-| [[TASK-005]] | `done` | — | document | Re-author PCP-003 in one pass from the amended artifacts, as a DRAFT |
-| [[TASK-006]] | `done` | — | document | Re-author PCR-003 in one pass from the amended artifacts, as a DRAFT |
-| [[TASK-007]] | `done` | — | annex | Promote both drafts, render both formats, re-anchor the annexes and re-ground the corpus |
-| [[TASK-008]] | `done` | — | measurement | Measure round two against rounds zero and one with one method, apply the stopping rule, and record the owner's reading |
-| [[TASK-009]] | `done` | — | documentation | Move the findings into docs, settle the decision, and rewrite or retire the proposal on the stopping rule's verdict |
+| [[TASK-001]] | `done` | — | mechanism | Make the round-two owner-reading measure a file that reproduces its table, then move the two regex counts into check_style.py |
 
 ---
 

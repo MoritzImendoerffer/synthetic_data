@@ -125,6 +125,21 @@ INITIAL_CONNECTIVE = re.compile(
     r"In contrast|For example|Thus|Hence|Nevertheless|Nonetheless|Moreover|Furthermore|"
     r"Instead|Rather|First|Second|Third|Finally|Overall)\b,?", re.I)
 
+# Two more advisory counts, added 2026-08-18 after the project owner read the round-two PCR-003
+# and named the balanced two-clause sentence — "…forms the … attributes of A-Mab, and this
+# report bounds the culture conditions that set them" — as the thing that gave it away. Counted
+# afterwards: 18-23 % of corpus sentences against 1.1-3.4 % in the four sources, and the round
+# that drove ", so " to zero did not move it, because nothing printed it back.
+#
+# AND_CLAUSE is a FLOOR. It matches ", and" followed by a fixed list of clause openers, so it
+# misses a second clause opening on a bare noun ("…, and osmolality was not"; "…, and both were
+# retained"). Measured 2026-08-18 it undercounts the corpus by 2-6 points and matches the four
+# sources within 0.5. The parser count in check_discourse.py is the other half; neither is a
+# superset of the other, and both are printed. Gated by nothing.
+AND_CLAUSE = re.compile(
+    r",\s+and\s+(?:the|this|that|these|those|it|they|he|she|we|its|their|a|an|[a-z]+ing)\b", re.I)
+NOT_TAIL = re.compile(r",\s+not\s+", re.I)
+
 
 def _band(lo, hi) -> str:
     if lo is None:
@@ -291,6 +306,8 @@ def measure(text: str) -> tuple[dict, list, Counter, list]:
     n_so = sum(1 for s in sents if SO_MID.search(s))
     n_init = sum(1 for s in sents if INITIAL_CONNECTIVE.match(s))
     n_coord = sum(1 for s in sents if len(CLAUSE_COORD.findall(s)) >= 2)
+    n_and   = sum(1 for s in sents if AND_CLAUSE.search(s))
+    n_not   = sum(1 for s in sents if NOT_TAIL.search(s))
     m = {
         "mean_len": stat.mean(lens),
         "median_len": stat.median(lens),
@@ -312,7 +329,10 @@ def measure(text: str) -> tuple[dict, list, Counter, list]:
         "_pct_so_mid":       100.0 * n_so / n,
         "_pct_initial_conn": 100.0 * n_init / n,
         "_pct_coord2":       100.0 * n_coord / n,
+        "_pct_and_clause":   100.0 * n_and / n,
+        "_pct_not_tail":     100.0 * n_not / n,
         "_n_so_mid": n_so, "_n_initial_conn": n_init, "_n_coord2": n_coord,
+        "_n_and_clause": n_and, "_n_not_tail": n_not,
     }
     hits = []
     for pat, label in BANNED:
@@ -362,8 +382,12 @@ def packing_line(m: dict) -> str:
             f"({m['_n_so_mid']}/{m['_n_sent']}), "
             f"opens with a connective {m['_pct_initial_conn']:4.1f} % "
             f"({m['_n_initial_conn']}/{m['_n_sent']}), "
-            f"2+ clause coordinators {m['_pct_coord2']:4.1f} %  "
-            f"[sources: 0.1-0.4 / 3.7-6.1 / 1.2-3.1]")
+            f"2+ clause coordinators {m['_pct_coord2']:4.1f} %, "
+            f"', and '+clause {m['_pct_and_clause']:4.1f} % "
+            f"({m['_n_and_clause']}/{m['_n_sent']}), "
+            f"', not ' {m['_pct_not_tail']:4.1f} % "
+            f"({m['_n_not_tail']}/{m['_n_sent']})  "
+            f"[sources: 0.1-0.4 / 3.7-6.1 / 1.2-3.1 / 1.1-3.4 / 0.0-0.2]")
 
 
 def render(name: str, m: dict, hits: list, compounds: Counter, longest: list,
@@ -470,23 +494,25 @@ def compare(paths: list[str]) -> int:
         return 0
 
     width = max(len(n) for n, _ in cols) + 2
-    print(f"{'metric':<50s}{'band':>11s}" + "".join(f"{n:>{width}s}" for n, _ in cols))
+    print(f"{'metric':<62s}{'band':>11s}" + "".join(f"{n:>{width}s}" for n, _ in cols))
     for key, (lo, hi, desc) in LIMITS.items():
-        row = f"{desc:<50s}{_band(lo, hi):>11s}"
+        row = f"{desc:<62s}{_band(lo, hi):>11s}"
         for _, m in cols:
             row += f"{m[key]:>{width}.1f}"
         print(row)
-    print(f"{'connectives per 1k words (not gated)':<50s}{'':>11s}"
+    print(f"{'connectives per 1k words (not gated)':<62s}{'':>11s}"
           + "".join(f"{1000.0 * sum(m['_connectives'].values()) / m['_n_words']:>{width}.1f}"
                    for _, m in cols))
-    print(f"{'  of the nine, how many are used at all':<50s}{'':>11s}"
+    print(f"{'  of the nine, how many are used at all':<62s}{'':>11s}"
           + "".join(f"{sum(1 for n in m['_connectives'].values() if n):>{width}d}"
                    for _, m in cols))
     for key, label in (("_pct_so_mid",       "% sentences with mid-sentence ', so ' (not gated)"),
                        ("_pct_initial_conn", "% sentences opening with a connective (not gated)"),
-                       ("_pct_coord2",       "% sentences with 2+ clause coordinators (not gated)")):
-        print(f"{label:<50s}{'':>11s}" + "".join(f"{m[key]:>{width}.1f}" for _, m in cols))
-    print(f"{'(sentences of prose)':<50s}{'':>9s}"
+                       ("_pct_coord2",       "% sentences with 2+ clause coordinators (not gated)"),
+                       ("_pct_and_clause",   "% sentences with ', and ' + a second clause (floor; not gated)"),
+                       ("_pct_not_tail",     "% sentences with mid-sentence ', not ' (not gated)")):
+        print(f"{label:<62s}{'':>11s}" + "".join(f"{m[key]:>{width}.1f}" for _, m in cols))
+    print(f"{'(sentences of prose)':<62s}{'':>11s}"
           + "".join(f"{m['_n_sent']:>{width}d}" for _, m in cols))
     return 0
 

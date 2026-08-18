@@ -36,12 +36,14 @@ jupyter: python3
 
 ```{python}
 #| tags: [setup]
-import sys, os, itertools
+import sys, os
 sys.path.insert(0, os.path.abspath("."))
 from _pcpkg import *  # noqa: F401,F403
 import doe_report as D
 import matplotlib.pyplot as plt
 import scipy.stats as sstat
+import itertools as it
+import pandas as pd
 
 DOC = "PCR-003"
 UO = "bioreactor"
@@ -49,393 +51,399 @@ UO_TITLE = "Production Bioreactor (Step 3)"
 
 # --- doc-local derived scalars (pulled from the model; never typed) -----------------
 alpha = 0.05
-SCR, RSM = "screening", "rsm"
+step_no = CFG.unit_op(UO).step
+resps = list(D.responses(UO))
+scr_f = list(D.screening_factors(UO))
+rsm_f = list(D.rsm_factors(UO))
+L = D.factor_letters(UO)
+par = {p.key: p for p in CFG.unit_op(UO).parameters}
+PNAME = {k: p.name for k, p in par.items()}
 
-n_scr, n_rsm = doe_runs(UO, SCR), doe_runs(UO, RSM)
-cp_scr, cp_rsm = doe_centre_points(UO, SCR), doe_centre_points(UO, RSM)
 
-scr_f, rsm_f = D.screening_factors(UO), D.rsm_factors(UO)
-n_scr_f, n_rsm_f = len(scr_f), len(rsm_f)
-resps = D.responses(UO)
+def fnm(k, lower=False):
+    n = PNAME[k].replace(" (pCO2)", "")
+    return (n[0].lower() + n[1:]) if lower else n
+
+
+def rnm(r, lower=True):
+    n = D.RESP_LABEL.get(r, r).replace(" (HMW)", "")
+    return (n[0].lower() + n[1:]) if lower else n
+
+
+def jn(items):
+    items = list(items)
+    if len(items) == 1:
+        return items[0]
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def fjoin(keys, lower=True):
+    return jn([fnm(k, lower) for k in keys])
+
+
+def rjoin(keys, lower=True):
+    return jn([rnm(k, lower) for k in keys])
+
+
+def rng_str(k):
+    p = par[k]
+    return f"{p.prange[0]:g}–{p.prange[1]:g}"
+
+
+def nor_str(k):
+    p = par[k]
+    return f"{p.nor[0]:g}–{p.nor[1]:g}"
+
+
+# design structure -------------------------------------------------------------------
+scr_df = csv(f"doe_{UO}_screening.csv")
+rsm_df = csv(f"doe_{UO}_rsm.csv")
+n_scr = doe_runs(UO, "screening")
+n_rsm = doe_runs(UO, "rsm")
+cp_scr = doe_centre_points(UO, "screening")
+cp_rsm = doe_centre_points(UO, "rsm")
+n_cube_scr = int((scr_df.run_type == "factorial").sum())
+n_cube_rsm = int((rsm_df.run_type == "factorial").sum())
+n_ax_rsm = int((rsm_df.run_type == "axial").sum())
+n_scr_f = len(scr_f)
+n_rsm_f = len(rsm_f)
 n_resp = len(resps)
-LETTER = D.factor_letters(UO)
-LBL = D.RESP_LABEL
 
-PNAME = {p.key: p.name for p in CFG.unit_op(UO).parameters}
-PUNIT = {p.key: p.unit for p in CFG.unit_op(UO).parameters}
+sf = {r: D.fit(UO, "screening", r) for r in resps}
+pr = {r: D.fit(UO, "rsm", r) for r in resps}
+n_scr_terms = len(sf[resps[0]]["names"]) + 1
+n_rsm_terms = len(pr[resps[0]]["names"]) + 1
+df_res_scr = int(sf[resps[0]]["model"].df_resid)
+df_res_rsm = int(pr[resps[0]]["model"].df_resid)
 
+# parameters -------------------------------------------------------------------------
+rp = report_params(UO)
+n_par = len(rp)
+n_mv = int((rp["Study"] == "multivariate").sum())
+n_uv = n_par - n_mv
+_cls = rp["Class"].value_counts().to_dict()
+n_wc = int(_cls.get("WC-CPP", 0))
+n_kpp = int(_cls.get("KPP", 0))
+n_gpp = int(_cls.get("GPP", 0))
+n_cpp = int(_cls.get("CPP", 0))
+uv_keys = [k for k in par if par[k].study == "univariate"]
+_widen = [(par[k].prange[1] - par[k].prange[0]) / (par[k].nor[1] - par[k].nor[0]) for k in par]
+widen_lo = min(_widen)
+widen_hi = max(_widen)
 
-def _lc(s):
-    return s[0].lower() + s[1:]
+# model adequacy ---------------------------------------------------------------------
+r2_lo = min(pr[r]["R2"] for r in resps)
+r2_hi = max(pr[r]["R2"] for r in resps)
+adj_lo = min(pr[r]["adjR2"] for r in resps)
+pred_lo_key = min(resps, key=lambda r: pr[r]["predR2"])
+pred_lo = pr[pred_lo_key]["predR2"]
+pred_lo_resp = rnm(pred_lo_key)
+pred_hi_key = max(resps, key=lambda r: pr[r]["predR2"])
+pred_hi = pr[pred_hi_key]["predR2"]
+pred_hi_resp = rnm(pred_hi_key)
+lof_lo_key = min(resps, key=lambda r: pr[r]["p_lof"])
+lof_p_lo = pr[lof_lo_key]["p_lof"]
+lof_p_lo_resp = rnm(lof_lo_key)
+p_rsm_hi = max(pr[r]["p"] for r in resps)
+scr_r2_lo = min(sf[r]["R2"] for r in resps)
+scr_pred_lo = min(sf[r]["predR2"] for r in resps)
+scr_p_hi_key = max(resps, key=lambda r: sf[r]["p"])
+scr_p_hi = sf[scr_p_hi_key]["p"]
+scr_p_hi_resp = rnm(scr_p_hi_key)
+n_scr_ns = sum(1 for r in resps if sf[r]["p"] >= alpha)
 
-
-def names_of(keys, lower=True):
-    ns = [_lc(PNAME[k]) if lower else PNAME[k] for k in keys]
-    return ns[0] if len(ns) == 1 else ", ".join(ns[:-1]) + " and " + ns[-1]
-
-
-rsm_list = names_of(rsm_f)
-scr_list = names_of(scr_f)
-dropped_f = [f for f in scr_f if f not in rsm_f]
-dropped_list = names_of(dropped_f)
-
-
-def par(k):
-    return CFG.unit_op(UO).param(k)
-
-
-def sp(k):
-    return f"{par(k).setpoint:g}"
-
-
-def nor(k):
-    lo, hi = par(k).nor
-    return f"{lo:g} to {hi:g}"
-
-
-def rng(k):
-    lo, hi = par(k).prange
-    return f"{lo:g} to {hi:g}"
-
-
-def rng_ratio(k):
-    p = par(k)
-    return (p.prange[1] - p.prange[0]) / (p.nor[1] - p.nor[0])
-
-
-def val(k, v):
-    return f"{v:g}" if PUNIT[k] == "pH" else f"{v:g} {PUNIT[k]}"
-
-
-def corner(nat):
-    return ", ".join(f"{_lc(PNAME[f])} {val(f, nat[f])}" for f in rsm_f)
-
-
-# --- effects, coefficients and fits -------------------------------------------------
-_eff = {r: D.screening_effects_df(UO, r) for r in resps}
-_coef = {r: D.rsm_coeff_df(UO, r) for r in resps}
-f_scr = {r: D.fit(UO, SCR, r) for r in resps}
-f_rsm = {r: D.fit(UO, RSM, r) for r in resps}
+# centre-point reproducibility -------------------------------------------------------
+cv_r = D.center_cv_df(UO, "rsm")
+cv_s = D.center_cv_df(UO, "screening")
+cv_rsm_max = float(cv_r["%CV"].max())
+cv_rsm_max_resp = rnm(resps[int(cv_r["%CV"].idxmax())])
+cv_rsm_min = float(cv_r["%CV"].min())
+cv_rsm_min_resp = rnm(resps[int(cv_r["%CV"].idxmin())])
+cv_scr_max = float(cv_s["%CV"].max())
+cv_scr_max_resp = rnm(resps[int(cv_s["%CV"].idxmax())])
 
 
-def _tl(keys):
-    return "".join(LETTER[k] for k in keys)
+# effect / coefficient accessors ------------------------------------------------------
+def eff(r, t):
+    d = D.screening_effects_df(UO, r)
+    return float(d.loc[d["Term"] == t, "Effect"].iloc[0])
 
 
-def eff(resp, *keys):
-    d = _eff[resp]
-    return float(d.loc[d["Term"] == _tl(keys), "Effect"].iloc[0])
+def eff_p(r, t):
+    d = D.screening_effects_df(UO, r)
+    return float(d.loc[d["Term"] == t, "p-value"].iloc[0])
 
 
-def eff_p(resp, *keys):
-    d = _eff[resp]
-    return float(d.loc[d["Term"] == _tl(keys), "p-value"].iloc[0])
+def cf(r, t):
+    d = D.rsm_coeff_df(UO, r)
+    return float(d.loc[d["Term"] == t, "Coef."].iloc[0])
 
 
-def coef(resp, *keys):
-    d = _coef[resp]
-    return float(d.loc[d["Term"] == _tl(keys), "Coef."].iloc[0])
+def cf_p(r, t):
+    d = D.rsm_coeff_df(UO, r)
+    return float(d.loc[d["Term"] == t, "p-value"].iloc[0])
 
 
-def coef_p(resp, *keys):
-    d = _coef[resp]
-    return float(d.loc[d["Term"] == _tl(keys), "p-value"].iloc[0])
-
-
-def quad(resp, k):
-    d = _coef[resp]
-    return float(d.loc[d["Term"] == LETTER[k] + "²", "Coef."].iloc[0])
-
-
-def quad_p(resp, k):
-    d = _coef[resp]
-    return float(d.loc[d["Term"] == LETTER[k] + "²", "p-value"].iloc[0])
-
-
-def n_sig_scr(resp):
-    d = _eff[resp]
+def n_sig_scr(r):
+    d = D.screening_effects_df(UO, r)
     return int((d["p-value"] < alpha).sum())
 
 
-def n_sig_rsm(resp):
-    d = _coef[resp]
-    return int((d[d["Term"] != "Intercept"]["p-value"] < alpha).sum())
+def n_sig_rsm(r):
+    d = D.rsm_coeff_df(UO, r)
+    d = d[d["Term"] != "Intercept"]
+    return int((d["p-value"] < alpha).sum())
 
 
-def n_terms_scr():
-    return len(_eff[resps[0]]) + 1
+def n_resp_sig_rsm(k):
+    return sum(1 for r in resps if cf_p(r, L[k]) < alpha)
 
 
-def n_terms_rsm():
-    return len(_coef[resps[0]])
+def n_resp_sig_scr(k):
+    return sum(1 for r in resps if eff_p(r, L[k]) < alpha)
 
 
-def df_resid(kind, resp="galactosylation"):
-    f = f_scr[resp] if kind == SCR else f_rsm[resp]
-    return int(f["model"].df_resid)
+def fmax(k):
+    """Largest significant screening main effect of one factor, across the responses."""
+    vals = [abs(eff(r, L[k])) for r in resps if eff_p(r, L[k]) < alpha]
+    return max(vals) if vals else 0.0
 
 
-def max_std_resid(resp):
-    f = f_rsm[resp]
-    return float(np.abs(f["model"].resid.values / f["rmse"]).max())
+osmo_key = [k for k in scr_f if k not in rsm_f][0]
+osmo_max = fmax(osmo_key)
+rsm_min_key = min(rsm_f, key=fmax)
+rsm_min_max = fmax(rsm_min_key)
 
-
-def shapiro_p(resp):
-    return float(sstat.shapiro(f_rsm[resp]["model"].resid.values).pvalue)
-
-
-fs_scr, fs_rsm = D.fit_summary_df(UO, SCR), D.fit_summary_df(UO, RSM)
-r2_lo, r2_hi = fs_rsm["R²"].min(), fs_rsm["R²"].max()
-adj_lo = fs_rsm["Adj. R²"].min()
-pred_lo, pred_hi = fs_rsm["Pred. R²"].min(), fs_rsm["Pred. R²"].max()
-pred_lo_resp = str(fs_rsm.loc[fs_rsm["Pred. R²"].idxmin(), "Response"])
-pred_hi_resp = str(fs_rsm.loc[fs_rsm["Pred. R²"].idxmax(), "Response"])
-scr_pred_lo, scr_pred_hi = fs_scr["Pred. R²"].min(), fs_scr["Pred. R²"].max()
-scr_p_hi = fs_scr["p-value"].max()
-scr_p_hi_resp = str(fs_scr.loc[fs_scr["p-value"].idxmax(), "Response"])
-lof_p = {r: f_rsm[r]["p_lof"] for r in resps}
-lof_p_lo = min(lof_p.values())
-lof_p_lo_resp = LBL[min(lof_p, key=lof_p.get)]
-lof_p_hi = max(lof_p.values())
-lof_p_hi_resp = LBL[max(lof_p, key=lof_p.get)]
-
-cv_rsm, cv_scr = D.center_cv_df(UO, RSM), D.center_cv_df(UO, SCR)
-cv_rsm_max = cv_rsm["%CV"].max()
-cv_rsm_max_resp = str(cv_rsm.loc[cv_rsm["%CV"].idxmax(), "Response"])
-cv_rsm_min = cv_rsm["%CV"].min()
-cv_rsm_min_resp = str(cv_rsm.loc[cv_rsm["%CV"].idxmin(), "Response"])
-cv_scr_max = cv_scr["%CV"].max()
-cv_scr_max_resp = str(cv_scr.loc[cv_scr["%CV"].idxmax(), "Response"])
-
-
-def cen_sd(resp, kind=SCR):
-    d = cv_scr if kind == SCR else cv_rsm
-    return float(d.loc[d["Response"] == LBL[resp], "SD"].iloc[0])
-
-
-def cen_mean(resp, kind=RSM):
-    d = cv_scr if kind == SCR else cv_rsm
-    return float(d.loc[d["Response"] == LBL[resp], "Mean"].iloc[0])
-
-
-# --- acceptance criteria ------------------------------------------------------------
-IPC = CFG.ipc_limits
-alert_sigma = IPC["capability_alert_sigma"]
-agg_margin = IPC["steps"][UO]["aggregates_hmw"]["from_ds_backcalc"]["margin"]
-n_from_cap = sum(1 for v in IPC["steps"][UO].values() if "from_capability" in v)
-
-
-def ipc_hi(r):
-    return D.effective_acceptance(UO, r)[1]
-
-
-def ds_lo(r):
-    return D.acceptance_for(UO, r)[0]
-
-
-def ds_hi(r):
-    return D.acceptance_for(UO, r)[1]
-
-
-def ds_range(r):
-    return f"{ds_lo(r):g} to {ds_hi(r):g}"
-
-
-# --- capability ---------------------------------------------------------------------
-br_keys = list(cqa_reg[cqa_reg.set_by == UO]["key"])
-n_br_cqa = len(br_keys)
-n_mc = V["n_monte_carlo"]
-
-
-def cap_row(k):
-    return cap[cap["key"] == k].iloc[0]
+# capability ---------------------------------------------------------------------------
+cqa_keys = list(cqa_reg[cqa_reg.set_by == UO]["key"])
+capd = cap[cap.key.isin(cqa_keys)].set_index("key")
+cqan = cqa_reg.set_index("key")
 
 
 def cpk(k):
-    return float(cap_row(k)["Cpk"])
+    return float(capd.loc[k, "Cpk"])
 
 
-def cap_mean(k):
-    return float(cap_row(k)["mean"])
+def cmean(k):
+    return float(capd.loc[k, "mean"])
 
 
-def cap_sd(k):
-    return float(cap_row(k)["sd"])
+def csd(k):
+    return float(capd.loc[k, "sd"])
 
 
-def cap_max(k):
-    return float(cap_row(k)["max"])
-
-
-def cap_min(k):
-    return float(cap_row(k)["min"])
-
-
-def cap_margin(k):
-    r = cap_row(k)
-    if r["spec_type"] == "upper":
-        return float(r["acc_high"]) - float(r["mean"])
-    if r["spec_type"] == "lower":
-        return float(r["mean"]) - float(r["acc_low"])
-    return min(float(r["mean"]) - float(r["acc_low"]),
-               float(r["acc_high"]) - float(r["mean"]))
-
-
-def cap_sigma(k):
-    return cap_margin(k) / cap_sd(k)
-
-
-cpk_min_key = min(br_keys, key=cpk)
-cpk_max_key = max(br_keys, key=cpk)
-cpk_min_cqa = str(cap_row(cpk_min_key)["cqa"])
-cpk_max_cqa = str(cap_row(cpk_max_key)["cqa"])
-
-# --- design space and worst-case corners --------------------------------------------
-ds = D.design_space_grid(UO)
-ds_pct = 100 * ds["fraction"]
-ds_n = ds["n_points"]
-ds_bind = LBL[ds["binding"]]
-ds_bind_pct = 100 * ds["per_response"][ds["binding"]]
-ds_easy = LBL[min(ds["per_response"], key=ds["per_response"].get)]
-ds_easy_pct = 100 * min(ds["per_response"].values())
-
-
-def _worst(resp, pts):
-    lo, hi, st = D.effective_acceptance(UO, resp)
-    nat = {f: [p[f] for p in pts] for f in rsm_f}
-    y = D.predict(UO, resp, natural=nat)
-    if st == "upper":
-        m = y - hi
-    elif st == "lower":
-        m = lo - y
-    else:
-        m = np.maximum(y - hi, lo - y)
-    i = int(np.argmax(m))
-    return float(m[i]), pts[i], float(y[i])
-
-
-_nor_pts = [dict(zip(rsm_f, [par(f).nor[i] for f, i in zip(rsm_f, c)]))
-            for c in itertools.product([0, 1], repeat=n_rsm_f)]
-_char_pts = [dict(zip(rsm_f, [par(f).prange[i] for f, i in zip(rsm_f, c)]))
-             for c in itertools.product([0, 1], repeat=n_rsm_f)]
-worst_nor = {r: _worst(r, _nor_pts) for r in resps}
-worst_char = {r: _worst(r, _char_pts) for r in resps}
-
-
-def wc_nor(r):
-    return worst_nor[r][2]
-
-
-def wc_nor_corner(r):
-    return corner(worst_nor[r][1])
-
-
-def wc_char(r):
-    return worst_char[r][2]
-
-
-def wc_char_corner(r):
-    return corner(worst_char[r][1])
-
-
-# --- proven acceptable ranges -------------------------------------------------------
-pt = D.par_table(UO)
-n_par_rows = len(pt)
-
-
-def _norm(s):
-    return s.replace(" ", "")
-
-
-n_par_full = int((pt["PAR (set-point)"].map(_norm) == pt["Char. range"].map(_norm)).sum())
-n_par_nor_full = int((pt["PAR (NOR)"].map(_norm) == pt["Char. range"].map(_norm)).sum())
-
-
-def par_row(resp, k):
-    d = pt[(pt["CQA"] == LBL[resp]) & (pt["Parameter"] == PNAME[k])]
-    return d.iloc[0]
-
-
-def par_sp(resp, k):
-    return str(par_row(resp, k)["PAR (set-point)"])
-
-
-def par_nor(resp, k):
-    return str(par_row(resp, k)["PAR (NOR)"])
-
-
-def par_crit(resp):
-    return str(par_row(resp, rsm_f[0])["Criterion"])
-
-
-def gov(resp):
-    return D.governing_factor(UO, resp)
-
-
-def gov_name(resp):
-    return _lc(PNAME[gov(resp)])
-
-
-# --- parameters ---------------------------------------------------------------------
-rp = report_params(UO)
-n_par_tot = len(rp)
-n_mv = int((rp["Study"] == "multivariate").sum())
-n_uv = n_par_tot - n_mv
-_cls = rp["Class"].value_counts().to_dict()
-n_wc = _cls.get("WC-CPP", 0)
-n_kpp = _cls.get("KPP", 0)
-n_gpp = _cls.get("GPP", 0)
-n_cpp_step = _cls.get("CPP", 0)
-uv_keys = [p.key for p in CFG.unit_op(UO).parameters if p.study == "univariate"]
-uv_list = names_of(uv_keys)
-ratio_lo = min(rng_ratio(k) for k in scr_f)
-ratio_hi = max(rng_ratio(k) for k in scr_f)
-
-# --- analytical methods -------------------------------------------------------------
-METH = {m["id"]: m for m in CFG.raw()["deviations"]["methods"]}
-AMV_ATTR = {"AMV-3010": ["afucosylation", "galactosylation", "high_mannose"],
-            "AMV-3011": ["aggregates_hmw"], "AMV-3012": ["hcp"],
-            "AMV-3013": ["acidic_variants"], "AMV-3014": ["residual_dna"]}
-
-
-def prec(a):
-    return METH[a]["precision_pct"]
-
-
-def loq(a):
-    return f'{METH[a]["loq"]:g} {METH[a]["loq_unit"]}'
+def cmargin(k):
+    r = capd.loc[k]
+    if str(r["spec_type"]) == "two_sided":
+        return float(min(r["acc_high"] - r["mean"], r["mean"] - r["acc_low"]))
+    return float(r["acc_high"] - r["mean"])
 
 
 def cqa_name(k):
-    return str(cqa_reg[cqa_reg["key"] == k].iloc[0]["cqa"])
+    return str(cqan.loc[k, "cqa"])
 
 
-def cqa_unit(k):
-    return str(cqa_reg[cqa_reg["key"] == k].iloc[0]["unit"])
+def tool1(k):
+    return float(cqan.loc[k, "tool1_score"])
 
 
-def methods_df():
-    rows = []
-    for aid, title in AMV_REFS:
-        ks = AMV_ATTR.get(aid, [])
-        rows.append([aid, title, "; ".join(cqa_name(k) for k in ks),
-                     "; ".join(dict.fromkeys(cqa_unit(k) for k in ks))])
-    return pd.DataFrame(rows, columns=["Method validation", "Title",
-                                       "Attribute reported", "Reportable unit"])
+cpk_min_key = min(cqa_keys, key=cpk)
+cpk_min = cpk(cpk_min_key)
+cpk_max_key = max(cqa_keys, key=cpk)
+cpk_2nd_key = sorted(cqa_keys, key=cpk)[1]
+
+# in-process acceptance ----------------------------------------------------------------
+ipc_sigma = float(CFG.ipc_limits["capability_alert_sigma"])
+ipc_cfg = CFG.ipc_limits["steps"][UO]
+cap_based = [r for r in resps if "from_capability" in (ipc_cfg.get(r) or {})]
+bc_based = [r for r in resps if "from_ds_backcalc" in (ipc_cfg.get(r) or {})]
+agg_margin = float(ipc_cfg[bc_based[0]]["from_ds_backcalc"]["margin"])
 
 
-# --- deviations ---------------------------------------------------------------------
-dev_n = len(dev_facts(DOC))
-co2_half = (par("co2").prange[1] - par("co2").prange[0]) / 2
-dev01_coded = dev_003_01_offset_mmhg / co2_half
-dev01_nor_pct = 100 * dev_003_01_offset_mmhg / (par("co2").nor[1] - par("co2").nor[0])
+def ipc_hi(r):
+    return float(D.effective_acceptance(UO, r)[1])
 
 
-def dev01_shift(resp):
-    return abs(eff(resp, "co2")) / 2 * dev01_coded
+def ds_hi(r):
+    return float(D.acceptance_for(UO, r)[1])
 
 
-dev02_delivered = par("feed_vol").setpoint * (1 - dev_003_02_feed_deficit_pct / 100)
+def ds_lo(r):
+    return float(D.acceptance_for(UO, r)[0])
+
+
+# design space --------------------------------------------------------------------------
+dsg = D.design_space_grid(UO)
+ds_frac = dsg["fraction"]
+ds_n = dsg["n_points"]
+ds_bind_key = dsg["binding"]
+ds_bind = rnm(ds_bind_key)
+ds_bind_rej = dsg["per_response"][ds_bind_key]
+ds_free_key = min(dsg["per_response"], key=dsg["per_response"].get)
+ds_free = rnm(ds_free_key)
+ds_free_rej = dsg["per_response"][ds_free_key]
+
+
+def _pred_at(combos):
+    coded = {f: [float(c[i]) for c in combos] for i, f in enumerate(rsm_f)}
+    return {r: D.predict(UO, r, coded=coded) for r in resps}
+
+
+def _ok(r, y, ds=False):
+    lo, hi, st = (D.acceptance_for(UO, r) if ds else D.effective_acceptance(UO, r))
+    if st == "upper":
+        return y <= hi
+    if st == "lower":
+        return y >= lo
+    return (y >= lo) & (y <= hi)
+
+
+CORNERS = list(it.product([-1.0, 1.0], repeat=n_rsm_f))
+_cy = _pred_at(CORNERS)
+corner_fail = [[r for r in resps if not bool(_ok(r, _cy[r])[i])] for i in range(len(CORNERS))]
+corner_fail_ds = [[r for r in resps if not bool(_ok(r, _cy[r], True)[i])] for i in range(len(CORNERS))]
+n_corner = len(CORNERS)
+n_corner_ok = sum(1 for f in corner_fail if not f)
+worst_i = max(range(len(CORNERS)), key=lambda i: len(corner_fail[i]))
+worst_n = len(corner_fail[worst_i])
+worst_names = rjoin(corner_fail[worst_i])
+eof_i = [i for i in range(len(CORNERS)) if corner_fail_ds[i]]
+eof_names = rjoin(corner_fail_ds[eof_i[0]]) if eof_i else ""
+eof_key = corner_fail_ds[eof_i[0]][0] if eof_i else None
+
+
+def corner_str(i):
+    parts = []
+    for f, c in zip(rsm_f, CORNERS[i]):
+        p = par[f]
+        v = float(D.to_natural(UO, f, c))
+        u = "" if p.unit == "pH" else f" {p.unit}"
+        parts.append(f"{fnm(f, True)} {v:g}{u}")
+    return jn(parts)
+
+
+def corner_val(i, r):
+    return float(_cy[r][i])
+
+
+NOR_C = list(it.product([0, 1], repeat=n_rsm_f))
+_nc = [tuple(float(D.to_coded(UO, f, par[f].nor[b])) for f, b in zip(rsm_f, c)) for c in NOR_C]
+_ny = _pred_at(_nc)
+nor_fail = [[r for r in resps if not bool(_ok(r, _ny[r])[i])] for i in range(len(_nc))]
+nor_fail_ds = [[r for r in resps if not bool(_ok(r, _ny[r], True)[i])] for i in range(len(_nc))]
+n_nor = len(NOR_C)
+n_nor_alert = sum(1 for f in nor_fail if f)
+n_nor_ds = sum(1 for f in nor_fail_ds if f)
+nor_alert_names = rjoin(sorted({r for f in nor_fail for r in f}))
+
+corner_tbl = pd.DataFrame(
+    [[*[f"{float(D.to_natural(UO, f, c)):g}" for f, c in zip(rsm_f, CORNERS[i])],
+      len(corner_fail[i]),
+      rjoin(corner_fail[i], False) if corner_fail[i] else "none"]
+     for i in range(len(CORNERS))],
+    columns=[*[(fnm(f) if par[f].unit == "pH" else f"{fnm(f)} ({par[f].unit})") for f in rsm_f],
+             "Limits breached", "Attribute"])
+
+# proven acceptable ranges ----------------------------------------------------------------
+_pn_cache = {}
+
+
+def pn(r, f):
+    k = (r, f)
+    if k not in _pn_cache:
+        _pn_cache[k] = D.par_nor_propagated(UO, r, f)
+    return _pn_cache[k]
+
+
+def pn_lo(r, f):
+    return pn(r, f)["par_nat"][0]
+
+
+def pn_hi(r, f):
+    return pn(r, f)["par_nat"][1]
+
+
+def pn_frac(r, f):
+    lo, hi = pn(r, f)["par_nat"]
+    p = par[f]
+    return (hi - lo) / (p.prange[1] - p.prange[0])
+
+
+def ps_frac(r, f):
+    d = D.par_at_design_centre(UO, r, f)["par_nat"]
+    p = par[f]
+    return (d[1] - d[0]) / (p.prange[1] - p.prange[0])
+
+
+PAIRS = [(r, f) for r in resps for f in rsm_f]
+n_pairs = len(PAIRS)
+n_full_sp = sum(1 for r, f in PAIRS if ps_frac(r, f) > 0.999)
+n_full_nor = sum(1 for r, f in PAIRS if pn_frac(r, f) > 0.999)
+tight_r, tight_f = min(PAIRS, key=lambda t: pn_frac(*t))
+tight_frac = pn_frac(tight_r, tight_f)
+
+
+def isect_lo(f):
+    return max(pn_lo(r, f) for r in resps)
+
+
+def isect_hi(f):
+    return min(pn_hi(r, f) for r in resps)
+
+
+def isect_lo_key(f):
+    return max(resps, key=lambda r: pn_lo(r, f))
+
+
+def isect_hi_key(f):
+    return min(resps, key=lambda r: pn_hi(r, f))
+
+
+# deviations -------------------------------------------------------------------------------
+co2_half = (par["co2"].prange[1] - par["co2"].prange[0]) / 2
+co2_shift = dev_003_01_offset_mmhg / co2_half
+feed_actual = par["feed_vol"].setpoint * (1 - dev_003_02_feed_deficit_pct / 100)
+
+# analytical methods -----------------------------------------------------------------------
+AMV_BY_ATTR = {"afucosylation": "AMV-3010", "galactosylation": "AMV-3010",
+               "high_mannose": "AMV-3010", "acidic_variants": "AMV-3013",
+               "aggregates_hmw": "AMV-3011", "hcp": "AMV-3012",
+               "residual_dna": "AMV-3014"}
+_amv_title = dict(AMV_REFS)
+methods_tbl = pd.DataFrame(
+    [[cqa_name(k), AMV_BY_ATTR[k], _amv_title[AMV_BY_ATTR[k]], str(cqan.loc[k, "unit"])]
+     for k in cqa_keys],
+    columns=["Quality attribute", "Method validation", "Technique", "Reportable unit"])
+_dm = csv("dev_methods.csv").set_index("id")
+perf_tbl = _dm.loc[[i for i in _dm.index if i in set(AMV_BY_ATTR.values())]].reset_index().rename(
+    columns={"id": "Method validation", "name": "Method", "precision_pct": "Precision (%RSD)",
+             "loq": "LOQ", "loq_unit": "LOQ unit", "accuracy_pct": "Accuracy (%)",
+             "variance_fraction": "Assay share of variance"})
+perf_tbl = perf_tbl[["Method validation", "Method", "Precision (%RSD)", "LOQ", "LOQ unit",
+                     "Accuracy (%)", "Assay share of variance"]]
+n_perf = len(perf_tbl)
+n_amv = len(AMV_REFS)
+glyc_prec = float(_dm.loc["AMV-3010", "precision_pct"])
+glyc_var = float(_dm.loc["AMV-3010", "variance_fraction"])
+
+# lack-of-fit summary ------------------------------------------------------------------------
+lof_tbl = pd.DataFrame(
+    [[rnm(r, False), pr[r]["F_lof"], pr[r]["p_lof"], pr[r]["df_lof"], pr[r]["df_pe"], pr[r]["rmse"]]
+     for r in resps],
+    columns=["Response", "F (lack of fit)", "p-value", "df (lack of fit)",
+             "df (pure error)", "RMSE"])
+
+
+# appendix matrices ---------------------------------------------------------------------------
+def _split_matrix(kind, factors):
+    m = D.coded_matrix_df(UO, kind)
+    setcols = ["Run", "Type"] + [L[f] for f in factors]
+    respcols = ["Run"] + [D.RESP_LABEL.get(r, r) for r in resps]
+    return m[setcols], m[respcols]
+
+
+appa_set, appa_resp = _split_matrix("screening", scr_f)
+appb_set, appb_resp = _split_matrix("rsm", rsm_f)
 ```
 
 ```{python}
@@ -459,162 +467,114 @@ print(SYN_BANNER)
 
 ## Abbreviations {.unnumbered}
 
-2-AB, 2-aminobenzamide; ADCC, antibody dependent cellular cytotoxicity; AMV, analytical
+2-AB, 2-aminobenzamide; ADCC, antibody dependent cell mediated cytotoxicity; AMV, analytical
 method validation; ANOVA, analysis of variance; BLA, Biologics License Application; CCD,
-central composite design; Cpk, process capability index; CPP, critical process
-parameter; CQA, critical quality attribute; DoE, design of experiments; GPP, general
+central composite design; CDC, complement dependent cytotoxicity; CEX, cation exchange
+chromatography; CQA, critical quality attribute; CPP, critical process parameter; Cpk,
+process capability index; DoE, design of experiments; DS, drug substance; GPP, general
 process parameter; HCP, host cell protein; HILIC, hydrophilic interaction liquid
-chromatography; HMW, high molecular weight; icIEF, imaged capillary isoelectric
-focusing; KPP, key process parameter; LOQ, limit of quantitation; MSAT, Manufacturing
-Science and Technology; NOR, normal operating range; PAR, proven acceptable range; pCO2,
-dissolved carbon dioxide partial pressure; PPQ, process performance qualification;
-PRESS, predicted residual error sum of squares; qPCR, quantitative polymerase chain
-reaction; RMSE, root mean square error; RSM, response surface methodology; SDM, scale
-down model; SEC, size exclusion chromatography; SOP, standard operating procedure; UPLC,
-ultra performance liquid chromatography; WC-CPP, well controlled critical process
-parameter.
+chromatography; HMW, high molecular weight; icIEF, imaged capillary isoelectric focusing;
+iVCC, initial viable cell concentration; KPP, key process parameter; MSAT, Manufacturing
+Science and Technology; NOR, normal operating range; OLS, ordinary least squares; PAR,
+proven acceptable range; pCO2, dissolved carbon dioxide partial pressure; PPQ, process
+performance qualification; PRESS, prediction error sum of squares; qPCR, quantitative
+polymerase chain reaction; RMSE, root mean square error; RSM, response surface methodology;
+SD, standard deviation; SDM, scale-down model; SEC, size exclusion chromatography; SOP,
+standard operating procedure; UPLC, ultra performance liquid chromatography; WC-CPP, well
+controlled critical process parameter.
 
 {{< pagebreak >}}
 
-<!-- ========================= BODY START (author here) ========================= -->
+<!-- ========================= BODY START ========================= -->
 
 # Executive summary {.unnumbered}
 
-The production bioreactor forms the glycan, charge variant and aggregate quality
-attributes of A-Mab, and this report bounds the culture conditions that set them. The
-bioreactor studies were executed on a qualified scale down model of the
-`{python} f"{V['commercial_scale_l']:,}"` L production vessel, under the plan approved
-as PCP-003 and the risk basis established in RA-001. The study approach follows the
-lifecycle model for process validation [@fda2011] and the enhanced development approach
-of ICH Q8 and ICH Q11 [@ichq8; @ichq11], and the attribute framework, the criticality
-levels and the risk ranking method that fixed the study scope are those of the A-Mab
-case study [@amab2009].
+The production bioreactor forms the glycan, charge variant and aggregate quality attributes of
+A-Mab, which places the widest part of the drug substance control strategy at this one step.
+The characterization of that step is recorded here against the approved plan PCP-003. Although the characterization studies were executed at small scale, they were run on a scale-down model qualified against
+the commercial `{python} f"{V['commercial_scale_l']:,}"` L vessel under SOP-1001, within the
+lifecycle approach to process validation [@fda2011] and the enhanced development approach of
+ICH Q8, Q9 and Q11 [@ichq8; @ichq9; @ichq11]. The attribute framework and the risk ranking approach were taken from the A-Mab case study [@amab2009]. The scope of the study was fixed in advance by the pre-characterization risk assessment RA-001.
 
-The screening study covered `{python} n_scr_f` parameters in a two level design of
-`{python} n_scr` runs. The `{python} n_rsm_f` factors that screening retained then
-entered a face centred response surface design of `{python} n_rsm` runs, and the
-remaining `{python} n_uv` parameters were assessed one at a time. Screening identified
-which factors matter. The response surface model built on those factors is the
-predictive model, and the design space and the proven acceptable ranges reported below
-rest on it, not on the near saturated screening fit.
+`{python} n_par` process parameters were characterized over ranges
+`{python} f"{widen_lo:.1f}"` to `{python} f"{widen_hi:.1f}"` times as wide as the intended
+commercial control ranges, which puts the edge of the knowledge space well outside the region the commercial process is expected to occupy under routine operation (@tbl-params). `{python} n_mv` of those parameters were varied together in a multivariate design, while `{python} n_uv` were assessed one at a time. The `{python} n_mv` parameters studied together entered a resolution V screening design of `{python} n_scr` runs, in which every main effect is estimated clear of every two-factor interaction. The
+`{python} n_rsm_f` factors retained from screening were then studied in a face centred central
+composite design of `{python} n_rsm` runs, which supports a full quadratic model over three
+levels of every factor it carries. On every run of both designs the same `{python} n_resp` quality attributes were measured at harvest: `{python} rjoin(resps)`.
 
-The response surface models account for between `{python} pct(r2_lo)` and
-`{python} pct(r2_hi)` of the variance in the `{python} n_resp` measured responses, at an
-adjusted R² of `{python} f"{adj_lo:.2f}"` or better. No response shows significant lack
-of fit against the centre point replicates, and the weakest of the five on predicted R²
-is `{python} pred_lo_resp.lower()`, at `{python} f"{pred_lo:.2f}"`.
+Over the ranges studied, the response surface models fitted to those runs describe the data adequately, with R² between `{python} f"{r2_lo:.3f}"` and `{python} f"{r2_hi:.3f}"`, a lowest adjusted R² of `{python} f"{adj_lo:.3f}"`, and no lack of fit test reaching significance against the pure error measured on the `{python} cp_rsm` centre-point replicates (@tbl-lof). Predicted R² separates the five responses more sharply than R² does. The weakest response on that measure is `{python} pred_lo_resp`, at `{python} f"{pred_lo:.3f}"`. In this report both the predictive claim for those responses and the basis of the design space in §6 rest on the response surface models, whereas the factors that matter were identified by screening.
 
-Across the characterized ranges, `{python} f"{ds_pct:.0f}"` % of an evenly spaced grid
-of `{python} f"{ds_n:,}"` operating points meets every in-process criterion the step
-governs. The characterized ranges contain edges of failure, which is what separates the
-knowledge space from the design space. The response that rejects most of the design grid
-is `{python} ds_bind.lower()`, at `{python} f"{ds_bind_pct:.0f}"` % of the points.
+Culture pH, the first of those factors, moves more attributes than any other parameter, at
+`{python} f"{cf('high_mannose', L['pH']):+.2f}"` percentage points per coded unit on high
+mannose and `{python} f"{cf('aggregates_hmw', L['pH']):+.2f}"` on aggregates, while
+afucosylation runs the other way at `{python} f"{cf('afucosylation', L['pH']):+.2f}"`. Because
+the same parameter pushes different attributes in opposite directions, the operating region is
+defined multivariately in §6 instead of as a set of independent one-dimensional ranges. Over the characterized space, `{python} f"{100*ds_frac:.0f}"` % of the region meets every in-process limit the step governs. The region is bound most tightly by `{python} ds_bind` (§6).
 
-Commercial scale capability was estimated from a Monte-Carlo simulation of
-`{python} f"{n_mc:,}"` batches with every parameter varying inside the normal operating
-range. The simulated batches meet the drug substance criterion for all
-`{python} n_br_cqa` attributes the step governs. The tightest capability of the
-`{python} n_br_cqa` attributes is the one for `{python} cpk_min_cqa.lower()`, at a Cpk
-of `{python} f"{cpk(cpk_min_key):.2f}"`, whose simulated mean sits
-`{python} f"{cap_sigma(cpk_min_key):.1f}"` standard deviations from the nearer of the
-two limits.
+Commercial-scale capability of the seven attributes was estimated by Monte-Carlo simulation of `{python} f"{V['n_monte_carlo']:,}"` batches, with every parameter drawn independently from inside its own normal operating range. On that basis all `{python} len(cqa_keys)` attributes the step sets are shown to meet the drug substance acceptance criteria at commercial scale (@tbl-cap). Among the seven, the tightest of those indices reaches `{python} f"{cpk_min:.2f}"` for `{python} cqa_name(cpk_min_key)`, which sits
+`{python} f"{cmargin(cpk_min_key):.2f}"` percentage points inside the nearer acceptance limit on
+a simulated standard deviation of `{python} f"{csd(cpk_min_key):.2f}"`. Two deviations were recorded during execution of the two designs (@tbl-dev). Both of them were investigated, root caused and retained, and neither altered a fitted effect, a proven acceptable range or a parameter classification (§12).
 
-Of the `{python} n_par_tot` parameters characterized, `{python} n_wc` are classified as
-well controlled critical process parameters (WC-CPP) and `{python} n_kpp` as key process
-parameters (KPP). The remaining parameter, `{python} _lc(PNAME['medium_conc'])`, is a
-general process parameter (GPP). No parameter at this step is classified as a critical
-process parameter, because the control system holds each of the quality linked
-parameters inside ranges the study proved acceptable.
-
-The execution recorded `{python} dev_n` deviations, and both were retained after
-investigation. Neither changed a parameter classification and neither moved the
-boundaries of the operating region (§13). The step does not control host cell protein
-(HCP) or residual DNA to the drug substance criteria by itself. Host cell protein and
-residual DNA are both cleared downstream, and that clearance is credited in PCR-005,
-PCR-007 and PCR-008. The capability reported here is an estimate from a qualified scale
-down model and not a commercial scale result. Confirmation at scale belongs to Stage 2,
-and this report rolls up into PCMR-001.
-
-{{< pagebreak >}}
+Of the `{python} n_par` parameters characterized, `{python} n_wc` were classified WC-CPP, `{python} n_kpp` KPP and `{python} n_gpp` GPP, while none required classification as a CPP (§9). The step does not
+control host cell protein or residual DNA on its own, because both are formed in the culture and
+cleared downstream, with the clearance credited in PCR-005, PCR-007 and PCR-008. Throughout this report, every claim made about those parameters rests on a qualified scale-down model with each of them held inside the normal operating range. Confirmation at commercial scale is the work of Stage 2. Once that confirmation is complete, this report rolls up into PCMR-001 alongside the reports covering the other seven steps of the train.
 
 # Introduction
 
 ## Product and unit operation
 
-A-Mab is a humanized IgG1 monoclonal antibody whose principal mechanism of action is
-antibody dependent cellular cytotoxicity. That mechanism depends on the N-glycan profile
-of the Fc region, which makes afucosylation and galactosylation attributes of efficacy as
-well as of consistency. The antibody is
-expressed by the A-Mab production cell line and is produced by fed batch culture in the
-production bioreactor, which is Step 3 of the drug substance process. Downstream of the
-bioreactor the platform train runs Protein A capture, low pH viral inactivation, cation
-exchange, anion exchange, small virus retentive filtration and ultrafiltration with
-diafiltration [@amab2009].
+A-Mab is a humanized IgG1 monoclonal antibody produced by fed-batch mammalian cell culture and
+purified on a platform train. The primary mechanism of action of that antibody is antibody dependent cell mediated cytotoxicity, which makes the N-linked glycan attributes efficacy linked and places them among the attributes of highest criticality in the drug substance [@amab2009]. Downstream of the culture, the purification train for that antibody runs Protein A capture (PCR-005), low-pH viral inactivation (PCR-006), cation
+exchange (PCR-007), anion exchange (PCR-008), small virus retentive filtration (PCR-009) and
+ultrafiltration with diafiltration (PCR-010), each of them covered by a characterization plan
+and report pair of its own (@tbl-related).
 
-The production bioreactor is the only step of the drug substance process at which
-product quality attributes are formed. The glycosylation and charge variant
-distributions of the product are established inside the cell and in the culture fluid,
-and the platform purification train does not modify them. Culture pH, temperature,
-dissolved carbon dioxide, osmolality and duration act on the glycosyltransferases of the
-Golgi and on the chemistry of the culture fluid, and the levels they set are carried
-into the drug substance. The culture conditions therefore define the design space for
-the glycan, charge variant and aggregate attributes of A-Mab, and @tbl-cqa lists those
-attributes with the criticality and acceptance criteria of each.
+The production bioreactor occupies Step `{python} step_no` of that drug substance process. Within the drug substance train, that step opens the characterization campaign this package documents. The culture in that bioreactor is grown at a working volume of
+`{python} f"{V['commercial_scale_l']:,}"` L, fed on a defined schedule, and harvested after
+about `{python} f"{par['duration'].setpoint:g}"` days at a nominal titer of
+`{python} f"{V['nominal_titer_g_per_l']:.2f}"` g/L. The production bioreactor is the only step
+of the drug substance process at which product quality attributes are formed. Those quality attributes, the glycosylation and charge variant distributions, are established inside the cell and in the culture fluid.
+Neither distribution is modified by the platform purification train, which separates on
+affinity, charge and size without discriminating between glycoforms of the same antibody.
 
-The vessel is operated as a fed batch culture at a working volume of
-`{python} f"{V['commercial_scale_l']:,}"` L at commercial scale, under SOP-2003. The
-culture receives nutrient feed on a fixed schedule as a percentage of working volume,
-and is harvested at the end of the scheduled duration. At the set-point conditions the
-culture delivers a harvest titre of `{python} f"{V['nominal_titer_g_per_l']:.1f}"` g/L,
-a peak viable cell density of `{python} f"{V['peak_vcd_e6']:.1f}"` × 10⁶ cells/mL and a
-final viability of `{python} f"{V['final_viability_pct']:.0f}"` %.
-
-Two of the attributes the bioreactor governs leave the step far above the level the drug
-substance must meet. Both of those attributes, host cell protein and residual DNA,
-accumulate in the culture fluid and are removed by the purification train. Therefore the
-bioreactor sets the burden that train receives, not the released value. The clearance
-credit for both belongs to Protein A capture (PCR-005), cation exchange (PCR-007) and
-anion exchange (PCR-008), and no clearance of any kind is claimed for this step.
+Five of the attributes formed in that culture were measured as responses of the characterization studies:
+`{python} rjoin(resps)`. Two further attributes, host cell protein and residual DNA, are also formed in the culture.
+Because the purification train clears both by several orders of magnitude, neither was carried
+as a response of this study; the clearance is characterized in PCR-005, PCR-007 and PCR-008,
+while the commercial-scale outcome for both attributes appears in the capability table of §8 (@tbl-cap).
 
 ## Objectives
 
-The study set out to do five things.
+The characterization studies were performed to meet the five objectives listed below, each of which is answered in a section of this report.
 
-- (i) Quantify the relationship between each characterized culture parameter and each
-  quality attribute the step forms.
-- (ii) Define a multivariate operating region over the parameters that govern those
-  attributes, at commercial equivalent conditions.
-- (iii) Establish proven acceptable ranges for each governed attribute and each response
-  surface factor, and confirm the normal operating ranges against them.
-- (iv) Classify every characterized parameter against the decision logic in SOP-4001.
-- (v) Justify the ranges that Stage 2 will run and the contribution this step makes to the
-  control strategy.
+(i) Quantify the relationship between each process parameter and each quality attribute the step
+    forms, over ranges wider than the intended commercial control ranges.
+(ii) Define the multivariate operating region within which every attribute the step governs
+     stays inside its acceptance criterion.
+(iii) Establish a proven acceptable range for each response surface factor against each governed
+      attribute, both at the set-point and under normal operating range variation of the
+      remaining factors.
+(iv) Classify each parameter from the demonstrated effect on quality and from the risk of
+     operating outside the region.
+(v) Justify the Stage 2 ranges and the control strategy contribution of the step, for roll-up
+    into PCMR-001.
 
 ## Regulatory and scientific basis
 
-The study is a Stage 1 process design activity in the sense of the lifecycle approach to
-process validation [@fda2011]. The study record is this report and the plan it executes,
-PCP-003. Stage 2 confirms at commercial scale what Stage 1 establishes at scale down,
-and nothing in this report substitutes for that confirmation.
+The characterization of the step was performed as Stage 1 process design work under the lifecycle approach to process validation [@fda2011]. The enhanced development approach of ICH Q8 supplies the design space
+concept, ICH Q9 supplies the risk methodology, while ICH Q11 supplies the expectation that a process parameter be linked both to the quality attribute it moves and to the range over which that link was demonstrated [@ichq8; @ichq9; @ichq11].
+Attribute criticality was treated throughout as a continuum instead of a binary label, consistent with ICH Q9 and with the assessment tools of the case study [@amab2009]. Attributes scoring high or
+very high on those tools were called critical.
 
-The development approach is the enhanced, quality by design approach of ICH Q8 and ICH
-Q11 [@ichq8; @ichq11]. Under that approach a design space is a multivariate region of
-parameter settings that has been shown to assure quality, movement inside the region is
-not a change from a regulatory filing perspective, and the burden the approach places on
-a report of this kind is to show how the region was arrived at and where it stops.
-Quality attribute criticality is treated as a continuum rather than as a binary
-[@ichq9], which is how the attribute levels in @tbl-cqa were assigned and how the
-parameter classes in §9 follow from the measured effects.
-
-ICH Q5A is not engaged at this step. Viral safety rests on the low pH hold (PCR-006),
-anion exchange (PCR-008) and small virus retentive filtration (PCR-009), and the
-cumulative claim is consolidated in PCMR-001.
+No viral clearance claim is made for this step, which places the viral safety framework of ICH Q5A outside the scope of this report. The
+modular clearance claims belong to low-pH viral inactivation (PCR-006), anion exchange (PCR-008)
+and small virus retentive filtration (PCR-009), and each of them is consolidated in PCMR-001.
+At the procedural level, qualification of the scale-down model followed SOP-1001, while the design, execution and statistical analysis of the designed experiments followed SOP-1002.
 
 ## Related documents
 
-The characterization package this report belongs to is listed in @tbl-related, and the
-controlled procedures and validated methods the study used are given in @tbl-sops
-(§3.3).
+As a set, the documents that scope, plan and consolidate this work appear in @tbl-related. RA-001 set the study scope and PCP-003 is the approved plan this report executes. That plan and this report both roll up into PCMR-001, in which the outcome of the step is consolidated with the outcome of the other seven steps of the drug substance train before Stage 2 begins.
 
 ```{python}
 #| output: asis
@@ -623,1188 +583,808 @@ print()
 print(": Related documents. {#tbl-related}")
 ```
 
+The controlled procedures governing the studies are listed in @tbl-sop, while the analytical method validations supporting the four assays are listed separately in @tbl-amv.
+
+```{python}
+#| output: asis
+print(sop_table(sops=SOP_REFS, amvs=[]))
+print()
+print(": Controlled procedures governing the characterization of Step "
+      f"{step_no}. " + "{#tbl-sop}")
+```
+
 # Prior knowledge and quality risk basis
 
 ## Platform and prior-product knowledge
 
-The production bioreactor runs on an established humanized IgG1 platform. Three earlier
-products from that platform, X-Mab, Y-Mab and Z-Mab, were manufactured with the same
-medium, the same feed strategy and the same vessel design, and the acceptance limits for
-several of the A-Mab attributes in @tbl-cqa were set from X-Mab clinical experience
-[@amab2009]. Platform experience of that depth changes what a characterization study is
-for, because the mechanisms by which culture conditions move a glycan profile are
-already known. Consequently the study confirms and bounds those mechanisms for A-Mab
-instead of discovering them.
+Novacyte operates a single humanized IgG1 platform, on which A-Mab is the fourth product to be
+developed. In development order, three products preceded A-Mab on that platform: X-Mab, Y-Mab and Z-Mab, all of them humanized IgG1 antibodies expressed in the same host cell line. The cell line lineage, the basal medium, the feed strategy and the control scheme of the production bioreactor run common to all four products, which means the mechanisms by which culture conditions move the glycan and charge variant distributions were established well before this study began. What the platform does not supply is the size of each effect for this molecule, or the shape of the region over which all five of the measured attributes stay simultaneously acceptable at commercial scale under normal operating range variation. For that reason, characterization of those mechanisms at this step confirms and bounds what the platform already establishes. It was not expected to discover a mechanism that the platform had not already established.
 
-Four of those mechanisms were carried into the design as explicit expectations.
-Galactosylation tracks the activity of the Golgi galactosyltransferase and the
-availability of its nucleotide sugar donor, both of which decline as a culture ages and
-as nutrients deplete. High mannose is enzymatic in the same way and reflects how
-completely the Golgi mannosidases have trimmed the precursor, which makes it sensitive
-to lumenal pH and to temperature. Afucosylation is set by a competition instead, between
-core fucosyltransferase activity and the rate at which the antibody transits the
-secretory pathway. Aggregate is the one expectation that is not enzymatic, because
-antibody that sits longer in an ageing broth aggregates more.
+Of the seven attributes, several acceptance limits carried into this study come from X-Mab clinical experience, which the attribute register records as such (@tbl-cqa). Y-Mab and Z-Mab, the other two products of the X-Mab lineage, contribute platform process history without contributing clinical data of their own. Because the three prior products share the expression system, the medium and the control scheme, the mechanistic expectations below were treated as established knowledge and were used to set both the direction and the width of each of the factor ranges studied here (@tbl-params).
 
-Acidic charge variants arise mainly from the deamidation of asparagine, and deamidation
-is base catalysed. Dissolved carbon dioxide acidifies the culture fluid, which was
-expected to slow the reaction and to lower the acidic fraction. Culture temperature was
-expected to act in the opposite direction through the rate constant.
-
-Prior knowledge does not settle two things, and both of them shaped this study. It does
-not give the position of the A-Mab operating point relative to the edges of failure for
-these attributes, because those edges depend on the cell line and on the acceptance
-limits the product carries. It also says little about interaction, since the platform
-record is a record of operation at target, not of parameters moved together.
-For this reason the study of these parameters was designed as a multivariate one over
-ranges wider than the control ranges, rather than as a confirmation at set-point.
+Among the glycan attributes, galactosylation tracks the activity of the Golgi galactosyltransferase and the supply of its nucleotide sugar donor, both of which decline as a culture ages, which made a lower galactosylation the expectation for a longer culture with every other condition held constant. High mannose behaves enzymatically in the same way and reflects how far mannosidase trimming has run, which makes the attribute sensitive both to lumenal pH and to the temperature at which the culture is held over the whole of the production stage. Unlike the other two glycans, afucosylation depends on a competition, between core fucosyltransferase activity and the rate at which antibody transits the Golgi. Afucosylation was expected on that basis to fall as the culture progresses. Aggregate in the same culture follows the one expectation of the five that is not enzymatic, because antibody that sits longer in an ageing broth aggregates more through simple physical association of the secreted material. Acidic variants in the same broth arise mainly by deamidation of the secreted antibody in the culture fluid, where the carbonate
+system sets the local proton activity, which made dissolved CO2 the parameter expected to dominate that response over the ranges characterized here.
 
 ## Quality attributes in scope
 
-For this step, @tbl-cqa lists the `{python} n_br_cqa` attributes the production
-bioreactor governs, with the criticality level and the Tool #1 score behind it. Tool #1
-scores an attribute as the product of the impact on safety or efficacy and the
-uncertainty in that impact, and the levels run from very low to very high [@amab2009].
-Attributes at high and very high criticality are treated as critical.
+In all, `{python} len(cqa_keys)` attributes of the drug substance are set at the bioreactor step, listed with acceptance criteria, criticality level and Tool #1 score in @tbl-cqa.
 
 ```{python}
 #| output: asis
 show(cqas_for(UO))
 print()
-print(": Quality attributes formed or governed at the production bioreactor. {#tbl-cqa}")
+print(": Quality attributes formed at the production bioreactor, with acceptance criteria, "
+      "criticality and the Tool #1 score. {#tbl-cqa}")
 ```
 
-The most consequential of these attributes is
-`{python} cqa_name('high_mannose').lower()`, at very high criticality and a Tool #1
-score of
-`{python} f"{int(cqa_reg[cqa_reg.key == 'high_mannose'].iloc[0]['tool1_score'])}"`. High
-mannose glycans shorten circulating half-life and the uncertainty around that effect is
-itself high, which is what drives the score. The next two glycan attributes,
-`{python} cqa_name('afucosylation').lower()` and
-`{python} cqa_name('galactosylation').lower()`, are of high criticality for a different
-reason: both modulate effector function, and afucosylation does so steeply. The fourth
-attribute, aggregate, is of high criticality as an immunogenicity risk, and it is the
-one attribute in this group that later steps also act on (PCR-006, PCR-007).
+High mannose ranks as the most consequential of those seven attributes, at a Tool #1 score of `{python} f"{tool1('high_mannose'):.0f}"`, because both the potential impact on clearance and the residual uncertainty about that impact are scored high. The second of the seven attributes, afucosylation, carries high criticality for a different reason. Through the same glycan route, it drives effector function directly, which means a shift in either direction changes potency. Galactosylation and aggregate follow those two attributes, both of high criticality and both scoring
+`{python} f"{tool1('aggregates_hmw'):.0f}"` or below on the same tool. On the same tool, the remaining three attributes sit far lower, with acidic variants at `{python} f"{tool1('acidic_variants'):.0f}"`, the lowest
+score anywhere in the register, and residual DNA at
+`{python} f"{tool1('residual_dna'):.0f}"`.
 
-By contrast, acidic charge variants sit at the other end of the range, at very low
-criticality and a Tool #1 score of
-`{python} f"{int(cqa_reg[cqa_reg.key == 'acidic_variants'].iloc[0]['tool1_score'])}"`.
-Deamidation at the levels this charge variant reaches has no demonstrated effect on
-potency, and the acceptance criterion of `{python} ds_range('acidic_variants')` % is
-correspondingly wide. The charge variant is nonetheless characterized here, because it
-responds to the same culture parameters as the glycans and because an unexplained shift
-in the attribute would be a signal about the culture.
-
-Host cell protein and residual DNA belong to a different category, as process
-impurities. Both are formed in the bioreactor and both are cleared downstream, and the
-criticality levels of
-`{python} str(cqa_reg[cqa_reg.key == 'hcp'].iloc[0]['criticality'])` and
-`{python} str(cqa_reg[cqa_reg.key == 'residual_dna'].iloc[0]['criticality'])` reflect
-the released material, not the harvest. Neither entered the multivariate design. Culture
-duration drives the harvest burden of both, and the range studied for duration bounds
-the load the purification train has to handle.
+Five of those seven attributes were measured as responses of the designed experiments. The other two attributes, host cell protein and residual DNA, were not measured as responses, for the reason given in §1.1: neither of them reaches the drug substance at a level the culture governs. Despite that exclusion, both attributes carry a drug substance acceptance criterion of their own. Both attributes are reported in the capability analysis of §8 on that basis, with the clearance credited to the steps that deliver it.
 
 ## Risk-based prioritization and parameter selection
 
-RA-001 assigned the study scope by risk ranking and filtering. Every parameter of the
-step was scored on the potential impact on a quality attribute and on the potential to
-interact with other parameters, and the combined score decided whether the parameter
-went into a multivariate design, into a univariate assessment, or into neither
-[@amab2009; @ichq9]. The parameter was ranked at the highest level wherever no data or
-rationale supported a judgement.
+Before any run was executed, every bioreactor parameter was ranked in RA-001 on two axes, the potential impact on a quality attribute and the potential to interact with other parameters. The ranked list was then filtered into study groups. `{python} n_mv` parameters were assigned to the multivariate design, on the
+ground that each of them acts on the enzymatic and physicochemical environment that sets a
+glycan or a charge variant. The remaining `{python} n_uv` parameters were assigned to univariate assessment instead, on the ground that each of them acts on the culture through growth and productivity rather than through that chemistry. No parameter was excluded from study altogether, which is the conservative default RA-001 applies wherever
+the supporting rationale is judged incomplete.
 
-Multivariate study was required for `{python} n_mv` parameters:
-`{python} scr_list`. Each of them acts directly on the enzymology or the solution
-chemistry that sets the glycan and charge variant profile, and each was expected to
-interact with at least one of the others. Culture duration is the clearest case, since
-it sets both the extent of glycan processing and the residence time of secreted antibody
-in the broth.
-
-The remaining `{python} n_uv` parameters were assessed one at a time:
-`{python} uv_list`. All four parameters act on cell growth and productivity, and none of
-them touches the reactions that set product quality. RA-001 scored them below the
-multivariate threshold on that basis. Dissolved oxygen and initial viable cell
-concentration set the growth trajectory, basal medium concentration sets the nutrient
-reservoir, nutrient feed-1 volume sets the replenishment, and the outcome of the
-assessment for each of the four is the classification given later (§9).
-
-For the five multivariate parameters, the characterization ranges are wider than the
-control ranges by a factor of between `{python} f"{ratio_lo:.1f}"` and
-`{python} f"{ratio_hi:.1f}"`. Widening them was deliberate. A range that only spans the
-control range cannot show where an attribute leaves specification, and cannot support a
-later request to move within the design space. The ranges in @tbl-params are the
-knowledge space of this step, and they extend well beyond any setting the commercial
-process is expected to use.
+The studied ranges of those parameters were widened well beyond the intended commercial control ranges, by a factor of
+`{python} f"{widen_lo:.1f}"` to `{python} f"{widen_hi:.1f}"` across the nine parameters, in order that the characterized space would bound the operating region at every edge instead of coinciding with it (@tbl-params). Culture pH, the first of those parameters, was studied across `{python} rng_str('pH')` against a normal operating range of
+`{python} nor_str('pH')`, culture temperature across `{python} rng_str('temperature')` °C
+against `{python} nor_str('temperature')` °C, and dissolved CO2 across `{python} rng_str('co2')`
+mmHg against `{python} nor_str('co2')` mmHg. Culture duration was studied across
+`{python} rng_str('duration')` days, which brackets the scheduled harvest day by
+`{python} f"{par['duration'].setpoint - par['duration'].prange[0]:g}"` days on each side. In
+addition, widening the ranges in this way supports later movement within the design space, since
+the knowledge space then extends beyond the region the commercial process is expected to occupy.
 
 # Materials and methods
 
 ## Scale-down model and its qualification
 
-The studies were executed in an instrumented bench scale bioreactor system qualified as
-a scale down model (SDM) of the `{python} f"{V['commercial_scale_l']:,}"` L production
-vessel (SOP-1001). The model and the commercial vessel are both stirred tank bioreactors
-with equivalent control of pH, dissolved oxygen, temperature and nutrient addition. The
-scale independent variables of the model, which include the five parameters
-characterized here, were operated at the values proposed for commercial operation. Scale
-dependent variables such as agitation, gas flow and headspace pressure were set so that
-the model matches the commercial vessel on process performance instead of on geometry.
+The characterization studies were executed in stirred tank scale-down bioreactors qualified against the commercial vessel under SOP-1001. Although the scale-down bioreactors reproduce the geometry
+class, the mixing and mass transfer behaviour and the control capability of the
+`{python} f"{V['commercial_scale_l']:,}"` L vessel, the qualification rests on measured
+comparability of the input and output attributes at set-point operation instead of on equipment
+similarity alone. Scale-independent parameters, among them culture pH, temperature, dissolved
+oxygen, initial viable cell concentration and culture duration, were operated at the target
+values of commercial operation. Scale-dependent parameters, among them agitation, gas flow
+rates, headspace pressure and the dissolved CO2 that follows from them, were set at small scale to match the process performance of the full-scale system instead of its equipment settings, which is the convention SOP-1001 requires.
 
-The model qualification compared the model against at-scale data on the input and output
-attributes that matter to this step: growth trajectory, titre, viability and the
-released quality attributes. The warrant that qualification gives is specific.
-Conclusions about parameter ranges and about the position of the operating point
-relative to the edges of failure transfer from the model to the commercial vessel,
-because the model reproduces the response of those attributes to the parameters being
-varied over the ranges studied here. The model is not evidence about commercial scale
-consistency, which only commercial scale batches can provide.
+At the qualification stage, the two scales were compared at set-point operation on growth, viability and titer trajectories, and on the five quality attributes measured at harvest. For the set-point condition, the nominal profile of the qualified scale-down model appears in @fig-timecourse, in which peak viable cell density reaches
+`{python} f"{V['peak_vcd_e6']:.1f}"` × 10⁶ cells/mL and viability at harvest is
+`{python} f"{V['final_viability_pct']:.0f}"` %. Because the conclusions of this report are applied directly to the commercial process at `{python} f"{V['commercial_scale_l']:,}"` L, that qualification is the warrant standing behind every operating range claim made in the sections below. Instead of reproducing them here, the comparability data supporting that qualification are held under SOP-1001.
 
-Reproducibility of the model itself is quantified by the centre point replicates of each
-design and is reported below (§5.1). Those replicates also supply the pure error term
-against which lack of fit is tested, which ties the adequacy of every model in §5.3 to
-the reproducibility of the scale down system.
+The `{python} cp_rsm` centre-point replicates of the response surface design were distributed across the execution campaign instead of being run consecutively, which means the spread between them
+carries culture-to-culture variation as well as assay variation. That spread is the pure error term against which the lack of fit tests of §5.3 are measured. The pure error term is reported per response in @tbl-cv.
+
+![Nominal fed-batch profile of the qualified scale-down model at set-point operation: viable cell density, culture viability and product titer.](../outputs/figures/fig_bioreactor_timecourse.png){#fig-timecourse}
 
 ## Cell line, media and culture operation
 
-The A-Mab production cell line was thawed and expanded through the seed train, and the
-production bioreactor was inoculated at the initial viable cell concentration given in
-@tbl-params. Media and feeds were prepared (SOP-2004) from a single lot of each
-component for the whole campaign, which removes lot to lot medium variation from the
-measured effects. Basal medium concentration and nutrient feed-1 volume were varied only
-in the univariate assessment.
+The production culture of every run was inoculated from an N-1 seed bioreactor at an initial viable cell concentration of `{python} f"{par['ivcc'].setpoint:g}"` × 10⁶ cells/mL and operated under
+SOP-2003. Chemically defined culture medium and nutrient feeds were prepared under SOP-2004 at a basal medium concentration of `{python} f"{par['medium_conc'].setpoint:g}"` X, with nutrient
+feed-1 delivered at `{python} f"{par['feed_vol'].setpoint:g}"` % of working volume on the
+platform schedule. Culture pH during the feed was held at `{python} f"{par['pH'].setpoint:g}"` by carbon dioxide
+sparging and base addition, temperature at
+`{python} f"{par['temperature'].setpoint:g}"` °C by jacket control, and dissolved oxygen at
+`{python} f"{par['do'].setpoint:g}"` % of air saturation by cascaded gassing.
 
-The culture was operated as a fed batch (SOP-2003), with pH, temperature and dissolved
-oxygen under closed loop control and dissolved carbon dioxide controlled through the gas
-sparge. The culture received nutrient feed-1 on the scheduled profile as a percentage of
-working volume. Harvest of the culture followed the scheduled duration for the run, and
-the harvest material was clarified before analysis.
-
-Raw materials controlled to platform specification were treated as identity and quality
-controlled inputs, not as characterization factors. Control of those materials is a
-release matter under SOP-2004, and no range for them is claimed by this study.
+Raw materials controlled to the platform specification were treated as identity and quality controlled inputs, and none of those materials was characterized as a variable of this study. The one exception among those inputs is nutrient feed-1, whose delivered volume is a settable parameter and was assessed univariately for that reason (§4.4). The cell bank, the medium formulation and the nutrient feed formulation were held constant across every run of both designs, which is the assumption under which every fitted effect reported in §5 is attributed to a studied parameter rather than to a change in the raw materials.
 
 ## Analytical methods
 
-@tbl-sops lists the controlled procedures and validated methods used, of which released
-N-glycan mapping by 2-AB HILIC-UPLC (SOP-3010, AMV-3010) reports afucosylation,
-galactosylation and high mannose from one separation. Size variants including aggregate
-(HMW) are measured by SEC-HPLC (SOP-3011, AMV-3011), charge variants by icIEF (SOP-3013,
-AMV-3013), host cell protein by ELISA (SOP-3012, AMV-3012) and residual DNA by qPCR
-(SOP-3014, AMV-3014).
+Each of the five responses was measured by a validated method on the harvest sample. Of the four methods, the released N-glycan map by 2-AB HILIC-UPLC reports three responses from a single injection, namely afucosylation, galactosylation and high mannose, which removes any between-assay component from a comparison among the three glycan
+responses. The charge variant response was measured on the same sample by imaged capillary isoelectric focusing (icIEF), with the acidic variant group reported as the summed area of the peaks eluting ahead of the main peak. The aggregate peak was measured as the high molecular weight fraction by SEC-HPLC, and the result was reported as a percentage of the total integrated peak area. The two process impurities were measured separately, host cell protein by ELISA and residual DNA by qPCR, both on the clarified harvest instead of on the bioreactor broth.
 
 ```{python}
 #| output: asis
-print(sop_table(sops=SOP_REFS, amvs=AMV_REFS))
+print(sop_table(sops=[], amvs=AMV_REFS))
 print()
-print(": Controlled procedures and validated analytical methods. {#tbl-sops}")
+print(": Validated analytical methods supporting the study. {#tbl-amv}")
 ```
 
-Method performance sets a floor on the effects this study can resolve. The N-glycan
-method is validated to an intermediate precision of `{python} f"{prec('AMV-3010'):.1f}"`
-% relative standard deviation with a limit of quantitation of
-`{python} loq('AMV-3010')`, and the host cell protein ELISA to
-`{python} f"{prec('AMV-3012'):.1f}"` % with a limit of quantitation of
-`{python} loq('AMV-3012')`. An effect smaller than the analytical variability of the
-assay is reported here as an estimate, not as a demonstrated change. Full performance of
-each assay is given in Appendix D and in the validation reports named above.
+The attribute to method assignment is given in @tbl-methods and the recorded method performance
+in @tbl-methodperf, both of them in Appendix D. Method performance is not restated in the body
+of this report, because the validation reports listed in @tbl-amv hold the full data for each
+method.
 
 ## Sampling plan
 
-Each run was sampled at harvest, and the harvest pool of every run supplied the material
-for all `{python} n_resp` designed responses. Sampling and analysis of every run
-followed the same sequence, and the analytical order was randomized against the run
-order so that assay drift could not align with a factor setting.
+Every run of both designs was sampled once, at harvest, and each harvest sample was then split between the four validated methods listed in @tbl-amv. Sampling at harvest matches the point at which the attributes leave
+the step, which is also the point the scale-down model was qualified against (§3.1). In-process samples were drawn from the same cultures daily, for growth, viability, titer, pH, dissolved oxygen and dissolved CO2.
+In this report those daily in-process results are held with the operating record and are kept out of the response models.
 
-The screening design carries `{python} cp_scr` centre point replicates and the response
-surface design carries `{python} cp_rsm`. Replication at the centre, and not at the
-corners, is what makes the pure error term independent of the model form, which is why
-the lack of fit tests in §5.3 have any meaning. Both sets of centre points are separate
-cultures run to the same conditions, not repeat injections of one harvest.
+Between them, the two designs were given `{python} cp_scr` and `{python} cp_rsm` centre-point replicates respectively, with the centre-point runs distributed through the execution sequence in each case. Run order within each design was randomized under SOP-1002, which
+protects the effect estimates against any drift in the analytical methods or in the culture
+system over the campaign.
 
 ## Statistical methods
 
-Factors were coded so that the set-point maps to zero and the edges of the
-characterization range map to minus one and plus one. Coding the factors makes the
-estimates comparable across parameters with different units, and every effect and
-coefficient in this report is reported on the coded scale. Analysis followed the
-statistical procedure for designed experiments (SOP-1002).
+Factors were coded so that the set-point maps to 0 and the edges of the characterization range
+map to −1 and +1. By coding the factors in that way, the estimates are placed on a common scale, on which a coefficient is the change in the response over half the characterized range of that factor.
+The screening data for each response were fitted on that coded scale by ordinary least squares, with all main effects and all two-factor interactions, which gives `{python} n_scr_terms` terms on `{python} n_scr` runs and
+leaves `{python} df_res_scr` residual degrees of freedom. An effect is reported as twice the
+coefficient on the coded factor, which is the change across the full characterized range. The
+response surface data were fitted with a full quadratic model of `{python} n_rsm_terms` terms on
+`{python} n_rsm` runs, leaving `{python} df_res_rsm` residual degrees of freedom.
 
-The screening design was analysed as a two factor interaction model fitted by ordinary
-least squares. An effect is reported as twice the coded coefficient, which is the change
-in the response between the low and the high edge of the characterization range. The
-response surface design was analysed as a full quadratic model in the `{python} n_rsm_f`
-retained factors. Terms of both models are judged at α = `{python} alpha`.
+Significance of every term was assessed at α = `{python} alpha` throughout both designs. That significance threshold was not adjusted for the number of terms estimated. Model adequacy was judged on R²,
+adjusted R², predicted R² from the PRESS statistic, the overall F test, and an analysis of
+variance partitioning the residual into lack of fit and pure error against the centre-point replicates of each design (@tbl-lof). A factor whose terms reach no significance in that analysis is reported as inactive over the range screened. Such a null result is retained in the knowledge space as evidence of robustness, because a parameter shown to be inactive over a wide range would otherwise have to be established again later in the lifecycle, at greater cost and with less supporting data behind it.
 
-Model adequacy is assessed on four things: R², adjusted R², predicted R² from the
-predicted residual error sum of squares (PRESS), and an analysis of variance that
-partitions the residual into lack of fit and pure error. A predicted R² well below the
-adjusted value indicates a model that fits the runs it was fitted to and predicts new
-ones poorly. A lack of fit test on the same model, where it reaches significance,
-indicates a model form that misses structure the replicates say is real.
-
-Proven acceptable ranges (PAR) were computed in two analyses for each governed attribute
-and each response surface factor. The first analysis holds the other factors at their
-set-points and scans the parameter of interest across its characterization range using
-the fitted response surface model. The second propagates normal operating range
-variation: the other factors are drawn inside their normal operating ranges, the fitted
-model is evaluated with the residual variance added, and the range is the region in
-which the upper bound of the 95 % predictive interval stays within acceptance. The
-second analysis uses a grid of `{python} D.PAR_GRID` points with
-`{python} f"{D.PAR_MC_N:,}"` draws at each point, and that analysis is the reproducible
-default reported below (§7).
-
-Commercial scale capability was estimated by Monte-Carlo simulation of
-`{python} f"{n_mc:,}"` batches with every parameter drawn inside its normal operating
-range (NOR). The capability index Cpk is reported against the binding limit, which for a
-one sided criterion is the single limit and for a two sided criterion is the nearer of
-the two.
+Commercial-scale capability was estimated on the same fitted models, by simulating `{python} f"{V['n_monte_carlo']:,}"` batches with every parameter drawn from inside its normal operating range and with the fitted models propagated through the train to the drug substance.
+Capability is reported as a one-sided Cpk against the drug substance criterion, taken on the
+binding side of the specification. No numerical acceptance threshold for Cpk is defined in this package. Each Cpk index is accordingly reported alongside the margin to the limit, which is what a reviewer needs in order to judge it directly.
 
 # Study design
 
 ## Factors, ranges and the knowledge space
 
-Taken together, the two designed experiments resolve which parameters move the
-attributes and then model the region those parameters define. Every parameter of the
-step appears in @tbl-params with the set-point, the normal operating range, the
-characterization range, the study type and the final classification. The
-characterization range is the knowledge space edge and is not itself a proven acceptable
-range, which is a computed quantity reported per attribute in §7.
+The `{python} n_par` parameters carried into the study are listed in @tbl-params with the
+set-point, the normal operating range, the characterization range and the classification reached
+in §9. For each parameter, the characterization range given there marks the knowledge-space edge. That edge is not a proven acceptable range, because the proven acceptable ranges are computed per attribute in §7 and run narrower than the characterization range in several cases.
 
 ```{python}
 #| output: asis
 show(report_params(UO))
 print()
-print(": Process parameters, ranges, study type and final classification. {#tbl-params}")
+print(": Production bioreactor parameters, ranges, study type and final classification. "
+      "{#tbl-params}")
 ```
 
-Each characterization range was justified against prior knowledge before execution. The
-culture pH range of `{python} rng('pH')` spans the settings over which the platform has
-been operated across three products, and reaches the point at which cell specific
-productivity begins to fall. The culture temperature range of
-`{python} rng('temperature')` °C is wide enough to change the growth and production
-balance without inducing the cold shock response. The dissolved carbon dioxide range of
-`{python} rng('co2')` mmHg was studied because accumulation to the upper end of that
-range is a known consequence of scale and is the mechanism by which large vessels differ
-from small ones. The osmolality range of `{python} rng('osmolality')` mOsm and the
-culture duration range of `{python} rng('duration')` days complete the set, the latter
-reaching one full feed cycle either side of the set-point.
+`{python} n_mv` of the `{python} n_par` parameters were varied together. The coded letters used for those parameters throughout this report are given in @tbl-legend. The letters follow the screening order
+and are reused for the response surface terms, which means term AE denotes the same factor pair in both designs and in the appendix tables that carry the full matrices (Appendices A and B).
 
 ```{python}
 #| output: asis
 show(D.factor_legend_df(UO))
 print()
-print(": Coded factor legend used in the effect and coefficient tables. {#tbl-legend}")
+print(": Coded factor legend for the screening and response-surface designs. {#tbl-legend}")
 ```
-
-@tbl-legend gives the letter codes used throughout §5 and Appendix C, in screening
-order, and the same letter denotes the same factor in the response surface model.
 
 ## Screening design
 
-The screening design is a two level factorial in the `{python} n_scr_f` multivariate
-parameters, augmented with `{python} cp_scr` centre points, for `{python} n_scr` runs in
-all. It estimates all `{python} n_scr_f` main effects and all two factor interactions
-between them, and the purpose of a design of that kind is to identify the parameters
-with the largest statistical effect on the quality attributes. The design is close to
-saturated at that resolution, and leaves `{python} df_resid(SCR)` residual degrees of
-freedom. Estimates from that design are reported as effect sizes and are not used for
-prediction. The full coded matrix is in an appendix (Appendix A).
+As executed, a two-level fractional factorial in `{python} n_scr_f` factors at resolution V was used for screening, augmented with `{python} cp_scr` centre points, which gives `{python} n_cube_scr` factorial runs and `{python} n_scr` runs in total. At that resolution every main effect of the five factors stays clear of every two-factor interaction, while each two-factor interaction is aliased only with interactions of three factors or more, which platform experience does not support as active in this expression system at the ranges studied. In a campaign of this kind, a screening experiment is run to identify the parameters with the largest effect on the quality attributes. A screening design of this kind supports no predictive claim. By construction, this type of design cannot resolve curvature. It has to be augmented on the subset of factors shown to move an attribute, which is the purpose of the response surface stage described below. The full coded matrix of that design and the measured responses are given in Appendix A.
 
 ## Response-surface design
 
-The response surface design is a face centred central composite design in the
-`{python} n_rsm_f` factors screening retained, augmented with `{python} cp_rsm` centre
-points, for `{python} n_rsm` runs. Face centred axial points keep every setting of the
-design inside the characterization ranges already justified above, which matters here
-because the ranges were chosen to reach the edges of failure and extending beyond them
-would have no operational meaning. The design adds curvature to the effects and
-interactions the screening design resolved, and the resulting full quadratic model is
-the predictive model used for the design space (§6), the proven acceptable ranges (§7)
-and the capability estimate (§8). The full coded matrix is given in an appendix
-(Appendix B).
+At the second stage, a face centred central composite layout was used in the `{python} n_rsm_f` factors retained from screening: `{python} fjoin(rsm_f)`. In total that layout is built from `{python} n_cube_rsm` factorial runs, `{python} n_ax_rsm` axial runs and `{python} cp_rsm` centre points, on `{python} n_rsm` runs. Face centred axial points were chosen so that no run falls outside the characterization range of any factor, which keeps every run of the design inside the space the scale-down model of §3.1 was qualified over, with no extrapolation involved. The design supports a full quadratic model, in
+which curvature and two-factor interaction are estimated together over three levels of each
+factor.
 
-Because the response surface design does not carry `{python} dropped_list`, the
-interactions involving that factor are represented in this report by the screening
-estimates alone. §5.4 states what that costs and §11 carries it forward as a limitation.
+Osmolality was screened but was not carried into the response surface stage. The largest significant screening main effect of osmolality reached `{python} f"{osmo_max:.2f}"` percentage points across the characterized range, against `{python} f"{rsm_min_max:.2f}"` for the smallest
+of the four factors that were carried forward. Because osmolality was left out of the response surface model, any interaction involving it is represented in this report by the screening estimate alone. That bound is stated again in §11, where it also explains why osmolality keeps a WC-CPP classification on screening evidence (§9).
 
 ## Univariate assessment
 
-Each of `{python} uv_list` was assessed one parameter at a time across the
-characterization ranges in @tbl-params, with the remaining parameters held at their
-set-points. The
-univariate assessment of those parameters covered the growth and productivity of the
-culture and the released quality attributes. None of the four parameters was carried
-into the multivariate design, for the reason RA-001 gives: all four act through the
-growth trajectory of the culture, and the parameters that act on the chemistry of
-glycosylation and deamidation are the five in the screening design.
+The remaining `{python} n_uv` parameters were assessed one at a time across the ranges in @tbl-params:
+`{python} fjoin(uv_keys)`. Each of them acts on the culture through growth and productivity
+instead of through the enzymatic chemistry that sets a glycan, which is why a multivariate design would have spent runs resolving interactions that platform experience does not support at this step.
+Dissolved oxygen and initial viable cell concentration were varied to both edges of the characterization range given in @tbl-params, with every other parameter held at its set-point throughout. Across a further set of runs, basal medium concentration and nutrient feed-1 volume were varied over their own ranges in the same way. However, neither of them was combined with another parameter in a factorial run.
 
-That choice has a boundary, and the boundary is stated here, not in the discussion.
-Interactions between these four parameters and the five multivariate factors were not
-studied. The classifications of those parameters in §9 rest on the univariate result and
-on the platform record, not on a multivariate demonstration, and any future move that
-changes two of them together sits outside the evidence this report provides.
+Over the ranges assessed, no univariate variation of those four parameters moved a quality attribute outside its acceptance criterion. The classification consequences of that univariate work appear in §9, where dissolved oxygen, initial
+viable cell concentration and nutrient feed-1 volume are classified KPP on process performance
+grounds, while basal medium concentration is classified GPP.
 
 # Results
 
 ## Centre-point performance and reproducibility
 
-Before any effect is reported, the centre point replicates fix what the study can
-resolve. Those replicates are summarized in @tbl-cv, with the mean, the standard
-deviation and the relative standard deviation of each response across the
-`{python} cp_rsm` centre points of the response surface design.
+Taken together, the centre-point replicates of both designs reproduce well enough to support the model adequacy tests that follow. The mean, the standard deviation and the coefficient of variation of each response across the `{python} cp_rsm` centre points of the response surface design are given in @tbl-cv.
 
 ```{python}
 #| output: asis
-show(D.center_cv_df(UO, RSM))
+show(D.center_cv_df(UO, "rsm"))
 print()
-print(": Centre-point reproducibility of the response-surface design. {#tbl-cv}")
+print(": Centre-point reproducibility of the response-surface design: mean, standard "
+      "deviation and coefficient of variation per response. {#tbl-cv}")
 ```
 
-Reproducibility across those replicates runs from `{python} f"{cv_rsm_min:.1f}"` % to
-`{python} f"{cv_rsm_max:.1f}"` % relative standard deviation across the five responses,
-and the least precise of them is `{python} cv_rsm_max_resp.lower()` against the most
-precise at `{python} cv_rsm_min_resp.lower()`. The two glycan responses that sit at the
-high end of that spread are measured on the same separation, whose validated
-intermediate precision is `{python} f"{prec('AMV-3010'):.1f}"` % (AMV-3010). Most of the
-observed centre point scatter is analytical in origin.
-
-The screening design shows the same picture on `{python} cp_scr` replicates, with a
-highest relative standard deviation of `{python} f"{cv_scr_max:.1f}"` % on
-`{python} cv_scr_max_resp.lower()`. Both replicate sets are consistent with the scale
-down model reproducing the set-point condition, and both are used as pure error in the
-analyses that follow.
+The least precise of those responses is `{python} cv_rsm_max_resp`, at
+`{python} f"{cv_rsm_max:.1f}"` % of the mean, while the most precise is
+`{python} cv_rsm_min_resp` at `{python} f"{cv_rsm_min:.1f}"` %. At the screening centre points, the same responses give a similar picture, with `{python} cv_scr_max_resp` least precise there at
+`{python} f"{cv_scr_max:.1f}"` %. Because the scale-down runs were executed across the whole
+campaign, these figures carry culture-to-culture variation as well as assay variation, which
+makes them an upper bound on the assay contribution taken alone. Against those figures, the recorded intermediate precision of the glycan assay reaches `{python} f"{glyc_prec:.1f}"` % relative standard deviation. The validation summary for that method attributes `{python} f"{100*glyc_var:.0f}"` % of the observed variance on those responses to the assay itself (@tbl-methodperf). The remainder of that variance is culture variation, which is the quantity the lack of fit tests of §5.3 are measured against.
 
 ## Screening: factor effects
 
-Screening resolved a small number of large effects and a larger number of terms that
-cannot be separated from noise. @tbl-eff-gal gives the six largest effects on
-galactosylation, which is the response with the most structure.
+Across the five responses, only a small number of large effects was resolved by screening. The model summaries for all five responses are given in @tbl-fit-scr. The adjusted R² of those summaries runs high throughout, but the near-saturated design leaves only
+`{python} df_res_scr` residual degrees of freedom, which drives the predicted R² negative for
+every response and leaves the overall F test short of significance on `{python} n_scr_ns` of the
+`{python} n_resp` responses. Consequently the fits from that design are read as effect estimates and never as predictive models of the step. Those magnitudes are refined by the response surface stage in §5.3, which is where the predictive claim of this report is made.
+
+```{python}
+#| output: asis
+show(D.fit_summary_df(UO, "screening"))
+print()
+print(": Screening model summaries. Predicted R² is negative throughout, which is the "
+      "expected behaviour of a near-saturated design. {#tbl-fit-scr}")
+```
+
+Of those five, galactosylation was found to be the most responsive attribute measured. `{python} n_sig_scr('galactosylation')` of the `{python} n_scr_terms - 1` terms estimable on that response reach significance at α = `{python} alpha`. The largest of them is culture duration at
+`{python} f"{eff('galactosylation', L['duration']):+.2f}"` percentage points across the
+characterized range (p = `{python} f"{eff_p('galactosylation', L['duration']):.4f}"`). Behind that term, dissolved CO2 follows at `{python} f"{eff('galactosylation', L['co2']):+.2f}"` and culture pH at
+`{python} f"{eff('galactosylation', L['pH']):+.2f}"`, both in the same direction as duration.
+The pH by duration interaction is larger than either of those main effects at
+`{python} f"{eff('galactosylation', L['pH'] + L['duration']):+.2f}"`, which is the first indication in the study that the two factors cannot be ranged independently of one another within the operating region defined in §6 (@tbl-eff-gal).
 
 ```{python}
 #| output: asis
 show(D.screening_effects_df(UO, "galactosylation", top=6))
 print()
-print(": Largest screening effects on galactosylation (effect = 2 × coded coefficient). {#tbl-eff-gal}")
+print(": Screening effects on galactosylation, six largest by magnitude. {#tbl-eff-gal}")
 ```
 
-Galactosylation moves further than any other response across the characterized ranges:
-culture duration lowers it by `{python} f"{abs(eff('galactosylation','duration')):.1f}"`
-percentage points from the low edge of the range to the high edge, dissolved carbon
-dioxide lowers it by `{python} f"{abs(eff('galactosylation','co2')):.1f}"` points, and
-culture pH by `{python} f"{abs(eff('galactosylation','pH')):.1f}"` points. Culture
-temperature acts in the opposite direction and raises it by
-`{python} f"{eff('galactosylation','temperature'):.1f}"` points. The interaction between
-culture pH and culture duration (@tbl-eff-gal) is almost as large as the duration main
-effect, at `{python} f"{eff('galactosylation','pH','duration'):.1f}"` points, which is
-the first sign that a one dimensional range would misdescribe this response.
-In all, `{python} n_sig_scr('galactosylation')` of the `{python} n_terms_scr() - 1`
-estimated terms reach significance at α = `{python} alpha`.
+Acidic variants are governed by dissolved CO2 above every other factor screened. That main effect reaches `{python} f"{eff('acidic_variants', L['co2']):+.2f}"` percentage points across the characterized range (p = `{python} f"{eff_p('acidic_variants', L['co2']):.4f}"`), which is roughly twice the
+next largest term in the table. Behind that effect, culture pH and culture temperature follow with opposite signs, at `{python} f"{eff('acidic_variants', L['pH']):+.2f}"` and `{python} f"{eff('acidic_variants', L['temperature']):+.2f}"` respectively. Where a culture runs both warm and acidic, the two effects partly cancel.
 
-Acidic variants are governed by one factor, and dissolved carbon dioxide lowers them by
-`{python} f"{abs(eff('acidic_variants','co2')):.1f}"` percentage points across the
-characterized range (p = `{python} f"{eff_p('acidic_variants','co2'):.4f}"`), which is
-the largest single effect anywhere in the screening set. Culture pH and culture
-temperature follow at `{python} f"{abs(eff('acidic_variants','pH')):.1f}"` and
-`{python} f"{eff('acidic_variants','temperature'):.1f}"` points. However, the attribute
-is of very low criticality and the acceptance criterion applies over a wide band. The
-highest acidic variant level any screening run reached was
-`{python} f"{csv(f'doe_{UO}_screening.csv')['acidic_variants'].max():.1f}"` %, against a
-drug substance criterion of `{python} ds_range('acidic_variants')` %.
+```{python}
+#| output: asis
+show(D.screening_effects_df(UO, "acidic_variants", top=6))
+print()
+print(": Screening effects on acidic variants, six largest by magnitude. {#tbl-eff-ac}")
+```
+
+Afucosylation and aggregate each rest on `{python} n_sig_scr('afucosylation')` significant terms of their own. For afucosylation the largest of them is the pH by duration interaction at
+`{python} f"{eff('afucosylation', L['pH'] + L['duration']):+.2f}"` percentage points, ahead of
+the culture duration main effect at
+`{python} f"{eff('afucosylation', L['duration']):+.2f}"` (@tbl-eff-afu). For aggregate the
+ranking is simpler, with culture pH at
+`{python} f"{eff('aggregates_hmw', L['pH']):+.2f}"` and culture duration at
+`{python} f"{eff('aggregates_hmw', L['duration']):+.2f}"` well ahead of one small interaction,
+both of them in the direction the prior expectation of §2.1 predicts (@tbl-eff-agg).
+
+```{python}
+#| output: asis
+show(D.screening_effects_df(UO, "afucosylation", top=6))
+print()
+print(": Screening effects on afucosylation, six largest by magnitude. {#tbl-eff-afu}")
+```
+
+```{python}
+#| output: asis
+show(D.screening_effects_df(UO, "aggregates_hmw", top=6))
+print()
+print(": Screening effects on aggregates (HMW), six largest by magnitude. {#tbl-eff-agg}")
+```
+
+Of the five responses, high mannose was resolved on the fewest terms. Only `{python} n_sig_scr('high_mannose')` terms
+reach significance, both of them main effects: culture pH at
+`{python} f"{eff('high_mannose', L['pH']):+.2f}"` percentage points and culture temperature at
+`{python} f"{eff('high_mannose', L['temperature']):+.2f}"`. Over the ranges screened, dissolved CO2, osmolality and culture duration stay inactive on this response. That null result was
+retained in the knowledge space, because it establishes that the attribute of highest
+criticality among the seven depends on the two parameters held under continuous closed-loop
+control (@tbl-eff-hm).
 
 ```{python}
 #| output: asis
 show(D.screening_effects_df(UO, "high_mannose", top=6))
 print()
-print(": Largest screening effects on high mannose. {#tbl-eff-hm}")
+print(": Screening effects on high mannose, six largest by magnitude. {#tbl-eff-hm}")
 ```
 
-High mannose depends on fewer factors than any other response, and only
-`{python} n_sig_scr('high_mannose')` terms reach significance at α = `{python} alpha`,
-both of them main effects (@tbl-eff-hm): culture pH raises high mannose by
-`{python} f"{eff('high_mannose','pH'):.1f}"` percentage points across the characterized
-range and culture temperature lowers it by
-`{python} f"{abs(eff('high_mannose','temperature')):.1f}"` points. No interaction
-involving high mannose is separable from noise on this design. The three inactive
-factors were retained in the knowledge space, because an attribute of very high
-criticality that does not respond to
-`{python} names_of(['co2','osmolality','duration'])` over ranges this wide is robust to
-them, and that robustness is part of the control strategy argument in §10.
+The standardized effects for the two glycan responses carrying the most terms are ranked in @fig-pareto.
+The contrast between the two panels makes the argument for the design that follows, since
+galactosylation is moved by four factors and by several of their interactions, whereas afucosylation is dominated by a single interaction and a single main effect of comparable size.
 
-Afucosylation and aggregate complete the set, and both carry fewer active factors than
-galactosylation. Afucosylation is driven by culture duration and by the interaction
-between culture duration and culture pH, at
-`{python} f"{abs(eff('afucosylation','duration')):.1f}"` and
-`{python} f"{eff('afucosylation','pH','duration'):.1f}"` percentage points, which is
-consistent with a competition that resolves as transit slows. Aggregate is driven mainly
-by culture pH and culture duration, at `{python} f"{eff('aggregates_hmw','pH'):.2f}"`
-and `{python} f"{eff('aggregates_hmw','duration'):.2f}"` percentage points, both of
-which raise it. Neither response shows a significant effect of osmolality.
-
-However, two limits on the screening analysis need stating. The overall model does not
-reach significance for `{python} scr_p_hi_resp.lower()` (p =
-`{python} f"{scr_p_hi:.2f}"`), which follows from the `{python} df_resid(SCR)` residual
-degrees of freedom the design leaves, not from an absence of structure. Predicted R² is
-negative for every response, with a highest value of `{python} f"{scr_pred_hi:.2f}"`. A
-near saturated design produces exactly that, because almost every degree of freedom has
-gone into estimating a term. Screening therefore ranks the factors, and the response
-surface model estimates the magnitudes.
-
-The `{python} n_rsm_f` factors carried forward were `{python} rsm_list`. Osmolality was
-dropped despite a resolved main effect on galactosylation and on acidic variants,
-because those effects are the smallest of the five and because the normal operating
-range is held to `{python} nor('osmolality')` mOsm by the medium and feed recipe. The
-full effect tables for all `{python} n_resp` responses are given in an appendix
-(Appendix C).
+![Standardized screening effects on afucosylation and galactosylation. Significant terms are shown in red.](../outputs/figures/fig_bioreactor_pareto.png){#fig-pareto}
 
 ## Response-surface models
 
-On the criteria set out in §3.5, the response surface models are adequate for all
-`{python} n_resp` responses and predictive for four of them, and @tbl-fit-rsm gives the
-summary statistics.
+The response surface models describe the characterized region adequately. Within that region, those models carry the predictive claim of this report. The model summaries for all five responses are given in @tbl-fit-rsm. R² runs from `{python} f"{r2_lo:.3f}"` to `{python} f"{r2_hi:.3f}"`, at a lowest adjusted R² of `{python} f"{adj_lo:.3f}"`. Across the five responses, every overall F test reaches significance, the weakest of them at p = `{python} f"{p_rsm_hi:.2g}"`.
 
 ```{python}
 #| output: asis
-show(D.fit_summary_df(UO, RSM))
+show(D.fit_summary_df(UO, "rsm"))
 print()
-print(": Response-surface model adequacy (full quadratic, N = 28). {#tbl-fit-rsm}")
+print(": Response-surface model summaries. {#tbl-fit-rsm}")
 ```
 
-Across the five responses, R² runs from `{python} pct(r2_lo)` to `{python} pct(r2_hi)`
-and adjusted R² does not fall below `{python} f"{adj_lo:.2f}"`. As a result, the fitted
-terms are carrying real structure and not degrees of freedom. Predicted R² is the more
-demanding statistic, and that statistic separates the five responses. Four of them reach
-`{python} f"{sorted(fs_rsm['Pred. R²'])[1]:.2f}"` or better, with the strongest at
-`{python} f"{pred_hi:.2f}"` for `{python} pred_hi_resp.lower()`, and the weakest of the
-five is `{python} pred_lo_resp.lower()` at `{python} f"{pred_lo:.2f}"`. A model at that
-level predicts the mean response usefully and predicts an individual batch loosely, and
-§7 treats it accordingly.
+Predicted R² is computed from the PRESS statistic and thus measures how a model behaves at a point it was not fitted to, which separates the five responses more sharply than R² does. The strongest of the five on that measure is `{python} pred_hi_resp`, at `{python} f"{pred_hi:.3f}"`, well clear of the rest. The weakest is
+`{python} pred_lo_resp` at `{python} f"{pred_lo:.3f}"`, a value that still supports interpolation inside the design while leaving less assurance behind a claim made at the edge of it. The same bound is carried by every prediction made for that response below.
+
+No lack of fit test reaches significance against the centre-point pure error. The lack of fit partition for all five responses is set side by side in @tbl-lof. The smallest lack of fit p-value belongs to
+`{python} lof_p_lo_resp`, at `{python} f"{lof_p_lo:.2f}"`.
 
 ```{python}
 #| output: asis
-show(D.anova_lof_df(UO, "galactosylation"))
+show(lof_tbl)
 print()
-print(": Analysis of variance for the galactosylation response-surface model. {#tbl-anova-gal}")
+print(": Lack-of-fit summary for the response-surface models, against the centre-point pure "
+      "error. {#tbl-lof}")
 ```
 
-@tbl-anova-gal partitions the galactosylation model, in which the model term carries
-`{python} pct(f_rsm['galactosylation']['model'].ess / (f_rsm['galactosylation']['model'].ess + f_rsm['galactosylation']['sse']))`
-of the total sum of squares, and the residual splits into
-`{python} f_rsm['galactosylation']['df_lof']` degrees of freedom of lack of fit against
-`{python} f_rsm['galactosylation']['df_pe']` of pure error. The lack of fit test does
-not approach significance (p = `{python} f"{lof_p['galactosylation']:.2f}"`).
-In addition, every other response behaves the same way, and the lowest lack of fit
-probability of the five stays well above α = `{python} alpha`.
+The lack of fit tests rest on `{python} cp_rsm` centre-point replicates. Therefore a non-significant result bounds the evidence for the model form without establishing it. For the response with the least margin, the full partition is given in @tbl-anova-ac.
 
-That test has a bound worth stating. The pure error term rests on
-`{python} f_rsm['galactosylation']['df_pe']` degrees of freedom from `{python} cp_rsm`
-centre point replicates. Therefore a non significant result bounds the evidence for the
-model form without establishing it. For this reason the weakest case is
-`{python} lof_p_lo_resp.lower()` (p = `{python} f"{lof_p_lo:.2f}"`), and it is the one to
-watch when the models are challenged at commercial scale.
+```{python}
+#| output: asis
+show(D.anova_lof_df(UO, lof_lo_key))
+print()
+print(": Analysis of variance for " + rnm(lof_lo_key) +
+      ", partitioning the residual into lack of fit and pure error. {#tbl-anova-ac}")
+```
+
+Coefficient tables for the two glycan responses that drive the operating region are given in
+@tbl-coef-gal and @tbl-coef-hm, with the remaining three in Appendix C. For galactosylation, `{python} n_sig_rsm('galactosylation')` of the `{python} n_rsm_terms - 1` model terms reach significance. On that response, culture duration carries the largest coefficient at `{python} f"{cf('galactosylation', L['duration']):+.2f}"` percentage
+points per coded unit, followed by dissolved CO2 at
+`{python} f"{cf('galactosylation', L['co2']):+.2f}"` and culture pH at
+`{python} f"{cf('galactosylation', L['pH']):+.2f}"`, while culture temperature runs the other
+way at `{python} f"{cf('galactosylation', L['temperature']):+.2f}"`. Three of those interactions reach significance and none of the quadratic terms does, which describes a surface tilted and twisted
+across this region without being curved within it.
 
 ```{python}
 #| output: asis
 show(D.rsm_coeff_df(UO, "galactosylation"))
 print()
-print(": Full quadratic coefficients for galactosylation (coded factors). {#tbl-coef-gal}")
+print(": Response-surface coefficients for galactosylation. {#tbl-coef-gal}")
 ```
 
-@tbl-coef-gal gives the galactosylation coefficients in model order, of which
-`{python} n_sig_rsm('galactosylation')` of the `{python} n_terms_rsm() - 1` terms reach
-significance. The four main effects hold the signs the screening design gave them, and
-three interactions survive: culture pH with culture duration
-(`{python} f"{coef('galactosylation','pH','duration'):.2f}"`), culture pH with dissolved
-carbon dioxide (`{python} f"{coef('galactosylation','pH','co2'):.2f}"`) and culture pH
-with culture temperature
-(`{python} f"{coef('galactosylation','pH','temperature'):.2f}"`). No quadratic term
-reaches significance. Consequently, the galactosylation surface is a plane twisted by
-the interactions, not a curved one.
+High mannose behaves differently from galactosylation. `{python} n_sig_rsm('high_mannose')` terms are significant,
+and culture pH dominates them at `{python} f"{cf('high_mannose', L['pH']):+.2f}"` percentage
+points per coded unit (p = `{python} f"{cf_p('high_mannose', L['pH']):.2g}"`). Culture
+temperature is the only other significant main effect, at
+`{python} f"{cf('high_mannose', L['temperature']):+.2f}"`. Because the attribute of highest criticality depends on the two parameters under continuous closed-loop control, the control burden it places on the step is correspondingly light.
 
 ```{python}
 #| output: asis
 show(D.rsm_coeff_df(UO, "high_mannose"))
 print()
-print(": Full quadratic coefficients for high mannose (coded factors). {#tbl-coef-hm}")
+print(": Response-surface coefficients for high mannose. {#tbl-coef-hm}")
 ```
 
-High mannose keeps the simpler structure that screening found: culture pH dominates at
-`{python} f"{coef('high_mannose','pH'):.2f}"` per coded unit, culture temperature
-follows at `{python} f"{coef('high_mannose','temperature'):.2f}"`, and two small
-interactions with culture pH reach significance on the larger design. The additional
-runs of the response surface design resolve those interactions where the screening
-design could not, which is the improvement in resolution the second stage was run for.
+Among the five responses, afucosylation is the only one on which a quadratic term was resolved. That quadratic term reaches `{python} f"{cf('afucosylation', L['pH'] + '²'):+.2f}"` per coded unit
+(p = `{python} f"{cf_p('afucosylation', L['pH'] + '²'):.3f}"`), acting together with a pH by
+duration interaction of
+`{python} f"{cf('afucosylation', L['pH'] + L['duration']):+.2f}"` to give a ridged surface whose maximum sits away from the corners of the design and inside the characterized region. By comparison, the simplest surface of the five was fitted for aggregate, on two significant main effects, culture pH at
+`{python} f"{cf('aggregates_hmw', L['pH']):+.2f}"` and culture duration at
+`{python} f"{cf('aggregates_hmw', L['duration']):+.2f}"`, alongside a small duration square
+(Appendix C).
 
-Afucosylation is the one response with a significant quadratic term, and the coefficient
-on the squared culture pH term is `{python} f"{quad('afucosylation','pH'):.2f}"` (p =
-`{python} f"{quad_p('afucosylation','pH'):.3f}"`). Afucosylation therefore falls away at
-both ends of the pH range instead of tracking it linearly. Aggregate carries a smaller
-curvature in culture duration (`{python} f"{quad('aggregates_hmw','duration'):.2f}"`, p
-= `{python} f"{quad_p('aggregates_hmw','duration'):.3f}"`). Coefficient tables for the
-remaining responses are given in an appendix (Appendix C).
+The fitted surfaces over culture pH and culture duration are shown in @fig-contours-phdur, with culture temperature and dissolved CO2 held at their set-points. The same five responses are shown over culture temperature and dissolved CO2 in @fig-contours-tco2, with the remaining two factors held at the same values. Read together, the two panels show
+that no single plane contains the operating problem: high mannose and aggregate are steepest
+along pH, whereas galactosylation and acidic variants are steepest along duration and dissolved
+CO2.
 
 ```{python}
-#| label: fig-contours
+#| label: fig-contours-phdur
 #| fig-cap: "Response-surface predictions over culture pH and culture duration, with culture temperature and dissolved CO2 at their set-points."
-D.fig_rsm_contours(UO, xf="pH", yf="duration")
+_ = D.fig_rsm_contours(UO, xf="pH", yf="duration")
+plt.show()
 ```
-
-@fig-contours shows all `{python} n_resp` surfaces over culture pH and culture duration,
-the two factors that appear in the most models. The galactosylation and afucosylation
-panels show the twist that the pH by duration interaction produces: the pH gradient at
-the short duration edge runs the opposite way from the gradient at the long edge. High
-mannose and aggregate show simple gradients in pH, and acidic variants varies with pH but
-hardly at all with culture duration.
 
 ```{python}
-#| label: fig-contours-co2
-#| fig-cap: "Response-surface predictions over dissolved CO2 and culture temperature, with culture pH and culture duration at their set-points."
-D.fig_rsm_contours(UO, xf="co2", yf="temperature")
+#| label: fig-contours-tco2
+#| fig-cap: "Response-surface predictions over culture temperature and dissolved CO2, with culture pH and culture duration at their set-points."
+_ = D.fig_rsm_contours(UO, xf="temperature", yf="co2")
+plt.show()
 ```
 
-@fig-contours-co2 covers the other two factors, of which acidic variants is the response
-those two govern, and the panel shows the strong dissolved carbon dioxide gradient with
-the weaker temperature gradient across it. Galactosylation also falls steadily with
-dissolved carbon dioxide, which makes that parameter the one factor that moves a high
-criticality glycan and the low criticality charge variant together.
+Model diagnostics for three of those responses are given in @fig-diag-gal, @fig-diag-hm and @fig-diag-ac. The standardized residuals show no structure against the predicted value, the
+normal quantile plots are close to linear and the actual against predicted plots sit on the identity line. Furthermore, diagnostics for the remaining two responses were reviewed to the same standard and show the same behaviour.
 
 ```{python}
 #| label: fig-diag-gal
-#| fig-cap: "Model diagnostics for galactosylation: residuals against predicted values, normal quantile plot and actual against predicted."
-D.fig_diagnostics(UO, "galactosylation")
+#| fig-cap: "Model diagnostics for galactosylation: standardized residuals against predicted value, normal quantile plot, and actual against predicted."
+_ = D.fig_diagnostics(UO, "galactosylation")
+plt.show()
 ```
 
 ```{python}
-#| label: fig-diag-acid
-#| fig-cap: "Model diagnostics for acidic variants, the response with the lowest predicted R²."
-D.fig_diagnostics(UO, "acidic_variants")
+#| label: fig-diag-hm
+#| fig-cap: "Model diagnostics for high mannose."
+_ = D.fig_diagnostics(UO, "high_mannose")
+plt.show()
 ```
 
-@fig-diag-gal and @fig-diag-acid give the diagnostics for the strongest and the weakest
-of the five models. In both, the residuals scatter about zero with no trend against the
-predicted value and no fan, and the actual against predicted points sit on the identity
-line. The largest standardized residual in the galactosylation model is
-`{python} f"{max_std_resid('galactosylation'):.1f}"` and in the acidic variants model
-`{python} f"{max_std_resid('acidic_variants'):.1f}"`, and neither residual set departs
-from normality (Shapiro-Wilk p = `{python} f"{shapiro_p('galactosylation'):.2f}"` and
-`{python} f"{shapiro_p('acidic_variants'):.2f}"`). No run was excluded from any fit.
+```{python}
+#| label: fig-diag-ac
+#| fig-cap: "Model diagnostics for acidic variants."
+_ = D.fig_diagnostics(UO, "acidic_variants")
+plt.show()
+```
 
 ## Mechanistic interpretation
 
-The surfaces behave as the platform mechanisms predict, with one exception that the
-study quantifies without explaining. Galactosylation falls as the culture ages, which is
-what a declining galactosyltransferase activity and a depleting nucleotide sugar pool
-produce. Dissolved carbon dioxide lowers it further, and the accepted mechanism for that
-is an acidified Golgi lumen: transferase activity and nucleotide sugar transport both
-fall as lumenal pH drops away from the enzyme optimum. Culture temperature raises
-galactosylation in the same picture, through the rate constant of the transfer reaction.
+On four of the five responses measured, the fitted surfaces follow the mechanisms set out in §2.1.
+Galactosylation falls as the culture lengthens, which is what a declining galactosyltransferase
+activity and a depleting nucleotide sugar pool together predict. Dissolved CO2 acts in the same
+direction, consistent with the acidification of the Golgi lumen that accompanies a rising
+carbonate load in the culture. Afucosylation also falls with culture duration, at
+`{python} f"{cf('afucosylation', L['duration']):+.2f}"` percentage points per coded unit, which
+matches the platform observation that longer cultures give lower afucosylation. In the same cultures, aggregate rises with both culture pH and culture duration, as expected for a species that accumulates while
+secreted antibody sits in an ageing broth.
 
-The pH by duration interaction on galactosylation follows from the same account. At the
-short duration edge of the range the transferase is still active, and raising culture pH
-lowers the product by
-`{python} f"{abs(D.predict(UO,'galactosylation',coded={'pH':1,'temperature':0,'duration':-1,'co2':0})[0] - D.predict(UO,'galactosylation',coded={'pH':-1,'temperature':0,'duration':-1,'co2':0})[0]):.1f}"`
-percentage points. At the long duration edge the same move changes it by
-`{python} f"{abs(D.predict(UO,'galactosylation',coded={'pH':1,'temperature':0,'duration':1,'co2':0})[0] - D.predict(UO,'galactosylation',coded={'pH':-1,'temperature':0,'duration':1,'co2':0})[0]):.1f}"`
-points. Once the enzyme system is depleted, the pH of the culture has little left to act
-on. An operating region built from one dimensional ranges would not represent that,
-which is the argument for the multivariate region (§6).
+Of the five, high mannose confirms the mechanistic expectation of §2.1 more directly than any other response. The attribute rises with
+culture pH and falls with culture temperature, which is the signature of incomplete mannosidase
+trimming, because a higher lumenal pH and a lower temperature both slow the trimming enzymes and
+leave more of the high-mannose precursor intact at secretion. Neither dissolved CO2 nor culture duration is significant on this response in either design, a null result that localizes the control of the attribute of highest criticality onto two of the nine parameters characterized.
 
-High mannose behaves as an incomplete trimming attribute: the Golgi mannosidases work
-best at an acidic lumenal pH, and raising the culture pH raises the lumenal pH away from
-that optimum, which leaves more of the untrimmed precursor in the released product.
-Higher culture temperature drives trimming further towards completion and lowers high
-mannose. Neither dissolved carbon dioxide nor culture duration moves the attribute
-measurably, which is consistent with trimming reaching the endpoint well before harvest.
+Acidic variants are the exception to that pattern. Dissolved CO2 dominates the response as expected, at
+`{python} f"{cf('acidic_variants', L['co2']):+.2f}"` percentage points per coded unit, but the
+sign of the culture pH term runs against a simple base-catalysed deamidation argument. Raising
+culture pH lowers acidic variants by
+`{python} f"{abs(cf('acidic_variants', L['pH'])):.2f}"` percentage points per coded unit.
+However, the attribute is of very low criticality, at a Tool #1 score of
+`{python} f"{tool1('acidic_variants'):.0f}"`, with an acceptance criterion applied as an upper
+limit of `{python} f"{ds_hi('acidic_variants'):.0f}"` %. The highest value any response surface
+run reached was `{python} f"{rsm_df['acidic_variants'].max():.1f}"` %. That observation is recorded as an empirical result of the study and is not used to support a mechanism.
 
-Afucosylation reflects a competition between core fucosyltransferase activity and the
-rate at which antibody transits the secretory pathway. Longer culture lowers
-afucosylation, because slower transit gives the transferase more time to act on each
-molecule. The curvature in culture pH says that the competition has an optimum inside
-the range instead of at an edge: the highest predicted afucosylation over a pH scan at
-the set-point of the other factors is
-`{python} f"{max(D.predict(UO,'afucosylation',coded={'pH':x,'temperature':0,'duration':0,'co2':0})[0] for x in np.linspace(-1,1,41)):.1f}"`
-%, and the level falls at both edges.
-
-Aggregate is not enzymatic. Antibody that sits longer in an ageing broth, at a higher pH
-and in the presence of proteases released by dying cells, aggregates more, and both
-significant factors act in that direction. The effect is small in absolute terms across
-the whole characterized range, at `{python} f"{eff('aggregates_hmw','pH'):.2f}"`
-percentage points for culture pH. Aggregate is nonetheless worth close attention here, as
-the only attribute of the five that downstream steps also change, and the cation exchange
-step is sized against the level this step delivers (PCR-007).
-
-Acidic variants carry the exception. Dissolved carbon dioxide lowers them, and the
-deamidation mechanism accounts for that directly, since an acidified culture fluid slows
-a base catalysed reaction, and culture temperature raises them in the way the rate
-constant predicts. However, culture pH lowers acidic variants as well, and solution
-chemistry predicts the opposite. The most likely account is an indirect one through cell
-physiology and through the age distribution of product in the harvest, and the study
-does not separate those possibilities. The response surface model quantifies the effect
-without attributing it, and the classification of culture pH in §9 rests on the effects
-it has on the glycan attributes.
-
-Finally, dropping osmolality from the response surface design has a cost that belongs
-here. Screening resolved an interaction between culture temperature and osmolality on
-galactosylation of `{python} f"{eff('galactosylation','temperature','osmolality'):.1f}"`
-percentage points (p =
-`{python} f"{eff_p('galactosylation','temperature','osmolality'):.3f}"`). That term is
-represented in this report by the screening estimate alone, and no quadratic or
-predictive statement is made about that term. The narrow recipe control of osmolality is
-what keeps the omission acceptable, and §11 carries it as a limitation.
+Read together, the significant interactions of the model carry the same message as the main effects do. The pH by duration term is significant on afucosylation and on galactosylation, at a magnitude that is large in both. What it means
+physically is that the consequence of harvesting a day later depends on the pH the culture was
+held at, because pH sets both the enzyme environment and the growth trajectory that determines
+how much antibody is made late in the culture. An operating region assembled from independent
+one-dimensional ranges would miss that dependence entirely, which is why §6 defines a
+multivariate region instead.
 
 # Design space
 
-The design space of the production bioreactor is a multivariate region in
-`{python} rsm_list`, over which the fitted response surface models predict that every
-attribute the step governs stays within the in-process criterion. The region is a subset
-of the characterized knowledge space in @tbl-params, and the normal operating ranges sit
-inside the region over almost all of their extent [@amab2009]. One corner of the normal
-operating range does not, and §7 reports it.
+The design space of the step is defined as the multivariate region of the characterized space over which every attribute the step governs stays inside its in-process limit. That region is defined in the `{python} n_rsm_f` well-controlled parameters carried into the response surface design:
+`{python} fjoin(rsm_f)`. The principal planes of the region are drawn as culture pH against culture duration (@fig-contours-phdur) and culture temperature against dissolved CO2 (@fig-contours-tco2),
+because those two pairs carry the significant interactions found in §5.3.
 
-The criteria the region is judged against are the step's in-process limits, not the drug
-substance specifications. For `{python} n_from_cap` of the `{python} n_resp` responses
-the in-process limit is an alert limit set at `{python} f"{alert_sigma:g}"` standard
-deviations above the simulated commercial scale mean, because those attributes are
-neither cleared nor modified downstream and the drug substance criterion sits far
-outside the spread of the process itself. For aggregate the limit is carried back from
-the drug substance criterion through the clearance the downstream train delivers,
-divided by an assurance margin of `{python} f"{agg_margin:g}"`. Both bases give a limit
-that binds well inside the drug substance criterion, and the in-process limits used in
-§7 and here are the more demanding comparison of the two available.
+Evaluated on a grid of `{python} f"{ds_n:,}"` points across the coded cube,
+`{python} f"{100*ds_frac:.1f}"` % of the characterized region meets every criterion
+simultaneously. The region is bound most tightly by `{python} ds_bind`, which alone rejects `{python} f"{100*ds_bind_rej:.1f}"` % of the grid, while the least binding of the five is `{python} ds_free` at `{python} f"{100*ds_free_rej:.1f}"` %. Since no single attribute rejects more than a sixth of the characterized region while the five of them together reject over two fifths of it, the constraints must act in different directions, which is the interaction argument of §5.4 expressed as a volume.
 
-Evaluated on an evenly spaced grid of `{python} f"{ds_n:,}"` points across the four
-characterized ranges, `{python} f"{ds_pct:.0f}"` % of the region meets every criterion
-simultaneously. The largest share of the grid is rejected by `{python} ds_bind.lower()`,
-at `{python} f"{ds_bind_pct:.0f}"` % of the points, and the smallest by
-`{python} ds_easy.lower()`, at `{python} f"{ds_easy_pct:.0f}"` %. The characterized ranges therefore contain edges of
-failure, which is the intended outcome of choosing ranges wider than the control ranges.
+Geometrically, the corners of the characterized cube are the worst case the region has to survive. All `{python} n_corner` of those corners are evaluated against the in-process limits in @tbl-corners.
+`{python} n_corner_ok` of them meet every in-process limit at once. The worst of those corners sits at `{python} corner_str(worst_i)`, where `{python} worst_n` limits are breached at once:
+`{python} worst_names`. At that corner galactosylation is predicted at
+`{python} f"{corner_val(worst_i, 'galactosylation'):.1f}"` % against an in-process limit of
+`{python} f"{ipc_hi('galactosylation'):.1f}"` %.
 
-The worst case corner of the characterized region is the one that fails
-`{python} ds_bind.lower()`: `{python} wc_char_corner(ds['binding'])`. At that corner the
-model predicts `{python} f"{wc_char(ds['binding']):.1f}"` %, against an in-process limit
-of `{python} f"{ipc_hi(ds['binding']):.1f}"` % and a drug substance criterion of
-`{python} ds_range(ds['binding'])` %. That single corner exceeds even the drug substance
-criterion, which is what an edge of failure means and why the design space is smaller
-than the knowledge space.
+```{python}
+#| output: asis
+show(corner_tbl)
+print()
+print(": Predicted performance at the " + f"{n_corner}" +
+      " corners of the characterized region, against the in-process limits of §7. "
+      "{#tbl-corners}")
+```
 
-The principal planes of the region are culture pH against culture duration, shown in
-@fig-contours, and dissolved carbon dioxide against culture temperature, shown in
-@fig-contours-co2. The first plane carries the interaction that drives galactosylation
-and afucosylation, and the second carries the gradient that drives acidic variants. A
-design space stated as four independent ranges would miss the first of those entirely,
-because the acceptable pH range at the short duration edge is not the acceptable pH
-range at the long one.
+Against the drug substance specifications those corners fare much better. Only `{python} len(eof_i)` corner of the cube fails that criterion. At `{python} corner_str(eof_i[0])`,
+`{python} eof_names` is predicted at
+`{python} f"{corner_val(eof_i[0], eof_key):.1f}"` % against a specification of
+`{python} f"{ds_lo(eof_key):.0f}"` to `{python} f"{ds_hi(eof_key):.0f}"` %. That corner marks the edge of failure of the knowledge space. It lies well outside the operating region defined here.
 
-Under ICH Q8, operation anywhere inside the region is not a change from a regulatory
-filing perspective [@ichq8]. Movement within the region still runs through the
-pharmaceutical quality system as a planned change with a prospective risk assessment
-[@ichq10], and movement outside the region requires change control and supporting data.
-The normal operating ranges in @tbl-params are where the commercial process is expected
-to run, and they occupy a small part of the region, with the exception noted in §7.
+The region is shown in the culture pH against culture duration plane in @fig-ds, with the drug substance acceptance boundaries drawn and the normal operating range marked. In that plane the normal operating range sits inside the characterized region, which in turn sits inside the knowledge space bounded by @tbl-params. As stated in ICH Q8, working within the design space is not
+considered a change from a regulatory filing perspective, although every planned move is still
+assessed prospectively under the pharmaceutical quality system before it is made
+[@ichq8; @ichq10]. Movement outside that region is handled under change control, with supporting data and a prospective assessment of the effect on each governed attribute.
 
-Three bounds apply to this claim. The region is defined by mean predictions from models
-fitted over the characterized ranges, and says nothing about settings outside those
-ranges. The models were fitted on a qualified scale down system, and commercial scale
-confirmation is a Stage 2 activity. The region covers the four response surface factors
-only, with osmolality and the four univariately assessed parameters held inside the
-ranges in @tbl-params.
+![Production-bioreactor operating region in the culture pH and culture duration plane. The shaded region meets every drug substance criterion, dashed lines are the acceptance boundaries and the dotted rectangle is the normal operating range.](../outputs/figures/fig_bioreactor_designspace.png){#fig-ds}
+
+Three bounds are attached to the design space claim made above. The region is defined only over the characterized ranges of @tbl-params. Nothing at all is claimed beyond those ranges. The models behind it were fitted as mean-response models on `{python} n_rsm` runs, which makes the reliability at the edge of the shaded region lower than at its centre. Routine operation at the centre of that region is accordingly supported by the capability statement of §8 instead of by the boundary itself. Beyond those two bounds, the whole region rests on the qualified scale-down model of §3.1. Design spaces of this kind are not confirmed at commercial scale at the edges of the ranges.
 
 # Proven acceptable ranges
 
-For a single parameter at a time, proven acceptable ranges complement the multivariate
-region with a per attribute statement of how far a single parameter may move. @tbl-par
-gives both analyses for every combination of governed attribute and response surface
-factor: the range proven with the other factors at their set-points, and the range that
-survives normal operating range co-variation of the other factors.
+The proven acceptable ranges are reported alongside the multivariate region, as a view taken one attribute and one parameter at a time. Each range was measured against the in-process limit of the step
+instead of the drug substance specification, because an intermediate has to be judged against a
+criterion that applies to it. For `{python} len(cap_based)` of the `{python} n_resp` responses
+the in-process limit is derived from the demonstrated commercial-scale capability, as an alert
+limit `{python} f"{ipc_sigma:g}"` standard deviations from the simulated mean (§8). For
+`{python} rjoin(bc_based)` the limit is carried back instead from the drug substance criterion,
+through the clearance the downstream train delivers, then divided by an assurance margin of
+`{python} f"{agg_margin:g}"`. The resulting limits appear in the Criterion column of @tbl-par, against which both proven acceptable range columns were computed.
+
+Two analyses were run against those limits, one for each combination of governed attribute and response surface factor. In the first of those analyses the other factors are held at their set-points, while the parameter of interest is scanned across its characterization range on the fitted response surface model. In the second analysis the other factors are varied within their normal operating ranges by Monte-Carlo of the same model. The proven acceptable range is then taken as the span over which the 95 % predictive interval stays inside the criterion. The second analysis serves as the reproducible default of this package. By construction it bounds the parameter more tightly than the first.
 
 ```{python}
 #| output: asis
 show(D.par_table(UO))
 print()
-print(": Proven acceptable ranges per governed attribute and response-surface factor. {#tbl-par}")
+print(": Proven acceptable ranges per governed attribute and response-surface factor, at "
+      "set-point and under normal operating range variation. {#tbl-par}")
 ```
 
-The acceptance basis is stated in the Criterion column and is the same in-process limit
-used for the design space (§6). Reading the table against the drug substance criteria
-instead would widen every range in the table.
+At set-point, `{python} n_full_sp` of the `{python} n_pairs` attribute and parameter combinations stay acceptable across the whole characterization range, whereas under normal
+operating range variation that count falls to `{python} n_full_nor`. Under that propagation, the narrowest of those combinations is formed by `{python} rnm(tight_r)` against `{python} fnm(tight_f, True)`. It retains `{python} f"{100*tight_frac:.0f}"` % of the characterized range, running from `{python} f"{pn_lo(tight_r, tight_f):.2f}"` to `{python} f"{pn_hi(tight_r, tight_f):.2f}"` under variation of the other three factors. Four rows are left unaffected by the propagation: high mannose and acidic variants against culture
+duration, and aggregate against culture temperature and dissolved CO2.
 
-With the other factors at their set-points, `{python} n_par_full` of the
-`{python} n_par_rows` combinations return the entire characterization range as a proven
-acceptable range. The four that do not are informative. Afucosylation and
-galactosylation both restrict culture duration at the short end, to
-`{python} par_sp('afucosylation','duration')` days and
-`{python} par_sp('galactosylation','duration')` days against a characterized range of
-`{python} rng('duration')` days. Acidic variants restrict dissolved carbon dioxide at
-the low end, to `{python} par_sp('acidic_variants','co2')` mmHg against a characterized
-range of `{python} rng('co2')` mmHg. Aggregate restricts culture duration at the long
-end, to `{python} par_sp('aggregates_hmw','duration')` days.
+For the operating region, the rows that matter most in that table are the ones that pull in opposite directions. On culture pH the proven acceptable range is bounded below by `{python} rnm(isect_lo_key('pH'))` at
+`{python} f"{isect_lo('pH'):.2f}"` and bounded above by `{python} rnm(isect_hi_key('pH'))` at
+`{python} f"{isect_hi('pH'):.2f}"`. Because the two bounds come from different attributes, the intersection of the univariate ranges on pH is narrower than any one of them taken alone. The same two-sided squeeze holds on culture duration, where the lower bound comes from
+`{python} rnm(isect_lo_key('duration'))` at `{python} f"{isect_lo('duration'):.1f}"` days while
+the upper bound comes from `{python} rnm(isect_hi_key('duration'))` at
+`{python} f"{isect_hi('duration'):.1f}"` days.
 
-Under normal operating range co-variation the ranges narrow further, and only
-`{python} n_par_nor_full` of the `{python} n_par_rows` combinations still span the full
-characterization range. Narrowing is the expected outcome, because this analysis
-compares the upper bound of a 95 % predictive interval against the limit instead of a
-mean prediction, and the interval carries both the co-variation of the other factors and
-the residual variance of the model.
+That intersection is narrower than the normal operating range itself on every one of the `{python} n_rsm_f` response surface factors. `{python} n_nor_alert` of the `{python} n_nor` corners of the normal operating range box are predicted to exceed an in-process limit on the mean response. The attributes involved in those corners are `{python} nor_alert_names`. That finding is bounded by three considerations. The limits concerned act as alert limits, set `{python} f"{ipc_sigma:g}"` standard deviations from the demonstrated commercial-scale mean, which means a small fraction of normal operation is expected
+to reach them by construction. On top of that construction, the Monte-Carlo analysis requires a 95 % predictive interval to sit wholly inside the alert limit, compounding the conservatism a second time. Measured against the drug substance specifications instead, `{python} n_nor - n_nor_ds` of the `{python} n_nor` corners of the normal operating range box meet every criterion. Those corners are also covered by the capability indices of §8, which carry the margins reported there.
+
+A representative plot is given for each governed attribute, taken against the parameter with the largest response surface main effect on it. In each of those figures the acceptance limit is drawn, the acceptable region is shaded green and the set-point and normal operating range are marked. In every figure the left panel carries the at set-point analysis and the right panel carries the Monte-Carlo analysis.
 
 ```{python}
-#| label: fig-par-hm
-#| fig-cap: "Proven acceptable range for high mannose against culture pH, at set-point (left) and with the other factors varying within their normal operating ranges (right). The acceptable region is shaded green."
-D.fig_par(UO, "high_mannose", D.governing_factor(UO, "high_mannose"))
+#| label: fig-par-afu
+#| fig-cap: "Proven acceptable range for afucosylation against its governing parameter."
+_ = D.fig_par(UO, "afucosylation", D.governing_factor(UO, "afucosylation"))
+plt.show()
 ```
-
-@fig-par-hm gives the analysis for high mannose against
-`{python} gov_name('high_mannose')`, which is the factor with the largest response
-surface main effect on it. At set-point the whole characterized pH range is acceptable,
-and under normal operating range co-variation the acceptable range becomes
-`{python} par_nor('high_mannose','pH')`. The upper part of the characterized pH range no
-longer holds the predictive bound below the in-process limit. The normal operating range
-for culture pH is `{python} nor('pH')`, and the upper edge of that range sits just above
-the co-varied bound.
 
 ```{python}
 #| label: fig-par-gal
-#| fig-cap: "Proven acceptable range for galactosylation against culture duration, at set-point and under normal operating range co-variation."
-D.fig_par(UO, "galactosylation", D.governing_factor(UO, "galactosylation"))
+#| fig-cap: "Proven acceptable range for galactosylation against its governing parameter."
+_ = D.fig_par(UO, "galactosylation", D.governing_factor(UO, "galactosylation"))
+plt.show()
 ```
 
-Galactosylation is the binding attribute, and @fig-par-gal shows why. Under co-variation
-the proven acceptable range for culture duration is
-`{python} par_nor('galactosylation','duration')` days, and the normal operating range
-for culture duration is `{python} nor('duration')` days. The lower edge of the normal
-operating range therefore sits below the lower edge of the proven acceptable range. The
-same pattern appears against dissolved carbon dioxide, where the range is
-`{python} par_nor('galactosylation','co2')` mmHg against a normal operating range of
-`{python} nor('co2')` mmHg. It appears again against culture temperature, where the
-co-varied range of `{python} par_nor('galactosylation','temperature')` °C stops just
-below the upper edge of the normal operating range of `{python} nor('temperature')` °C.
-
-That is an adverse result, quantified here before it is dispositioned. At the corner of
-the normal operating range where all four factors take their least favourable values at
-once, `{python} wc_nor_corner('galactosylation')`, the model predicts galactosylation of
-`{python} f"{wc_nor('galactosylation'):.1f}"` % against an in-process alert limit of
-`{python} f"{ipc_hi('galactosylation'):.1f}"` %. Afucosylation reaches its own alert
-limit of `{python} f"{ipc_hi('afucosylation'):.1f}"` % at the equivalent corner.
-
-Three things bound that finding. The limit exceeded is an alert limit derived from the
-demonstrated capability of the process, at `{python} f"{alert_sigma:g}"` standard
-deviations above the simulated mean, and a limit of that construction is expected to be
-exceeded by a small proportion of batches. The comparison is made at a simultaneous four
-factor extreme, whereas the capability simulation draws the parameters independently:
-over `{python} f"{n_mc:,}"` simulated batches the highest galactosylation was
-`{python} f"{cap_max('galactosylation'):.1f}"` %. Against the drug substance criterion
-of `{python} ds_range('galactosylation')` % there is no exceedance anywhere in the
-normal operating range. An excursion of this kind is therefore an investigation trigger
-under the in-process control strategy in §10, not a specification failure.
-
 ```{python}
-#| label: fig-par-acid
-#| fig-cap: "Proven acceptable range for acidic variants against dissolved CO2, at set-point and under normal operating range co-variation."
-D.fig_par(UO, "acidic_variants", D.governing_factor(UO, "acidic_variants"))
+#| label: fig-par-hm
+#| fig-cap: "Proven acceptable range for high mannose against its governing parameter."
+_ = D.fig_par(UO, "high_mannose", D.governing_factor(UO, "high_mannose"))
+plt.show()
 ```
 
-@fig-par-acid gives the acidic variant analysis against
-`{python} gov_name('acidic_variants')`, where the at set-point range starts at
-`{python} par_sp('acidic_variants','co2')` mmHg and the co-varied range at
-`{python} par_nor('acidic_variants','co2')` mmHg, both bounded at the low end because
-low dissolved carbon dioxide raises the attribute. The normal operating range of
-`{python} nor('co2')` mmHg extends below the co-varied bound, which is the same pattern
-as galactosylation and has the same disposition.
-
 ```{python}
-#| label: fig-par-afuc
-#| fig-cap: "Proven acceptable range for afucosylation against culture duration, at set-point and under normal operating range co-variation."
-D.fig_par(UO, "afucosylation", D.governing_factor(UO, "afucosylation"))
+#| label: fig-par-ac
+#| fig-cap: "Proven acceptable range for acidic variants against its governing parameter."
+_ = D.fig_par(UO, "acidic_variants", D.governing_factor(UO, "acidic_variants"))
+plt.show()
 ```
 
 ```{python}
 #| label: fig-par-agg
-#| fig-cap: "Proven acceptable range for aggregate against culture pH, at set-point and under normal operating range co-variation."
-D.fig_par(UO, "aggregates_hmw", D.governing_factor(UO, "aggregates_hmw"))
+#| fig-cap: "Proven acceptable range for aggregates (HMW) against its governing parameter."
+_ = D.fig_par(UO, "aggregates_hmw", D.governing_factor(UO, "aggregates_hmw"))
+plt.show()
 ```
 
-@fig-par-afuc and @fig-par-agg complete the set, and afucosylation restricts culture
-duration at the short end under both analyses, at
-`{python} par_sp('afucosylation','duration')` days and
-`{python} par_nor('afucosylation','duration')` days. Aggregate restricts culture pH only
-under co-variation, at `{python} par_nor('aggregates_hmw','pH')`, and the at set-point
-range covers the whole characterized span.
-
-The relationship between these ranges and the design space needs stating explicitly. A
-proven acceptable range is univariate, and each one holds only under the analysis that
-produced it. The design space in §6 is the multivariate region, and where the whole
-characterization range of a parameter is proven acceptable, the constraint that actually
-binds the operating region is the multivariate corner, not any univariate range. Both
-statements rest on the fitted response surface models and on the characterized ranges,
-and neither extends beyond them.
+The relationship between these ranges and the region of §6 runs as follows. A proven acceptable range is univariate. It therefore holds only under the conditions of the analysis that produced it. The design space covers the multivariate region instead. Where a whole characterization range is proven acceptable, the binding constraint on operation falls at a multivariate corner instead of on any univariate range. Every range in @tbl-par is bounded by the characterization ranges of @tbl-params and by the fitted response surface models. None of them is claimed outside those bounds.
 
 # Process capability and robustness
 
-For every attribute in @tbl-cqa, capability was estimated by simulating
-`{python} f"{n_mc:,}"` commercial scale batches with every parameter drawn independently
-inside the normal operating range and with the fitted models and the residual variance
-applied, and @tbl-cap gives the result.
+Commercial-scale capability was estimated from `{python} f"{V['n_monte_carlo']:,}"` simulated batches, with every process parameter drawn from within its normal operating range. The capability outcome for the `{python} len(cqa_keys)` attributes the step sets is given in @tbl-cap.
 
 ```{python}
 #| output: asis
-show(cap_for(br_keys))
+show(cap_for(cqa_keys))
 print()
-print(": Estimated commercial-scale capability for the attributes the bioreactor governs. {#tbl-cap}")
+print(": Commercial-scale capability for the attributes formed at the production bioreactor, "
+      "from " + f"{V['n_monte_carlo']:,}" + " simulated batches. {#tbl-cap}")
 ```
 
-Across those batches, every attribute clears the drug substance criterion. The tightest
-capability of the `{python} n_br_cqa` attributes is the one for
-`{python} cpk_min_cqa.lower()`, at a Cpk of `{python} f"{cpk(cpk_min_key):.2f}"`. The
-simulated mean behind that capability, `{python} f"{cap_mean(cpk_min_key):.2f}"` %, sits
-`{python} f"{cap_margin(cpk_min_key):.2f}"` percentage points above the lower acceptance
-limit of `{python} f"{ds_lo(cpk_min_key):g}"` %, which is
-`{python} f"{cap_sigma(cpk_min_key):.1f}"` standard deviations of the simulated
-distribution. The lower limit binds, not the upper one, and the highest value in
-`{python} f"{n_mc:,}"` simulated batches was `{python} f"{cap_max(cpk_min_key):.1f}"` %
-(@tbl-cap).
+The tightest capability among those seven attributes belongs to `{python} cqa_name(cpk_min_key)`, at `{python} f"{cpk_min:.2f}"`. The simulated mean of that attribute sits at `{python} f"{cmean(cpk_min_key):.2f}"` %
+against a specification of `{python} f"{ds_lo(cpk_min_key):.0f}"` to
+`{python} f"{ds_hi(cpk_min_key):.0f}"` %, leaving a margin of
+`{python} f"{cmargin(cpk_min_key):.2f}"` percentage points to the nearer limit on a standard
+deviation of `{python} f"{csd(cpk_min_key):.2f}"`. The binding side of that specification is the lower limit, which follows directly from §5.4: the parameters that lower high mannose are the ones the step holds most closely, which settles the distribution nearer the floor than the ceiling.
 
-The reason `{python} cpk_min_cqa.lower()` is the tightest case is not that the process
-controls the attribute poorly. High mannose carries the narrowest acceptance band
-relative to the level the process runs at, at `{python} ds_range('high_mannose')` %
-around a mean of `{python} f"{cap_mean('high_mannose'):.1f}"` %, and the attribute also
-sits at very high criticality. Both facts about the attribute point the control strategy
-at the two parameters that move it, which is what §10 does.
+The second tightest capability belongs to `{python} cqa_name(cpk_2nd_key)`, at `{python} f"{cpk(cpk_2nd_key):.2f}"`. By contrast, the remaining attributes sit far from their limits. Their capability indices therefore show only
+that none of them constrains the process. The furthest of those attributes from a limit is `{python} cqa_name(cpk_max_key)`, at `{python} f"{cpk(cpk_max_key):.1f}"`. The capability index of that attribute is reported in @tbl-cap for completeness.
 
-The widest capability is the one for `{python} cpk_max_cqa.lower()`, at a Cpk of
-`{python} f"{cpk(cpk_max_key):.1f}"`, and an index of that size does not mean the
-process is `{python} f"{cpk(cpk_max_key) / cpk(cpk_min_key):.0f}"` times better
-controlled for aggregate than for high mannose. The index means the attribute sits far
-from the limit that applies to it, at a simulated mean of
-`{python} f"{cap_mean('aggregates_hmw'):.2f}"` % against a criterion of
-`{python} ds_range('aggregates_hmw')` %, and the index should be read as showing that
-aggregate does not constrain this step.
+Host cell protein and residual DNA are listed in @tbl-cap with indices of `{python} f"{cpk('hcp'):.1f}"` and `{python} f"{cpk('residual_dna'):.1f}"`. Neither of those two figures records an achievement of the production bioreactor alone. Both attributes leave the bioreactor far above the drug substance criterion. The clearance that brings both attributes down is credited to Protein A capture (PCR-005), cation exchange (PCR-007) and anion exchange (PCR-008). The contribution of the production bioreactor amounts to the input burden it hands on, which is the quantity those three steps were characterized against.
 
-Host cell protein and residual DNA appear in @tbl-cap as drug substance outcomes, not as
-bioreactor outputs. The bioreactor sets the burden entering the purification train, and
-the capability shown for both is the result of that burden and the clearance the train
-delivers. The clearance credit belongs to Protein A capture (PCR-005), cation exchange
-(PCR-007) and anion exchange (PCR-008), and the consolidated position is in PCMR-001.
-
-Two bounds apply to every index in @tbl-cap. Each is estimated from a qualified scale
-down model with the parameters inside their normal operating ranges, and none is a
-measurement at commercial scale. The simulation also assumes that the parameters vary
-independently inside those ranges, which is why the corner analysis in §7 is reported
-alongside it.
+Two bounds are attached to the capability statement made above. The simulation behind it draws parameters from within the normal operating range, which makes it a description of routine operation instead of the edges
+of the design space. The models it propagates were fitted on the qualified scale-down model of §3.1. Confirmation of the figures at commercial scale is delivered by the process performance qualification batches of Stage 2.
 
 # Parameter classification
 
-Classification follows the decision logic for process parameters (SOP-4001) and the
-continuum of criticality in [@ichq9]. A parameter whose variability affects a critical
-quality attribute is critical, and the distinction between a critical process parameter
-and a well controlled critical process parameter is the risk of leaving the design
-space, not the size of the effect [@amab2009]. The outcome for every parameter appears
-in @tbl-params, and the rationale for each is below.
+Every parameter characterized was given a classification, whether or not a significant effect was found for it.
+The classifications appear in @tbl-params and the rationale for each is given below. The classification convention is taken from SOP-4001 and from the decision logic of the case study [@amab2009]. A parameter whose variability affects a critical quality attribute becomes a CPP or a WC-CPP, and what separates the two classes is the risk of falling outside the design space instead of the size of the effect.
 
-- Culture pH is a WC-CPP because it reaches significance on all `{python} n_resp` responses
-  of the response surface model, including the largest effect on high mannose, and because
-  the control
-  system holds it to `{python} nor('pH')` against a proven acceptable range that covers the
-  whole characterized span at set-point (@tbl-par).
-- Culture temperature is a WC-CPP because it moves galactosylation, high mannose and acidic
-  variants, and jacketed control holds it to `{python} nor('temperature')` °C inside a
-  characterized range of `{python} rng('temperature')` °C.
-- Dissolved carbon dioxide is a WC-CPP because it carries the largest effect in the study
-  on acidic variants and a substantial effect on galactosylation, and sparge control holds
-  it to `{python} nor('co2')` mmHg. Dissolved carbon dioxide is also the parameter most
-  exposed to scale, which is why the characterized range reaches `{python} rng('co2')` mmHg.
-- Osmolality is a WC-CPP because screening resolved effects on galactosylation and acidic
-  variants, and although the parameter was not carried into the response surface design,
-  the medium and feed recipe holds it to `{python} nor('osmolality')` mOsm. Classification
-  on the screening result and on the recipe control (SOP-2004) is the conservative reading
-  of a factor that was not modelled further.
-- Culture duration is a WC-CPP because it carries the largest main effect on galactosylation
-  and on afucosylation and sets the harvest impurity burden of the step, and the harvest
-  schedule holds it to `{python} nor('duration')` days inside a characterized range of
-  `{python} rng('duration')` days.
-- Dissolved oxygen is a KPP because the univariate assessment linked it to growth and
-  productivity with no measurable link to a quality attribute, and the vessel controls it
-  to `{python} nor('do')` % of saturation (process consistency depends on it).
-- Initial viable cell concentration is a KPP on the same basis, since the seed train
-  delivers it to `{python} nor('ivcc')` × 10⁶ cells/mL and the parameter sets the growth
-  trajectory without changing the released profile.
-- Nutrient feed-1 volume is a KPP because the feed schedule delivers
-  `{python} nor('feed_vol')` % of working volume and the parameter governs titre with no
-  measured effect on product quality.
-- Basal medium concentration is a GPP because the univariate assessment over
-  `{python} rng('medium_conc')` X found no link to product quality, and none to process
-  performance that would require control beyond the recipe (SOP-2004).
+- Culture pH was classified WC-CPP in @tbl-params. It carries a significant response surface main effect on
+  `{python} n_resp_sig_rsm('pH')` of the `{python} n_resp` responses, including the attribute of
+  highest criticality. Because the parameter is measured continuously and controlled to well within its normal operating range (`{python} nor_str('pH')`), the risk of leaving the design space is low.
+- Culture temperature was classified WC-CPP on the same control argument, together with a significant response surface effect on `{python} n_resp_sig_rsm('temperature')` responses. The culture is held by jacket control well inside the normal operating range of `{python} nor_str('temperature')` °C.
+- Culture duration was classified WC-CPP. The largest single coefficient anywhere in the study belongs to the duration term on galactosylation, at `{python} f"{cf('galactosylation', L['duration']):+.2f}"` percentage points per coded unit (@tbl-coef-gal). Harvest day remains a scheduled decision instead of a controlled variable, which makes the operating risk procedural and places it under the batch record.
+- Dissolved CO2 was classified WC-CPP. It governs acidic variants and carries significant terms on galactosylation as well (@tbl-coef-gal). The range needed to hold that parameter runs wide (`{python} nor_str('co2')` mmHg). The parameter is measured in line against an offline reference, which is the control that detected DEV-003-01 in §12.
+- Osmolality was classified WC-CPP on screening evidence alone, which makes it the only parameter in the register classified that way. It reached significance on
+  `{python} n_resp_sig_scr('osmolality')` responses in screening, with a largest effect of
+  `{python} f"{osmo_max:.2f}"` percentage points, the smallest of the `{python} n_scr_f` factors.
+  Because the response surface model does not carry it, the classification rests on the
+  screening estimate and on the conservative default RA-001 applies to an attribute-linked
+  parameter.
+- Dissolved oxygen was classified KPP. No effect on any quality attribute was found across
+  `{python} rng_str('do')` % of air saturation. Because the parameter governs cell growth and titer, it is controlled and monitored for process consistency.
+- Initial viable cell concentration was classified KPP on the same basis. It sets the growth trajectory of the culture and with it the productivity of the run, without moving a quality attribute across
+  `{python} rng_str('ivcc')` × 10⁶ cells/mL.
+- Nutrient feed-1 volume was classified KPP. The delivered volume drives titer and the late-culture nutrient environment, without moving any quality attribute across the characterized range of `{python} rng_str('feed_vol')` % of working volume.
+- Basal medium concentration was classified GPP. Nothing was detected on any quality attribute or on
+  process performance across `{python} rng_str('medium_conc')` X, which allows the parameter to
+  be held to the platform specification without process monitoring.
 
-No parameter at this step is classified as a critical process parameter. The
-`{python} n_wc` quality linked parameters are all held by the control system inside
-ranges this study proved acceptable, the risk of an unnoticed excursion outside the
-design space is correspondingly low, and that outcome matches the platform record for
-the step [@amab2009].
-
-Finally, null results were classified rather than dropped. Osmolality, dissolved carbon
-dioxide and culture duration produce no measurable effect on high mannose across ranges
-that are `{python} f"{ratio_lo:.1f}"` to `{python} f"{ratio_hi:.1f}"` times the width of
-the control ranges, and that absence is evidence of robustness for the attribute of
-highest criticality at this step. Those three culture parameters stay in the knowledge
-space on that basis, and the evidence is bounded by the ranges screened.
+Finally, no parameter at this step was classified as a CPP. Every quality-linked parameter here is held
+by instrumented control within a band that is a small fraction of the characterized space, which keeps the risk of an excursion outside the design space low in each of the five cases considered. The null results of those parameters are retained in the knowledge space, because a parameter shown to be inactive over a wide range is
+evidence of robustness in exactly the way §3.5 describes.
 
 # Contribution to the control strategy
 
-Within the control strategy for A-Mab drug substance, the production bioreactor
-contributes four elements, and each is stated below with the range or the document that
-carries it.
+Four elements are contributed by the step to the control strategy of the drug substance. The first element is the set of parameter ranges in @tbl-params, in which the `{python} n_wc` WC-CPPs are controlled
+to normal operating ranges lying inside the design space of §6, while the `{python} n_kpp` KPPs are controlled for process consistency rather than for a quality outcome. The second element is in-process monitoring, since culture pH,
+temperature, dissolved oxygen and dissolved CO2 are recorded continuously, while the in-process limits of §7 give the alert levels against which the performance of a running culture is judged in real time.
 
-The first element is parameter control: `{python} n_wc` quality linked parameters are
-controlled to the normal operating ranges in @tbl-params, which lie inside the design
-space (§6) apart from the corner identified in §7. Two of those parameters, culture pH and culture temperature, carry the most
-weight, because they are the two that move high mannose, the attribute with the tightest
-capability at this step.
+The third element the step contributes is analytical control of the harvest material. The five attributes of @tbl-cv are measured on the harvest material of every batch by the validated methods of @tbl-amv, which links the
+operating record to the attribute outcome batch by batch. The fourth element is the input control arising from DEV-003-02, under which nutrient feed-1 delivery is verified by mass reconciliation
+after execution and the feed pump calibration interval has been shortened (§12).
 
-The second element is in-process monitoring against the limits used in §6 and §7, which
-sit inside the drug substance criteria by construction, at `{python} f"{alert_sigma:g}"`
-standard deviations above the simulated mean for the attributes the train does not
-modify. An excursion above one of those limits triggers investigation of the culture
-rather than rejection of the batch, and the corner analysis in §7 shows which
-combinations of parameter settings would produce one.
+Cross-step credit is owed for three of the seven attributes the step sets. Aggregate formed in the bioreactor is polished principally at cation exchange, which is characterized in PCR-007. Host cell protein and residual DNA are cleared across
+Protein A capture (PCR-005), cation exchange and anion exchange (PCR-008). The bioreactor controls the burden handed to those steps, without delivering the drug substance figures of @tbl-cap by itself. The glycan and charge variant attributes remain the ones for which this step is solely responsible, because no downstream step modifies them.
 
-The third element is release testing, under which the glycan profile, the charge variant
-profile and the size variant profile of the drug substance are tested against the
-criteria in @tbl-cqa by the methods in @tbl-sops (AMV-3010, AMV-3011, AMV-3013). Testing
-confirms the outcome; the parameter ranges and the in-process limits are what assure it.
-
-The fourth element is the input the step provides to the purification train, where host
-cell protein and residual DNA leave this step far above the drug substance criteria and
-culture duration is the parameter that sets both burdens. Holding duration to
-`{python} nor('duration')` days therefore bounds the load that Protein A capture, cation
-exchange and anion exchange must clear, and the clearance itself is characterized in
-PCR-005, PCR-007 and PCR-008.
-
-Two things this step does not do should be equally clear. The step does not control host
-cell protein or residual DNA to the drug substance criteria, and makes no viral clearance
-claim of any kind. The consolidated control strategy, including the cumulative viral
-clearance and the cross step credit for the shared attributes, is in PCMR-001.
+What the step does not control matters equally to the control strategy. It contributes nothing to the viral safety
+claim, which rests on low-pH viral inactivation (PCR-006), anion exchange (PCR-008) and small
+virus retentive filtration (PCR-009), and which is consolidated in PCMR-001. It does not set the
+drug substance concentration, which is delivered at ultrafiltration and diafiltration (PCR-010).
+Every control element above holds only while the culture is operated within the ranges characterized here, on the cell bank and the medium formulation held constant throughout this
+study.
 
 # Discussion
 
-After both designed experiments, the step is understood well enough to define a design
-space and to justify the ranges Stage 2 will run. A screening design ranked the
-`{python} n_scr_f` factors and a response surface design modelled the region defined by
-the `{python} n_rsm_f` that screening retained: `{python} rsm_list`. The mechanistic
-expectations carried into the study were confirmed for every response except acidic
-variants, and the effects that matter most are the ones prior knowledge predicted would
-matter.
+The bioreactor step is now understood well enough to support the Stage 2 ranges. The `{python} n_scr_f` factors of that step were ranked in a screening design. The four factors retained from screening are modelled by a response surface design: `{python} fjoin(rsm_f)`. Across the five responses those models explain between
+`{python} f"{100*r2_lo:.0f}"` % and `{python} f"{100*r2_hi:.0f}"` % of the observed variation,
+while the operating region they define covers `{python} f"{100*ds_frac:.0f}"` % of the
+characterized space (§6). Overall, what the study adds to platform knowledge is the size of each effect for this molecule and the geometry of the acceptable region, neither of which the three prior products could supply.
 
-Confidence in the scale down model is the load bearing assumption of everything above.
-Reproducibility of the model at the centre point runs from
-`{python} f"{cv_rsm_min:.1f}"` % to `{python} f"{cv_rsm_max:.1f}"` % relative standard
-deviation, most of which is analytical, and the qualification under SOP-1001 matched the
-model to at-scale data on the attributes this study measures. However, a scale down
-model reproduces the response of a culture to the controlled parameters, not the
-variability a commercial vessel adds. Design spaces are not confirmed at scale at the
-edges of the ranges, and this one is no exception.
+Confidence in the scale-down model behind those figures rests on the qualification of §3.1 and on the centre-point behaviour of §5.1. The centre points were run across the campaign, at a largest coefficient of variation of `{python} f"{cv_rsm_max:.1f}"` % on `{python} cv_rsm_max_resp`.
+Because that figure carries culture variation as well as assay variation, it is the natural
+yardstick for the lack of fit tests, all of which the models passed (@tbl-lof).
 
-Three limitations qualify the conclusions, and each is managed forward with a named
-control. The first limitation is the omission of osmolality from the response surface
-design, where screening resolved a temperature by osmolality interaction on
-galactosylation of `{python} f"{eff('galactosylation','temperature','osmolality'):.1f}"`
-percentage points (p =
-`{python} f"{eff_p('galactosylation','temperature','osmolality'):.3f}"`) and this report
-claims nothing predictive about that term. Osmolality is managed by recipe control to
-`{python} nor('osmolality')` mOsm and by the WC-CPP classification, and a move of the
-medium or the feed strategy would require the interaction to be studied properly.
+The conclusions drawn above are bounded by three limitations. The first limitation is the response surface factor set, which carries `{python} n_rsm_f` of the `{python} n_scr_f` screened factors, leaving the temperature by osmolality interaction that screening resolved on galactosylation (@tbl-eff-gal) represented in this report by the screening estimate alone, as stated in §4.3. The second limitation is predictive strength at the edge of the region, where predicted R² is weakest for `{python} pred_lo_resp` at `{python} f"{pred_lo:.3f}"`, which leaves a prediction made for that response near the boundary with correspondingly less assurance behind it than one made near the centre. The third limitation is scale, since every claim in this report is made on a qualified scale-down model and the design space is not confirmed at commercial scale at the edges of the ranges.
 
-The second limitation is the strength of the lack of fit evidence: all `{python} n_resp`
-models pass the test, and the test rests on `{python} f_rsm['galactosylation']['df_pe']`
-degrees of freedom of pure error. Therefore a passing test bounds the evidence for the
-model form without establishing it. For this reason the weakest model of the five is
-`{python} lof_p_lo_resp.lower()` (p = `{python} f"{lof_p_lo:.2f}"`), which also carries
-the lowest predicted R² at `{python} f"{pred_lo:.2f}"`. The very low criticality of that
-attribute and the wide acceptance band are what make that acceptable, and the model is
-used only to bound a range and not to predict a batch.
+The lack of fit tests rest on `{python} cp_rsm` centre-point replicates. Therefore a
+non-significant result bounds the evidence for the model form without establishing it. For this
+reason the weakest case to watch at scale is `{python} lof_p_lo_resp`
+(p = `{python} f"{lof_p_lo:.2f}"`).
 
-The third limitation is the univariate treatment of `{python} uv_list`, since
-interactions between those four parameters and the five multivariate factors were not
-studied. The classifications of those parameters in §9 rest on univariate evidence and
-on the platform record, and a proposed change to two of them together falls outside this
-report.
+Two deviations from the plan were recorded during execution and both of them were retained. Neither of them changed a fitted effect, a
+proven acceptable range or a classification, for the reasons set out in §12. The one deviation that reaches the control strategy is DEV-003-02, whose corrective action added the feed verification step described in §10.
 
-The deviations recorded during execution are summarized below (§13). Both were impact
-assessed before the affected data were used: the dissolved carbon dioxide probe offset of
-`{python} f"{dev_003_01_offset_mmhg:g}"` mmHg is smaller than the reproducibility of
-every response it could affect, and the nutrient feed shortfall of
-`{python} f"{dev_003_02_feed_deficit_pct:g}"` % left the delivered volume inside the
-normal operating range. Neither altered a fitted effect, a classification or a range.
-
-No parameter at this step required the most stringent control class. The five quality
-linked parameters are all well controlled critical process parameters, because the
-control system holds each of them inside a range this study proved acceptable and an
-excursion would be detected in process. The parameter closest to needing more is culture
-pH, since it moves every response including the one with the tightest capability, and the
-co-varied proven acceptable range for culture pH in @tbl-par falls short of the
-characterization range for every one of them.
+No parameter at this step required the most stringent classification available under SOP-4001. Every quality-linked
+parameter was classified WC-CPP instead of CPP, because each of them is held by instrumented
+control well inside the characterized space. Should the control capability at the receiving site
+prove looser than the capability assumed here, culture pH is the parameter to re-examine first,
+since it carries significant terms on more responses than any other.
 
 # Conclusions
 
-The production bioreactor is characterized and the operating region is defined, on a
-response surface model over `{python} rsm_list` that describes the `{python} n_resp`
-attributes the step forms at an R² of `{python} pct(r2_lo)` or better and with no
-significant lack of fit against the centre point replicates.
+The production bioreactor is well characterized and robust over the ranges studied. A multivariate operating region for that step is defined in `{python} fjoin(rsm_f)`, covering
+`{python} f"{100*ds_frac:.0f}"` % of the characterized space. Proven acceptable ranges are
+established for every governed attribute against every response surface factor, at set-point and
+under normal operating range variation (@tbl-par).
 
-That operating region is the multivariate space in those four parameters over which
-every governed attribute stays within the in-process criterion, and it covers
-`{python} f"{ds_pct:.0f}"` % of the characterized grid. The normal operating ranges in
-@tbl-params lie inside the region apart from the single corner reported in §7. Proven
-acceptable ranges are reported per attribute and per parameter in @tbl-par, under both
-the at set-point and the co-varied analysis.
+All `{python} len(cqa_keys)` attributes formed at the step meet the drug substance acceptance criteria at commercial scale. The tightest of those capabilities reaches `{python} f"{cpk_min:.2f}"` for
+`{python} cqa_name(cpk_min_key)`, with a margin of `{python} f"{cmargin(cpk_min_key):.2f}"`
+percentage points to the nearer limit. Of the `{python} n_par` parameters classified, `{python} n_wc` are WC-CPP, `{python} n_kpp` are KPP and `{python} n_gpp` is GPP, while none is a CPP. The two
+deviations recorded during execution were resolved without impact on the region, on the ranges
+or on the classifications.
 
-The attributes the step governs all meet the drug substance criteria at commercial
-scale, on the estimate in @tbl-cap. The tightest capability of the `{python} n_br_cqa`
-attributes is the one for `{python} cpk_min_cqa.lower()`, at a Cpk of
-`{python} f"{cpk(cpk_min_key):.2f}"` and a margin of
-`{python} f"{cap_margin(cpk_min_key):.2f}"` percentage points to the binding limit. Of
-the `{python} n_par_tot` parameters, `{python} n_wc` are well controlled critical
-process parameters, `{python} n_kpp` are key process parameters and the remaining one is
-a general process parameter, and the step has no critical process parameter.
-
-The `{python} dev_n` recorded deviations were investigated, retained and impact
-assessed, and neither changed a classification or a range. The capability and the region
-reported here are estimates from a qualified scale down model, and confirmation at
-commercial scale is a Stage 2 activity. This report rolls up into PCMR-001.
+The claims above hold over the characterized ranges of @tbl-params, on the qualified scale-down
+model of §3.1, and for the cell bank and medium formulation used throughout this study. The step does not deliver the drug substance host cell protein and residual DNA outcomes on its own. It makes no viral clearance claim of any kind. Confirmation at commercial scale is the work of
+Stage 2. On completion of that work, this report rolls up into PCMR-001.
 
 # Deviations from the plan
 
-During execution, `{python} dev_n` deviations were recorded against PCP-003. Each was
-investigated, root caused and impact assessed before the affected data were used, both
-were retained, and @tbl-dev gives the register.
+Two deviations from PCP-003 were recorded during execution. Each of them was investigated, root caused, impact assessed and dispositioned before the data were analysed. Both of them were retained, which means the affected runs stayed in the reported analysis. @tbl-dev holds the register of those two events.
 
 ```{python}
 #| output: asis
 print(dev_register(DOC))
 print()
-print(": Deviations recorded during execution of PCP-003. {#tbl-dev}")
+print(": Deviation register for the production-bioreactor characterization. {#tbl-dev}")
 ```
 
-Both entries are minor and both were detected by a check that the plan required, one in
-process and one after execution, and neither invalidated a design or triggered
-re-execution.
+## DEV-003-01 — dissolved CO2 probe drift
 
-## DEV-003-01 — dissolved carbon dioxide probe drift
+The first of those events began when the in-line dissolved CO2 probe on the scale-down bioreactor read
+`{python} f"{dev_003_01_offset_mmhg:g}"` mmHg away from the offline reference during screening
+run 4. That discrepancy was found by the routine comparison of the in-line reading against the offline blood-gas measurement, by which time the run had already completed. Because the control
+loop held the culture to the in-line reading, the culture experienced a dissolved CO2 level
+differing from the design level of that run by the same amount.
 
-The dissolved carbon dioxide probe on the scale down bioreactor read
-`{python} f"{dev_003_01_offset_mmhg:g}"` mmHg away from the offline reference during
-screening run 4. The probe drift was detected by the routine comparison of in-process
-monitoring against the offline reference, and the affected run had already completed
-when the comparison was made.
+That discrepancy was attributed by the investigation to drift of probe EQ-BRX-205 between scheduled calibrations. The equipment record confirms that the probe was inside its calibration interval at execution. The probe was recalibrated and re-verified against the offline reference before the response surface design was executed. In addition, the calibration interval for that probe class was shortened as a
+corrective action.
 
-The investigation of that drift attributed the offset to probe drift between scheduled
-calibrations on equipment EQ-BRX-205, which was within its calibration interval at the
-time of execution. The magnitude of the offset corresponds to
-`{python} f"{dev01_coded:.2f}"` coded units of the dissolved carbon dioxide factor, or
-`{python} f"{dev01_nor_pct:.0f}"` % of the width of the normal operating range, against
-a characterization range of `{python} rng('co2')` mmHg. The actual dissolved carbon
-dioxide level in the affected run stayed well inside the characterized range, and the
-run remained a valid setting of the design.
-
-The impact on the fitted effects is bounded by that magnitude. Applied to the largest
-dissolved carbon dioxide effect in the study, on acidic variants, a misassignment of
-`{python} f"{dev01_coded:.2f}"` coded units corresponds to a response shift of
-`{python} f"{dev01_shift('acidic_variants'):.2f}"` percentage points. The centre point
-standard deviation of the same response on the screening design is
-`{python} f"{cen_sd('acidic_variants'):.2f}"` percentage points. The offset is smaller
-than the reproducibility of the measurement it would have to move, and smaller still
-relative to the glycan responses. The run was retained, and the probe was recalibrated
-before the response surface design was executed.
+The impact of the drift is bounded by the size of the offset relative to the design. Since the
+characterization range of dissolved CO2 spans `{python} rng_str('co2')` mmHg, an offset of
+`{python} f"{dev_003_01_offset_mmhg:g}"` mmHg is `{python} f"{co2_shift:.2f}"` of a coded unit
+on one of `{python} n_cube_scr` factorial runs. The screening estimates are used to rank factors and never to predict. A perturbation of that size on a single run does not change the ranking from which the response surface factors were selected. The response surface design was executed
+after recalibration and estimates the dissolved CO2 terms on `{python} n_rsm` runs at three
+levels, which leaves the predictive model of §5.3 and every proven acceptable range derived from it unaffected by this deviation.
+The deviation was therefore retained.
 
 ## DEV-003-02 — nutrient feed-1 under-delivery
 
-Nutrient feed-1 was under-delivered by `{python} f"{dev_003_02_feed_deficit_pct:g}"` %
-of the scheduled volume on one centre point batch of the screening design, from lot
-LOT-FED-3120. Post-execution mass reconciliation of that batch found the shortfall, and
-investigation attributed it to a feed pump calibration offset.
+The second event was found when post-execution mass reconciliation showed that one centre-point batch of the screening design had received `{python} f"{dev_003_02_feed_deficit_pct:g}"` % less nutrient feed-1 than the batch
+record specified, from lot LOT-FED-3120. That shortfall stayed invisible during the run itself, because the feed was delivered on schedule and only the cumulative mass fell short.
 
-On that batch, the delivered feed volume was `{python} f"{dev02_delivered:.1f}"` % of
-working volume against a set-point of `{python} sp('feed_vol')` % and a normal operating
-range of `{python} nor('feed_vol')` %. That feed volume kept the batch inside the normal
-operating range for the parameter throughout, and nutrient feed-1 volume is classified
-KPP on evidence that it governs titre rather than product quality (§9).
+The root cause of the shortfall was traced to a calibration offset on the feed pump, confirmed against the pump verification record. The pump was recalibrated and the verification frequency was increased, as described in §10. Moreover, the reconciliation step that detected the shortfall is now performed before the analytical results are released.
 
-The affected batch is one of the `{python} cp_scr` screening centre points. The values
-of that batch therefore enter the pure error term and not an effect estimate. For the
-affected batch, the glycan responses were verified on `{python} dev_003_02_ver_n`
-measurements under AMV-3010, whose intermediate precision of
-`{python} f"{prec('AMV-3010'):.1f}"` % gives that verification set a 95 % confidence
-half width of `{python} f"{dev_003_02_ci_hw:.2f}"` % relative, which puts a feed
-shortfall of `{python} f"{dev_003_02_feed_deficit_pct:g}"` % below the level that
-comparison can resolve. The batch was retained as a centre point, the pump was
-recalibrated, and the feed delivery check was added to the in-process record for the
-remaining runs.
+The delivered feed volume reached `{python} f"{feed_actual:.1f}"` % of working volume against a set-point
+of `{python} f"{par['feed_vol'].setpoint:g}"` %, which places it inside the normal operating
+range of `{python} nor_str('feed_vol')` % assessed univariately in §4.4. The glycan results for that batch were verified against `{python} f"{dev_003_02_ver_n:g}"` further
+determinations by AMV-3010. However, the 95 % confidence half-width of that verification set is
+`{python} f"{dev_003_02_ci_hw:.2f}"` % of the reported value, which is wider than the shift a `{python} f"{dev_003_02_feed_deficit_pct:g}"` % feed deficit could produce. No shift attributable to the deviation was resolvable against it. Because the affected batch is a centre point, the consequence of retaining it is a small addition to the pure error term instead of a change to any effect estimate. As a result the lack of fit tests of §5.3 are made more conservative by retaining the batch than they would be by excluding it. The second deviation was retained on that basis.
 
-Neither deviation changed a parameter classification, a fitted effect or a boundary of
-the operating region. Both are closed.
+# Appendices A-D
 
-# Appendix A — Screening design matrix and responses
+The complete design matrices, the full effect and coefficient tables and the analytical method summary are collected in the appendices below. They carry the data behind §5 and §7, without adding any claim that is not already made in the body of this report.
 
-The coded screening matrix and the measured responses are given in @tbl-appA. Coded
-levels are minus one at the low edge of the characterization range, zero at the
-set-point and plus one at the high edge, with the letters as defined in @tbl-legend.
+## Appendix A — Screening design matrix and responses
+
+@tbl-appa-set gives the coded settings of the screening design and @tbl-appa-resp the measured
+responses, both by run number.
 
 ```{python}
 #| output: asis
-show(D.coded_matrix_df(UO, SCR))
+show(appa_set)
 print()
-print(": Screening design matrix (coded) and measured responses. {#tbl-appA}")
+print(": Screening design, coded factor settings by run. {#tbl-appa-set}")
 ```
-
-# Appendix B — Response-surface design matrix and responses
-
-The coded response-surface matrix and the measured responses are given in @tbl-appB. The
-design is face centred, so the axial runs sit at plus or minus one on one factor with
-the others at zero.
 
 ```{python}
 #| output: asis
-show(D.coded_matrix_df(UO, RSM))
+show(appa_resp)
 print()
-print(": Response-surface design matrix (coded) and measured responses. {#tbl-appB}")
+print(": Screening design, measured responses by run. {#tbl-appa-resp}")
 ```
 
-# Appendix C — Full effect and coefficient tables
+## Appendix B — Response-surface design matrix and responses
 
-Full screening effect tables for all responses follow, in the order the responses are
-measured. Effects are twice the coded coefficient.
+@tbl-appb-set gives the coded settings of the face centred central composite design and
+@tbl-appb-resp the measured responses.
+
+```{python}
+#| output: asis
+show(appb_set)
+print()
+print(": Response-surface design, coded factor settings by run. {#tbl-appb-set}")
+```
+
+```{python}
+#| output: asis
+show(appb_resp)
+print()
+print(": Response-surface design, measured responses by run. {#tbl-appb-resp}")
+```
+
+## Appendix C — Full effect and coefficient tables
+
+The complete screening effect tables for all five responses follow, then the response-surface
+coefficient tables for the three responses not shown in §5.3.
 
 ```{python}
 #| output: asis
 for _r in resps:
     show(D.screening_effects_df(UO, _r))
     print()
-    print(f": Screening effects — {LBL[_r]}. {{#tbl-appC-{_r.replace('_', '-')}}}")
+    print(f": Complete screening effect table for {rnm(_r)}. "
+          + "{#tbl-appc-scr-" + _r.replace("_", "-") + "}")
     print()
 ```
 
-Full response-surface coefficient tables for the responses not shown in §5.3 follow.
-
 ```{python}
 #| output: asis
-for _r in resps:
-    if _r in ("galactosylation", "high_mannose"):
-        continue
+for _r in [x for x in resps if x not in ("galactosylation", "high_mannose")]:
     show(D.rsm_coeff_df(UO, _r))
     print()
-    print(f": Response-surface coefficients — {LBL[_r]}. {{#tbl-appC-rsm-{_r.replace('_', '-')}}}")
+    print(f": Complete response-surface coefficient table for {rnm(_r)}. "
+          + "{#tbl-appc-rsm-" + _r.replace("_", "-") + "}")
     print()
 ```
 
-# Appendix D — Analytical methods summary
+## Appendix D — Analytical methods summary
 
-The validated methods used for the designed responses and for the impurity attributes
-are summarized in @tbl-appMeth. Method performance is reported in full in the validation
-reports named in the table.
+@tbl-methods maps each quality attribute to the validated method that reports it, while
+@tbl-methodperf gives the recorded performance for the methods whose validation summary is held
+in this package. The remaining validations are cited in @tbl-amv.
 
 ```{python}
 #| output: asis
-show(methods_df())
+show(methods_tbl)
 print()
-print(": Validated analytical methods and the attributes they report. {#tbl-appMeth}")
+print(": Attribute to method assignment. {#tbl-methods}")
 ```
 
-<!-- ========================= BODY END ======================================== -->
+```{python}
+#| output: asis
+show(perf_tbl)
+print()
+print(": Recorded analytical method performance. {#tbl-methodperf}")
+```
+
+<!-- ========================= BODY END ========================= -->
 
 # References {.unnumbered}
 

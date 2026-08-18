@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-17_01_register-second-round]]** · **7 of 9 done** · 2 todo
+**[[epic|2026-08-17_01_register-second-round]]** · **7 of 9 done** · 1 partly · 1 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -31,7 +31,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-008]] | `todo` | the assistant | measurement | Measure round two against rounds zero and one with one method, apply the stopping rule, and record the owner's reading |
+| [[TASK-008]] | `partly` | the assistant | measurement | Measure round two against rounds zero and one with one method, apply the stopping rule, and record the owner's reading |
 | [[TASK-009]] | `todo` | the assistant | documentation | Move the findings into docs, settle the decision, and rewrite or retire the proposal on the stopping rule's verdict |
 
 ## Done

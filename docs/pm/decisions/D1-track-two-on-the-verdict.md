@@ -29,6 +29,18 @@ clear and the reading does not, the owner's quoted sentences become the next tar
 stays blocked. Slower by one reading; it is the reading the owner has already said is the real
 test.
 
+**Measured 2026-08-18 (TASK-008): the numbers half is answered, and the rule holds on every
+line.** Mid-sentence `, so ` 0.0 % in both documents against an edge of 1.0 %; sentence-initial
+connectives 4.9 % and 4.0 % against an edge of 3.0 %; topic chaining 46.0 % and 46.1 %, which is
+*above* round one rather than the permitted 2.0 points below, and above the 45 % bar the proposal
+set before that bar was dropped; copula 21.9 % and 25.7 %, both below round one. The register gate
+passes both. No line sits within 0.5 points of its edge. Full page:
+[`docs/results/2026-08-18-register-round-two.md`](../../results/2026-08-18-register-round-two.md).
+
+**What is still outstanding is the reading, and it is the whole of Option B.** The owner has not
+yet read the two rendered PDFs. Under Option A the epic could ship to Track 2 now; under Option B
+it waits for the reading. The plan assumes Option B.
+
 **What the plan assumes meanwhile.** Option B. TASK-008 records both the verdict and the reading;
 TASK-009 prepares both shapes of the proposal (Track 2, or the new target) so `/ship` does not
 improvise. Nothing in this epic is blocked by the answer.

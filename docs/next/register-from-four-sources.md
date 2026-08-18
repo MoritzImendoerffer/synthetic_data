@@ -10,6 +10,11 @@
 > against a floor of 20.0 and `pct_under_15` 55.6 % against a ceiling of 32.0. The gate has to be
 > repaired and the mechanism content supplied before a fourth round is worth running.
 
+> **2026-08-18, later the same day:** the evaluation of the stop is in
+> [`author-facing-apparatus.md`](author-facing-apparatus.md). It argues that §8 of the results page
+> treats four symptoms of one cause, and it puts a one-section probe ahead of the fourth round.
+> Read it before planning anything below.
+
 **Status: three rounds delivered; Track A and Track B are closed on the reading of 2026-08-18. Track D is being worked on since 2026-08-18 in work unit `2026-08-18_02_register-track-d`, on the project owner's instruction that all documents be re-authored.**
 Round one shipped in work unit `2026-08-16_01_register-from-four-sources`, round two in
 `2026-08-17_01_register-second-round`, round three in `2026-08-18_01_register-third-round`. All

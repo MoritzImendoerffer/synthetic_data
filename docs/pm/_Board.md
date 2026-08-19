@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **4 of 41 done** · 37 todo
+**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **5 of 41 done** · 36 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -31,7 +31,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-005]] | `todo` | the assistant | annex | Promote the new PCP-005: render, re-anchor its annex, re-ground the corpus |
 | [[TASK-006]] | `todo` | the assistant | measurement | Rebuild-and-reground proof after the pilot's promotion |
 | [[TASK-007]] | `todo` | the assistant | document | Author PCR-006 (Low-pH Viral Inactivation (Step 6)) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-008]] | `todo` | the assistant | document | Author PCR-008 (Anion Exchange Chromatography (Step 8)) in one pass under the rebuilt apparatus, with one content-review cycle |
@@ -77,6 +76,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-002]] | `done` | — | document | Author PCP-005 (Protein A Chromatography (Step 5)) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-003]] | `done` | — | measurement | The blind reading of shipped vs new PCP-005, recorded verbatim, then the rule applied — HALT for the owner (D7) |
 | [[TASK-004]] | `done` | — | measurement | Count the pilot and write its results page |
+| [[TASK-005]] | `done` | — | annex | Promote the new PCP-005: render, re-anchor its annex, re-ground the corpus |
 
 ---
 

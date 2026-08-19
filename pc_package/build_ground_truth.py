@@ -1568,14 +1568,16 @@ PAMETHODS = [
 # Analytical methods: the sentence that links each method to its analyte.
 # Plan §5.3 / Report §3.3, both titled "Analytical methods".
 PA_METHOD_QUOTE = {
-    "AMV-3016": ("Leached Protein A is measured by ELISA under AMV-3016",
+    "AMV-3016": ("Leached Protein A will be measured by the enzyme-linked immunosorbent assay "
+                 "of AMV-3016",
                  "Leached Protein A was measured by ELISA under AMV-3016 and is reported in ppm"),
-    "AMV-3012": ("host cell protein by the platform ELISA under AMV-3012",
+    "AMV-3012": ("Host cell protein in the eluate pool will be measured by the enzyme-linked "
+                 "immunosorbent assay of AMV-3012",
                  "Pool host cell protein was measured by ELISA under AMV-3012 and is reported as "
                  "ng of host cell protein per mg of antibody"),
-    "AMV-3014": ("Residual DNA is measured by qPCR under AMV-3014",
+    "AMV-3014": ("Residual DNA will be measured by quantitative PCR under AMV-3014",
                  "residual DNA by qPCR under AMV-3014"),
-    "AMV-3011": ("aggregate by SEC-HPLC under AMV-3011",
+    "AMV-3011": ("Aggregate will be measured by size exclusion chromatography under AMV-3011",
                  "size variants by SEC-HPLC under AMV-3011"),
 }
 # Quality attributes, from "Quality attributes in scope" (plan §4.2 / report §2.2).
@@ -1590,8 +1592,13 @@ PA_CQA_QUOTE = {
                      "across the train"),
 }
 # Table captions carrying the attribute rows (report splits set vs cleared over two tables).
-PA_CQA_TABLE_PLAN = ("Quality attributes governed or monitored at the capture step, with their "
-                     "drug-substance acceptance criteria.")
+# The plan splits the register the same way the report does: the attribute the step sets,
+# then the ones it clears.
+PA_CQA_TABLE_PLAN = {
+    "leached_protein_a": "Quality attribute set by the capture step.",
+    "hcp": "Quality attributes cleared by the capture step.",
+    "residual_dna": "Quality attributes cleared by the capture step.",
+}
 PA_CQA_TABLE_REPORT = {
     "leached_protein_a": ("Quality attribute set by the Protein A step, with acceptance criterion "
                           "and criticality assigned under the Tool #1 impact and uncertainty ranking."),
@@ -1616,19 +1623,38 @@ PA_CLASS_QUOTE = {
 # Plan §4.1 / §6.4: the prior-knowledge expectation stated for each parameter before the study.
 PA_PRIOR_QUOTE = {
     "Protein load": ("Unit-operation description and prior knowledge",
-                     "a high load is expected to raise the host cell protein carried into the eluate"),
+                     "As the protein load approaches the dynamic binding capacity of the resin, "
+                     "the mass transfer zone extends further down the bed and impurity that would "
+                     "have been washed out is carried into the eluate"),
     "Elution buffer pH": ("Unit-operation description and prior knowledge",
-                          "both pool host cell protein and leached Protein A are expected to rise "
-                          "as the elution pH falls"),
+                          "Over the ranges studied, elution pH is expected to change pool host "
+                          "cell protein more than any other parameter"),
     "Load flow rate": ("Unit-operation description and prior knowledge",
-                       "its effect is expected on step yield and not on the quality attributes"),
-    "Operating temperature": ("Univariate assessment",
-                              "Temperature acts on binding kinetics and on the rate of ligand "
-                              "hydrolysis, and both processes are slow compared with the residence "
-                              "time of the step"),
-    "Bed height": ("Univariate assessment",
-                   "Bed height acts on residence time at a fixed linear velocity, so its influence "
-                   "is already spanned by the load flow rate factor"),
+                       "Load flow rate sets the residence time and hence how far into the pore "
+                       "the antibody diffuses before the fluid moves on, so a faster load broadens "
+                       "the mass transfer zone, lowers the dynamic binding capacity and costs "
+                       "yield at high load"),
+    "Operating temperature": ("Unit-operation description and prior knowledge",
+                              "Operating temperature and bed height are expected to change pool "
+                              "host cell protein and step yield less than the multivariate "
+                              "parameters do"),
+    "Bed height": ("Unit-operation description and prior knowledge",
+                   "bed height is then expected to leave pool host cell protein and step yield "
+                   "unchanged"),
+}
+# The expectation each quote carries, in the plan's own terms. The plan does not say the same
+# thing about all three parameters it keeps out of the multivariate design: flow acts on yield,
+# temperature acts less than the multivariate factors do, and bed height is expected to leave
+# both responses unchanged because residence time is held constant at scale-up.
+PA_PRIOR_CLAIM = {
+    "Protein load": "Protein load is expected to raise the pool host cell protein.",
+    "Elution buffer pH": "Elution buffer pH is expected to change the pool host cell protein "
+                         "more than any other parameter.",
+    "Load flow rate": "Load flow rate is expected to act on step yield and not on the pool host "
+                      "cell protein.",
+    "Operating temperature": "Operating temperature is expected to change the pool host cell "
+                             "protein less than the multivariate parameters do.",
+    "Bed height": "Bed height is expected to leave the pool host cell protein unchanged.",
 }
 # Report §7 "Proven acceptable ranges": one fragment per response of @tbl-par.
 PA_PAR_QUOTE = {
@@ -1661,8 +1687,9 @@ def pa_step(doc_id, file_name, sec, report):
                   "process and the first chromatographic operation in the purification train")
     else:
         src = ref(doc_id, file_name, sec, "Purpose and scope",
-                  "It sets one quality attribute, leached Protein A, and it is the principal point "
-                  "of host cell protein and residual DNA removal in the process")
+                  "It binds the antibody from the clarified harvest, removes the bulk of the host "
+                  "cell protein and DNA in the flow-through and the wash, and delivers a low-pH "
+                  "eluate to the viral inactivation step")
     return S.ProcessStep(
         step_id="step:protein_a", step_name=PAUO_NAME, step_number=str(PASTEP),
         unit_operation=PAUO_NAME,
@@ -1687,8 +1714,8 @@ def pa_equipment(doc_id, file_name, sec, report):
                                "Scale-down model and its qualification",
                                "A scale-down chromatography system was qualified as a model of "
                                "the manufacturing-scale step under SOP-1001" if report
-                               else "a bench-scale column that is a qualified model of the "
-                                    "commercial step")],
+                               else "a scale-down model of the commercial capture column, "
+                                    "qualified under SOP-1001")],
         metadata=meta())
     if report:
         return [sdm]
@@ -1698,8 +1725,9 @@ def pa_equipment(doc_id, file_name, sec, report):
                     equipment_type="chromatography column", site_name=P.RECEIVING_SITE,
                     source_references=[ref(doc_id, file_name, sec,
                                            "Scale-down model and its qualification",
-                                           "column efficiency falls inside the range recorded for "
-                                           "the commercial column")],
+                                           "The model predicts mean performance at commercial "
+                                           "scale, and it does not reproduce the hydrodynamic "
+                                           "variation of a commercial column")],
                     metadata=meta()),
         sdm,
     ]
@@ -1724,8 +1752,7 @@ def pa_params(doc_id, file_name, sec, classified):
     caption = ("Process parameters of the Protein A step, with set-point, normal operating range, "
                "characterization range, final classification and study type."
                if classified else
-               "Parameters of the capture step, with set-point, characterization range, normal "
-               "operating range and the study type assigned by RA-001.")
+               "Parameters, ranges and study type for the capture step.")
     rats = {"WC-CPP": "Carries a large effect on pool host cell protein — the impurity load the "
                       "polishing steps have to handle — and is reliably controlled within its "
                       "normal operating range, so the risk of an undetected excursion is low.",
@@ -1768,7 +1795,7 @@ def pa_cqas(doc_id, file_name, sec, report):
     out = []
     for key in PA_CQA_KEYS:
         r = _pa_cqa_row(key)
-        table_title = PA_CQA_TABLE_REPORT[key] if report else PA_CQA_TABLE_PLAN
+        table_title = (PA_CQA_TABLE_REPORT if report else PA_CQA_TABLE_PLAN)[key]
         out.append(S.QualityAttribute(
             attribute_id=PAATTR_CONCEPT[key], attribute_name=r["cqa"], attribute_type="CQA",
             unit=r["unit"],
@@ -1826,8 +1853,8 @@ def pa_studies(doc_id, file_name, report):
                                    "The screening was executed as a two-level full factorial in "
                                    "the four multivariate factors with"
                                    if report
-                                   else "A two-level full factorial in the 4 multivariate factors "
-                                        "will be run")],
+                                   else "The screening study is a two-level full factorial in "
+                                        "the 4 multivariate factors")],
             metadata=meta()),
         S.StudyDesign(
             study_id="study:pa_rsm", study_type="response_surface_doe",
@@ -1838,8 +1865,8 @@ def pa_studies(doc_id, file_name, report):
             source_references=[ref(doc_id, file_name, sec, "Response-surface design",
                                    "a face-centred central composite design in the same four factors"
                                    if report
-                                   else "A face-centred central composite design will follow in the "
-                                        "same 4 factors")],
+                                   else "The response-surface study is a face-centred central "
+                                        "composite design in the same 4 factors")],
             metadata=meta()),
         S.StudyDesign(
             study_id="study:pa_sdm_qual", study_type="scale_down_qualification",
@@ -1850,8 +1877,8 @@ def pa_studies(doc_id, file_name, report):
                                    "performance on the attributes that matter for the claims in "
                                    "this report"
                                    if report
-                                   else "triplicate scale-down runs at the set-point condition will "
-                                        "be compared with the corresponding at-scale data")],
+                                   else "Qualification will compare the model against at-scale "
+                                        "data from the engineering and clinical campaigns")],
             metadata=meta()),
         S.StudyDesign(
             study_id="study:pa_univariate", study_type="univariate",
@@ -1924,24 +1951,45 @@ def pa_assertions(doc_id, file_name, report):
             add(PAATTR_CONCEPT[key], "attribute_measured_by_method", f"method:{PA_CQA_METHOD[key]}",
                 f"{PAATTR_NAME[key]} is measured by {PA_CQA_METHOD[key]}.", "Analytical methods",
                 PA_METHOD_QUOTE[PA_CQA_METHOD[key]][0])
-    # Acceptance criteria. Both are drug-substance criteria: the leached Protein A limit is
-    # the direct responsibility of this step, the HCP limit is explicitly NOT applied here.
+    # Acceptance criteria. Leached Protein A is judged against the drug-substance criterion
+    # directly; pool host cell protein is not, because the pool is an intermediate the polishing
+    # steps still clear. The two documents state that differently, so the assertion TEXT is
+    # written per document: PCP-005 (re-authored 2026-08-19) derives the in-process ceiling from
+    # the drug-substance criterion by a safety factor and states the derived value, PCR-005 keeps
+    # the wording of its own text. The value is read from the same engine the plan renders it
+    # from, never typed.
     lpa = _pa_cqa_row("leached_protein_a")
     add("attr:leached_protein_a", "attribute_has_acceptance_criterion", "lit:leached_protein_a_acc",
         f"Leached Protein A acceptance: {lpa['acc_low']:g}–{lpa['acc_high']:g} {lpa['unit']} "
         f"at drug substance.",
-        "Quality attributes in scope",
+        "Quality attributes in scope" if report else "Acceptance and decision criteria",
         "Leached Protein A keeps the drug-substance criterion itself, which is the "
         "conservative choice at a capture step" if report
-        else "the criterion of 5 ppm is the direct responsibility of this study")
+        else "Leached Protein A is judged against the drug substance criterion directly, because "
+             "it is the attribute this step forms")
     hcp = _pa_cqa_row("hcp")
-    add("attr:hcp", "attribute_has_acceptance_criterion", "lit:hcp_acc",
-        f"Host cell protein acceptance: {hcp['acc_low']:g}–{hcp['acc_high']:g} {hcp['unit']} at "
-        f"drug substance; the criterion is not applied at the outlet of this step.",
-        "Proven acceptable ranges" if report else "Acceptance and decision criteria",
-        "pool host cell protein is judged against an in-process limit carried back from the "
-        "drug-substance criterion through the clearance the polishing steps deliver" if report
-        else "Pool host cell protein will be judged against the drug-substance criterion of 100 ng/mg")
+    if report:
+        hcp_text = (f"Host cell protein acceptance: {hcp['acc_low']:g}–{hcp['acc_high']:g} "
+                    f"{hcp['unit']} at drug substance; the criterion is not applied at the outlet "
+                    f"of this step.")
+        hcp_quote = ("pool host cell protein is judged against an in-process limit carried back "
+                     "from the drug-substance criterion through the clearance the polishing steps "
+                     "deliver")
+    else:
+        import doe_report as D
+        pa_ipc = D.effective_acceptance(PAUO, "pool_hcp_ng_mg")[1]
+        pa_margin = (D.CFG.ipc_limits["steps"][PAUO]["pool_hcp_ng_mg"]["from_ds_backcalc"]["margin"])
+        hcp_text = (f"Pool host cell protein is judged against an in-process limit of "
+                    f"{pa_ipc:,.0f} {hcp['unit']}, which is the drug-substance criterion of "
+                    f"{hcp['acc_high']:g} {hcp['unit']} carried back through the clearance the "
+                    f"downstream steps deliver in the nominal train and divided by a safety "
+                    f"factor of {pa_margin:g}, and not the drug-substance criterion itself.")
+        hcp_quote = ("Pool host cell protein is judged against an in-process limit rather than "
+                     "against the drug substance criterion, because the cation and anion exchange "
+                     "steps still clear host cell protein after the capture step and the capture "
+                     "pool is an intermediate")
+    add("attr:hcp", "attribute_has_acceptance_criterion", "lit:hcp_acc", hcp_text,
+        "Proven acceptable ranges" if report else "Acceptance and decision criteria", hcp_quote)
     # parameter -> attribute impacts / non-impacts
     if report:
         # Report §9: one classification sentence quoted against the parameter it classifies.
@@ -1976,12 +2024,11 @@ def pa_assertions(doc_id, file_name, report):
         for name in PA_WCCPP:
             sec_title, quote = PA_PRIOR_QUOTE[name]
             add(PAPARAM_CONCEPT[name], "parameter_impacts_attribute", "attr:hcp",
-                f"{name} is expected to affect the pool host cell protein.", sec_title, quote)
+                PA_PRIOR_CLAIM[name], sec_title, quote)
         for name in ["Load flow rate"] + PA_UNIVARIATE:
             sec_title, quote = PA_PRIOR_QUOTE[name]
             add(PAPARAM_CONCEPT[name], "parameter_does_not_significantly_impact_attribute",
-                "attr:hcp", f"{name} is expected to affect only process performance.",
-                sec_title, quote)
+                "attr:hcp", PA_PRIOR_CLAIM[name], sec_title, quote)
     return AssertionStore(run_id=f"gt-{doc_id}", assertions=A, rationales=[])
 
 
@@ -1996,33 +2043,41 @@ def pa_report_sections(doc_id, file_name, report):
     lpa = _pa_cqa_row("leached_protein_a")
     if not report:
         return [ReportSection(section_id=f"{doc_id}-summary", title="Plan summary", statements=[
-            st(1, "PCP-005 defines the Stage-1 characterization study of the A-Mab Protein A "
-                  "capture step (Step 5).",
-               "Purpose and scope", "This plan defines the Stage-1 characterization study for that step"),
+            st(1, "PCP-005 defines the Stage 1 process characterization studies for the A-Mab "
+                  "Protein A capture step (Step 5).",
+               "Purpose and scope",
+               "This plan describes the process characterization studies that will be performed on "
+               "the Protein A capture step of the A-Mab drug substance process"),
             st(2, "Four parameters are assigned to multivariate study and two to univariate "
                   "assessment.",
                "Purpose and scope",
-               "This plan covers the 4 process parameters that RA-001 assigned to multivariate "
-               "study and the 2 parameters it assigned to univariate study"),
-            st(3, "The study uses a full-factorial screen followed by a face-centred central "
-                  "composite design on a qualified scale-down column.",
+               "Of those parameters, 4 will be studied in a multivariate design and 2 will be "
+               "assessed one at a time"),
+            st(3, "The multivariate work runs as a two-level full factorial screen and then as a "
+                  "face-centred central composite design in the same four factors.",
                "Response-surface design",
-               "A face-centred central composite design will follow in the same 4 factors"),
-            st(4, "Protein A sets leached Protein A and is the principal point of host cell protein "
-                  "and residual DNA removal.",
-               "Purpose and scope",
-               "It sets one quality attribute, leached Protein A, and it is the principal point of "
-               "host cell protein and residual DNA removal in the process"),
-            st(5, "The operating region will be declared as the multivariate subset of the "
-                  "characterization ranges over which every attribute with a criterion stays inside it.",
+               "The response-surface study is a face-centred central composite design in the same "
+               "4 factors"),
+            st(4, "Protein A removes the bulk of the process impurities carried into it and forms "
+                  "one impurity of its own, the ligand that leaches from the resin.",
+               "Unit-operation description and prior knowledge",
+               "The step therefore concentrates the product, removes the bulk of the process "
+               "impurities, and introduces one impurity of its own, which is ligand that leaches "
+               "from the resin"),
+            st(5, "The operating region will be declared as the part of the characterized space "
+                  "over which every quality attribute the step controls is predicted by its "
+                  "response-surface model to meet its criterion.",
                "Acceptance and decision criteria",
-               "The operating region will be declared as the multivariate subset of the "
-               "characterization ranges over which every attribute with a criterion is predicted "
-               "to stay inside that criterion."),
-            st(6, "A response with no significant term is pre-declared as a robustness result, and "
-                  "no operating limit is derived from an effect the study could not resolve.",
-               "Acceptance and decision criteria",
-               "A response with no significant term is a result and will be reported as one."),
+               "The operating region will be declared as the part of the characterized space over "
+               "which every quality attribute the step controls is predicted by its "
+               "response-surface model to meet the criterion"),
+            st(6, "A factor with no significant term over the range studied is pre-declared as a "
+                  "result: the absence of an effect is reported together with the range over which "
+                  "it was tested.",
+               "Statistical methods",
+               "A factor with no significant term over the range studied will be reported as "
+               "having no detectable effect on that response, and the absence will be stated "
+               "together with the range over which it was tested"),
         ])]
     return [ReportSection(section_id=f"{doc_id}-summary", title="Report summary", statements=[
         st(1, "Two parameters are classified WC-CPP, two KPP and two GPP, and no parameter of the "
@@ -2151,7 +2206,9 @@ def build_plan_protein_a():
         out_of_schema_notes=[
             "Pool host cell protein is an in-process response with no step-level spec; captured via "
             "StudyDesign.responses. QualityAttribute.acceptance_criteria holds the drug-substance "
-            "criterion, which the plan states is applied only as a conservative reference here.",
+            "criterion; the plan judges the capture pool against an in-process limit derived from "
+            "that criterion by a safety factor, and judges leached Protein A against the "
+            "drug-substance criterion directly.",
             "The Plan states classification is an OUTPUT; parameter_type left 'unclassified' here.",
         ],
         inventory=pa_inventory(doc, f, "process_characterization_plan"),

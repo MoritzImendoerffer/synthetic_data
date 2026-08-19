@@ -1,9 +1,9 @@
 ---
 type: pm-decision
 sprint: 2026-08-19_02_fifth-round-plan-then-batches
-status: open
-waiting_on: project owner
-blocks: TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010 (and every later batch)
+status: settled 2026-08-19 — PASS
+decided_by: project owner
+unblocked: TASK-005, TASK-006 and the batches
 tags: [pm/decision]
 ---
 
@@ -36,3 +36,11 @@ the results page records what you named — which is then the next thing to chan
 plan is tried.
 
 **What the plan assumes meanwhile.** Nothing that depends on the answer runs before it.
+
+---
+
+**Settled 2026-08-19 — PASS.** The reading, verbatim
+(`.claude/work/2026-08-19_02_fifth-round-plan-then-batches/owner-reading-PCP-005-2026-08-19.md`):
+"A reads better. In B, following sentence clearly revealed it's origin: 'Three mechanisms frame what
+the study expects to find.'" Key opened afterwards by checksum: **A was the new plan.** Rule: new
+judged better, 0 < 5 sentences quoted → PASS. `PCP-005` is promoted and the batches run.

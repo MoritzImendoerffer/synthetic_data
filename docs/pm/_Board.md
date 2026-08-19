@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **2 of 41 done** · 1 doing · 38 todo
+**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **3 of 41 done** · 38 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -22,7 +22,6 @@ tags: [pm/board]
 
 | Decision | Waiting on | Blocks |
 |---|---|---|
-| [[D7-does-the-plan-pass|D7 — does a plan written under the rebuilt apparatus read as a paper?]] | project owner | [[TASK-005]], [[TASK-006]], [[TASK-007]], [[TASK-008]], [[TASK-009]], [[TASK-010 (and every later batch)]] |
 | [[D8-do-the-batches-continue|D8 — after each batch, does the sampled document pass, and do the batches continue?]] | project owner | each batch's successor (TASK-014.., [[TASK-020..]], [[TASK-028..]], [[TASK-033..) until its row reads PASS]] |
 
 ## Not finished — the assistant's work, not the owner's
@@ -32,7 +31,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-003]] | `doing` | the assistant | measurement | The blind reading of shipped vs new PCP-005, recorded verbatim, then the rule applied — HALT for the owner (D7) |
 | [[TASK-004]] | `todo` | the assistant | measurement | Count the pilot and write its results page |
 | [[TASK-005]] | `todo` | the assistant | annex | Promote the new PCP-005: render, re-anchor its annex, re-ground the corpus |
 | [[TASK-006]] | `todo` | the assistant | measurement | Rebuild-and-reground proof after the pilot's promotion |
@@ -78,6 +76,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 |---|---|---|---|---|
 | [[TASK-001]] | `done` | — | mechanism | Fix the pilot's inputs before the agent exists: PCP-005 brief, scaffold, blind key, reading protocol |
 | [[TASK-002]] | `done` | — | document | Author PCP-005 (Protein A Chromatography (Step 5)) in one pass under the rebuilt apparatus, with one content-review cycle |
+| [[TASK-003]] | `done` | — | measurement | The blind reading of shipped vs new PCP-005, recorded verbatim, then the rule applied — HALT for the owner (D7) |
 
 ---
 

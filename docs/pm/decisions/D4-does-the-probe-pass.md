@@ -1,9 +1,9 @@
 ---
 type: pm-decision
 sprint: 2026-08-18_03_author-facing-apparatus
-status: open
-waiting_on: project owner
-blocks: TASK-006, TASK-007, TASK-008, TASK-009, TASK-010
+status: settled 2026-08-19 — PASS
+decided_by: project owner
+unblocked: TASK-006, TASK-007, TASK-008, TASK-009, TASK-010
 tags: [pm/decision]
 ---
 
@@ -42,3 +42,11 @@ writes the probe; TASK-004 puts the two PDFs in front of you and stops.
 
 **Known limit.** You have read the shipped subsections four times today and may recognise them.
 That is recorded, not disguised: the question is which reads as a paper, not which is new.
+
+---
+
+**Settled 2026-08-19 — PASS.** The reading, verbatim
+(`.claude/work/2026-08-18_03_author-facing-apparatus/owner-reading-2026-08-19.md`): A read alone,
+"the pdfs read fine"; after B, "A clearly wins". No sentence quoted from either. Key opened
+afterwards: **A was the probe.** Rule: probe judged better, 0 < 3 sentences quoted → PASS. Tasks
+2–6 of the proposal (TASK-006..TASK-010) run.

@@ -11,18 +11,16 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-18_03_author-facing-apparatus]]** · **3 of 12 done** · 1 doing · 8 todo
+**[[epic|2026-08-18_03_author-facing-apparatus]]** · **4 of 12 done** · 8 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
 ## Waiting on the project owner
 
 **This is the only section that is yours.** Each is an argument a person has to settle.
-**One of them blocks a task below**, named in its own row: until it is settled that work cannot start.
+None of them blocks the work below.
 
-| Decision | Waiting on | Blocks |
-|---|---|---|
-| [[D4-does-the-probe-pass|D4 — does the one-section probe read as a paper?]] | project owner | [[TASK-006]], [[TASK-007]], [[TASK-008]], [[TASK-009]], [[TASK-010]] |
+*None.*
 
 ## Not finished — the assistant's work, not the owner's
 
@@ -31,7 +29,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-004]] | `doing` | the assistant | measurement | The blind reading, recorded verbatim, then the decision rule applied — HALT for the owner |
 | [[TASK-005]] | `todo` | the assistant | measurement | Count what the reading named, run the gate on the probe, and write the results page |
 | [[TASK-006]] | `todo` | the assistant | mechanism | Split the register gate into GATED tics and ADVISORY signals; the author sees pass/fail, the reviewer sees the table |
 | [[TASK-007]] | `todo` | the assistant | mechanism | Take scaffold, register and rigor off the author-facing section plan and put them in a reviewer's checklist |
@@ -48,6 +45,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-001]] | `done` | — | mechanism | Extend the measurement script with the frame counts, and prove it reproduces the results page |
 | [[TASK-002]] | `done` | — | mechanism | Build the probe scaffold: the setup code, the ten-line guide, the stripped brief, the excerpt, and the blind key |
 | [[TASK-003]] | `done` | — | document | Author the probe: two subsections, one agent, one pass, minimal regime, no counters |
+| [[TASK-004]] | `done` | — | measurement | The blind reading, recorded verbatim, then the decision rule applied — HALT for the owner |
 
 ---
 

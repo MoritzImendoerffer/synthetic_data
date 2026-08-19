@@ -14,3 +14,10 @@ The two questions the decision rule needs are not yet answered in this message: 
 if any, read as machine prose (with A or B), and which of the two reads as a paper. "The pdfs read
 fine" is recorded as the first response and the questions are put again below. The key stays
 closed until both are answered.
+
+## Second message, verbatim
+
+> I did not know that there is a difference, I read just A.pdf yet. Should I read B too, I guess?
+
+So "the pdfs read fine" applies to A.pdf alone: A was read and nothing in it was quoted. B.pdf is
+unread at this point. The key stays closed.

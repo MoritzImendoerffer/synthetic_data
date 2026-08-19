@@ -1,0 +1,66 @@
+---
+type: pm-board
+epic: 2026-08-19_01_fourth-round-one-document
+sprint: 2026-08-19_01_fourth-round-one-document
+generated: true
+tags: [pm/board]
+---
+
+> [!warning] Generated from `.claude/work/2026-08-19_01_fourth-round-one-document/state.json` by `scripts/pm_notes.py`.
+> Anything written here by hand is lost on the next run.
+
+# Board — the active epic
+
+**[[epic|2026-08-19_01_fourth-round-one-document]]** · **8 of 8 done**
+
+[[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
+
+## Waiting on the project owner
+
+**This is the only section that is yours.** Each is an argument a person has to settle.
+None of them blocks the work below.
+
+*None.*
+
+## Not finished — the assistant's work, not the owner's
+
+Nothing in this table needs the project owner. It is what the coding assistant has still to do,
+and it is here so the state is visible, not so anyone else acts on it.
+
+*None.*
+
+## Done
+
+| Task | Status | Waiting on | Kind | What it is |
+|---|---|---|---|---|
+| [[TASK-001]] | `done` | — | mechanism | Fix the launch prompt, the blind key and the reading protocol before anything is written |
+| [[TASK-002]] | `done` | — | document | Author PCR-007 in one pass under the rebuilt apparatus: one agent, the RUNNER's inputs, nothing else |
+| [[TASK-003]] | `done` | — | measurement | Content review before the reading: the four questions on the draft, at most one return to the author |
+| [[TASK-004]] | `done` | — | measurement | The blind reading of shipped vs new PCR-007, recorded verbatim, then the rule applied — HALT for the owner |
+| [[TASK-005]] | `done` | — | measurement | Count what the reading named, before/after against the same script, and write the results page |
+| [[TASK-006]] | `done` | — | annex | Promote the new PCR-007: render, re-cut its 33 spans, re-anchor its annex, re-ground the corpus |
+| [[TASK-007]] | `done` | — | measurement | Rebuild-and-reground proof after promotion: the corpus is whole |
+| [[TASK-008]] | `done` | — | documentation | Move the findings into docs, update the roadmap and the proposal, and ship |
+
+---
+
+## The same, as live queries
+
+These need the Dataview plugin in Obsidian. **They query by tag, not by folder**, so they work
+wherever the vault is rooted. A folder source such as `FROM "docs/pm"` only resolves when the
+vault is opened at the repository root, which is the usual reason a table comes back empty.
+
+Without the plugin these render as code blocks, and the tables above are the board.
+
+```dataview
+TABLE status, kind, title
+FROM #pm/task
+WHERE status != "done"
+SORT status ASC
+```
+
+```dataview
+TABLE waiting_on AS "waiting on"
+FROM #pm/decision
+WHERE status = "open"
+```

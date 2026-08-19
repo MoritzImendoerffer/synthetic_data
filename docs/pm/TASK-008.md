@@ -1,47 +1,44 @@
 ---
 type: pm-task
-epic: 2026-08-19_01_fourth-round-one-document
-sprint: 2026-08-19_01_fourth-round-one-document
+epic: 2026-08-19_02_fifth-round-plan-then-batches
+sprint: 2026-08-19_02_fifth-round-plan-then-batches
 task: TASK-008
-status: done
-kind: documentation
-title: "Move the findings into docs, update the roadmap and the proposal, and ship"
+status: todo
+kind: document
+title: "Author PCR-008 (Anion Exchange Chromatography (Step 8)) in one pass under the rebuilt apparatus, with one content-review cycle"
 generated: true
-waiting_on: —
-tags: [pm/task, pm/done]
+waiting_on: the assistant
+tags: [pm/task, pm/todo]
+about: ["PCR-008"]
 ---
 
-> [!warning] Generated from `.claude/work/2026-08-19_01_fourth-round-one-document/state.json` by `scripts/pm_notes.py`.
+> [!warning] Generated from `.claude/work/2026-08-19_02_fifth-round-plan-then-batches/state.json` by `scripts/pm_notes.py`.
 > Anything written here by hand is lost on the next run.
 
-# TASK-008 — Move the findings into docs, update the roadmap and the proposal, and ship
+# TASK-008 — Author PCR-008 (Anion Exchange Chromatography (Step 8)) in one pass under the rebuilt apparatus, with one content-review cycle
 
-**Epic:** [[epic]] · **Status:** `done` · **Waiting on:** — · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
-/ship does this. Whether the campaign continues to the remaining documents is a new decision for the owner and a new /explore, not this unit's.
+83 annex quotes, 25 rhetorical spans to re-anchor later in this batch's annex task.
 
 ## Acceptance criteria
 
-- [x] docs/results/README.md gains the page's row; authoring/HANDOFF.md §3a gains one row: 'PCR-007 re-authored in one pass under the rebuilt apparatus, 2026-08-<dd>' with the re-anchoring counts (quotes moved / 88, spans re-cut / 33) on PASS, or 'authored, read, not promoted' on FAIL
-- [x] docs/ROADMAP.md: the register-campaign row says what is now true — on PASS, that one document is at the rebuilt-apparatus register and the remaining count (14 at round zero + the earlier-round documents), and that the rest is the owner's call; on FAIL, what the reading named and that the regime needs revising before another document
-- [x] docs/next/register-from-four-sources.md: rewritten down to what remains (the other documents, in the owner's order) or deleted if the owner decides the campaign is done — the plan does not decide this; its README.md row matches
-- [x] CLAUDE.md depth band and TASKS.md page band re-measured if PCR-007's page count moved them; TASKS.md 'Things that will catch you out' gains an item only if this round found one
-- [x] `uv run python scripts/pm_notes.py` regenerated; D5 and D6 settled; metadata.json status = shipped
+- [ ] procedures/AUTHOR-A-DOCUMENT.md followed with <DOC>=PCR-008, <uokey>=aex, <outline>=report_doe: brief rebuilt fresh (`## 2b` 1, `## 5d` 0, §5c names D-001); DRAFT instantiated from the template and executing; ONE agent (`opus`, fresh context) launched with the §2 prompt verbatim and nothing else
+- [ ] the transcript audit (§3) shows Reads of only the allowed inputs and code, and an empty `suspect` list — no --review, check_discourse, measure_, sentence-listing or rewrite script, no other .qmd; if not empty, the draft is set aside as evidence and a fresh agent re-launched with the same prompt, and the outcome says so
+- [ ] `check_render.py pc_package/PCR-008_aex.DRAFT.qmd --render` -> all chunks exec, all inline expressions eval, no <<NEEDS:>>, tic gate OK, docx renders; fresh pdf with no missing glyph; every section of section_plan.yaml `report_doe` present in order; typed-measurement grep hits only statistical conventions or code, each listed
+- [ ] the registered discrepancy D-001 is carried in substance by the draft (brief §5c assignment read against the text; ANNEX-A-BATCH §5), stated in the outcome
+- [ ] the content review (§4): run 1 filed as content-review-PCR-008.md; if any question read 'no', ONE return to the same author and a second fresh judge filed as run 2; the outcome states run-1/run-2 counts per question and 'promotable on content' or not — either way the document proceeds to its batch's annex task
+- [ ] outcome records ONLY: model (self-reported), check_render passes, render, glyphs, <<NEEDS>>, sentences, words, pages, audit result, review counts — no style row, no frame count; `git status --short pc_package/` shows only the untracked DRAFT(s) of this batch
 
-**Depends on:** [[TASK-005]]
+**Depends on:** [[TASK-003]], [[TASK-005]]
 
-## What was built
+## Documents it is about
 
-Shipped 2026-08-19. Gates at ship: make test 95 passed; make style 24 OK / 0 FAIL; 20/20 annexes valid; 2084/2084 quotes grounded with strict anchors; git diff outputs/ empty; tree clean; the only typed numeral in the promoted document outside inline expressions is a '95 %' interval level. Reproduction check: the annexes-and-gates path plus the explicit re-render of the one changed document (check_render --render, docx and pdf, glyph check) — stated as such; a full make corpus would rewrite nineteen untouched rendered pairs with float noise. Moves: docs/results/README.md row; two HANDOFF §3a rows (the re-author with its re-anchoring counts; the RUNNER sentence from run 1's self-measurement); TASKS.md trap 14 (an autonomous author with the reviewer's tool in reach will use it unasked); ROADMAP register row updated (fifth result, the split of registers, what remains is the owner's call); the proposal rewritten down to what remains and kept (the owner has not decided about the rest); docs/next/README.md row; docs/pm epic, archive row, board; D5 and D6 settled; CLAUDE.md depth band unchanged (50 pp inside 41–56).
+- **PCR-008** — `pc_package/PCR-008_aex.qmd`
 
 ## Files it touched
 
-- [[README]] — `docs/results/README.md`
-- [[HANDOFF]] — `authoring/HANDOFF.md`
-- [[ROADMAP]] — `docs/ROADMAP.md`
-- [[register-from-four-sources]] — `docs/next/register-from-four-sources.md`
-- [[README]] — `docs/next/README.md`
-- `CLAUDE.md`
-- [[TASKS]] — `pc_package/TASKS.md`
+- `pc_package/PCR-008_aex.DRAFT.qmd`
+- `.claude/work/2026-08-19_02_fifth-round-plan-then-batches/content-review-PCR-008.md`

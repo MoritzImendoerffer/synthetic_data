@@ -1,45 +1,44 @@
 ---
 type: pm-task
-epic: 2026-08-19_01_fourth-round-one-document
-sprint: 2026-08-19_01_fourth-round-one-document
+epic: 2026-08-19_02_fifth-round-plan-then-batches
+sprint: 2026-08-19_02_fifth-round-plan-then-batches
 task: TASK-007
-status: done
-kind: measurement
-title: "Rebuild-and-reground proof after promotion: the corpus is whole"
+status: todo
+kind: document
+title: "Author PCR-006 (Low-pH Viral Inactivation (Step 6)) in one pass under the rebuilt apparatus, with one content-review cycle"
 generated: true
-waiting_on: —
-tags: [pm/task, pm/done]
-about: ["PCR-007"]
+waiting_on: the assistant
+tags: [pm/task, pm/todo]
+about: ["PCR-006"]
 ---
 
-> [!warning] Generated from `.claude/work/2026-08-19_01_fourth-round-one-document/state.json` by `scripts/pm_notes.py`.
+> [!warning] Generated from `.claude/work/2026-08-19_02_fifth-round-plan-then-batches/state.json` by `scripts/pm_notes.py`.
 > Anything written here by hand is lost on the next run.
 
-# TASK-007 — Rebuild-and-reground proof after promotion: the corpus is whole
+# TASK-007 — Author PCR-006 (Low-pH Viral Inactivation (Step 6)) in one pass under the rebuilt apparatus, with one content-review cycle
 
-**Epic:** [[epic]] · **Status:** `done` · **Waiting on:** — · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
-This is the rebuild-and-reground task the workflow requires, sized to one document: nothing upstream of a render changed except that document, so a `make data figures` is not needed and must not be run (outputs/ must stay identical). Nothing else under pc_package/ may have moved.
+82 annex quotes, 31 rhetorical spans to re-anchor later in this batch's annex task.
 
 ## Acceptance criteria
 
-- [x] runs ONLY if TASK-006 ran: `uv run python authoring/check_render.py pc_package/PCR-007_cex.qmd --render` -> chunks exec, no <<NEEDS>>, docx renders, tic gate OK, no missing glyph on the fresh pdf
-- [x] `cd pc_package && uv run python build_ground_truth.py && uv run python validate_annex.py && GROUNDING_STRICT_ANCHORS=1 uv run python check_grounding.py` -> 20/20 valid, N/N grounded (N as TASK-006 printed), exit 0
-- [x] `git diff --stat outputs/` empty; `make test PY="uv run python"` passes; `make style` 24 OK / 0 FAIL
-- [x] the depth band: PCR-007's new page count against CLAUDE.md's 'reports with a DoE run 41–56 pp' — inside, or the band re-measured and the sentence updated at ship (TASK-008)
+- [ ] procedures/AUTHOR-A-DOCUMENT.md followed with <DOC>=PCR-006, <uokey>=viral_inactivation, <outline>=report_doe: brief rebuilt fresh (`## 2b` 1, `## 5d` 0, §5c names D-001); DRAFT instantiated from the template and executing; ONE agent (`opus`, fresh context) launched with the §2 prompt verbatim and nothing else
+- [ ] the transcript audit (§3) shows Reads of only the allowed inputs and code, and an empty `suspect` list — no --review, check_discourse, measure_, sentence-listing or rewrite script, no other .qmd; if not empty, the draft is set aside as evidence and a fresh agent re-launched with the same prompt, and the outcome says so
+- [ ] `check_render.py pc_package/PCR-006_viral_inactivation.DRAFT.qmd --render` -> all chunks exec, all inline expressions eval, no <<NEEDS:>>, tic gate OK, docx renders; fresh pdf with no missing glyph; every section of section_plan.yaml `report_doe` present in order; typed-measurement grep hits only statistical conventions or code, each listed
+- [ ] the registered discrepancy D-001 is carried in substance by the draft (brief §5c assignment read against the text; ANNEX-A-BATCH §5), stated in the outcome
+- [ ] the content review (§4): run 1 filed as content-review-PCR-006.md; if any question read 'no', ONE return to the same author and a second fresh judge filed as run 2; the outcome states run-1/run-2 counts per question and 'promotable on content' or not — either way the document proceeds to its batch's annex task
+- [ ] outcome records ONLY: model (self-reported), check_render passes, render, glyphs, <<NEEDS>>, sentences, words, pages, audit result, review counts — no style row, no frame count; `git status --short pc_package/` shows only the untracked DRAFT(s) of this batch
 
-**Depends on:** [[TASK-006]]
-
-## What was built
-
-Run 2026-08-19 after TASK-006. `check_render.py pc_package/PCR-007_cex.qmd --render` -> all chunks exec, all inline expressions eval, no <<NEEDS>>, no gated tic and no banned phrase, quarto docx render OK, no missing glyph (the numeral lint's three hits are α = 0.05 and two 95 % interval levels, permitted). `build_ground_truth.py && validate_annex.py` -> 20/20 annexes valid; `GROUNDING_STRICT_ANCHORS=1 check_grounding.py` -> 2084/2084 quotes grounded across 20 annexes, exit 0 — also re-run against the COMMITTED docx after the --render rewrote it (the re-render changes bytes, not text; the docx was restored by name, never by directory, and grounding reads 2084/2084 against the committed file). `git diff --stat outputs/` empty; make test 95 passed; make style 24 OK / 0 FAIL; `git status --short` clean. Depth band: the promoted PCR-007 is 50 pp, inside CLAUDE.md's 'reports with a DoE run 41–56 pp' (it was 51); no band sentence to re-measure.
+**Depends on:** [[TASK-003]], [[TASK-005]]
 
 ## Documents it is about
 
-- **PCR-007** — `pc_package/PCR-007_cex.qmd`
+- **PCR-006** — `pc_package/PCR-006_viral_inactivation.qmd`
 
 ## Files it touched
 
-- not recorded
+- `pc_package/PCR-006_viral_inactivation.DRAFT.qmd`
+- `.claude/work/2026-08-19_02_fifth-round-plan-then-batches/content-review-PCR-006.md`

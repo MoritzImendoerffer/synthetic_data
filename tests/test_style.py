@@ -23,9 +23,30 @@ def test_packing_counts():
     assert m["_n_sent"] == 4
 
 
-def test_limits_unchanged():
+def test_limits_split():
+    """Five gated tics, seven advisory signals, twelve rows in the union — and the union keeps
+    the row order the committed baseline tables were printed in (2026-08-19, TASK-006 of
+    2026-08-18_03_author-facing-apparatus)."""
+    assert len(cs.GATED) == 5
+    assert len(cs.ADVISORY) == 7
     assert len(cs.LIMITS) == 12
+    assert set(cs.LIMITS) == set(cs.GATED) | set(cs.ADVISORY)
+    assert not (set(cs.GATED) & set(cs.ADVISORY))
+    assert list(cs.LIMITS) == ["mean_len", "median_len", "pct_over_40", "pct_over_55",
+                               "pct_under_15", "em_dash", "semicolon", "colon", "paren",
+                               "bold", "multi_hyphen", "rather_than"]
     assert not any(k.startswith("_pct_") for k in cs.LIMITS)
+
+
+def test_evaluate_gates_only_the_tics():
+    """A text that breaks every advisory band and no gated one passes evaluate(); the
+    self-test's union view sees the same text fail."""
+    m = {"_n_sent": cs.MIN_SENTENCES, "mean_len": 12.0, "median_len": 10.0, "pct_over_40": 0.0,
+         "pct_over_55": 0.0, "pct_under_15": 80.0, "paren": 0.0, "rather_than": 5.0,
+         "em_dash": 0.0, "semicolon": 0.0, "colon": 0.0, "bold": 0.0, "multi_hyphen": 0.0}
+    assert cs.evaluate(m) == []
+    assert {k for k, *_ in cs.evaluate(m, cs.LIMITS)} == {
+        "mean_len", "median_len", "pct_over_40", "pct_under_15", "paren", "rather_than"}
 
 
 FIXTURE_AND = (

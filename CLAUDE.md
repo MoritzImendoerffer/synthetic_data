@@ -114,24 +114,27 @@ differ only in their `UO` key and unit-specific narrative:
   no other report reached 59.) Achieve depth with grounded tables, analysis
   and full appendices — never with filler, and never by inventing a DoE for a step that has
   none.
-- **Voice (gated):** a process scientist writing material to support a BLA: precise,
-  complete, mechanistically reasoned, traceable — and written in **plain technical
+- **Voice (gated on the tics only):** a process scientist writing material to support a BLA:
+  precise, complete, mechanistically reasoned, traceable — and written in **plain technical
   English at about C1 level**, modelled on the published human sources in `refs/text/`
-  (PDA TR 60; the A-Mab case study), *never* on an existing document in `pc_package/`.
-  Short sentences, almost no em-dashes or semicolons, no coined compounds
-  ("host cell protein", not "host-cell-protein"), no commentary on your own rhetoric.
-  Measurable targets and worked corrections: `authoring/WRITING_GUIDE.md` §4; verbatim
-  exemplars: `authoring/REGISTER_EXEMPLAR.md`. Enforced by `authoring/check_style.py`,
-  whose thresholds are calibrated so **all four** human sources pass (`--selftest`): PDA
-  TR 60, A-Mab, and the two 2023 ISPE Good Practice Guides added on 2026-08-16. The band is
-  their union, so write to the per-source column in `WRITING_GUIDE.md` §4a, not to its edge.
-  `check_style.py` also prints an **advisory** clause-packing line on every run — mid-sentence
-  `, so `, sentences opening with a connective, sentences with two or more clause coordinators,
-  `, and ` followed by a second clause (a regex **floor**, not the rate) and mid-sentence `, not `
-  — which is gated by nothing and exists so the author can see where the reasoning went. The
-  passive rate is the sixth, in `check_discourse.py` and in brief §5d, and it is a **band and
-  never a floor**. Three rounds now say the same thing: a measure that is printed back to the
-  author moves, and one that is not drifts.
+  (PDA TR 60; the A-Mab case study; the two 2023 ISPE Good Practice Guides), *never* on an
+  existing document in `pc_package/`. Short sentences, almost no em-dashes or semicolons, no
+  coined compounds ("host cell protein", not "host-cell-protein"), no commentary on your own
+  rhetoric. Guide: `authoring/WRITING_GUIDE.md`; verbatim exemplars:
+  `authoring/REGISTER_EXEMPLAR.md`. **What fails a build** is `check_style.GATED` — em-dash,
+  semicolon, colon, bold in a sentence, coined three-part compound — plus the banned phrase
+  list; all five sit at or near zero in all four human sources (`--selftest` proves it). **The
+  author sees pass/fail on those and nothing else.** The sentence-length bands, the parenthesis
+  rate, "rather than", the connective repertoire, the clause-packing family and the passive rate
+  are `ADVISORY`: printed only under `check_style.py --review` (and `check_discourse.py`), for a
+  **reviewer**, and gated by nothing. Why, measured on 2026-08-19: the owner read the same two
+  subsections written under two regimes, blind, and preferred "clearly" the one that failed the
+  length bands and passed nothing that three rounds had targeted (`, so ` 8.9 %, `, and `+clause
+  15.6 %, passive 31.8 %) over the shipped text that passed every row
+  ([`docs/results/2026-08-19-apparatus-probe.md`](docs/results/2026-08-19-apparatus-probe.md)).
+  A band a good paragraph fails is a broken band, and a measure printed back to the author is a
+  target, not a signal. **Do not print counters to an author.** Give the author the facts, the
+  reader and the role; give the reviewer the table.
 - **Framing rule:** the screening model identifies effects; the **response-surface
   model is the predictive/design-space model**. State this; don't over-claim the
   near-saturated screening fit.
@@ -211,8 +214,9 @@ from the result. All 20 documents had to be re-authored to break the loop.
 
 - `make data figures` current for the active seed.
 - `quarto render <doc>.qmd --to docx` and `--to pdf` succeed with no errors.
-- `uv run python authoring/check_style.py <doc>.qmd` passes (the register gate; see the
-  Voice rule above). `check_render.py` runs it automatically as a hard gate.
+- `uv run python authoring/check_style.py <doc>.qmd` passes (the tic gate, `GATED` only; see
+  the Voice rule above). `check_render.py` runs it automatically as a hard gate. A reviewer, not
+  the author, reads `check_style.py --review <doc>.qmd`.
 - `python build_ground_truth.py && python validate_annex.py` → all annexes valid.
 - `python check_grounding.py` → every annex quote verbatim in the rendered text, and no weak
   anchors. `GROUNDING_STRICT_ANCHORS=1` makes the anchor check a gate; the corpus is at zero.

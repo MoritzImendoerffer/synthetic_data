@@ -507,9 +507,15 @@ passages from those documents, arranged by the job each one does.
 
 ### 4a. The measurable targets
 
-`authoring/check_style.py` measures these and **fails the build** if they are missed. The
-thresholds are read off the four human documents above, and `check_style.py --selftest`
-proves that all four pass.
+`authoring/check_style.py` measures these. **Since 2026-08-19 only the tic rows fail the
+build** — em-dashes, semicolons, colons, bold spans, coined compounds (`check_style.GATED`) and
+the banned phrases. The sentence-length rows, the parenthesis rate and "rather than" are
+**advisory**: a reviewer reads them under `check_style.py --review`, and an author is shown
+nothing but pass/fail on the tics. The reason is in
+`docs/results/2026-08-19-apparatus-probe.md` §3: the text the project owner preferred, read
+blind against the shipped one, fails the length bands. The thresholds are read off the four
+human documents above, and `check_style.py --selftest` proves that all four pass every row,
+gated and advisory.
 
 Several of these are **bands, not ceilings**. Writing that is too short and too choppy is
 just as unlike a real regulatory document as writing that sprawls. Human technical prose sits
@@ -517,18 +523,18 @@ in the middle.
 
 | Property | Band | PDA TR 60 | A-Mab | ISPE TT | ISPE PV |
 |---|---|---|---|---|---|
-| Mean sentence length | 20 – 30.5 words | 24.2 | 26.6 | 28.0 | 30.2 |
-| Median sentence length | 18 – 26.5 words | 21.0 | 23.0 | 24.0 | 26.0 |
-| Sentences over 40 words | 3 – 21.5 % | 9.8 | 13.4 | 14.8 | 20.8 |
-| Sentences over 55 words | ≤ 9.5 % | 2.9 | 5.2 | 5.8 | 9.0 |
-| Sentences under 15 words | 15 – 32 % | 20.5 | 19.5 | 16.3 | 16.2 |
-| Parenthetical openings | 3 – 14.5 per 1000 words | 11.9 | 12.3 | 14.2 | 10.7 |
-| Em-dashes | ≤ 2.5 per 1000 words | 1.2 | 0.0 | 0.0 | 0.0 |
-| Semicolons | ≤ 4.5 per 1000 words | 1.9 | 1.1 | 1.8 | 0.9 |
-| Colons | ≤ 5.5 per 1000 words | 2.1 | 3.3 | 4.3 | 2.9 |
-| Bold spans | ≤ 1.0 per 1000 words | 0.0 | 0.0 | 0.0 | 0.0 |
-| Coined 3-part hyphenated compounds | ≤ 1.5 per 1000 words | 0.5 | 0.2 | 0.4 | 0.0 |
-| "rather than" | ≤ 0.8 per 1000 words | 0.3 | 0.1 | 0.1 | 0.0 |
+| Mean sentence length *(advisory)* | 20 – 30.5 words | 24.2 | 26.6 | 28.0 | 30.2 |
+| Median sentence length *(advisory)* | 18 – 26.5 words | 21.0 | 23.0 | 24.0 | 26.0 |
+| Sentences over 40 words *(advisory)* | 3 – 21.5 % | 9.8 | 13.4 | 14.8 | 20.8 |
+| Sentences over 55 words *(advisory)* | ≤ 9.5 % | 2.9 | 5.2 | 5.8 | 9.0 |
+| Sentences under 15 words *(advisory)* | 15 – 32 % | 20.5 | 19.5 | 16.3 | 16.2 |
+| Parenthetical openings *(advisory)* | 3 – 14.5 per 1000 words | 11.9 | 12.3 | 14.2 | 10.7 |
+| Em-dashes **(gated)** | ≤ 2.5 per 1000 words | 1.2 | 0.0 | 0.0 | 0.0 |
+| Semicolons **(gated)** | ≤ 4.5 per 1000 words | 1.9 | 1.1 | 1.8 | 0.9 |
+| Colons **(gated)** | ≤ 5.5 per 1000 words | 2.1 | 3.3 | 4.3 | 2.9 |
+| Bold spans **(gated)** | ≤ 1.0 per 1000 words | 0.0 | 0.0 | 0.0 | 0.0 |
+| Coined 3-part hyphenated compounds **(gated)** | ≤ 1.5 per 1000 words | 0.5 | 0.2 | 0.4 | 0.0 |
+| "rather than" *(advisory)* | ≤ 0.8 per 1000 words | 0.3 | 0.1 | 0.1 | 0.0 |
 | *Connectives, per 1000 words — not gated* | *diagnostic* | *2.7* | *2.7* | *2.2* | *2.6* |
 | *…of the nine in §4b, how many are used* | *diagnostic* | *9* | *7* | *7* | *6* |
 | *Sentences with a mid-sentence ", so " — not gated* | *diagnostic* | *0.1 %* | *0.3 %* | *0.4 %* | *0.4 %* |

@@ -487,8 +487,11 @@ def baseline_column_names(human_suffix: str) -> list[str]:
     list lets a subset be looked up by name.
     """
     import glob
+    # Untracked working files -- <DOC>_<uo>.DRAFT.qmd, .PROBE.qmd, .EXCERPT.qmd -- were not
+    # in the baseline and must not shift its columns; the uppercase suffix is the convention.
     docs = sorted(os.path.basename(q) for q in
-                  glob.glob(os.path.join(ROOT, "pc_package", "*.qmd")))
+                  glob.glob(os.path.join(ROOT, "pc_package", "*.qmd"))
+                  if not re.search(r"\.[A-Z]+\.qmd$", os.path.basename(q)))
     return [n + human_suffix for n, _, _, _ in HUMAN_SOURCES] + docs
 
 

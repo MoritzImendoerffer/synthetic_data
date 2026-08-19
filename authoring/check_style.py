@@ -4,6 +4,7 @@
     uv run python authoring/check_style.py pc_package/PCR-003_bioreactor.qmd
     uv run python authoring/check_style.py --selftest        # the human sources must pass
     uv run python authoring/check_style.py <qmd> --report    # numbers only, never fails
+    uv run python authoring/check_style.py <qmd> --review    # the REVIEWER's table (advisory rows)
     uv run python authoring/check_style.py <qmd>... --compare  # table vs the human sources
 
 Why this exists
@@ -66,36 +67,61 @@ HUMAN_SOURCES = [
 ]
 
 # --------------------------------------------------------------------------------------
-# Thresholds. Every one of these is satisfied by BOTH human sources (see --selftest).
+# Thresholds. Every one of these is satisfied by all four human sources (see --selftest).
 # --------------------------------------------------------------------------------------
 # Each entry is (lo, hi, description); None means unbounded on that side.
 #
-# Several bands are TWO-SIDED on purpose. Capping sentence length alone pushes an author
-# into staccato prose — 17-word averages and 40 % of sentences under 15 words — which is
-# just as unlike real regulatory writing as the 34-word sprawl it replaced. Human technical
-# prose sits in a band, not at a minimum, so the gate enforces a band.
-# Five ceilings moved up on 2026-08-16 when the two ISPE guides joined the self-test. Each
-# is set to clear the widest source, which is ISPE PV on four of the five: it measures 30.2
-# mean, 26.0 median, 20.8 % over 40 words and 9.0 % over 55. ISPE TT sets the parenthesis
-# ceiling at 14.2. The old values were 28.0 / 25.0 / 16.0 / 7.5 / 14.0 and were read off two
-# sources that both happen to write shorter than the ISPE house style.
-LIMITS = {
+# TWO SETS SINCE 2026-08-19, and the difference is who reads them.
+#
+# GATED is what fails a build: the punctuation and lexical tics that sit at or near zero in all
+# four human sources and mark the machine register from across the room — the em-dash aside,
+# the semicolon splice, the colon, bold inside a sentence, the coined three-part compound —
+# plus the BANNED phrase list below. An author sees pass/fail on these and nothing else.
+#
+# ADVISORY is the sentence-length distribution, the parenthesis rate and "rather than". They
+# are printed under --review for a REVIEWER and never shown to an author, and they fail
+# nothing. The reason is measured, not argued: on 2026-08-19 the project owner read the same
+# two subsections of PCR-005 written under two regimes, blind, and preferred "clearly" the one
+# that FAILED this gate as it then stood — % over 40 words at 1.1 against a floor of 3.0 and
+# "rather than" at 1.6 per 1k against a ceiling of 0.8, with mean length, median length and
+# % under 15 all within a tenth of their edge — over the shipped text that passed every row.
+# A band that a good paragraph fails is a broken band, and a band printed back to the author
+# is a target: three rounds moved these numbers and the reader did not read them
+# (docs/results/2026-08-19-apparatus-probe.md §3). The edges have NOT been moved; the rows
+# stopped being gated. `paren` had a floor of 3.0 and moves with the length rows because a
+# floor on parentheses is a floor on a habit, not a tic.
+#
+# The values are unchanged from 2026-08-16, when five ceilings moved up as the two ISPE guides
+# joined the self-test. Each is set to clear the widest source (ISPE PV on four of the five:
+# 30.2 mean, 26.0 median, 20.8 % over 40 words, 9.0 % over 55; ISPE TT sets the parenthesis
+# ceiling at 14.2). Several bands are TWO-SIDED on purpose: capping length alone pushed an
+# author into staccato prose once, and human prose sits in a band. That is still true, and it
+# is now the reviewer's band to read.
+GATED = {
+    # punctuation habits, per 1000 words -------------------------------------------
+    "em_dash":       (None,  2.5, "em-dashes per 1k words"),
+    "semicolon":     (None,  4.5, "semicolons per 1k words"),
+    "colon":         (None,  5.5, "colons per 1k words"),
+    "bold":          (None,  1.0, "**bold** spans per 1k words"),
+    # lexical habits, per 1000 words -----------------------------------------------
+    "multi_hyphen":  (None,  1.5, "coined 3+-part hyphenated compounds per 1k words"),
+}
+ADVISORY = {
     # sentence-length distribution ------------------------------------------------
     "mean_len":      (20.0, 30.5, "mean sentence length (words)"),
     "median_len":    (18.0, 26.5, "median sentence length (words)"),
     "pct_over_40":   ( 3.0, 21.5, "% of sentences over 40 words"),
     "pct_over_55":   ( None, 9.5, "% of sentences over 55 words"),
     "pct_under_15":  (15.0, 32.0, "% of sentences under 15 words"),
-    # punctuation habits, per 1000 words -------------------------------------------
-    "em_dash":       (None,  2.5, "em-dashes per 1k words"),
-    "semicolon":     (None,  4.5, "semicolons per 1k words"),
-    "colon":         (None,  5.5, "colons per 1k words"),
     "paren":         ( 3.0, 14.5, "parenthetical openings per 1k words"),
-    "bold":          (None,  1.0, "**bold** spans per 1k words"),
-    # lexical habits, per 1000 words -----------------------------------------------
-    "multi_hyphen":  (None,  1.5, "coined 3+-part hyphenated compounds per 1k words"),
     "rather_than":   (None,  0.8, '"rather than" per 1k words'),
 }
+# The union, IN THE ORDER THE TABLES HAVE ALWAYS PRINTED. `--compare`, the committed baseline
+# tables in .claude/work/*/measure_baseline_style.txt and the measurement scripts that
+# reproduce them iterate LIMITS and depend on this row order. Do not reorder it.
+LIMITS = {k: (ADVISORY | GATED)[k] for k in (
+    "mean_len", "median_len", "pct_over_40", "pct_over_55", "pct_under_15",
+    "em_dash", "semicolon", "colon", "paren", "bold", "multi_hyphen", "rather_than")}
 
 # The connectives WRITING_GUIDE 4b recommends. Counted and printed on every run, and gated by
 # nothing.
@@ -348,12 +374,16 @@ def measure(text: str) -> tuple[dict, list, Counter, list]:
 MIN_SENTENCES = 40
 
 
-def evaluate(m: dict) -> list[tuple[str, float, str, str]]:
-    """Return the failing checks as (key, value, band, description)."""
+def evaluate(m: dict, limits: dict | None = None) -> list[tuple[str, float, str, str]]:
+    """Return the failing checks as (key, value, band, description).
+
+    A document is judged on GATED only. The self-test passes LIMITS, the union, because a
+    band that real human prose fails is wrong whether it gates or advises.
+    """
     if m.get("_n_sent", 0) < MIN_SENTENCES:
         return []
     bad = []
-    for key, (lo, hi, desc) in LIMITS.items():
+    for key, (lo, hi, desc) in (limits or GATED).items():
         v = m.get(key)
         if v is None:
             continue
@@ -391,55 +421,64 @@ def packing_line(m: dict) -> str:
 
 
 def render(name: str, m: dict, hits: list, compounds: Counter, longest: list,
-           verbose: bool) -> list:
+           verbose: bool, review: bool = False) -> list:
+    """Print one document's result.
+
+    Default (the author's view): the sentence and word count, the GATED rows, the banned
+    phrases. Under ``review`` (the reviewer's view): the ADVISORY rows with their bands as
+    well, the connective and clause-packing lines, and with ``verbose`` the coined compounds
+    and the longest sentences. The split is deliberate — see the comment above GATED.
+    """
     print(f"== {name} ==")
     print(f"   {m['_n_sent']} sentences, {m['_n_words']} words of prose")
     if m["_n_sent"] < MIN_SENTENCES:
-        print(f"   NOTE  under {MIN_SENTENCES} sentences: distribution thresholds are "
-              f"reported but not enforced (too small a sample).")
+        print(f"   NOTE  under {MIN_SENTENCES} sentences: thresholds are reported but not "
+              f"enforced (too small a sample).")
     bad_keys = {b[0] for b in evaluate(m)}
-    for key, (lo, hi, desc) in LIMITS.items():
+    for key, (lo, hi, desc) in GATED.items():
         flag = "FAIL" if key in bad_keys else "ok  "
-        note = ""
-        if key in bad_keys and lo is not None and m[key] < lo:
-            note = "  <- TOO LOW"
-        print(f"   {flag}  {desc:<48s} {m[key]:6.1f}  ({_band(lo, hi)}){note}")
-    print(f"   --    {connective_line(m)}")
-    print(f"   --    {packing_line(m)}")
+        print(f"   {flag}  {desc:<48s} {m[key]:6.1f}  ({_band(lo, hi)})  [gated]")
+    if review:
+        for key, (lo, hi, desc) in ADVISORY.items():
+            out = (hi is not None and m[key] > hi) or (lo is not None and m[key] < lo)
+            note = "  <- outside the source band" if out else ""
+            print(f"   --    {desc:<48s} {m[key]:6.1f}  ({_band(lo, hi)})  [advisory]{note}")
+        print(f"   --    {connective_line(m)}")
+        print(f"   --    {packing_line(m)}")
     bad = evaluate(m)
     if hits:
         print(f"\n   BANNED PHRASES ({len(hits)}):")
         for label, frag, ctx in hits[:20]:
             print(f"     [{label}] {frag!r}")
             print(f"        ...{ctx.strip()}...")
-    if verbose and compounds:
+    if review and verbose and compounds:
         print("\n   coined compounds:",
               ", ".join(f"{w}({c})" for w, c in compounds.most_common(15)))
-    if verbose and longest:
+    if review and verbose and longest:
         print("\n   longest sentences:")
         for s in longest:
             print(f"     [{len(s.split())}w] {s[:190]}...")
     return bad
 
 
-def check_file(path: str, verbose: bool, report_only: bool) -> int:
+def check_file(path: str, verbose: bool, report_only: bool, review: bool = False) -> int:
     m, hits, compounds, longest = measure(prose_from_qmd(path))
     if not m:
         print(f"WARN  no prose found in {path}")
         return 0
-    bad = render(os.path.relpath(path, ROOT), m, hits, compounds, longest, verbose)
+    bad = render(os.path.relpath(path, ROOT), m, hits, compounds, longest, verbose, review)
     if report_only:
         return 0
     if bad or hits:
-        print(f"\nFAIL  {len(bad)} threshold(s) exceeded, {len(hits)} banned phrase(s).")
+        print(f"\nFAIL  {len(bad)} gated threshold(s) exceeded, {len(hits)} banned phrase(s).")
         print("      Fix the prose, not the gate: see authoring/WRITING_GUIDE.md §4 "
               "and authoring/REGISTER_EXEMPLAR.md.")
         return 1
-    print("\nOK    register is within the human-source envelope.")
+    print("\nOK    no gated tic and no banned phrase.")
     return 0
 
 
-def selftest(verbose: bool) -> int:
+def selftest(verbose: bool, review: bool = True) -> int:
     """The gate must pass real human regulatory prose. If it does not, the gate is wrong.
 
     A source that is not on disk is a FAILURE, not a skip. The extracts are committed, so a
@@ -456,8 +495,9 @@ def selftest(verbose: bool) -> int:
             missing.append(name)
             continue
         m, hits, compounds, longest = measure(prose_from_extract(path, lo, hi))
-        bad = render(f"{name} (human), extract pp. {lo}-{hi}",
-                     m, hits, compounds, longest, verbose)
+        render(f"{name} (human), extract pp. {lo}-{hi}",
+               m, hits, compounds, longest, verbose, review)
+        bad = evaluate(m, LIMITS)     # the union: an advisory band a source fails is wrong too
         if bad or hits:
             print(f"\nFAIL  {name} does not pass its own gate — RELAX the threshold(s) "
                   f"above; human prose defines the envelope.\n")
@@ -499,7 +539,7 @@ def compare(paths: list[str]) -> int:
         row = f"{desc:<62s}{_band(lo, hi):>11s}"
         for _, m in cols:
             row += f"{m[key]:>{width}.1f}"
-        print(row)
+        print(row + ("   [gated]" if key in GATED else "   [advisory]"))
     print(f"{'connectives per 1k words (not gated)':<62s}{'':>11s}"
           + "".join(f"{1000.0 * sum(m['_connectives'].values()) / m['_n_words']:>{width}.1f}"
                    for _, m in cols))
@@ -526,6 +566,9 @@ def main() -> int:
                     help="table of the given documents against all four human sources")
     ap.add_argument("--report", action="store_true",
                     help="print metrics but always exit 0")
+    ap.add_argument("--review", action="store_true",
+                    help="the reviewer's view: the advisory rows, bands, connectives and clause "
+                         "packing as well as the gated tics (never shown to an author)")
     ap.add_argument("-v", "--verbose", action="store_true",
                     help="also list coined compounds and the longest sentences")
     a = ap.parse_args()
@@ -539,7 +582,7 @@ def main() -> int:
             print(f"FAIL  no such file: {q}")
             rc = 1
             continue
-        rc = max(rc, check_file(q, a.verbose, a.report))
+        rc = max(rc, check_file(q, a.verbose, a.report, a.review))
     if not a.selftest and not a.qmd:
         ap.print_help()
     return rc

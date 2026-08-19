@@ -1,9 +1,9 @@
 ---
 type: pm-decision
 sprint: 2026-08-19_01_fourth-round-one-document
-status: open
-waiting_on: project owner
-blocks: TASK-006, TASK-007
+status: settled 2026-08-19 — PASS
+decided_by: project owner
+unblocked: TASK-006, TASK-007
 tags: [pm/decision]
 ---
 
@@ -38,3 +38,11 @@ another document is tried.
 difference from the probe: this is a whole document — an executive summary that has to match its
 conclusions, cross-references, a SETUP chunk the agent wrote itself — and you have read neither
 version before, so no "fourth reading" limit applies.
+
+---
+
+**Settled 2026-08-19 — PASS.** The reading, verbatim
+(`.claude/work/2026-08-19_01_fourth-round-one-document/owner-reading-2026-08-19.md`): "B is clearly
+bette[r] to read … B reads more like a paper", three sentences quoted from A as machine-generated,
+none from B. Key opened afterwards by checksum: **B was the new document.** Rule: new judged
+better, 0 < 5 sentences quoted → PASS. TASK-006 (promote, re-anchor, re-ground) and TASK-007 run.

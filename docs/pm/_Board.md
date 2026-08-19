@@ -11,19 +11,16 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-19_01_fourth-round-one-document]]** · **3 of 8 done** · 1 doing · 4 todo
+**[[epic|2026-08-19_01_fourth-round-one-document]]** · **4 of 8 done** · 4 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
 ## Waiting on the project owner
 
 **This is the only section that is yours.** Each is an argument a person has to settle.
-**One of them blocks a task below**, named in its own row: until it is settled that work cannot start.
+None of them blocks the work below.
 
-| Decision | Waiting on | Blocks |
-|---|---|---|
-| [[D5-which-document|D5 — which document is the one whole document under the rebuilt apparatus?]] | project owner | nothing — the plan assumes PCR-007 and proceeds; overrule before TASK-002 runs |
-| [[D6-does-the-whole-document-pass|D6 — does the whole document written under the rebuilt apparatus read as a paper?]] | project owner | [[TASK-006]], [[TASK-007]] |
+*None.*
 
 ## Not finished — the assistant's work, not the owner's
 
@@ -32,7 +29,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-004]] | `doing` | the assistant | measurement | The blind reading of shipped vs new PCR-007, recorded verbatim, then the rule applied — HALT for the owner |
 | [[TASK-005]] | `todo` | the assistant | measurement | Count what the reading named, before/after against the same script, and write the results page |
 | [[TASK-006]] | `todo` | the assistant | annex | Promote the new PCR-007: render, re-cut its 33 spans, re-anchor its annex, re-ground the corpus |
 | [[TASK-007]] | `todo` | the assistant | measurement | Rebuild-and-reground proof after promotion: the corpus is whole |
@@ -45,6 +41,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-001]] | `done` | — | mechanism | Fix the launch prompt, the blind key and the reading protocol before anything is written |
 | [[TASK-002]] | `done` | — | document | Author PCR-007 in one pass under the rebuilt apparatus: one agent, the RUNNER's inputs, nothing else |
 | [[TASK-003]] | `done` | — | measurement | Content review before the reading: the four questions on the draft, at most one return to the author |
+| [[TASK-004]] | `done` | — | measurement | The blind reading of shipped vs new PCR-007, recorded verbatim, then the rule applied — HALT for the owner |
 
 ---
 

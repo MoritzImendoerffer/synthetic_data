@@ -1,9 +1,8 @@
 ---
 type: pm-decision
 sprint: 2026-08-19_01_fourth-round-one-document
-status: open
-waiting_on: project owner
-blocks: nothing — the plan assumes PCR-007 and proceeds; overrule before TASK-002 runs
+status: settled 2026-08-19 — PCR-007, by the owner's /explore and not overruled
+decided_by: project owner (by not overruling before TASK-002)
 tags: [pm/decision]
 ---
 

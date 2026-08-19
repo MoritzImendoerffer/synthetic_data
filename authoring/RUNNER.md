@@ -47,13 +47,19 @@ Invoke as:
                 `from _pcpkg import *`, `../outputs/…` and reference.docx resolve.
 
 3. author:     ONE agent writes the whole document, in section order, bound with:
-                 - authoring/WRITING_GUIDE.md      (how to write — read first)
                  - authoring/out/<DOC>.brief.md    (the grounded facts + helper inventory;
-                                                    every number comes from here)
-                 - authoring/section_plan.yaml     (the doc-type outline + per-section
-                                                    scaffold / register / rigor / instructions)
-                 - authoring/REGISTER_EXEMPLAR.md  (voice — the distilled gold excerpts)
+                                                    every number comes from here; §2b is the
+                                                    step's mechanism)
+                 - authoring/section_plan.yaml     (the doc-type outline: sections, headings,
+                                                    helper menus, one sentence of coverage —
+                                                    STRUCTURE ONLY, no obligations)
                  - authoring/STORY_BIBLE.md        (world canon + grounding map)
+                 - authoring/WRITING_GUIDE.md      (how to write — short and positive)
+                 - authoring/REGISTER_EXEMPLAR.md  (voice — the distilled gold excerpts)
+               The author is shown NO counter and NO checklist of moves. Measured
+               2026-08-19: the section written under exactly this regime was preferred blind
+               over the one written under counters and obligations
+               (docs/results/2026-08-19-apparatus-probe.md).
                It writes every body section between the SETUP chunk and the References,
                adding any doc-local derived scalars to the SETUP chunk. Numbers are inline
                `{python}` expressions; a value with no helper becomes `<<NEEDS: …>>`.
@@ -61,12 +67,17 @@ Invoke as:
 4. gate:       uv run python authoring/check_render.py pc_package/<DOC>_<uokey>.qmd --render
                  - HARD: every chunk execs, every inline expr evals, no <<NEEDS:>>,
                    quarto render --to docx succeeds.
-                 - HARD: the register gate (authoring/check_style.py) — sentence-length
-                   distribution, em-dash/semicolon/compound density, banned tics. Its
-                   thresholds are calibrated so PDA TR 60 and the A-Mab case study pass
-                   (`--selftest`). Use --lax-style to demote it while drafting.
+                 - HARD: the tic gate (authoring/check_style.py GATED) — em-dash, semicolon,
+                   colon, bold in a sentence, coined compound, banned phrases. Calibrated so
+                   all four human sources pass (`--selftest`). The author sees pass/fail on
+                   these and nothing else.
                  - ADVISORY: the numeral lint (flags typed measurements to convert to
                    inline exprs; statistical conventions α/p/n/CI may stay).
+   review:     A REVIEWER, not the author, then reads two things: the table
+               `uv run python authoring/check_style.py --review <qmd>` (the length bands and
+               the clause-packing family, as signals) and authoring/REVIEW_CHECKLIST.md,
+               answered against the finished sections. A "no" goes back to the author as
+               what the section lacks, never as a phrase to insert.
                On a HARD failure, re-invoke the SAME agent to fix in place (or extend a
                helper if a <<NEEDS:>> is real), then re-gate. Do NOT start a fresh agent
                mid-document — that reintroduces the coherence problem.

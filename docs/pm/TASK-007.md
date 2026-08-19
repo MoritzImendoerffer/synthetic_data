@@ -46,6 +46,8 @@ authoring/RUNNER.md step 3 lists the author's inputs as brief (with §2b), secti
 
 Survivor grep across authoring/ docs/ CLAUDE.md pc_package/TASKS.md pc_package/README.md: every remaining hit is a record (docs/results, docs/pm, docs/next proposals, this unit), the annex taxonomy (span-role names in authoring/rhetorical/*.spans.yaml, authoring/out/*.rhetorical.json, build_rhetorical_annex.py's role list, RHETORICAL_ANNEX.md's role table, HANDOFF.md §3a's role list) — which stays, only its second life as instructions ended — plus ONE author-facing survivor fixed at source: pc_package/_pcpkg.py:380's dev_register docstring said '(for the table_narration move)' and reached every brief through the helper inventory; reworded, and all 20 briefs rebuilt in two batches (build_brief takes ~34 s each; 0 failures of 20; grep table_narration in authoring/out/*.brief.md -> 0). make test 90 passed.
 
+CORRECTION 2026-08-19 (found while doing TASK-009): the RUNNER.md step 3 / step 4 edits described above were NOT in commit 7f0f341. The Python edit that carried them aborted on an earlier assertion (the RHETORICAL_ANNEX sentence, which had a different line break) before reaching RUNNER.md, and the outcome was written from the intended edit rather than from a re-read of the file. Applied for real in the TASK-009 follow-up commit; `grep -c 'STRUCTURE ONLY\|review:' authoring/RUNNER.md` -> 2 now.
+
 ## Documents it is about
 
 - **PCR-005** — `pc_package/PCR-005_protein_a.qmd`

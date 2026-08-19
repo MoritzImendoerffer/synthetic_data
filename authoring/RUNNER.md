@@ -19,8 +19,13 @@ Invoke as:
   under `uv`; always `uv run python …`, never bare `python3`.)
 - **You must NOT read any `pc_package/*.qmd`.** Authoring depends only on: `config` → the
   model → `outputs/`, the `_pcpkg` / `doe_report` helpers, the `authoring/` artifacts
-  (guide, brief, section plan, register exemplar, story bible, template), and the published
-  human sources in `refs/text/`. `authoring/check_blank_repo.sh` proves this.
+  (guide, brief, section plan, register exemplar, story bible, template, and the step's
+  mechanism file `authoring/mechanism/<uokey>.yaml`, which the brief carries as §2b), and the
+  published human sources in `refs/text/`. `authoring/check_blank_repo.sh` proves this.
+- **The mechanism file has been read by the project owner.** `authoring/mechanism/<uokey>.yaml`
+  is prose written from domain knowledge with no source to ground it against, which is why its
+  `reviewed_by_owner` field carries the date the owner read it. A brief whose §2b says
+  "reviewed by owner: not yet" is not ready to author from.
 
   This is stronger than "not needed". An earlier register exemplar was distilled *from* an
   AI-written report in `pc_package/`, which closed a loop: the machine voice fed itself and

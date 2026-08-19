@@ -3,12 +3,13 @@ type: pm-task
 epic: 2026-08-18_03_author-facing-apparatus
 sprint: 2026-08-18_03_author-facing-apparatus
 task: TASK-009
-status: todo
+status: doing
 kind: mechanism
 title: "Write the per-unit-operation mechanism files, emit them as brief \u00a72b, and halt for the owner's read"
 generated: true
 waiting_on: the assistant
-tags: [pm/task, pm/todo]
+tags: [pm/task, pm/doing]
+about: ["PCR-005", "PTP-001"]
 ---
 
 > [!warning] Generated from `.claude/work/2026-08-18_03_author-facing-apparatus/state.json` by `scripts/pm_notes.py`.
@@ -16,7 +17,7 @@ tags: [pm/task, pm/todo]
 
 # TASK-009 — Write the per-unit-operation mechanism files, emit them as brief §2b, and halt for the owner's read
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `doing` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
@@ -32,6 +33,21 @@ Runs only on D4 = PASS. Written from domain knowledge, NOT from refs/text/ — e
 
 **Depends on:** [[TASK-004]]
 
+## What was built
+
+WRITTEN, AND HALTED FOR THE OWNER'S READ (2026-08-19). Eight files in authoring/mechanism/ (bioreactor, harvest, protein_a, viral_inactivation, cex, aex, virus_filtration, ufdf), each with key, step_title, source, reviewed_by_owner (null until read), an overview, a `cqas` map (every CQA the step sets per the register, plus the responses it clears or measures — 7/3/4/3/5/6/3/1 entries) and a `parameters` map covering every parameter key in config (9/3/6/4/5/5/2/3). Written from domain knowledge in the terms of art (dynamic binding capacity, mass transfer zone, histidine protonation at the Fc–ligand interface, immobilisation chemistry, cumulative cycle number, sanitisation history, polarisation layer, isoelectric point, nucleotide sugar donor, …). Directions are committed only where the physical chemistry is unambiguous AND agrees with the sign the seeded model encodes (checked against config/parameters.yaml: e.g. HCP up with load and down with elution pH at Protein A; LRV up as pH falls at low-pH hold; aggregate clearance down with load and later stop-collect at CEX; HCP clearance up with load pH and down with conductivity at AEX; MVM LRV down with filtered volume). Where the model's sign is empirical against the textbook (pCO2 and pH on acidic variants at the bioreactor) the file names the pathway and says the net direction is what the fitted model reads.
+
+No number in any prose value: tests/test_mechanism.py (5 tests) asserts one file per UO, the shape, no digit in overview/cqas/parameters, every config parameter present, every CQA the step sets present — 95 passed. Two digit slips caught by the test and reworded ('CH2–CH3 interface', 'CH2 domain' -> 'the second and third constant domains of the heavy chain'). One word the owner objected to on 2026-08-18 ('aggressively') was in the first draft of protein_a.yaml and is gone.
+
+build_brief.py emits `## 2b. Mechanism — how the step works` for every per-UO document (key is not None) with the file's provenance line ('reviewed by owner: not yet' until the field is set), the overview, and one bullet per attribute and per parameter with the register's / config's display names; corpus-level documents get no §2b (`build_brief.py PTP-001 && grep -c '## 2b'` -> 0; PCR-005 -> 1). authoring/mechanism/README.md says what the files are, why, and the no-number rule; RUNNER.md preconditions name the file and require the owner's read before authoring.
+
+HALT: the eight files are in front of the owner. The task completes when each carries `reviewed_by_owner: <date>`; a correction the owner makes is recorded here.
+
+## Documents it is about
+
+- **PCR-005** — `pc_package/PCR-005_protein_a.qmd`
+- **PTP-001** — `pc_package/PTP-001_transfer.qmd`
+
 ## Files it touched
 
 - `authoring/mechanism/bioreactor.yaml`
@@ -43,3 +59,6 @@ Runs only on D4 = PASS. Written from domain knowledge, NOT from refs/text/ — e
 - `authoring/mechanism/virus_filtration.yaml`
 - `authoring/mechanism/ufdf.yaml`
 - `authoring/build_brief.py`
+- [[README]] — `authoring/mechanism/README.md`
+- `tests/test_mechanism.py`
+- [[RUNNER]] — `authoring/RUNNER.md`

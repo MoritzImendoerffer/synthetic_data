@@ -284,6 +284,53 @@ def _discourse_section(doc_id: str, key) -> str:
     return b.getvalue()
 
 
+
+def _mechanism_section(key: str) -> str:
+    """§2b — the physical chemistry of the step, from authoring/mechanism/<key>.yaml.
+
+    Prose written from domain knowledge and read once by the project owner (the file says
+    when); no number in it, so a reseed cannot stale it. This is the supply for the mechanism
+    the reports are asked to explain: until 2026-08-19 nothing carried it, and an author asked
+    for a mechanism and given none wrote category labels in its place
+    (docs/results/2026-08-18-track-d-stopped.md §5.2).
+    """
+    import yaml
+    path = os.path.join(ROOT, "authoring", "mechanism", f"{key}.yaml")
+    if not os.path.exists(path):
+        return ("## 2b. Mechanism — how the step works\n\n_No mechanism file at "
+                f"`authoring/mechanism/{key}.yaml`. Write one before authoring; see "
+                "`authoring/mechanism/README.md`._\n\n")
+    m = yaml.safe_load(open(path, encoding="utf-8"))
+    b = io.StringIO()
+    w = b.write
+    w("## 2b. Mechanism — how the step works\n\n")
+    w(f"> From `authoring/mechanism/{key}.yaml` ({m.get('source', 'domain knowledge')}; "
+      f"reviewed by owner: {m.get('reviewed_by_owner') or 'not yet'}). This is the physical "
+      "chemistry the report's mechanistic prose rests on. It carries no number on purpose: "
+      "the effects, their signs and their sizes come from the fitted models in §4 and §7, and "
+      "the report says what the data show and why the chemistry makes that expected or "
+      "surprising.\n\n")
+    w("**Overview.** " + " ".join(str(m.get("overview", "")).split()) + "\n\n")
+    names = {r["key"]: r["cqa"] for r in P.cqa_reg[["key", "cqa"]].to_dict("records")}
+    names.update({k: v for k, v in getattr(D, "RESP_LABEL", {}).items() if k not in names})
+    if m.get("cqas"):
+        w("**Quality attributes and responses**\n\n")
+        for k, text in m["cqas"].items():
+            w(f"- **{names.get(k, k)}** (`{k}`): " + " ".join(str(text).split()) + "\n")
+        w("\n")
+    if m.get("parameters"):
+        w("**Parameters**\n\n")
+        pnames = {}
+        try:
+            pnames = {q.key: q.name for q in P.CFG.unit_op(key).parameters}
+        except Exception:
+            pass
+        for k, text in m["parameters"].items():
+            w(f"- **{pnames.get(k, k)}** (`{k}`): " + " ".join(str(text).split()) + "\n")
+        w("\n")
+    return b.getvalue()
+
+
 def _discrepancy_assignments(doc_id: str) -> str:
     """The registered discrepancies this document is required to carry, if any.
 
@@ -448,6 +495,11 @@ def build(doc_id: str, review: bool = False) -> str:
         w("### CQA register — keys for `cqas_by_keys([...])` and `cap_for([...])`\n\n")
         reg = P.cqa_reg[["key", "cqa", "set_by", "criticality"]].copy()
         w(reg.to_markdown(index=False) + "\n\n")
+
+    # 2b. Mechanism -------------------------------------------------------------
+    # Per-unit-operation documents only: the corpus-level four have no single step.
+    if key is not None:
+        w(_mechanism_section(key))
 
     # 3. Parameters -------------------------------------------------------------
     if key is not None:

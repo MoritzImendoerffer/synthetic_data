@@ -1,50 +1,49 @@
 ---
 type: pm-board
-epic: 2026-08-18_03_author-facing-apparatus
-sprint: 2026-08-18_03_author-facing-apparatus
+epic: 2026-08-19_01_fourth-round-one-document
+sprint: 2026-08-19_01_fourth-round-one-document
 generated: true
 tags: [pm/board]
 ---
 
-> [!warning] Generated from `.claude/work/2026-08-18_03_author-facing-apparatus/state.json` by `scripts/pm_notes.py`.
+> [!warning] Generated from `.claude/work/2026-08-19_01_fourth-round-one-document/state.json` by `scripts/pm_notes.py`.
 > Anything written here by hand is lost on the next run.
 
 # Board — the active epic
 
-**[[epic|2026-08-18_03_author-facing-apparatus]]** · **12 of 12 done**
+**[[epic|2026-08-19_01_fourth-round-one-document]]** · **0 of 8 done** · 8 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
 ## Waiting on the project owner
 
 **This is the only section that is yours.** Each is an argument a person has to settle.
-None of them blocks the work below.
+**One of them blocks a task below**, named in its own row: until it is settled that work cannot start.
 
-*None.*
+| Decision | Waiting on | Blocks |
+|---|---|---|
+| [[D5-which-document|D5 — which document is the one whole document under the rebuilt apparatus?]] | project owner | nothing — the plan assumes PCR-007 and proceeds; overrule before TASK-002 runs |
+| [[D6-does-the-whole-document-pass|D6 — does the whole document written under the rebuilt apparatus read as a paper?]] | project owner | [[TASK-006]], [[TASK-007]] |
 
 ## Not finished — the assistant's work, not the owner's
 
 Nothing in this table needs the project owner. It is what the coding assistant has still to do,
 and it is here so the state is visible, not so anyone else acts on it.
 
-*None.*
+| Task | Status | Waiting on | Kind | What it is |
+|---|---|---|---|---|
+| [[TASK-001]] | `todo` | the assistant | mechanism | Fix the launch prompt, the blind key and the reading protocol before anything is written |
+| [[TASK-002]] | `todo` | the assistant | document | Author PCR-007 in one pass under the rebuilt apparatus: one agent, the RUNNER's inputs, nothing else |
+| [[TASK-003]] | `todo` | the assistant | measurement | Content review before the reading: the four questions on the draft, at most one return to the author |
+| [[TASK-004]] | `todo` | the assistant | measurement | The blind reading of shipped vs new PCR-007, recorded verbatim, then the rule applied — HALT for the owner |
+| [[TASK-005]] | `todo` | the assistant | measurement | Count what the reading named, before/after against the same script, and write the results page |
+| [[TASK-006]] | `todo` | the assistant | annex | Promote the new PCR-007: render, re-cut its 33 spans, re-anchor its annex, re-ground the corpus |
+| [[TASK-007]] | `todo` | the assistant | measurement | Rebuild-and-reground proof after promotion: the corpus is whole |
+| [[TASK-008]] | `todo` | the assistant | documentation | Move the findings into docs, update the roadmap and the proposal, and ship |
 
 ## Done
 
-| Task | Status | Waiting on | Kind | What it is |
-|---|---|---|---|---|
-| [[TASK-001]] | `done` | — | mechanism | Extend the measurement script with the frame counts, and prove it reproduces the results page |
-| [[TASK-002]] | `done` | — | mechanism | Build the probe scaffold: the setup code, the ten-line guide, the stripped brief, the excerpt, and the blind key |
-| [[TASK-003]] | `done` | — | document | Author the probe: two subsections, one agent, one pass, minimal regime, no counters |
-| [[TASK-004]] | `done` | — | measurement | The blind reading, recorded verbatim, then the decision rule applied — HALT for the owner |
-| [[TASK-005]] | `done` | — | measurement | Count what the reading named, run the gate on the probe, and write the results page |
-| [[TASK-006]] | `done` | — | mechanism | Split the register gate into GATED tics and ADVISORY signals; the author sees pass/fail, the reviewer sees the table |
-| [[TASK-007]] | `done` | — | mechanism | Take scaffold, register and rigor off the author-facing section plan and put them in a reviewer's checklist |
-| [[TASK-008]] | `done` | — | mechanism | Replace WRITING_GUIDE.md with a short positive guide and move its history out |
-| [[TASK-009]] | `done` | — | mechanism | Write the per-unit-operation mechanism files, emit them as brief §2b, and halt for the owner's read |
-| [[TASK-010]] | `done` | — | mechanism | Add the four content questions to the reviewer's checklist and calibrate them on the excerpt and the probe |
-| [[TASK-011]] | `done` | — | measurement | Prove the corpus is unchanged: annexes, grounding, outputs, tests and style at the end of the unit |
-| [[TASK-012]] | `done` | — | documentation | Move the findings into docs, update the roadmap, and delete the proposal |
+*None.*
 
 ---
 

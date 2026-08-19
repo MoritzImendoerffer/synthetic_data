@@ -149,6 +149,24 @@ Straight from `config/parameters.yaml`. "DoE?" decides whether `doe_report.py` a
     The note's frontmatter already carries the right `sprint:`, so the script has what it needs to
     tell them apart and does not use it.
 
+12. **A counter printed to an author is a target, not a signal.** Three register rounds gated or
+    printed twenty-two measures back to the authoring agent and every one of them moved; the
+    owner rejected the result anyway, and the section the owner then preferred blind sat at or
+    beyond round-zero on all of them and **failed** the gate as it stood
+    (`docs/results/2026-08-19-apparatus-probe.md`). Give an author the facts, the reader and the
+    role (`WRITING_GUIDE.md`, brief §2b); give the reviewer the table (`check_style.py --review`,
+    `REVIEW_CHECKLIST.md`). If you find yourself adding a per-section obligation or a grep list
+    to an author's inputs, that is the mechanism that produced "acts through the capacity of the
+    bed", and it will produce it again.
+
+13. **An edit script that asserts mid-way leaves the later edits unwritten while you record them
+    as done.** A Python heredoc that applies several `assert old in s; s = s.replace(...)` edits
+    aborts at the first failed assertion and writes nothing after it; the session then reads
+    "ok" from a re-run of the fixed part and writes an outcome from the intent. Hit on 2026-08-19:
+    `RUNNER.md` steps 3 and 4 were recorded as edited in TASK-007 and were not (`7ca9c78` fixed
+    it). After any multi-edit script, `grep` the file for a string only the new text contains
+    before writing the outcome.
+
 ## Open items
 
 They live in [`../docs/ROADMAP.md`](../docs/ROADMAP.md), with one proposal per item in

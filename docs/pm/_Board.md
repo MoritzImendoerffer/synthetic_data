@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-18_03_author-facing-apparatus]]** · **11 of 12 done** · 1 todo
+**[[epic|2026-08-18_03_author-facing-apparatus]]** · **12 of 12 done**
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -27,9 +27,7 @@ None of them blocks the work below.
 Nothing in this table needs the project owner. It is what the coding assistant has still to do,
 and it is here so the state is visible, not so anyone else acts on it.
 
-| Task | Status | Waiting on | Kind | What it is |
-|---|---|---|---|---|
-| [[TASK-012]] | `todo` | the assistant | documentation | Move the findings into docs, update the roadmap, and delete the proposal |
+*None.*
 
 ## Done
 
@@ -46,6 +44,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-009]] | `done` | — | mechanism | Write the per-unit-operation mechanism files, emit them as brief §2b, and halt for the owner's read |
 | [[TASK-010]] | `done` | — | mechanism | Add the four content questions to the reviewer's checklist and calibrate them on the excerpt and the probe |
 | [[TASK-011]] | `done` | — | measurement | Prove the corpus is unchanged: annexes, grounding, outputs, tests and style at the end of the unit |
+| [[TASK-012]] | `done` | — | documentation | Move the findings into docs, update the roadmap, and delete the proposal |
 
 ---
 

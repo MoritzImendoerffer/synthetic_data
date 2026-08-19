@@ -1,19 +1,28 @@
 ---
 type: pm-epic
 sprint: 2026-08-18_03_author-facing-apparatus
-status: planned
+status: shipped 2026-08-19
 started: 2026-08-18
-proposal: docs/next/author-facing-apparatus.md
+proposal: docs/next/author-facing-apparatus.md (deleted at ship 2026-08-19; git history at 88fbce7)
 tags: [pm/epic]
 ---
 
 # Epic — the author-facing apparatus, tested on one section first
 
-Board: [[_Board]] · decision: [[D4-does-the-probe-pass]] · proposal:
-[`docs/next/author-facing-apparatus.md`](../next/author-facing-apparatus.md) ·
+Board: [[_Board]] · decision: [[D4-does-the-probe-pass]] · proposal: deleted at ship
+(`git show 88fbce7:docs/next/author-facing-apparatus.md`) ·
 exploration: `.claude/work/2026-08-18_03_author-facing-apparatus/exploration.md` · plan:
 `.claude/work/2026-08-18_03_author-facing-apparatus/implementation-plan.md` · what it follows:
 [`docs/results/2026-08-18-track-d-stopped.md`](../results/2026-08-18-track-d-stopped.md)
+
+**Shipped 2026-08-19.** The probe passed blind ("A clearly wins" — A the probe, no sentence
+quoted; D4 = PASS) and the rebuild followed: `check_style.py` gates five tics and prints the rest
+to a reviewer under `--review`; `section_plan.yaml` is an outline and the obligations became
+`authoring/REVIEW_CHECKLIST.md` with four calibrated content questions; `WRITING_GUIDE.md` is 122
+positive lines; `authoring/mechanism/` supplies each step's physical chemistry as brief §2b,
+owner-read; the brief carries no counter. Corpus byte-identical (20/20 valid, 2084/2084
+grounded). Not shipped, and the owner's call: one whole document under the rebuilt apparatus.
+Results: [`docs/results/2026-08-19-apparatus-probe.md`](../results/2026-08-19-apparatus-probe.md).
 
 **Why it opened.** Track D stopped after three documents: every gated and printed measure was
 inside its band and the owner still quoted eight sentences from `PCR-005`. The evaluation of that

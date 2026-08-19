@@ -44,3 +44,24 @@ separate; this file is about what the text commits to, not how it is shaped.
 | Is the worst-case corner the region must still satisfy named? | Design space; PARs | the corner's settings and its predicted response against the limit |
 | Is the range of each factor justified, not only its presence? | Prior knowledge; Study design | the reason for the edges — platform history, the RA-001 score, the mechanism — next to each range |
 | Where the text gives a mechanism, does it name a physical cause — which species, which interaction, which property of the resin, the buffer or the culture, and in which direction it acts? | Prior knowledge; Results (mechanistic interpretation); Discussion | a cause a chemist could dispute; "acts through the capacity of the bed", "behaves as a resin property", "the physical chemistry of affinity capture" name a category and are the failure |
+
+## Content — what a sentence commits to
+
+Added 2026-08-19 (TASK-010). Everything above is about whether a section carries what it should.
+These four are about whether a sentence says anything, and no counter can answer them. They are
+answered by a reader of the finished text who has read neither the writing guide nor any measure
+of the draft: a fresh-context agent given only this block and the text, or the project owner. Each
+answer is yes or no per sentence, with the sentence quoted. **A "no" on any of the four blocks
+promotion** until the author has addressed it.
+
+| # | question | a "no" looks like |
+|---|---|---|
+| 1 | Does every `because`, `since`, `governs`, `sets`, `acts on / through` name a physical cause — a species, an interaction, a property of the resin, the buffer or the culture, and a direction — **in the clause where the verb stands**, and not only in a clause that follows a colon or in the next sentence? | "governs pool host cell protein because it sets the aggressiveness of desorption"; "acts through the capacity of the bed"; "follows from the physical chemistry of affinity capture" |
+| 2 | Is every technical term a term of art in the chromatography, cell-culture or virology literature? | "aggressiveness of desorption"; "resin property" used for a process; "parameter of a single run" for "operating parameter" |
+| 3 | Can each sentence in a mechanism paragraph be disagreed with on its own? | a sentence that stacks a claim, a cause, a list and an inference so that no part can be denied without the rest |
+| 4 | Does any sentence tell the reader how to file the finding it has just stated? | a trailing clause that renames the finding as a category ("…, which is the curvature a two-level design cannot see"; "…, which is the interaction already seen in Table 5.8"); a causal gloss that answers an objection nobody raised |
+
+How it is run: `procedures/REVIEW-BEFORE-PROMOTION.md` in the active work unit (the annex step
+of `authoring/RUNNER.md`, step 5) — the judge is given this block and the rendered text and
+nothing else, its answers are filed in the work unit beside the draft, and the draft is promoted
+only when the four read yes or the author has answered each no.

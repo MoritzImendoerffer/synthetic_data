@@ -377,7 +377,7 @@ def doe_centre_points(key, kind):
 # Deviation facts (density-pass narrated-deviation sections).                  #
 # --------------------------------------------------------------------------- #
 def dev_register(doc_id):
-    """Markdown register of a report's seeded deviations (for the table_narration move).
+    """Markdown register of a report's seeded deviations, for the deviations section to introduce and walk.
 
     Columns: Deviation, Summary, Detected during, Disposition — sourced from
     outputs/data/deviations.csv (built from config/parameters.yaml). Returns an

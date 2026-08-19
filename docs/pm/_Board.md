@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-18_03_author-facing-apparatus]]** · **6 of 12 done** · 6 todo
+**[[epic|2026-08-18_03_author-facing-apparatus]]** · **7 of 12 done** · 5 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -29,7 +29,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-007]] | `todo` | the assistant | mechanism | Take scaffold, register and rigor off the author-facing section plan and put them in a reviewer's checklist |
 | [[TASK-008]] | `todo` | the assistant | mechanism | Replace WRITING_GUIDE.md with a short positive guide and move its history out |
 | [[TASK-009]] | `todo` | the assistant | mechanism | Write the per-unit-operation mechanism files, emit them as brief §2b, and halt for the owner's read |
 | [[TASK-010]] | `todo` | the assistant | mechanism | Add the four content questions to the reviewer's checklist and calibrate them on the excerpt and the probe |
@@ -46,6 +45,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-004]] | `done` | — | measurement | The blind reading, recorded verbatim, then the decision rule applied — HALT for the owner |
 | [[TASK-005]] | `done` | — | measurement | Count what the reading named, run the gate on the probe, and write the results page |
 | [[TASK-006]] | `done` | — | mechanism | Split the register gate into GATED tics and ADVISORY signals; the author sees pass/fail, the reviewer sees the table |
+| [[TASK-007]] | `done` | — | mechanism | Take scaffold, register and rigor off the author-facing section plan and put them in a reviewer's checklist |
 
 ---
 

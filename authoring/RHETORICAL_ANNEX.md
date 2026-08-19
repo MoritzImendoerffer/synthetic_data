@@ -41,9 +41,14 @@ hedge and boundary detection.
 The layer is **grounded** exactly like every other annex quote: each span's `quote` must
 appear verbatim (whitespace-collapsed) in the rendered document (`build_rhetorical_annex.py`
 enforces this). It is **build-then-annex**: authored from the final text, so the spans and
-the document cannot disagree. It composes with the section plan — the roles below are the
-concrete text-span realizations of the scaffolds (SCQA/CCC) and rigor obligations that
-`section_plan.yaml` assigns each section.
+the document cannot disagree. **The roles are annotated on finished text and are never authoring
+instructions.** Until 2026-08-19 this paragraph said the opposite — that the roles were "the
+concrete text-span realizations of the scaffolds and rigor obligations `section_plan.yaml`
+assigns each section" — and the section plan told the author to perform those obligations. Each
+of the eight sentences the owner rejected in `PCR-005` on 2026-08-18 was one of them being
+performed, and the annex then labelled one of those sentences (`PCR-005-R17`) as its canonical
+`mechanistic_warrant`. The obligations now live in `authoring/REVIEW_CHECKLIST.md` as questions
+a reviewer asks afterwards; nothing an author reads names a role.
 
 ## Roles (the taxonomy)
 
@@ -51,10 +56,10 @@ Each span carries exactly one `role`:
 
 | role | what it marks | typical cue / origin |
 |---|---|---|
-| `problem_statement` | the Situation+Complication an SCQA opener sets — the uncertainty, risk or gap that motivates a section or the study | "whose interaction was not quantified", "at risk here" |
+| `problem_statement` | the situation and complication a section opener sets — the uncertainty, risk or gap that motivates a section or the study | "whose interaction was not quantified", "at risk here" |
 | `claim` | an Answer / finding asserted up front (the point of a section or paragraph) | topic sentence; "stated first"; "the step is well understood" |
 | `justification` | evidence or reasoning offered for a claim: an effect, a table row, a diagnostic, a statistic | "@tbl-…", "effect … (p < …)", "because …" |
-| `mechanistic_warrant` | a physical/chemical mechanism explaining a result (a justification that reasons from mechanism) | "at the operating pH the antibody carries …" |
+| `mechanistic_warrant` | a physical/chemical mechanism explaining a result (a justification that reasons from mechanism). **It must name a physical cause** — which species, which interaction, which property, in which direction. A category label standing where the cause belongs ("acts through the capacity of the bed", "behaves as a resin property", "follows from the physical chemistry of affinity capture") is **not** a warrant and is not labelled as one; 6 of the 26 spans so labelled on 2026-08-18 carried such a frame (`docs/results/2026-08-18-track-d-stopped.md` §5.6) | "at the operating pH the antibody carries …"; "lowering the pH protonates the histidine residues at the Fc–ligand interface and reduces affinity" |
 | `hedge` | a calibrated qualification signalling limited certainty | "is consistent with", "suggests", "more modest", "attributable to the assay" |
 | `bounded_conclusion` | a claim explicitly bounded by range / model / assumption / scale-down | "across the characterized ranges", "on the qualified scale-down model" |
 | `cross_step_credit` | attributes control of a shared attribute across *named* steps / documents | "cleared to release levels by … PCR-005, PCR-007, PCR-008" |

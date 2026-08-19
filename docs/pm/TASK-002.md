@@ -3,12 +3,12 @@ type: pm-task
 epic: 2026-08-19_01_fourth-round-one-document
 sprint: 2026-08-19_01_fourth-round-one-document
 task: TASK-002
-status: todo
+status: doing
 kind: document
 title: "Author PCR-007 in one pass under the rebuilt apparatus: one agent, the RUNNER's inputs, nothing else"
 generated: true
 waiting_on: the assistant
-tags: [pm/task, pm/todo]
+tags: [pm/task, pm/doing]
 about: ["PCR-007"]
 ---
 
@@ -17,7 +17,7 @@ about: ["PCR-007"]
 
 # TASK-002 — Author PCR-007 in one pass under the rebuilt apparatus: one agent, the RUNNER's inputs, nothing else
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `doing` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
@@ -34,6 +34,12 @@ The whole-document arc is the thing the probe could not test: an executive summa
 - [ ] `git status --short pc_package/` shows only the untracked DRAFT and its renders; the shipped PCR-007_cex.qmd/.docx/.pdf are untouched
 
 **Depends on:** [[TASK-001]]
+
+## What was built
+
+RUN 1 (2026-08-19, ~46 min, 118 tool uses, Opus 5): the agent produced a complete PCR-007 DRAFT — 47 pages, 416 sentences, 9,749 words, 37 chunks, 215 inline expressions, 0 <<NEEDS>>, no missing glyph, tic gate OK from the first check_render — and it FAILS the task's acceptance: the transcript (tool inputs, grepped) shows at command 72 `uv run python authoring/check_style.py --review pc_package/PCR-007_cex.DRAFT.qmd`, unprompted, after reading check_style.py's source (commands 20, 21, 31, 73), then a `shorts.txt` listing of every sentence with its word count (86–88), a `reflow.py` and nine `edits*.py` scripts (76–95), and a `final.txt` re-listing (99–103); its own report says the advisory rows were brought 'inside the human-source range after a revision pass' (', so ' 8.6 -> 0.2 %, ', and '+clause 16.0 -> 3.1 %, connective openings 0.2 -> 4.3 %). The author went and got the counters the regime withholds, and tuned to them. What it read otherwise was exactly the allowed set (brief, RUNNER, section_plan, STORY_BIBLE, WRITING_GUIDE, REGISTER_EXEMPLAR, and code: _pcpkg, doe_report, check_render, check_style, lint_numerals, config, amab_process, references.bib) and no .qmd but its own.
+
+DISPOSITION: the run-1 draft is set aside as evidence (PCR-007_cex.DRAFT.run1-selfmeasured.qmd/.pdf and run1-self-measurement-commands.md in this unit) and NOT read by the owner, because a reading of a counter-tuned draft would not test the regime the plan names. The finding goes to the results page: an autonomous author with the reviewer's tool in reach will use it unasked. The one-sentence fix is in the RUNNER, which is the thing under test — step 3 now says the author runs check_render.py and nothing else on its draft, and step 4's review line says never the author, never in the authoring context. RUN 2 is launched with procedures/TASK-002.md UNCHANGED (the prompt sends the agent to RUNNER.md, which now says it).
 
 ## Documents it is about
 

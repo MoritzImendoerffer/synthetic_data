@@ -56,10 +56,17 @@ Invoke as:
                  - authoring/STORY_BIBLE.md        (world canon + grounding map)
                  - authoring/WRITING_GUIDE.md      (how to write — short and positive)
                  - authoring/REGISTER_EXEMPLAR.md  (voice — the distilled gold excerpts)
-               The author is shown NO counter and NO checklist of moves. Measured
-               2026-08-19: the section written under exactly this regime was preferred blind
-               over the one written under counters and obligations
-               (docs/results/2026-08-19-apparatus-probe.md).
+               The author is shown NO counter and NO checklist of moves, AND DOES NOT GO AND
+               GET ONE: it runs check_render.py and nothing else on its draft — not
+               check_style.py (whose --review is the reviewer's table), not check_discourse.py,
+               not measure_*.py, and no script of its own that lists or counts its sentences.
+               What check_render prints is all it sees. Measured 2026-08-19: the section
+               written under exactly this regime was preferred blind over the one written
+               under counters and obligations (docs/results/2026-08-19-apparatus-probe.md).
+               Found the same day on the first whole document: an author that can reach the
+               reviewer's table will use it unasked — the PCR-007 run-1 agent ran
+               `check_style.py --review` on its own draft, listed its short sentences, and
+               revised nine times toward the advisory bands. That draft was set aside.
                It writes every body section between the SETUP chunk and the References,
                adding any doc-local derived scalars to the SETUP chunk. Numbers are inline
                `{python}` expressions; a value with no helper becomes `<<NEEDS: …>>`.
@@ -73,7 +80,8 @@ Invoke as:
                    these and nothing else.
                  - ADVISORY: the numeral lint (flags typed measurements to convert to
                    inline exprs; statistical conventions α/p/n/CI may stay).
-   review:     A REVIEWER, not the author, then reads two things: the table
+   review:     A REVIEWER — never the author, never in the authoring context — then reads two
+               things: the table
                `uv run python authoring/check_style.py --review <qmd>` (the length bands and
                the clause-packing family, as signals) and authoring/REVIEW_CHECKLIST.md,
                answered against the finished sections. A "no" goes back to the author as

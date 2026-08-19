@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-19_01_fourth-round-one-document]]** · **3 of 8 done** · 5 todo
+**[[epic|2026-08-19_01_fourth-round-one-document]]** · **3 of 8 done** · 1 doing · 4 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -32,7 +32,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-004]] | `todo` | the assistant | measurement | The blind reading of shipped vs new PCR-007, recorded verbatim, then the rule applied — HALT for the owner |
+| [[TASK-004]] | `doing` | the assistant | measurement | The blind reading of shipped vs new PCR-007, recorded verbatim, then the rule applied — HALT for the owner |
 | [[TASK-005]] | `todo` | the assistant | measurement | Count what the reading named, before/after against the same script, and write the results page |
 | [[TASK-006]] | `todo` | the assistant | annex | Promote the new PCR-007: render, re-cut its 33 spans, re-anchor its annex, re-ground the corpus |
 | [[TASK-007]] | `todo` | the assistant | measurement | Rebuild-and-reground proof after promotion: the corpus is whole |

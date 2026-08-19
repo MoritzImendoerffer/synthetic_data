@@ -3,12 +3,12 @@ type: pm-task
 epic: 2026-08-19_01_fourth-round-one-document
 sprint: 2026-08-19_01_fourth-round-one-document
 task: TASK-004
-status: todo
+status: doing
 kind: measurement
 title: "The blind reading of shipped vs new PCR-007, recorded verbatim, then the rule applied \u2014 HALT for the owner"
 generated: true
 waiting_on: the assistant
-tags: [pm/task, pm/todo]
+tags: [pm/task, pm/doing]
 about: ["PCR-007"]
 ---
 
@@ -17,7 +17,7 @@ about: ["PCR-007"]
 
 # TASK-004 — The blind reading of shipped vs new PCR-007, recorded verbatim, then the rule applied — HALT for the owner
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `doing` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
@@ -31,6 +31,10 @@ HARD STOP: the session ends its turn with A.pdf and B.pdf ready, D6 open, and th
 - [ ] the outcome states in one line what the owner said about each document, without paraphrase, and the limit that applies (none of the previous 'fourth reading' kind — the owner has read neither version of PCR-007 before)
 
 **Depends on:** [[TASK-003]]
+
+## What was built
+
+HALTED FOR THE OWNER, 2026-08-19. A.pdf and B.pdf are in the unit, copied under the letters blind-key.md assigns by a shell command that printed neither the key nor the file sizes; PDF metadata (title, author) identical. LIMIT, recorded: the session then printed the two page counts (51 and 50) and, knowing the shipped PCR-007 is 51 pages, can infer the key; the owner cannot, the key stays closed in the conversation, and the session says nothing about which is which. The owner is given procedures/READING.md's text: two versions of the whole PCR-007 report, the suggested subset (Executive summary; Results, all four subsections; Design space; Discussion), the two questions, and the rule. The reading is recorded verbatim before the key is opened by checksum and before any count.
 
 ## Documents it is about
 

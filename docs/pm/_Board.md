@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **6 of 41 done** · 35 todo
+**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **6 of 41 done** · 4 doing · 31 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -31,10 +31,10 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-007]] | `todo` | the assistant | document | Author PCR-006 (Low-pH Viral Inactivation (Step 6)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-008]] | `todo` | the assistant | document | Author PCR-008 (Anion Exchange Chromatography (Step 8)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-009]] | `todo` | the assistant | document | Author PCR-009 (Small-Virus Retentive Filtration (Step 9)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-010]] | `todo` | the assistant | document | Author PCR-010 (Ultrafiltration / Diafiltration (Step 10)) in one pass under the rebuilt apparatus, with one content-review cycle |
+| [[TASK-007]] | `doing` | the assistant | document | Author PCR-006 (Low-pH Viral Inactivation (Step 6)) in one pass under the rebuilt apparatus, with one content-review cycle |
+| [[TASK-008]] | `doing` | the assistant | document | Author PCR-008 (Anion Exchange Chromatography (Step 8)) in one pass under the rebuilt apparatus, with one content-review cycle |
+| [[TASK-009]] | `doing` | the assistant | document | Author PCR-009 (Small-Virus Retentive Filtration (Step 9)) in one pass under the rebuilt apparatus, with one content-review cycle |
+| [[TASK-010]] | `doing` | the assistant | document | Author PCR-010 (Ultrafiltration / Diafiltration (Step 10)) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-011]] | `todo` | the assistant | annex | Promote batch B1 (PCR-006, PCR-008, PCR-009, PCR-010): render, re-cut spans, re-anchor, re-ground |
 | [[TASK-012]] | `todo` | the assistant | measurement | Sampled blind reading of one document from batch B1 — HALT for the owner (D8) |
 | [[TASK-013]] | `todo` | the assistant | measurement | Rebuild-and-reground proof after batch B1 |

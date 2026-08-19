@@ -3,12 +3,12 @@ type: pm-task
 epic: 2026-08-19_02_fifth-round-plan-then-batches
 sprint: 2026-08-19_02_fifth-round-plan-then-batches
 task: TASK-007
-status: todo
+status: doing
 kind: document
 title: "Author PCR-006 (Low-pH Viral Inactivation (Step 6)) in one pass under the rebuilt apparatus, with one content-review cycle"
 generated: true
 waiting_on: the assistant
-tags: [pm/task, pm/todo]
+tags: [pm/task, pm/doing]
 about: ["PCR-006"]
 ---
 
@@ -17,7 +17,7 @@ about: ["PCR-006"]
 
 # TASK-007 — Author PCR-006 (Low-pH Viral Inactivation (Step 6)) in one pass under the rebuilt apparatus, with one content-review cycle
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `doing` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
@@ -33,6 +33,10 @@ about: ["PCR-006"]
 - [ ] outcome records ONLY: model (self-reported), check_render passes, render, glyphs, <<NEEDS>>, sentences, words, pages, audit result, review counts — no style row, no frame count; `git status --short pc_package/` shows only the untracked DRAFT(s) of this batch
 
 **Depends on:** [[TASK-003]], [[TASK-005]]
+
+## What was built
+
+IN PROGRESS 2026-08-19: brief rebuilt (2b 1, 5d 0), scaffold instantiated, ONE agent (`opus`, fresh context) launched with the AUTHOR-A-DOCUMENT §2 prompt verbatim; four B1 authors run concurrently. Audit, checks and the review cycle follow when it reports.
 
 ## Documents it is about
 

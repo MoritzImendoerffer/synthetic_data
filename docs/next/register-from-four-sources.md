@@ -10,15 +10,19 @@
 > against a floor of 20.0 and `pct_under_15` 55.6 % against a ceiling of 32.0. The gate has to be
 > repaired and the mechanism content supplied before a fourth round is worth running.
 
-> **2026-08-19:** the apparatus probe passed and the rebuild shipped
-> ([`../results/2026-08-19-apparatus-probe.md`](../results/2026-08-19-apparatus-probe.md)): the
-> gate now fails on five tics only, the section plan carries no obligations, the guide is short
-> and positive, each step's mechanism is in the brief, and a content review runs before
-> promotion. **§8 of the stopped page is superseded.** What remains of this proposal is the
-> fourth round itself: one whole document under the rebuilt apparatus, read by the owner, before
-> nineteen. Every measurement below is a record of the earlier rounds.
+> **2026-08-19, later:** the fourth round ran and passed
+> ([`../results/2026-08-19-fourth-round-PCR-007.md`](../results/2026-08-19-fourth-round-PCR-007.md)):
+> `PCR-007` authored in one pass under `RUNNER.md` as rebuilt, one content-review cycle, preferred
+> blind by the owner with no sentence quoted, promoted and re-grounded. **What remains of this
+> proposal:** the other documents, under the same regime, in the owner's order — fourteen at round
+> zero (`PCP-004/005/006/008/009/010`, `PCR-004/006/008/009/010`, `PTP-001`, `PCMP-001`,
+> `PCMR-001`), plus the five at earlier rounds if the owner wants one register across the corpus
+> (`PCP-003`, `PCR-003`, `PCP-007`, `PCR-005`, `RA-001`) — and the open question whether a plan
+> behaves under the regime the way a report did. The budget per document is the Track D list below,
+> now with the content-review cycle and a transcript audit for self-measurement added. Everything
+> below the status line is the record of the earlier rounds.
 
-**Status: three rounds delivered; Track D stopped after its pilot of three (2026-08-18); the apparatus rebuilt and shipped (2026-08-19). The fourth round — one whole document under the rebuilt apparatus — is being worked on since 2026-08-19 in work unit `2026-08-19_01_fourth-round-one-document`.**
+**Status: three rounds delivered; Track D stopped after its pilot of three (2026-08-18); the apparatus rebuilt and shipped (2026-08-19); the fourth round — `PCR-007` under the rebuilt apparatus — delivered 2026-08-19 in `2026-08-19_01_fourth-round-one-document`. Open: the remaining documents, the owner's call.**
 Round one shipped in work unit `2026-08-16_01_register-from-four-sources`, round two in
 `2026-08-17_01_register-second-round`, round three in `2026-08-18_01_register-third-round`. All
 three are measured: [round one](../results/2026-08-17-register-pilot.md),

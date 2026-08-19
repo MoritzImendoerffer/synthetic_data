@@ -167,6 +167,15 @@ Straight from `config/parameters.yaml`. "DoE?" decides whether `doe_report.py` a
     it). After any multi-edit script, `grep` the file for a string only the new text contains
     before writing the outcome.
 
+14. **An autonomous author with the reviewer's tool in reach will use it unasked.** The first
+    `PCR-007` agent under the rebuilt RUNNER ran `check_style.py --review` on its own draft at its
+    72nd command, listed its short sentences and revised nine times toward the advisory bands —
+    nobody printed a counter to it; it went and got them. "Show the author nothing" has to be
+    paired with "the author runs `check_render` and nothing else on its draft" (`RUNNER.md` step 3,
+    since 2026-08-19), and the transcript of an authoring run is audited for `--review`,
+    `check_discourse`, `measure_` and sentence-listing scripts before the draft is read
+    (`docs/results/2026-08-19-fourth-round-PCR-007.md` §2).
+
 ## Open items
 
 They live in [`../docs/ROADMAP.md`](../docs/ROADMAP.md), with one proposal per item in

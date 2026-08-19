@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-19_01_fourth-round-one-document]]** · **7 of 8 done** · 1 todo
+**[[epic|2026-08-19_01_fourth-round-one-document]]** · **8 of 8 done**
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -27,9 +27,7 @@ None of them blocks the work below.
 Nothing in this table needs the project owner. It is what the coding assistant has still to do,
 and it is here so the state is visible, not so anyone else acts on it.
 
-| Task | Status | Waiting on | Kind | What it is |
-|---|---|---|---|---|
-| [[TASK-008]] | `todo` | the assistant | documentation | Move the findings into docs, update the roadmap and the proposal, and ship |
+*None.*
 
 ## Done
 
@@ -42,6 +40,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-005]] | `done` | — | measurement | Count what the reading named, before/after against the same script, and write the results page |
 | [[TASK-006]] | `done` | — | annex | Promote the new PCR-007: render, re-cut its 33 spans, re-anchor its annex, re-ground the corpus |
 | [[TASK-007]] | `done` | — | measurement | Rebuild-and-reground proof after promotion: the corpus is whole |
+| [[TASK-008]] | `done` | — | documentation | Move the findings into docs, update the roadmap and the proposal, and ship |
 
 ---
 

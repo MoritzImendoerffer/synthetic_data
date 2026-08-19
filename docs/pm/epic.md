@@ -1,7 +1,7 @@
 ---
 type: pm-epic
 sprint: 2026-08-19_01_fourth-round-one-document
-status: planned
+status: shipped 2026-08-19
 started: 2026-08-19
 proposal: docs/next/register-from-four-sources.md
 tags: [pm/epic]
@@ -15,6 +15,16 @@ proposal: [`docs/next/register-from-four-sources.md`](../next/register-from-four
 `.claude/work/2026-08-19_01_fourth-round-one-document/exploration.md` · plan:
 `.claude/work/2026-08-19_01_fourth-round-one-document/implementation-plan.md` · what it follows:
 [`docs/results/2026-08-19-apparatus-probe.md`](../results/2026-08-19-apparatus-probe.md)
+
+**Shipped 2026-08-19.** `PCR-007` was authored in one pass by one agent under `RUNNER.md` as
+rebuilt, went through one content-review cycle, and was preferred blind by the owner over the
+shipped report — "B is clearly better to read … B reads more like a paper", no sentence quoted from
+it (D6 = PASS). Promoted: 33 spans re-cut, 31 of 110 annex quotes re-anchored, 2084/2084 grounded,
+20/20 valid, `outputs/` untouched, 50 pp. Found on the way: the first author fetched the reviewer's
+table itself (`check_style.py --review`) and tuned to it; that draft was set aside and `RUNNER.md`
+now says the author runs `check_render` and nothing else. Not shipped, the owner's call: the
+remaining documents. Results:
+[`docs/results/2026-08-19-fourth-round-PCR-007.md`](../results/2026-08-19-fourth-round-PCR-007.md).
 
 **Why it opened.** The probe showed on two subsections that the author-facing apparatus, not the
 model, produced the prose the owner rejected, and the apparatus was rebuilt: five tics gate,

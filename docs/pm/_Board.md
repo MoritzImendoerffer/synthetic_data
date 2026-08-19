@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-19_01_fourth-round-one-document]]** · **0 of 8 done** · 8 todo
+**[[epic|2026-08-19_01_fourth-round-one-document]]** · **1 of 8 done** · 7 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -32,7 +32,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-001]] | `todo` | the assistant | mechanism | Fix the launch prompt, the blind key and the reading protocol before anything is written |
 | [[TASK-002]] | `todo` | the assistant | document | Author PCR-007 in one pass under the rebuilt apparatus: one agent, the RUNNER's inputs, nothing else |
 | [[TASK-003]] | `todo` | the assistant | measurement | Content review before the reading: the four questions on the draft, at most one return to the author |
 | [[TASK-004]] | `todo` | the assistant | measurement | The blind reading of shipped vs new PCR-007, recorded verbatim, then the rule applied — HALT for the owner |
@@ -43,7 +42,9 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 ## Done
 
-*None.*
+| Task | Status | Waiting on | Kind | What it is |
+|---|---|---|---|---|
+| [[TASK-001]] | `done` | — | mechanism | Fix the launch prompt, the blind key and the reading protocol before anything is written |
 
 ---
 

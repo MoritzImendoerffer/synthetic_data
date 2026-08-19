@@ -2990,8 +2990,8 @@ def cx_equipment(doc_id, file_name, sec, report):
         equipment_type="chromatography column (scale-down)", site_name=P.SENDING_SITE,
         source_references=[ref(doc_id, file_name, sec,
                                "Scale-down model and its qualification",
-                               "All characterization runs were performed in a qualified "
-                               "scale-down model of the commercial cation exchange step" if report
+                               "The study was executed on a laboratory-scale chromatography "
+                               "system operated as a model of the commercial column" if report
                                else "The model holds the bed height, the linear flow velocity, "
                                     "the protein load per litre of resin and the load, wash and "
                                     "elution volumes in column volumes at the commercial values")],
@@ -3127,12 +3127,13 @@ CXMETHOD_QUOTE = {
         "AMV-3016": "leached Protein A by ELISA under AMV-3016",
     },
     True: {  # PCR-007
-        "AMV-3011": ("Pool aggregate was measured as high molecular weight species by "
-                     "size-exclusion chromatography (SEC-HPLC) under AMV-3011"),
-        "AMV-3012": "host cell protein by immunoassay (ELISA) under AMV-3012",
-        "AMV-3014": ("residual DNA by quantitative polymerase chain reaction (qPCR) under "
+        "AMV-3011": ("Pool aggregate was measured as the high molecular weight fraction by "
+                     "size-exclusion high-performance liquid chromatography under AMV-3011"),
+        "AMV-3012": ("Pool host cell protein was measured by enzyme-linked immunosorbent assay "
+                     "under AMV-3012"),
+        "AMV-3014": ("Residual DNA was measured by quantitative polymerase chain reaction under "
                      "AMV-3014"),
-        "AMV-3016": "leached Protein A by immunoassay under AMV-3016",
+        "AMV-3016": "leached Protein A by enzyme-linked immunosorbent assay under AMV-3016",
     },
 }
 
@@ -3161,7 +3162,7 @@ def cx_studies(doc_id, file_name, report):
             n_runs=n_scr, n_center_points=P.doe_centre_points(CXUO, "screening"), scale_down_model="scale-down chromatography column",
             associated_parameters=[CXPARAM_CONCEPT[f] for f in CX_MULTIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Screening design",
-                                   "The screening design was a two-level full factorial in the "
+                                   "The screening study was a two-level full factorial in the "
                                    "four multivariate factors" if report
                                    else "Every main effect and every two-factor interaction is "
                                         "therefore estimable without aliasing, as the interaction "
@@ -3174,7 +3175,7 @@ def cx_studies(doc_id, file_name, report):
             n_runs=n_rsm, n_center_points=P.doe_centre_points(CXUO, "rsm"), scale_down_model="scale-down chromatography column",
             associated_parameters=[CXPARAM_CONCEPT[f] for f in CX_MULTIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Response-surface design",
-                                   "The response-surface design was a face-centred central "
+                                   "The response-surface study was a face-centred central "
                                    "composite design in the same four factors" if report
                                    else "The parameters carried forward from screening enter a "
                                         "face-centred central composite design of")],
@@ -3184,9 +3185,9 @@ def cx_studies(doc_id, file_name, report):
             unit_operation=CXUO_NAME, scale_down_model="scale-down chromatography column",
             source_references=[ref(doc_id, file_name, "Materials and methods",
                                    "Scale-down model and its qualification",
-                                   "Qualification of the model rests on the agreement of its "
-                                   "output attributes with the commercial-scale process at "
-                                   "equivalent operating conditions" if report
+                                   "Qualification of the model compared the small-scale "
+                                   "system with the at-scale process on the attributes that "
+                                   "enter and leave the step" if report
                                    else "column efficiency will be verified by plate count and "
                                         "peak asymmetry under "
                                         "SOP-1001")],
@@ -3197,8 +3198,7 @@ def cx_studies(doc_id, file_name, report):
             factors=CX_UNIVARIATE, responses=["step yield", "pool aggregate", "pool HCP"],
             associated_parameters=[CXPARAM_CONCEPT[f] for f in CX_UNIVARIATE],
             source_references=[ref(doc_id, file_name, "Study design", "Univariate assessment",
-                                   "The elution flow rate was assessed univariately across its "
-                                   "characterization range" if report
+                                   "Elution flow rate was assessed one at a time" if report
                                    else "That design therefore supports a proven acceptable "
                                         "range for flow rate at the set-points of the other four "
                                         "parameters only")],
@@ -3251,16 +3251,28 @@ def cx_assertions(doc_id, file_name, report):
         f"{CXUO_NAME} is the last step in the train that reduces aggregate, so the "
         f"drug-substance aggregate content is set by what this step delivers.",
         "Quality attributes in scope",
-        "Aggregate is the attribute for which this step is the last opportunity" if report
+        "cation exchange is the last step in the train that reduces the high molecular weight "
+        "fraction, so no step after this one removes what this step leaves in the pool" if report
         else "Because no later step of the train reduces aggregate, the content of the pool "
              "carries through to the drug substance")
-    cleared_quote = ("each of which enters the step from an upstream operation and leaves it "
-                     "reduced" if report else
-                     "attributes in scope are formed upstream and are only reduced here")
+    # Re-anchored 2026-08-19 onto the re-authored report. The old anchor was one clause
+    # shared by all three records, which named none of them. §2.2 gives host cell protein a
+    # sentence of its own and names residual DNA and leached Protein A together in the
+    # sentence that says why neither was measured as a design response.
+    cleared_quote = ({
+        "hcp": ("Host cell protein is the second. It is cleared by three chromatography steps "
+                "in series"),
+        "residual_dna": ("Residual DNA and leached Protein A are cleared across the step but "
+                         "were not measured as design responses"),
+        "leached_protein_a": ("Residual DNA and leached Protein A are cleared across the step "
+                              "but were not measured as design responses"),
+    } if report else dict.fromkeys(
+        ["hcp", "residual_dna", "leached_protein_a"],
+        "attributes in scope are formed upstream and are only reduced here"))
     for key in ["hcp", "residual_dna", "leached_protein_a"]:
         add("step:cex", "step_has_quality_attribute", CXATTR_CONCEPT[key],
             f"{CXUO_NAME} clears {CXATTR_NAME[key]} (formed upstream; not set here).",
-            "Quality attributes in scope", cleared_quote)
+            "Quality attributes in scope", cleared_quote[key])
     # attribute -> method (plan only; the report does not restate the linkage)
     if not report:
         for key in CX_CQA_METHOD:
@@ -3276,51 +3288,58 @@ def cx_assertions(doc_id, file_name, report):
     # re-authored in this round and keeps the wording that matches its own text. Leaving this
     # unconditional silently rewrote the PCR-007 annex, which is outside the batch.
     add("attr:aggregates_hmw", "attribute_has_acceptance_criterion", "lit:aggregates_hmw_acc",
-        (f"Aggregate acceptance: {agg['acc_low']:g}–{agg['acc_high']:g} {agg['unit']}, applied "
-         f"directly to this pool." if report else
+        (f"Aggregate acceptance: {agg['acc_low']:g}–{agg['acc_high']:g} {agg['unit']} at drug "
+         f"substance. No step downstream of cation exchange reduces the high molecular weight "
+         f"fraction, so that criterion is also the ceiling at this pool, and the in-process "
+         f"limit the study is judged against is derived from it by a safety factor." if report else
          f"Aggregate acceptance: {agg['acc_low']:g}–{agg['acc_high']:g} {agg['unit']} at drug "
          f"substance; no later step of the train reduces aggregate, so the pool criterion is "
          f"carried back from it."),
-        "Quality attributes in scope" if report else "Acceptance and decision criteria",
-        "with their drug substance acceptance criteria and criticality" if report
+        "Proven acceptable ranges" if report else "Acceptance and decision criteria",
+        "For aggregate no step downstream of cation exchange reduces the high molecular weight "
+        "fraction, so the ceiling at this pool is the drug-substance criterion itself" if report
         else "The aggregate criterion is derived differently, because no later step of the train "
              "reduces the level once the pool has been collected")
     # parameter -> attribute impacts / non-impacts
     if report:
         add("param:cex_load", "parameter_impacts_attribute", "attr:aggregates_hmw",
-            "Protein load has the largest effect on pool aggregate and the second largest on "
-            "pool host cell protein (WC-CPP).",
+            "Protein load carries the largest effect on the attributes this step clears and on "
+            "step yield, and its proven acceptable range against aggregate is the one that "
+            "constrains the design space (WC-CPP).",
             "Parameter classification",
-            "It has the largest effect on pool aggregate, which is the attribute this step "
-            "carries, and the second largest on pool host cell protein")
+            "It carries the largest effect on both cleared attributes and on step yield, and its "
+            "proven acceptable range against aggregate is the one that constrains the design "
+            "space")
         add("param:cex_wash_cond", "parameter_impacts_attribute", "attr:hcp",
-            "Load/wash conductivity governs pool host cell protein and has no detectable effect "
-            "on pool aggregate (WC-CPP).",
+            "Load and wash conductivity carries the largest effect on pool host cell protein and "
+            "no effect on pool aggregate (WC-CPP).",
             "Parameter classification",
-            "It governs pool host cell protein and has no detectable effect on pool aggregate")
+            "It carries the largest effect on pool host cell protein and no effect on aggregate")
         add("param:cex_elution_ph", "parameter_impacts_attribute", "attr:aggregates_hmw",
-            "Elution buffer pH has the second largest effect on pool aggregate and interacts with "
-            "protein load (WC-CPP).",
+            "Elution buffer pH raises pool aggregate across its range and interacts with protein "
+            "load in doing so (WC-CPP).",
             "Parameter classification",
-            "It has the second largest effect on pool aggregate and it interacts with protein load")
+            "It raises pool aggregate across its range and interacts with protein load in doing so")
         add("param:cex_stop_collect", "parameter_impacts_attribute", "attr:aggregates_hmw",
-            "The stop collect criterion affects pool aggregate through how much of the descending "
-            "edge enters the pool (WC-CPP).",
+            "A later elution stop collect point raises pool aggregate across its range and "
+            "recovers monomer at the same time (WC-CPP).",
             "Parameter classification",
-            "It affects pool aggregate through how much of the descending edge enters the pool")
+            "A later stop point raises pool aggregate across its range and recovers monomer at "
+            "the same time")
         add("param:cex_wash_cond", "parameter_does_not_significantly_impact_attribute",
             "attr:aggregates_hmw",
-            "Load/wash conductivity has no detectable effect on pool aggregate; the null result is "
-            "retained in the knowledge space.",
-            "Parameter classification",
-            "Load and wash conductivity has no effect on pool aggregate")
+            "Load and wash conductivity had no detectable effect on pool aggregate; the null "
+            "result is retained in the knowledge space.",
+            "Screening: factor effects",
+            "Load and wash conductivity had no detectable effect on aggregate")
         add("param:cex_flow", "parameter_does_not_significantly_impact_attribute",
             "attr:aggregates_hmw",
-            "Elution flow rate showed no effect on any governed attribute across its "
-            "characterization range (GPP).",
-            "Parameter classification",
-            "The univariate assessment found no effect on any governed attribute across its "
-            "characterization range")
+            "Elution flow rate showed no demonstrated effect across its characterization range, "
+            "so it was not carried into the multivariate design and does not enter the design "
+            "space (GPP).",
+            "Univariate assessment",
+            "Because flow rate carries no demonstrated effect, it was not carried into the "
+            "multivariate design")
     else:
         for name in CX_MULTIVARIATE:
             add(CXPARAM_CONCEPT[name], "parameter_impacts_attribute", "attr:aggregates_hmw",
@@ -3403,51 +3422,71 @@ def cx_report_sections(doc_id, file_name, report):
                "Where a model fails any of the four conditions, the response will be reported "
                "without a design space claim"),
         ])]
+    # Re-anchored and rewritten 2026-08-19 against the re-authored PCR-007. Every statement
+    # below was read back against the new text: st1 dropped a KPP claim the report never makes,
+    # st2 no longer says no other step changes aggregate (the new §8 says the bioreactor forms it
+    # and the low-pH hold raises it, and that only this step reduces it), st6-st8 follow the new
+    # in-process-limit framing of §7.1, and st9 now carries the commercial-scale capability
+    # result rather than repeating st2.
     return [ReportSection(section_id=f"{doc_id}-summary", title="Report summary", statements=[
-        st(1, "All four multivariate parameters are well-controlled CPPs and the elution flow rate is "
-              "a general process parameter; no CPP and no KPP is assigned at this step.",
+        st(1, "No parameter at this step is a critical process parameter: the four quality-linked "
+              "parameters are well-controlled critical process parameters, set or measured by "
+              "instrumented systems, and the elution flow rate is a general process parameter.",
            "Parameter classification",
-           "All 4 quality-linked parameters are well controlled, and the one remaining parameter "
-           "(the elution flow rate) is a general process parameter"),
-        st(2, "The aggregate capability belongs to the cation exchange step alone, because no other "
-              "step in the train changes the attribute.",
+           "No parameter was classified as a critical process parameter. All four quality-linked "
+           "parameters are set or measured by instrumented systems"),
+        st(2, "Aggregate is reduced only at this step, so the aggregate capability of the drug "
+              "substance rests on cation exchange in a way that the impurity capabilities, which "
+              "are shared with other steps, do not.",
            "Process capability and robustness",
-           "This capability belongs to the cation exchange step alone, because no other step in the "
-           "train changes the attribute"),
+           "the aggregate capability of the drug substance rests on this step in a way that the "
+           "impurity capabilities do not"),
         st(3, "Pool host cell protein is governed by the load and wash conductivity and by protein "
               "load, acting in opposite directions and through their interaction.",
            "Screening: factor effects",
-           "Pool host cell protein is affected by the conductivity of the load and wash buffer, by "
-           "protein load, and by the interaction between them"),
-        st(4, "The pool-aggregate and pool-HCP response-surface models keep their accuracy on data "
-              "they have not seen, and both are used for prediction on that basis.",
+           "Host cell protein levels were affected by load and wash conductivity and by protein "
+           "load, in opposite directions, and a significant interaction between the two was "
+           "identified"),
+        st(4, "The pool aggregate and pool host cell protein response-surface models predict a "
+              "withheld run about as well as they describe the runs they were fitted to, and both "
+              "are used for prediction on that basis.",
            "Response-surface models",
-           "both models are used for prediction in this report on that basis"),
-        st(5, "No response shows significant curvature over the ranges studied, so the fitted surfaces "
-              "are planes with an interaction twist and there is no edge of failure inside the region.",
-           "Response-surface models",
-           "No quadratic term is significant for any of the three responses"),
-        st(6, "The step yield model is not predictive and is used only for the direction and the "
-              "approximate size of the protein-load effect.",
+           "which means the models predict a withheld run about as well as they describe the runs "
+           "they were fitted to"),
+        st(5, "No response shows significant curvature over the ranges studied: each response "
+              "changes linearly with each parameter, the interactions carry the whole departure "
+              "from additivity, and no edge of failure lies inside the characterized region.",
+           "Mechanistic interpretation",
+           "None of the four quadratic terms is significant in any of the three models. Over the "
+           "ranges studied each response changes linearly with each parameter"),
+        st(6, "The step yield model is not predictive and is used only to confirm the protein load "
+              "effect, so no yield claim in the report depends on prediction.",
            "Discussion",
-           "which is too low for the model to be used for prediction at a stated condition"),
-        st(7, "Pool host cell protein above the drug-substance criterion is the correct result for an "
-              "intermediate and is not a failed acceptance criterion; the step is judged on its "
-              "clearance factor.",
+           "is used only to confirm the protein load effect, so no yield claim in this report "
+           "depends on prediction"),
+        st(7, "Pool host cell protein is judged against an in-process limit rather than the "
+              "drug-substance criterion, because the pool is an intermediate that the anion "
+              "exchange step reduces further.",
            "Proven acceptable ranges",
-           "That corner is therefore outside the operating region this step claims"),
-        st(8, "The further host cell protein clearance is credited to anion exchange in PCR-008 and "
-              "the cumulative position across the train is consolidated in PCMR-001.",
-           "Executive summary",
-           "the cumulative position across the train is consolidated in PCMR-001"),
-        st(9, "Aggregate meets its drug-substance criterion at commercial scale and this step carries "
-              "that attribute alone.",
-           "Conclusions", "and this step carries that attribute alone"),
-        st(10, "Two deviations were recorded and both were dispositioned as retained, with no effect "
-               "on any fitted model, operating-region boundary or classification.",
+           "comparing the pool against the drug-substance criterion would report a failure that "
+           "does not exist"),
+        st(8, "Host cell protein, residual DNA and leached Protein A are cleared by Protein A "
+              "capture, by this step and by anion exchange, and the ranges and controls the other "
+              "two steps contribute are reported in PCR-005 and PCR-008.",
+           "Contribution to the control strategy",
+           "Host cell protein, residual DNA and leached Protein A are cleared by Protein A "
+           "capture, by this step and by anion exchange, and the ranges and controls those steps "
+           "contribute are in PCR-005 and PCR-008"),
+        st(9, "At commercial scale the four attributes this step clears meet their drug-substance "
+              "criteria, and host cell protein is the tightest of the four.",
+           "Conclusions",
+           "At commercial scale the four quality attributes this step clears meet their "
+           "drug-substance criteria, the tightest among them being host cell protein"),
+        st(10, "Both deviations recorded during execution were detected after the affected run, "
+               "were investigated to a root cause and were dispositioned as retained.",
             "Deviations from the plan",
-            "Both were dispositioned as retained, which means the affected run stayed in the analysis "
-            "rather than being excluded or repeated"),
+            "Both were detected after the affected run rather than during it, both were "
+            "investigated to a root cause, and both were dispositioned as retained"),
     ])]
 
 
@@ -3456,20 +3495,23 @@ def cx_design_spaces(doc_id, file_name):
         design_space_id="ds:cex", unit_operation=CXUO_NAME,
         parameters=["param:cex_load", "param:cex_wash_cond", "param:cex_elution_ph",
                     "param:cex_stop_collect"],
-        quality_attributes_constrained=["attr:aggregates_hmw"],
+        quality_attributes_constrained=["attr:aggregates_hmw", "attr:hcp"],
         definition="The part of the characterized four-dimensional region in protein load, "
                    "load/wash conductivity, elution buffer pH and the stop collect criterion in "
                    "which both governed attributes stay within their in-process limits. Aggregate "
-                   "is the governing attribute, and its worst corner (all four parameters at their "
-                   "upper edges) lies outside the region: it is below the drug-substance limit but "
-                   "above the in-process limit, which is that limit divided by an assurance margin "
-                   "because no downstream step removes aggregate. Pool host cell protein is judged "
-                   "against a limit carried back from the drug-substance criterion through the "
+                   "is the attribute that constrains it more, and the corner at which protein "
+                   "load, elution buffer pH and the stop collect criterion sit together at the "
+                   "unfavourable edge of their normal operating ranges lies outside the region: "
+                   "the prediction there is below the drug-substance limit but above the "
+                   "in-process limit, which is that limit divided by a safety factor because no "
+                   "downstream step removes aggregate. Pool host cell protein is judged against a "
+                   "limit carried back from the drug-substance criterion through the "
                    "anion-exchange clearance.",
         source_references=[ref(doc_id, file_name, "Design space", "Design space",
-                               "The design space for this step is the part of the characterized "
-                               "four-dimensional region in which both governed attributes stay "
-                               "within their in-process limits")],
+                               "The design space of this step is the region of the four "
+                               "well-controlled critical process parameters over which pool "
+                               "aggregate and pool host cell protein remain within their "
+                               "in-process limits")],
         metadata=meta())]
 
 
@@ -3477,30 +3519,34 @@ def cx_design_spaces(doc_id, file_name):
 # Report-only PAR / discourse layers (PCR-007 only).                            #
 # --------------------------------------------------------------------------- #
 # proven_acceptable_ranges derive from the same DoE engine that renders @tbl-par  #
-# (doe_report.par_table). Aggregate is proven acceptable across every full         #
-# characterization range; pool HCP returns "none (set-point breaches)" against the #
-# drug-substance criterion, which the report narrates as the correct result for an #
-# intermediate — the step is judged on its clearance factor and on the step-level  #
-# ceiling derived from the anion-exchange clearance factor (PCR-008). PCR-007       #
-# carries NO weak_claims. These layers are report-only; the plan omits them.        #
+# (doe_report.par_table). Both responses are judged against the in-process limit   #
+# of the step and not against the drug-substance criterion: §7.1 derives the host   #
+# cell protein limit by carrying the drug-substance criterion back through the      #
+# anion-exchange clearance and dividing by a safety factor, and the aggregate limit #
+# by dividing the drug-substance criterion itself, because no later step reduces    #
+# aggregate. Both therefore return an interval for every parameter, and protein     #
+# load against aggregate is the range that binds. PCR-007 carries NO weak_claims.   #
+# These layers are report-only; the plan omits them.                                #
 # --------------------------------------------------------------------------- #
 CX_PAR_SEC = "Proven acceptable ranges"
-CX_PAR_QUOTE = {
-    "Aggregates (HMW, %)": ("For aggregate the two analyses separate, and the separation is the "
-                            "informative part"),
-    "Pool HCP (ng/mg)": ("For host cell protein the analysis returns a range for every parameter"),
-}
-_CX_PAR_GENERAL_QUOTE = ("the criterion applied to each is the in-process limit for this "
-                         "step rather than the criterion the drug substance itself must meet")
+
+
+def _par_interval(value, unit):
+    """A PAR cell with its parameter unit appended, when the cell is an interval.
+
+    ``doe_report.par_table`` returns a range for a response the criterion admits and a short
+    phrase ("none (...)") for one it does not, and a unit may only be appended to the first."""
+    text = str(value)
+    return f"{text} {unit}".strip() if unit and "–" in text else text
 
 
 def cx_proven_acceptable_ranges(doc_id, file_name):
     """One ProvenAcceptableRange per governed response x response-surface parameter, from the
-    same DoE engine (``doe_report.par_table``) that renders @tbl-par in the report. Both
-    responses use a drug-substance specification as the acceptance basis — this step has no
-    viral-clearance response, so nothing is back-calculated from a cumulative requirement.
-    For pool HCP the drug-substance criterion does not apply to the intermediate, so the
-    analysis returns no interval; the basis records why that is the expected result."""
+    same DoE engine (``doe_report.par_table``) that renders @tbl-par in the report. The
+    acceptance basis is read back from the engine by ``par_basis_text``, so it states the
+    criterion the interval was actually computed against: for this step that is the in-process
+    limit of each response, which §7.1 of the report derives from the drug-substance criterion.
+    Both responses return an interval for every parameter on that basis."""
     import doe_report as D
     par = D.par_table(CXUO)
     out = []
@@ -3511,25 +3557,16 @@ def cx_proven_acceptable_ranges(doc_id, file_name):
     for i, r in enumerate(par.to_dict("records"), 1):
         cqa, param, unit = r["CQA"], r["Parameter"], (r["Unit"] or "")
         char = f"{r['Char. range']} {unit}".strip()
-        hcp = "HCP" in cqa
-        basis = (
-            "Drug-substance host-cell-protein specification, applied as the upper acceptance "
-            "limit. It is not a step criterion: the cation-exchange pool is an intermediate, so "
-            "the predicted pool level sits above it across the whole region and no interval is "
-            "returned. The step is judged instead on its clearance factor and on the step-level "
-            "ceiling back-calculated from the anion-exchange clearance factor (PCR-008); on that "
-            "basis every characterized range is acceptable."
-            if hcp else
-            "Drug-substance aggregate specification, applied as the upper acceptance limit "
-            "directly to this pool, because no downstream operation reduces aggregate.")
+        # The unit belongs to the PARAMETER, so it is appended to any interval the engine
+        # returns. It used to be dropped for pool HCP, back when that response returned no
+        # interval at all against the drug-substance criterion; against the in-process limit
+        # of §7.1 it returns a range like every other row, and the range needs its unit.
         out.append(S.ProvenAcceptableRange(
             par_id=f"{doc_id}-PAR{i:02d}", unit_operation=CXUO_NAME,
             quality_attribute=cqa, parameter=param,
             characterization_range=char,
-            par_at_setpoint=f"{r['PAR (set-point)']} {unit}".strip() if not hcp
-            else r["PAR (set-point)"],
-            par_nor_propagated=f"{r['PAR (NOR)']} {unit}".strip() if not hcp
-            else r["PAR (NOR)"],
+            par_at_setpoint=_par_interval(r["PAR (set-point)"], unit),
+            par_nor_propagated=_par_interval(r["PAR (NOR)"], unit),
             acceptance_basis=par_basis_text(CXUO, cqa),
             source_references=[ref(doc_id, file_name, f"{doc_id}_sec_par", CX_PAR_SEC,
                                    rows[(cqa, param)],
@@ -3605,8 +3642,8 @@ def build_report_cex():
         ],
         out_of_schema_notes=[
             "CEX sets no CQA; the QualityAttribute entities are the CQAs it controls/clears (formed upstream).",
-            "Pool aggregate and pool HCP are in-process responses with no released spec; reported via studies/report_sections. Aggregate is the exception that binds here: CEX is the last aggregate-reduction step, so the DS limit applies directly to this pool and the step carries it alone.",
-            "Pool HCP is an in-process value, not a failed criterion. The PAR analysis returns no interval against the DS criterion because the pool is an intermediate; the step is judged on its 78-fold clearance factor and on a step-level ceiling back-calculated from the AEX clearance factor. The further AEX clearance is credited to PCR-008 and the cumulative position to PCMR-001.",
+            "Pool aggregate and pool HCP are in-process responses with no released spec; reported via studies/report_sections. Both are judged against an in-process limit derived in §7.1, not against the DS criterion: for HCP the DS criterion is carried back through the AEX clearance and divided by a safety factor, for aggregate the DS criterion is the pool ceiling itself (no later step reduces it) and is divided by a larger safety factor.",
+            "Pool HCP above the DS criterion is the expected result for an intermediate and is not a failed acceptance criterion. Against the in-process limit the PAR analysis returns an interval for every parameter. The further AEX clearance is credited to PCR-008 and the cumulative position across the train to PCMR-001.",
             "No response shows significant curvature, and the step-yield model is direction-only (predicted R^2 0.20); the two attribute models carry every prediction.",
             "Process-capability (Cpk) values have no dedicated field; reported as report_sections statements.",
             "proven_acceptable_ranges mirror @tbl-par (doe_report.par_table); rhetorical_spans are verbatim report prose; PCR-007 carries no weak_claims.",

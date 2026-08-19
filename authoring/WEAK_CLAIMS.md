@@ -57,7 +57,7 @@ gate caught it.
 ## What the feature was
 
 The corpus's default invariant is that **every claim is grounded** (CLAUDE.md golden rule 3,
-WRITING_GUIDE §3/§6). This feature was the controlled exception: a few fluent, in-register
+WRITING_GUIDE §3, and REVIEW_CHECKLIST.md). This feature was the controlled exception: a few fluent, in-register
 but unsupported or overstated claims would be planted into a report and **labeled**, so the
 benchmark carried negative examples for evidence-grounding tasks — claim verification,
 overstatement detection, "does the cited evidence actually support this sentence?".
@@ -70,7 +70,7 @@ documents contain exactly these.
 ## Why it was retired
 
 The claims were **planted after authoring**, as a maintainer step. The author is required to
-ground everything (WRITING_GUIDE §7a), so a labeled negative could not come from the author
+ground everything (WRITING_GUIDE §3; CLAUDE.md, nothing is added after authoring), so a labeled negative could not come from the author
 — hence the post-hoc injection. That sequencing is the flaw.
 
 A claim written against a finished document has no way to be *merely unsupported*. It lands

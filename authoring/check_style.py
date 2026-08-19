@@ -471,8 +471,7 @@ def check_file(path: str, verbose: bool, report_only: bool, review: bool = False
         return 0
     if bad or hits:
         print(f"\nFAIL  {len(bad)} gated threshold(s) exceeded, {len(hits)} banned phrase(s).")
-        print("      Fix the prose, not the gate: see authoring/WRITING_GUIDE.md §4 "
-              "and authoring/REGISTER_EXEMPLAR.md.")
+        print("      Fix the prose, not the gate: see authoring/WRITING_GUIDE.md §4.")
         return 1
     print("\nOK    no gated tic and no banned phrase.")
     return 0

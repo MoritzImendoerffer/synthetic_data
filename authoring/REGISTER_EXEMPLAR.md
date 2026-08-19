@@ -55,10 +55,11 @@ The corpus's own first-pass reports are **not** a voice reference, and you must 
 them. They were written in a machine register: 34-word average sentences, an em-dash aside
 every third sentence, coined compounds such as "the quality-attribute-richest
 characterization in the campaign", and a "what this means" clause welded to every paragraph.
-`authoring/check_style.py` exists to catch that drift, and its thresholds are the measured
-properties of the four documents quoted below. Note what that does and does not buy you: the
-band is the union of four house styles, so writing at its edge matches none of them. Aim at the
-per-source columns in `WRITING_GUIDE.md` §4a.
+`authoring/check_style.py` exists to catch that drift. What it gates is the five tics that sit
+at or near zero in the four documents quoted below; the sentence-length bands it once gated are
+now a reviewer's signal under `check_style.py --review`, because the section the owner preferred
+blind on 2026-08-19 failed them (`docs/results/2026-08-19-apparatus-probe.md`). Read the passages
+below for the shape of the paragraph and the weight of the verb, not for a number to hit.
 
 ---
 

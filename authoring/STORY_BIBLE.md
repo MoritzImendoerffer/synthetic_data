@@ -9,7 +9,7 @@ Two kinds of content live here, and the distinction is load-bearing:
 
 - **Grounding map** (§10) — where each *fact that is a number or a controlled value*
   actually lives (a helper, a constant, a CSV). The author **pulls** these through
-  inline expressions and **never restates them as prose** (WRITING_GUIDE §6, CLAUDE.md
+  inline expressions and **never restates them as prose** (WRITING_GUIDE §3, CLAUDE.md
   golden rule 1). This bible therefore names the *source*, not the value.
 - **Narrative canon** (§1–§9) — the qualitative, fictional world: names, roles, the
   platform lineage, the transfer arc, the campaign storyline, register. This is *new
@@ -89,7 +89,7 @@ whole train with roles from `process_steps_df()`. The canonical narrative of eac
 Viral safety is **modular and orthogonal** across steps 6 (low-pH), 8 (AEX) and 9 (VF):
 each contributes an independent log-reduction increment, and the cumulative claim is
 consolidated in PCMR-001. Any single-step report gives **cross-step credit** and never
-implies it delivers the whole viral-safety claim alone (WRITING_GUIDE §3).
+implies it delivers the whole viral-safety claim alone (REVIEW_CHECKLIST.md, cross-step credit).
 
 ## 5. Platform and prior-product history (narrative canon)
 
@@ -137,7 +137,7 @@ registry is `SOP_REFS` / `AMV_REFS`; each step draws a subset via a named list
 - Each analytical response has one AMV (e.g. HCP → `AMV-3012`, SEC → `AMV-3011`, N-glycan
   → `AMV-3010`, MVM → `AMV-3018`). Pull the step's subset from its `_AMV_REFS` list.
 - SOP/AMV numbers are **identifiers, not measurements** — write them plainly; the numeral
-  lint exempts them (WRITING_GUIDE §6). Never invent a new number; use the registry.
+  lint exempts them (WRITING_GUIDE §3). Never invent a new number; use the registry.
 
 ## 8. Regulatory framing
 
@@ -182,7 +182,7 @@ a requalified, representative load.** The **reported analysis is the requalified
 execution; the first execution is retained as a real superseded dataset** and is
 *referenced* (to confirm root cause: the anomalous interaction is statistically absent in
 the requalified data), **not analysed**. A report of such a step tells this as an
-adverse-before-mitigation story (WRITING_GUIDE §3), grounded entirely in the seeded
+adverse-before-mitigation story (WRITING_GUIDE §2, rule 8), grounded entirely in the seeded
 scalars and the two datasets — never in invented numbers. Milder deviations (probe drift,
 feed under-delivery) are simply **retained** with a bounded-impact argument.
 

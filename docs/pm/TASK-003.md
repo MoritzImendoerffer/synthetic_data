@@ -3,12 +3,12 @@ type: pm-task
 epic: 2026-08-19_02_fifth-round-plan-then-batches
 sprint: 2026-08-19_02_fifth-round-plan-then-batches
 task: TASK-003
-status: todo
+status: doing
 kind: measurement
 title: "The blind reading of shipped vs new PCP-005, recorded verbatim, then the rule applied \u2014 HALT for the owner (D7)"
 generated: true
 waiting_on: the assistant
-tags: [pm/task, pm/todo]
+tags: [pm/task, pm/doing]
 about: ["PCP-005"]
 ---
 
@@ -17,7 +17,7 @@ about: ["PCP-005"]
 
 # TASK-003 — The blind reading of shipped vs new PCP-005, recorded verbatim, then the rule applied — HALT for the owner (D7)
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `doing` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
@@ -30,6 +30,10 @@ HARD STOP. If the owner reads only one file first, record it and ask for the oth
 - [ ] decisions.pilot_outcome set PASS|FAIL; D7 settled; on FAIL the batch tasks are cancelled (cancelled_by: D7) and TASK-005/TASK-007 and the ship still run
 
 **Depends on:** [[TASK-002]]
+
+## What was built
+
+HALTED FOR THE OWNER, 2026-08-19. A.pdf and B.pdf in the unit under the letters blind-key-PCP-005.md assigns, copied by a command that printed neither the key, nor sizes, nor page counts (both plans are 31 pages in any case); PDF metadata title/author identical. The owner is given READING.md's pilot text. The answer is recorded verbatim before the key is opened by checksum and before any count.
 
 ## Documents it is about
 

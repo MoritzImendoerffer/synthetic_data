@@ -316,7 +316,7 @@ def _mechanism_section(key: str) -> str:
     if m.get("cqas"):
         w("**Quality attributes and responses**\n\n")
         for k, text in m["cqas"].items():
-            w(f"- **{names.get(k, k)}** (`{k}`): " + " ".join(str(text).split()) + "\n")
+            w(f"- **{names.get(k, k)}:** " + " ".join(str(text).split()) + "\n")
         w("\n")
     if m.get("parameters"):
         w("**Parameters**\n\n")
@@ -325,8 +325,11 @@ def _mechanism_section(key: str) -> str:
             pnames = {q.key: q.name for q in P.CFG.unit_op(key).parameters}
         except Exception:
             pass
+        # Display names only. The YAML keys are config identifiers (`do`, `co2`, `ivcc`), not
+        # abbreviations, and the owner's read of 2026-08-19 said so: an author sees "Dissolved
+        # oxygen", never "do".
         for k, text in m["parameters"].items():
-            w(f"- **{pnames.get(k, k)}** (`{k}`): " + " ".join(str(text).split()) + "\n")
+            w(f"- **{pnames.get(k, k)}:** " + " ".join(str(text).split()) + "\n")
         w("\n")
     return b.getvalue()
 

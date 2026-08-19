@@ -23,3 +23,9 @@ asserts that no prose value contains a digit.
 each step does and expect, and do not explain the mass transfer or the chemistry. This is the one
 place in the repository where prose is authored without a source to ground it against, which is
 why the project owner reads every file once and the `reviewed_by_owner` field says when.
+
+**Keys are config identifiers, not abbreviations.** `co2`, `do`, `ivcc` and the rest are the
+`key:` values in `config/parameters.yaml`, which is how `tests/test_mechanism.py` checks that
+every parameter has a mechanism. The brief prints the display name from config ("Dissolved CO2
+(pCO2)", "Dissolved oxygen", "Initial viable cell conc.") and never the key (owner's read,
+2026-08-19).

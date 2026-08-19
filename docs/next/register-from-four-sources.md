@@ -18,7 +18,7 @@
 > fourth round itself: one whole document under the rebuilt apparatus, read by the owner, before
 > nineteen. Every measurement below is a record of the earlier rounds.
 
-**Status: three rounds delivered; Track A and Track B are closed on the reading of 2026-08-18. Track D is being worked on since 2026-08-18 in work unit `2026-08-18_02_register-track-d`, on the project owner's instruction that all documents be re-authored.**
+**Status: three rounds delivered; Track D stopped after its pilot of three (2026-08-18); the apparatus rebuilt and shipped (2026-08-19). The fourth round — one whole document under the rebuilt apparatus — is being worked on since 2026-08-19 in work unit `2026-08-19_01_fourth-round-one-document`.**
 Round one shipped in work unit `2026-08-16_01_register-from-four-sources`, round two in
 `2026-08-17_01_register-second-round`, round three in `2026-08-18_01_register-third-round`. All
 three are measured: [round one](../results/2026-08-17-register-pilot.md),

@@ -22,7 +22,7 @@
 > now with the content-review cycle and a transcript audit for self-measurement added. Everything
 > below the status line is the record of the earlier rounds.
 
-**Status: three rounds delivered; Track D stopped after its pilot of three (2026-08-18); the apparatus rebuilt and shipped (2026-08-19); the fourth round — `PCR-007` under the rebuilt apparatus — delivered 2026-08-19 in `2026-08-19_01_fourth-round-one-document`. Open: the remaining documents, the owner's call.**
+**Status: three rounds delivered; Track D stopped after its pilot of three (2026-08-18); the apparatus rebuilt and shipped (2026-08-19); the fourth round — `PCR-007` under the rebuilt apparatus — delivered 2026-08-19. The remaining documents are being worked on since 2026-08-19 in work unit `2026-08-19_02_fifth-round-plan-then-batches`: `PCP-005` first (the owner's choice, 2026-08-19), then the batches with sampled readings.**
 Round one shipped in work unit `2026-08-16_01_register-from-four-sources`, round two in
 `2026-08-17_01_register-second-round`, round three in `2026-08-18_01_register-third-round`. All
 three are measured: [round one](../results/2026-08-17-register-pilot.md),

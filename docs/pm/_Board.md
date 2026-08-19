@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-19_01_fourth-round-one-document]]** · **2 of 8 done** · 6 todo
+**[[epic|2026-08-19_01_fourth-round-one-document]]** · **3 of 8 done** · 5 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -32,7 +32,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-003]] | `todo` | the assistant | measurement | Content review before the reading: the four questions on the draft, at most one return to the author |
 | [[TASK-004]] | `todo` | the assistant | measurement | The blind reading of shipped vs new PCR-007, recorded verbatim, then the rule applied — HALT for the owner |
 | [[TASK-005]] | `todo` | the assistant | measurement | Count what the reading named, before/after against the same script, and write the results page |
 | [[TASK-006]] | `todo` | the assistant | annex | Promote the new PCR-007: render, re-cut its 33 spans, re-anchor its annex, re-ground the corpus |
@@ -45,6 +44,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 |---|---|---|---|---|
 | [[TASK-001]] | `done` | — | mechanism | Fix the launch prompt, the blind key and the reading protocol before anything is written |
 | [[TASK-002]] | `done` | — | document | Author PCR-007 in one pass under the rebuilt apparatus: one agent, the RUNNER's inputs, nothing else |
+| [[TASK-003]] | `done` | — | measurement | Content review before the reading: the four questions on the draft, at most one return to the author |
 
 ---
 

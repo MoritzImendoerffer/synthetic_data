@@ -21,3 +21,12 @@ closed until both are answered.
 
 So "the pdfs read fine" applies to A.pdf alone: A was read and nothing in it was quoted. B.pdf is
 unread at this point. The key stays closed.
+
+## Third message, verbatim, after reading B.pdf
+
+> A clearly wins
+
+Sentences quoted as machine prose: none from A (first message: "the pdfs read fine", read as A
+alone per the second message); none quoted from B. Preference: A, "clearly".
+
+The reading is complete. The key is opened next, below this line, and the counts come after.

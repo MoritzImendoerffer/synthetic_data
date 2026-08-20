@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **19 of 48 done** · 29 todo
+**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **20 of 48 done** · 28 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -55,7 +55,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-039]] | `todo` | the assistant | measurement | Rebuild-and-reground proof after batch B5 |
 | [[TASK-040]] | `todo` | the assistant | measurement | Write the batches' results page |
 | [[TASK-041]] | `todo` | the assistant | documentation | Move the findings into docs, update the roadmap, retire or reduce the proposal, and ship |
-| [[TASK-046]] | `todo` | the assistant | document | Re-author PCR-008 (attempt 3) in one pass under the amended guide, with one content-review cycle |
 | [[TASK-047]] | `todo` | the assistant | measurement | Blind reading: round-zero PCR-008 vs attempt 3 — HALT for the owner (D8) |
 | [[TASK-048]] | `todo` | the assistant | annex | Dispose of PCR-008 per the reading: promote attempt 3, or revert to round zero by name; re-ground either way |
 
@@ -82,6 +81,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-043]] | `done` | — | measurement | Blind reading: round-zero PCR-008 vs attempt 2 — HALT for the owner (D8) |
 | [[TASK-044]] | `done` | — | annex | Dispose of PCR-008 per the reading: promote attempt 2, or revert to round-zero by name; re-ground either way |
 | [[TASK-045]] | `done` | — | mechanism | Put the causal-clause rule into the author-facing guide |
+| [[TASK-046]] | `done` | — | document | Re-author PCR-008 (attempt 3) in one pass under the amended guide, with one content-review cycle |
 
 ---
 

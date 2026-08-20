@@ -35,225 +35,157 @@ jupyter: python3
 
 ```{python}
 #| tags: [setup]
-import sys, os
+import sys, os, re
 sys.path.insert(0, os.path.abspath("."))
 from _pcpkg import *  # noqa: F401,F403
 import doe_report as D
-import matplotlib.pyplot as plt
-import scipy.stats as sstat
-import itertools
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import scipy.stats as sstat
 
 DOC = "PCR-005"
 UO = "protein_a"
 UO_TITLE = "Protein A Chromatography (Step 5)"
 
-# --- doc-local derived scalars (pulled from the model; never typed) -----------------
-alpha = 0.05
-step_no = CFG.unit_op(UO).step
+# --- doc-local derived scalars (pulled from the model; nothing typed) ---------------
+# Study-design conventions, held here so the prose and the annex read one source.
+ALPHA = 0.05
+PI_PCT = 95
+
+RESP = D.responses(UO)
+HCP, YLD, LPA = RESP
+FACTORS = D.rsm_factors(UO)
+LET = D.factor_letters(UO)
+PARAM = {p.key: p for p in CFG.unit_op(UO).parameters}
+PNAME = {k: p.name for k, p in PARAM.items()}
+PUNIT = {k: p.unit for k, p in PARAM.items()}
+SP = {k: p.setpoint for k, p in PARAM.items()}
+NOR = {k: p.nor for k, p in PARAM.items()}
+PRG = {k: p.prange for k, p in PARAM.items()}
+STEP_NO = CFG.unit_op(UO).step
+
 n_scr = doe_runs(UO, "screening")
 n_rsm = doe_runs(UO, "rsm")
 cp_scr = doe_centre_points(UO, "screening")
 cp_rsm = doe_centre_points(UO, "rsm")
-FS = D.rsm_factors(UO)
-RESP = D.responses(UO)
-PNAME = {p.key: p.name for p in CFG.unit_op(UO).parameters}
-PUNIT = {p.key: p.unit for p in CFG.unit_op(UO).parameters}
-NOR = {f: CFG.unit_op(UO).param(f).nor for f in FS}
-PR = {f: CFG.unit_op(UO).param(f).prange for f in FS}
-SP = {f: CFG.unit_op(UO).param(f).setpoint for f in FS}
-
-scr_df = csv(f"doe_{UO}_screening.csv")
-rsm_df = csv(f"doe_{UO}_rsm.csv")
-pools = pd.concat([scr_df, rsm_df], ignore_index=True)
-n_pools = len(pools)
-n_fact_scr = int((scr_df.run_type == "factorial").sum())
-n_fact_rsm = int((rsm_df.run_type == "factorial").sum())
-n_axial_rsm = int((rsm_df.run_type == "axial").sum())
-n_params = len(CFG.unit_op(UO).parameters)
-n_multi = sum(1 for p in CFG.unit_op(UO).parameters if p.study == "multivariate")
+n_fact = n_scr - cp_scr
+n_axial = n_rsm - cp_rsm - n_fact
+n_params = len(PARAM)
+n_multi = sum(1 for p in PARAM.values() if p.study == "multivariate")
 n_uni = n_params - n_multi
-cls_counts = report_params(UO)["Class"].value_counts().to_dict()
-n_wccpp = cls_counts.get("WC-CPP", 0)
-n_kpp = cls_counts.get("KPP", 0)
-n_gpp = cls_counts.get("GPP", 0)
-n_cpp = cls_counts.get("CPP", 0)
 
-fits_scr = {r: D.fit(UO, "screening", r) for r in RESP}
-fits_rsm = {r: D.fit(UO, "rsm", r) for r in RESP}
-n_terms_scr = len(fits_scr[RESP[0]]["names"])
-n_terms_rsm = len(fits_rsm[RESP[0]]["names"])
-df_res_scr = int(fits_scr[RESP[0]]["model"].df_resid)
-df_res_rsm = int(fits_rsm[RESP[0]]["model"].df_resid)
+fit_scr = {r: D.fit(UO, "screening", r) for r in RESP}
+fit_rsm = {r: D.fit(UO, "rsm", r) for r in RESP}
+cen = D.center_cv_df(UO, "rsm").set_index("Response")
+cen_s = D.center_cv_df(UO, "screening").set_index("Response")
 
 
-def eff(resp, term):
+def cenv(resp, col="%CV", screening=False):
+    t = cen_s if screening else cen
+    return float(t.loc[D.RESP_LABEL[resp], col])
+
+
+def eff(resp, term, col="Effect"):
     d = D.screening_effects_df(UO, resp)
-    return float(d.loc[d["Term"] == term, "Effect"].iloc[0])
+    return float(d.loc[d["Term"] == term, col].iloc[0])
 
 
-def eff_p(resp, term):
-    d = D.screening_effects_df(UO, resp)
-    return float(d.loc[d["Term"] == term, "p-value"].iloc[0])
-
-
-def rcoef(resp, term):
+def coef(resp, term, col="Coef."):
     d = D.rsm_coeff_df(UO, resp)
-    return float(d.loc[d["Term"] == term, "Coef."].iloc[0])
+    return float(d.loc[d["Term"] == term, col].iloc[0])
 
 
-def rcoef_p(resp, term):
-    d = D.rsm_coeff_df(UO, resp)
-    return float(d.loc[d["Term"] == term, "p-value"].iloc[0])
+def pfmt(p):
+    return "< 0.001" if p < 0.001 else f"= {p:.3f}"
 
 
-def n_sig_scr(resp, a=alpha):
-    d = D.screening_effects_df(UO, resp)
-    return int((d["p-value"] < a).sum())
+def rng_str(t, fmt="{:.3g}", unit=""):
+    if t is None:
+        return "no acceptable range"
+    u = f" {unit}" if unit else ""
+    return f"{fmt.format(t[0])} to {fmt.format(t[1])}{u}"
 
 
-def n_sig_rsm(resp, a=alpha):
-    d = D.rsm_coeff_df(UO, resp)
-    return int((d[d["Term"] != "Intercept"]["p-value"] < a).sum())
+def nor_str(k, fmt="{:g}"):
+    return rng_str(NOR[k], fmt, PUNIT[k])
 
 
-def cvr(resp, kind="rsm"):
-    d = D.center_cv_df(UO, kind)
-    return float(d.loc[d["Response"] == D.RESP_LABEL[resp], "%CV"].iloc[0])
+def prg_str(k, fmt="{:g}"):
+    return rng_str(PRG[k], fmt, PUNIT[k])
 
 
-def pred(resp, **nat):
-    base = dict(SP)
-    base.update(nat)
-    return float(D.predict(UO, resp, natural=base)[0])
+# Acceptance criteria: the step's own in-process limit for pool host cell protein,
+# the drug-substance criterion for leached Protein A.
+ipc_lo, ipc_hi, ipc_type = D.ipc_limit(UO, HCP)
+ipc_margin = float(CFG.ipc_limits["steps"][UO][HCP]["from_ds_backcalc"]["margin"])
+_cqa = csv("cqa_register.csv").set_index("key")
+ds_hcp_hi = float(_cqa.loc["hcp", "acc_high"])
+lpa_hi = float(D.acceptance_for(UO, LPA)[1])
+_ps = csv("process_summary.csv").set_index("step")
+down_hcp_fold = float(_ps[_ps.index > STEP_NO]["hcp_clearance_fold"].dropna().prod())
+
+pred_c = {r: float(D.predict(UO, r, coded={f: 0.0 for f in FACTORS})[0]) for r in RESP}
+hcp_headroom = ipc_hi / pred_c[HCP]
+
+DS = D.design_space_grid(UO)
+
+# Behaviour of the limiting response over the normal operating range box (mean model).
+_grid = np.meshgrid(*[np.linspace(NOR[f][0], NOR[f][1], 11) for f in FACTORS], indexing="ij")
+_nor_nat = {f: _grid[i].ravel() for i, f in enumerate(FACTORS)}
+nor_hcp = D.predict(UO, HCP, natural=_nor_nat)
+nor_ok = float((nor_hcp <= ipc_hi).mean())
+nor_hcp_max = float(nor_hcp.max())
+nor_hcp_min = float(nor_hcp.min())
+nor_yld_min = float(D.predict(UO, YLD, natural=_nor_nat).min())
+nor_yld_max = float(D.predict(UO, YLD, natural=_nor_nat).max())
+nor_lpa_max = float(D.predict(UO, LPA, natural=_nor_nat).max())
 
 
-def corner(resp, box, worst="max"):
-    rows = list(itertools.product(*[box[f] for f in FS]))
-    vals = [float(D.predict(UO, resp, natural=dict(zip(FS, r)))[0]) for r in rows]
-    i = int(np.argmax(vals)) if worst == "max" else int(np.argmin(vals))
-    return dict(zip(FS, rows[i])), vals[i]
+def max_load_at_ph(ph, n=801):
+    xs = np.linspace(PRG["load"][0], PRG["load"][1], n)
+    y = D.predict(UO, HCP, natural={"load": xs,
+                                    "elution_ph": np.full(n, float(ph)),
+                                    "flow": np.full(n, SP["flow"]),
+                                    "end_collect": np.full(n, SP["end_collect"])})
+    ok = xs[y <= ipc_hi]
+    return float(ok.max()) if ok.size else float("nan")
 
 
-PAR = D.par_table(UO)
+PAR_SP = {(r, f): D.par_at_design_centre(UO, r, f)["par_nat"]
+          for r in RESP if D.effective_acceptance(UO, r) for f in FACTORS}
+PAR_NOR = {(r, f): D.par_nor_propagated(UO, r, f)["par_nat"]
+           for r in RESP if D.effective_acceptance(UO, r) for f in FACTORS}
+
+# Commercial-scale capability.
+_cap = csv("capability.csv").set_index("key")
 
 
-def par_cell(resp, factor, col):
-    m = (PAR["CQA"] == D.RESP_LABEL[resp]) & (PAR["Parameter"] == PNAME[factor])
-    return str(PAR.loc[m, col].iloc[0])
+def cpk(k):
+    return float(_cap.loc[k, "Cpk"])
 
 
-# acceptance criteria
-hcp_ipc = D.ipc_limit(UO, "pool_hcp_ng_mg")[1]
-hcp_margin = CFG.ipc_limits["steps"][UO]["pool_hcp_ng_mg"]["from_ds_backcalc"]["margin"]
-hcp_ceiling = hcp_ipc * hcp_margin
-hcp_ds_lim = D.acceptance_for(UO, "pool_hcp_ng_mg")[1]
-lpa_lim = D.acceptance_for(UO, "leached_protein_a_ppm")[1]
-hcp_basis = D.acceptance_basis(UO, "pool_hcp_ng_mg")
-lpa_basis = D.acceptance_basis(UO, "leached_protein_a_ppm")
-
-# the assayed pools, read without a model
-lpa_max = float(pools["leached_protein_a_ppm"].max())
-lpa_min = float(pools["leached_protein_a_ppm"].min())
-lpa_mean = float(pools["leached_protein_a_ppm"].mean())
-lpa_sd = float(pools["leached_protein_a_ppm"].std(ddof=1))
-lpa_head = lpa_lim - lpa_max
-lpa_over = int((pools["leached_protein_a_ppm"] > lpa_lim).sum())
-hcp_pool_max = float(pools["pool_hcp_ng_mg"].max())
-hcp_pool_min = float(pools["pool_hcp_ng_mg"].min())
-n_pool_over = int((pools["pool_hcp_ng_mg"] > hcp_ipc).sum())
-n_pool_over_lowph = int((pools.loc[pools["pool_hcp_ng_mg"] > hcp_ipc, "elution_ph"]
-                         == PR["elution_ph"][0]).sum())
-yld_min = float(pools["step_yield"].min())
-yld_max = float(pools["step_yield"].max())
-
-# the nominal train
-ps = csv("process_summary.csv").set_index("step")
-hcp_nom = float(ps.loc[step_no, "pool_hcp_ng_mg"])
-lpa_nom = float(ps.loc[step_no, "leached_protein_a_ppm"])
-cex_fold = float(ps.loc[7, "hcp_clearance_fold"])
-aex_fold = float(ps.loc[8, "hcp_clearance_fold"])
-down_fold = cex_fold * aex_fold
-dna_lrv = float(CFG.unit_op(UO).model["dna_lrv"])
-
-# predictions from the fitted response-surface models
-hcp_sp = pred("pool_hcp_ng_mg")
-lpa_sp = pred("leached_protein_a_ppm")
-yld_sp = pred("step_yield")
-hcp_sp_ratio = hcp_ipc / hcp_sp
-nor_corner, hcp_nor_worst = corner("pool_hcp_ng_mg", NOR)
-par_corner, hcp_par_worst = corner("pool_hcp_ng_mg", PR)
-lpa_nor_corner, lpa_nor_worst = corner("leached_protein_a_ppm", NOR)
-yld_corner, yld_worst = corner("step_yield", PR, worst="min")
-hcp_nor_worst_ds = hcp_nor_worst / down_fold
-hcp_sp_ds = hcp_sp / down_fold
-def corner_txt(c):
-    parts = []
-    for f in FS:
-        nm = PNAME[f]
-        nm = nm[0].lower() + nm[1:]
-        parts.append(f"{nm} {c[f]:g}" if PUNIT[f].lower() == "ph"
-                     else f"{nm} {c[f]:g} {PUNIT[f]}")
-    return ", ".join(parts[:-1]) + " and " + parts[-1]
+def cap_mean(k):
+    return float(_cap.loc[k, "mean"])
 
 
-nor_corner_txt = corner_txt(nor_corner)
-par_corner_txt = corner_txt(par_corner)
-yld_corner_txt = corner_txt(yld_corner)
+# Classification outcome for this step.
+_rp = report_params(UO)
+cls_n = _rp["Class"].value_counts().to_dict()
 
-# coverage of the normal operating range and of the characterized region
-_g = np.meshgrid(*[np.linspace(NOR[f][0], NOR[f][1], 11) for f in FS], indexing="ij")
-_natgrid = {f: x.ravel() for f, x in zip(FS, _g)}
-nor_ok = float((D.predict(UO, "pool_hcp_ng_mg", natural=_natgrid) <= hcp_ipc).mean())
-nor_lpa_max = float(D.predict(UO, "leached_protein_a_ppm", natural=_natgrid).max())
-dsg = D.design_space_grid(UO)
-ds_frac = dsg["fraction"]
-ds_binding = D.RESP_LABEL[dsg["binding"]]
-ds_n = dsg["n_points"]
-ds_rej_lpa = dsg["per_response"]["leached_protein_a_ppm"]
-
-# the elution pH that the top of the load NOR requires
-_ph = np.linspace(PR["elution_ph"][0], PR["elution_ph"][1], 701)
-_yy = D.predict(UO, "pool_hcp_ng_mg", natural={
-    "load": np.full(_ph.size, NOR["load"][1]), "elution_ph": _ph,
-    "flow": np.full(_ph.size, SP["flow"]), "end_collect": np.full(_ph.size, SP["end_collect"])})
-ph_at_load_hi = float(_ph[_yy <= hcp_ipc].min())
-
-# the deviation run, placed in the characterization range
-dev_ph_coded = float(D.to_coded(UO, "elution_ph", dev_005_01_ph_measured))
-range_ratio_min = min((PR[f][1] - PR[f][0]) / (NOR[f][1] - NOR[f][0]) for f in FS)
-d_vs_b_hcp = abs(rcoef("pool_hcp_ng_mg", "B") / rcoef("pool_hcp_ng_mg", "D"))
-
-# commercial-scale capability
-cap_keys = ["hcp", "residual_dna", "leached_protein_a"]
-_c = cap[cap.key.isin(cap_keys)].set_index("key")
-cpk_hcp = float(_c.loc["hcp", "Cpk"])
-cpk_dna = float(_c.loc["residual_dna", "Cpk"])
-cpk_lpa = float(_c.loc["leached_protein_a", "Cpk"])
-hcp_ds_mean = float(_c.loc["hcp", "mean"])
-hcp_ds_sd = float(_c.loc["hcp", "sd"])
-hcp_ds_max = float(_c.loc["hcp", "max"])
-lpa_ds_mean = float(_c.loc["leached_protein_a", "mean"])
-lpa_ds_ratio = float(_c.loc["leached_protein_a", "acc_high"]) / lpa_ds_mean
-cpk_tight = float(_c["Cpk"].min())
-cpk_tight_name = str(_c.loc[_c["Cpk"].idxmin(), "cqa"])
-n_mc = V["n_monte_carlo"]
-scale_l = V["commercial_scale_l"]
-
-# analytical methods
-methods = csv("dev_methods.csv").set_index("id")
-amv_ids = [a for a, _ in PROTEIN_A_AMV_REFS]
-methods_df = csv("dev_methods.csv")
-methods_df = methods_df[methods_df["id"].isin(amv_ids)].rename(columns={
-    "id": "Method", "name": "Analytical procedure", "precision_pct": "Precision (%RSD)",
-    "loq": "LoQ", "loq_unit": "LoQ unit", "accuracy_pct": "Accuracy (%)",
-    "variance_fraction": "Assay share of variance"})
-lpa_prec = float(methods.loc["AMV-3016", "precision_pct"])
-lpa_varfrac = float(methods.loc["AMV-3016", "variance_fraction"])
-lpa_loq = float(methods.loc["AMV-3016", "loq"])
-hcp_prec = float(methods.loc["AMV-3012", "precision_pct"])
-hcp_varfrac = float(methods.loc["AMV-3012", "variance_fraction"])
+# Deviation DEV-005-01: the run the off-target buffer lot was used on, and the
+# impact of the released pH value on the response that lot's run reported.
+_lot = csv("dev_lots.csv").set_index("id").loc["LOT-BUF-5290"]
+dev_run = int(re.search(r"\d+", str(_lot["used_in"])).group())
+_dr = csv(f"doe_{UO}_rsm.csv").set_index("run").loc[dev_run]
+dev_set = {f: float(_dr[f]) for f in FACTORS}
+dev_obs_hcp = float(_dr[HCP])
+dev_pred_nom = float(D.predict(UO, HCP, natural=dev_set)[0])
+dev_pred_off = float(D.predict(UO, HCP, natural={**dev_set,
+                                                 "elution_ph": dev_005_01_ph_measured})[0])
+dev_coded_ph = float(D.to_coded(UO, "elution_ph", dev_005_01_ph_measured))
+dev_resid = dev_obs_hcp - dev_pred_nom
+dev_ph_gap = SP["elution_ph"] - dev_005_01_ph_measured
 ```
 
 ```{python}
@@ -277,984 +209,1307 @@ print(SYN_BANNER)
 
 ## Abbreviations {.unnumbered}
 
-AMV, analytical method validation; ANOVA, analysis of variance; BLA, Biologics License
-Application; CCD, central composite design; Cpk, one-sided process capability index; CQA,
-critical quality attribute; CV, column volume; DoE, design of experiments; DS, drug
-substance; ELISA, enzyme-linked immunosorbent assay; GPP, general process parameter; HCP,
-host cell protein; ICH, International Council for Harmonisation; KPP, key process
-parameter; LoQ, limit of quantitation; MSAT, Manufacturing Science and Technology; NOR,
-normal operating range; PAR, proven acceptable range; ppm, parts per million; qPCR,
-quantitative polymerase chain reaction; RSD, relative standard deviation; RSM, response
-surface methodology; SD, standard deviation; SDM, scale-down model; SEC-HPLC, size
-exclusion high performance liquid chromatography; SOP, standard operating procedure;
-WC-CPP, well-controlled critical process parameter.
+AEX, anion exchange chromatography; AMV, analytical method validation; BLA, Biologics
+License Application; CCD, central composite design; CEX, cation exchange chromatography;
+Cpk, one-sided process capability index; CQA, critical quality attribute; CV, column volume;
+DNA, deoxyribonucleic acid; DoE, design of experiments; ELISA, enzyme-linked immunosorbent
+assay; Fc, fragment crystallizable region of the antibody; GPP, general process parameter;
+HCP, host cell protein; ICH, International Council for Harmonisation; IgG1, an immunoglobulin G
+subclass; KPP, key process parameter; MSAT, Manufacturing Science and Technology; NOR,
+normal operating range; PAR, proven acceptable range; PRESS, predicted residual error sum of
+squares; qPCR, quantitative polymerase chain reaction; RMSE, root mean square error; RSM,
+response surface methodology; SEC-HPLC, size exclusion high performance liquid
+chromatography; SOP, standard operating procedure; WC-CPP, well-controlled critical process
+parameter.
 
 {{< pagebreak >}}
 
+<!-- ========================= BODY START (author here) ========================= -->
+
 # Executive summary {.unnumbered}
 
-Protein A chromatography is the capture step of the A-Mab drug substance process and the
-first chromatographic operation in the purification train. The step binds A-Mab from the
-clarified harvest on an immobilized Protein A resin, removes host cell protein (HCP) and DNA in the flow-through and the wash, and elutes the antibody at low pH into the low-pH viral
-inactivation step. Characterization was executed under the paired plan PCP-005 on a
-scale-down model qualified against manufacturing-scale performance (SOP-1001). The work was executed to the lifecycle approach to process validation [@fda2011], to the enhanced development approach of ICH Q8, Q9 and Q11 [@ichq8; @ichq9; @ichq11] and to the risk basis recorded in RA-001. Commercial manufacture of the drug substance runs at
-`{python} f"{scale_l:,}"` L [@amab2009].
+Protein A affinity chromatography is the capture step of the A-Mab drug substance process.
+This report presents the characterization study executed on the qualified scale-down model
+under the plan PCP-005, in support of transfer of the process to commercial manufacture at a
+production bioreactor scale of `{python} f"{V['commercial_scale_l']:,}"` L. The scope of the
+study was set by the risk assessment RA-001. `{python} n_params` process parameters were
+characterized. `{python} n_multi` were studied in a multivariate design and `{python} n_uni`
+were assessed one at a time.
 
-In total `{python} n_params` process parameters were assessed at this step. Of these,
-`{python} n_multi` were studied in a two-level factorial screening design of `{python} n_scr` runs and
-then in a face-centred central composite design of `{python} n_rsm` runs, while the
-remaining `{python} n_uni` (operating temperature and bed height) were assessed one
-parameter at a time. On the evidence set out in §9, `{python} n_wccpp` parameters were
-classified as well-controlled critical process parameters, `{python} n_kpp` as key process
-parameters and `{python} n_gpp` as general process parameters. No parameter at this step
-was classified as a critical process parameter.
+The screening design was a two-level full factorial in `{python} len(D.screening_factors(UO))`
+parameters with `{python} cp_scr` centre points, `{python} n_scr` runs in all. The
+response-surface design was a face-centred central composite in the same parameters,
+`{python} n_rsm` runs. Three responses were measured on every eluate pool, pool host cell
+protein, step yield and leached Protein A.
 
-The step sets one critical quality attribute, leached Protein A, and is the principal
-clearance step for host cell protein and residual DNA (§2.2). Pool host cell protein is
-the response that bounds the operating region. Because the response-surface model for that
-response is adequate and predictive (R² = `{python} f"{fits_rsm['pool_hcp_ng_mg']['R2']:.3f}"`,
-adjusted R² = `{python} f"{fits_rsm['pool_hcp_ng_mg']['adjR2']:.3f}"`, predicted R² =
-`{python} f"{fits_rsm['pool_hcp_ng_mg']['predR2']:.3f}"`), the design space in §6 is
-derived from it. Over the characterized region, the model places `{python} pct(1 - ds_frac)` of the evaluated settings above the in-process limit of `{python} f"{hcp_ipc:,.0f}"` ng/mg. The same limit was exceeded by `{python} n_pool_over` of the `{python} n_pools` pools assayed across the two designs, every one of them at the low edge of the elution pH range. The settings that produced those pools mark an edge of failure for the step.
+Pool host cell protein rises as protein load approaches the dynamic binding capacity of
+the resin and host cell protein that the wash would otherwise remove is left on the bed. It falls
+as elution buffer pH rises, because less of the host cell protein held weakly on the resin and
+on the antibody is released with the product. The interaction between the two is significant
+(p `{python} pfmt(D.rsm_coeff_df(UO, HCP).set_index('Term').loc['AB', 'p-value'])`). The
+response-surface model for pool host cell protein has an R² of
+`{python} f"{fit_rsm[HCP]['R2']:.3f}"` and shows no significant lack of fit. Extending the end
+of pool collection recovers antibody from the tail of the elution peak and raises step yield,
+and a higher protein load or a faster load flow rate lowers it through earlier breakthrough.
+No parameter showed a significant effect on leached Protein A across the ranges studied.
 
-The normal operating range is not wholly inside the acceptable region. That range includes a corner at `{python} nor_corner_txt`, where the model predicts `{python} f"{hcp_nor_worst:,.0f}"` ng/mg against a limit of `{python} f"{hcp_ipc:,.0f}"` ng/mg. However, the in-process limit itself carries an
-assurance factor of `{python} f"{hcp_margin:g}"` below the pool concentration above which
-the downstream train can no longer bring a batch to specification. Even at that corner the drug substance would carry `{python} f"{hcp_nor_worst_ds:.0f}"` ng/mg against a
-specification of `{python} f"{hcp_ds_lim:.0f}"` ng/mg. The operating region is therefore
-stated in §6 as a joint constraint on protein load and elution buffer pH.
+The design space is the part of the characterized region in which pool host cell protein
+stays at or below the step's in-process limit of `{python} f"{ipc_hi:,.0f}"` ng/mg and
+leached Protein A stays at or below `{python} f"{lpa_hi:g}"` ppm. On an evenly spaced grid
+across the four characterized ranges, `{python} pct(DS['fraction'])` of the region meets both
+criteria, and every rejected point is rejected by pool host cell protein. The excluded part is
+the corner at high protein load and low elution pH. The same corner is the only part of the normal
+operating ranges that breaches the limit, and at the low edge of the elution pH range the
+mean model reaches the limit at a load of
+`{python} f"{max_load_at_ph(NOR['elution_ph'][0]):.1f}"` g/L resin, below the upper edge of
+the load range of `{python} f"{NOR['load'][1]:g}"` g/L resin. Protein load and elution buffer
+pH are therefore taken forward as a jointly controlled pair (§6).
 
-Leached Protein A produced no model of predictive value. Neither the screening fit nor the response-surface model reaches significance (p = `{python} f"{fits_scr['leached_protein_a_ppm']['p']:.2f}"` and p = `{python} f"{fits_rsm['leached_protein_a_ppm']['p']:.2f}"`), with a negative predicted coefficient of determination in both cases. For this reason the
-claim for this attribute is made from the assayed pools without a model. All `{python} n_pools` pools met the acceptance criterion of `{python} f"{lpa_lim:.0f}"` ppm, and the highest of them reached `{python} f"{lpa_max:.2f}"` ppm.
-
-Commercial-scale capability was estimated by Monte-Carlo simulation of
-`{python} f"{n_mc:,}"` batches operated within the normal operating range, and all three attributes this step governs meet the drug-substance criteria (§8). The tightest of the three attributes is `{python} cpk_tight_name`, at Cpk `{python} f"{cpk_tight:.1f}"` against a limit of `{python} f"{hcp_ds_lim:.0f}"` ng/mg, with a simulated mean of
-`{python} f"{hcp_ds_mean:.1f}"` ng/mg. Two deviations were recorded during execution and
-are reported in §13. Both were investigated, dispositioned as retained and assessed as
-having no effect on the fitted models, on the operating region or on the classifications.
-
-The step therefore delivers a bounded operating region for the two parameters that govern
-pool host cell protein, a leached Protein A level inside the criterion at every setting studied and the capture-stage share of host cell protein and DNA clearance. Protein A
-chromatography does not by itself bring host cell protein to the drug-substance
-specification. The remaining clearance is delivered by cation exchange (PCR-007) and anion exchange (PCR-008), while no viral clearance is claimed for this step. These results are rolled up into the master report PCMR-001.
+Protein load and elution buffer pH were classified as well-controlled critical process
+parameters. Load flow rate and end of pool collect were classified as key process parameters,
+and operating temperature and bed height as general process parameters. At commercial scale
+the drug substance meets its criteria for the impurity attribute this step introduces and the
+two it removes,
+and the tightest of the three capabilities is host cell protein at a Cpk of
+`{python} f"{cpk('hcp'):.2f}"`. Two deviations were recorded during execution and both were
+retained after investigation (§13). This report rolls up into the master report PCMR-001.
 
 # Introduction
 
 ## Product and unit operation
 
-A-Mab is a humanized IgG1 monoclonal antibody that is manufactured by fed-batch mammalian cell culture and purified on an established platform train [@amab2009]. The train runs Protein
-A capture, low-pH viral inactivation, cation exchange, anion exchange, small-virus
-retentive filtration and ultrafiltration with diafiltration. Protein A chromatography is
-Step `{python} step_no` of that train and the first purification step after harvest and
-clarification (PCR-004).
+A-Mab is a humanized IgG1 monoclonal antibody produced in fed-batch mammalian cell culture
+and purified by the Novacyte Biologics platform process [@amab2009]. Its principal mechanism
+of action is antibody-dependent cellular cytotoxicity, so the glycan attributes formed in the
+production bioreactor are linked to efficacy and are characterized in PCR-003. The
+purification train is Protein A capture, low-pH viral inactivation, cation exchange, anion
+exchange, small-virus retentive filtration, and ultrafiltration with diafiltration. Protein A
+chromatography is Step `{python} STEP_NO` of the drug substance process and the first
+chromatographic operation in it.
 
-The step is operated in bind and elute mode on an immobilized Protein A affinity resin.
-Clarified harvest is loaded at `{python} f"{SP['load']:g}"` g/L resin onto a bed of
-`{python} f"{CFG.unit_op(UO).param('bed_height').setpoint:g}"` cm at a linear velocity of `{python} f"{SP['flow']:g}"` cm/hr. The antibody binds through the Fc region while
-host cell protein, DNA and media components pass into the flow-through and are further
-reduced by the post-load wash. Bound antibody is released by a low-pH elution buffer at pH
-`{python} f"{SP['elution_ph']:g}"`, with the eluate collected to
-`{python} f"{SP['end_collect']:g}"` column volumes on the descending edge of the peak.
-Because the low-pH eluate is also the feed to the viral inactivation step, the elution
-condition serves two purposes at once.
+The step is operated in bind and elute mode on an immobilized staphylococcal Protein A resin.
+The ligand binds the Fc region of the antibody at neutral pH through hydrophobic and hydrogen
+bonding contacts at the interface between the second and third constant domains of the heavy
+chain. Host cell protein, DNA and most other components of the clarified harvest pass into
+the flow-through or are removed in the wash. Lowering the pH protonates histidine residues at
+the interface between the Fc region and the ligand, weakens the interaction and releases the
+antibody into a small volume of low-pH eluate. The step therefore concentrates the product,
+removes the bulk of the process impurities, and introduces one impurity of its own, the
+ligand that leaches from the resin.
 
-Three impurity attributes are governed here. Leached Protein A is formed at this step and
-at no other, since it is the affinity ligand released from the resin under the elution
-condition. Host cell protein and residual DNA are formed in the production bioreactor
-(PCR-003) and are cleared here for the first time. Product quality attributes formed
-upstream, such as the glycan and charge variants, pass through the step unaltered, because
-affinity capture does not discriminate between them [@amab2009].
+Ligand that leaves the resin elutes with the antibody, so the step introduces one critical
+quality attribute of its own, leached Protein A. Host cell protein and DNA are not bound
+by the ligand and leave in the flow-through and the wash, apart from the small fraction
+held weakly on the resin or carried through with the antibody. The burden that enters with
+the clarified harvest is therefore largely removed at this step. The eluate is the feed to the
+low-pH viral inactivation step, which is characterized in PCR-006. No viral clearance claim
+is made for Protein A chromatography in this package. The cumulative viral clearance claim
+rests on the low-pH hold, on anion exchange and on small-virus retentive filtration, and it
+is consolidated in PCMR-001.
 
-## Objectives
-
-This report records the executed characterization of Step `{python} step_no` and has five
-objectives:
-
-(i) quantify the relationship between each studied parameter and the responses that
-matter at this step, namely pool host cell protein, step yield and leached Protein A;
-
-(ii) define the multivariate operating region over which the governed attributes remain
-within their criteria;
-
-(iii) establish proven acceptable ranges for each parameter against each governed
-attribute;
-
-(iv) classify every parameter of the step against the decision logic in SOP-4001; and
-
-(v) justify the Stage 2 ranges and the contribution this step makes to the control
-strategy.
-
-## Related documents
-
-The documents that scope, plan and consolidate this study are listed in @tbl-related.
-The study scope was set by RA-001 through risk ranking, PCP-005 is the approved protocol this report executes and PCMR-001 consolidates the results of all eight per-step reports.
+The commercial drug substance facility is Novacyte Biologics, Grafton, WI. The
+characterization studies reported here were executed at Novacyte Biologics, Cambridge, MA, on
+the scale-down model described in §3.1. The related documents of the package are listed in
+@tbl-related.
 
 ```{python}
 #| output: asis
 print(related_docs_md(DOC))
-print("\n: Documents related to this report. {#tbl-related}\n")
+print()
+print(": Related documents. {#tbl-related}")
 ```
+
+## Objectives
+
+The study had five objectives.
+
+1. To quantify the relationship between each characterized process parameter and the
+quality and performance attributes of the eluate pool.
+2. To define the operating region over which those attributes meet the criteria that apply to
+   them.
+3. To establish a proven acceptable range for each parameter and to place the normal
+   operating range inside it.
+4. To classify each parameter under SOP-4001 from the demonstrated effects and the control
+   capability of the commercial equipment.
+5. To justify the ranges taken forward to Stage 2 and the contribution this step makes to the
+   control strategy.
 
 ## Regulatory and scientific basis
 
-The study is a Stage 1 process design activity in the sense of the lifecycle guidance
-[@fda2011]. The record of that study is the evidence that the commercial ranges proposed for this step rest on data and on prior knowledge instead of on the transfer of a set-point alone.
-The design space concept used in §6 is supplied by ICH Q8, the risk methodology carried forward from RA-001 by ICH Q9 and the framing of the control strategy in §10 by ICH Q11 [@ichq8; @ichq9; @ichq11].
+The study is a Stage 1 process design activity in the lifecycle approach to process
+validation [@fda2011]. It follows the enhanced development approach of ICH Q8, in which a
+design space is established from the demonstrated relationships between parameters and
+quality attributes, and movement within that space is not a change [@ichq8]. Criticality is
+treated as a continuum and not as a binary classification, following ICH Q9 and the A-Mab
+case study, and the attributes at high and very high criticality are called critical
+[@ichq9; @amab2009]. The link from process understanding to the control strategy follows ICH
+Q11 [@ichq11].
 
-Criticality is treated as a continuum in this package. Attributes are assigned a level of
-very low, low, moderate, high or very high, of which the levels high and very high are
-called critical [@amab2009]. Parameter classes follow the same logic: a well-controlled critical process parameter is one whose variability affects a critical quality attribute
-but which carries a low risk of leaving the design space, whereas a critical process
-parameter carries a high risk of leaving it. Since that distinction rests on control
-capability and on the size of the region as well as on the size of the effect, it is
-applied at the end of this report (§9) and not at the start.
+ICH Q5A governs the viral safety evaluation of the process [@ichq5a]. No viral clearance is
+claimed for this step. That framework is therefore not applied in this report. The controlled documents
+that govern execution and analysis are listed in @tbl-sop.
 
-No viral clearance claim is made for the Protein A step. The modular clearance claim for
-A-Mab rests on low-pH viral inactivation, anion exchange and small-virus retentive filtration, all consolidated in PCMR-001 under ICH Q5A(R2) [@ichq5a].
+```{python}
+#| output: asis
+print(sop_table(sops=PROTEIN_A_SOP_REFS, amvs=PROTEIN_A_AMV_REFS))
+print()
+print(": Controlled documents and validated methods for the capture step. {#tbl-sop}")
+```
 
 # Prior knowledge and quality risk basis
 
 ## Platform and prior-product knowledge
 
-The Protein A capture step is a platform operation at Novacyte Biologics with an extensive
-performance history. It has been used to manufacture three earlier humanized IgG1 products
-(X-Mab, Y-Mab and Z-Mab) and to supply the A-Mab clinical programme. Across that experience the step has recovered antibody consistently and has reduced host cell protein
-and DNA by a large factor at every scale operated. This body of experience reduced the
-amount of development work the present study had to do. Characterization at this step
-confirms and bounds behaviour that is already understood rather than discovering it, which is the same argument the case study makes for its own downstream platform [@amab2009]. The transfer of that credit is justified by mechanism rather than by similarity alone, because the resin chemistry, the bed geometry and the buffer system used for A-Mab are the platform ones, with the antibody itself the only material difference between A-Mab and the earlier products at this step.
+The Novacyte downstream platform has produced three prior humanized IgG1 antibodies, X-Mab,
+Y-Mab and Z-Mab, and the Protein A capture step has been operated at commercial scale for all
+three. The resin, the buffer system and the operating principle are unchanged for A-Mab. The
+platform history therefore establishes the mechanism of the step and the approximate size of
+the parameter effects, and the purpose of this study is to bound them for A-Mab rather than
+to discover them. Some acceptance limits used in this package come from X-Mab clinical
+experience, and they are recorded in the drug substance quality attribute register rather
+than in this report.
 
-The mechanistic expectations the study set out to test were also supplied by prior knowledge.
-Elution buffer pH was expected to be the dominant parameter for pool host cell protein,
-because the pH of the elution buffer determines which of the impurities bound to the resin
-and to the product desorb together with the antibody. Protein load was expected to act in
-the opposite direction: as the load approaches the dynamic binding capacity of the resin,
-the mass-transfer zone extends further down the bed and a greater share of the loaded
-impurity burden is carried into the eluate. The two parameters were expected to interact,
-since the impurity recruited by a heavy load and the impurity recruited by an aggressive
-elution are partly the same material.
+Platform knowledge was not treated as transferable in one respect. An alternate Protein A
+resin was assessed under RA-004, which concluded that independent characterization would be
+required for it and that bridging from platform data would not be accepted. This study
+covers the platform resin only, and its conclusions do not extend to the alternate resin.
 
-Step yield was expected to be governed by the end of pool collect, which sets how far down
-the descending edge of the elution peak the pool is taken. Load flow rate acts on yield
-through residence time in the bed, since a high linear velocity shortens contact and
-increases breakthrough during the load phase, and that effect was expected to be strongest when the bed is already heavily loaded.
+Protein load is the mass of antibody applied per volume of resin. As it approaches the dynamic
+binding capacity of the resin, the mass transfer zone reaches the column outlet, antibody
+breaks through into the flow-through, and host cell protein that the wash would otherwise
+displace is left on the bed. A lower elution pH disrupts the contacts between the Fc region
+and the ligand more completely, so the antibody desorbs sooner and in a sharper peak and
+carries with it more of the host cell protein held weakly on the resin and on the antibody
+itself. Load and elution pH act on the same population of weakly held host cell protein, load
+by leaving more of it on the bed and pH by releasing more of what is there, so an interaction
+between them was expected before the study was run. A faster load shortens the residence time
+and lets antibody pass down the bed before it reaches a free ligand, which broadens the mass
+transfer zone and costs yield through earlier breakthrough. A later end of pool collection
+recovers antibody from the tail of the elution peak and dilutes the pool.
 
-Leaching of the affinity ligand was expected to be a property of the resin and of the
-elution condition, and to be small enough over the proposed ranges to be hard to resolve.
-Leached Protein A is assigned by the platform to the resin life-cycle programme (SOP-2008) as much as to the operating parameters, because ligand release accumulates with cycle number and sanitization history. The analysis reported in §5.3 was framed by that expectation.
+Leached Protein A was expected to be flat across the operating ranges. Ligand leaves the
+resin by hydrolysis of the immobilization chemistry and by proteolysis of exposed ligand, and
+the leached fragments elute with the antibody because they still bind the Fc region. The
+amount depends on the coupling chemistry of the resin, on the cumulative cycle number and on
+the sanitization history, and all three are properties of the resin over its life rather than
+of a single run.
 
 ## Quality attributes in scope
 
-One critical quality attribute is set by this step: leached Protein A, a process impurity of low to moderate criticality. The acceptance criterion for that attribute is given in @tbl-cqa-set with the Tool #1 score, which is the product of impact and uncertainty in the criticality assessment [@amab2009].
-
-```{python}
-#| output: asis
-show(cqas_for(UO))
-print("\n: The critical quality attribute set by Step 5. {#tbl-cqa-set}\n")
-```
-
-Two further attributes are governed at this step without being formed here, with all three listed together in @tbl-cqa-gov in the order they are discussed below.
+This step introduces one process impurity attribute of the drug substance and removes two
+others. All three are listed with their criticality in @tbl-cqa. Leached Protein A is introduced by this step and
+is not present before it. Host cell protein and DNA enter with the clarified harvest and are
+removed here, and both are removed further by cation exchange (PCR-007) and anion exchange
+(PCR-008).
 
 ```{python}
 #| output: asis
 show(cqas_by_keys(["leached_protein_a", "hcp", "residual_dna"]))
-print("\n: Quality attributes governed at Step 5, with acceptance criteria and "
-      "criticality. {#tbl-cqa-gov}\n")
+print()
+print(": Quality attributes introduced or removed at the capture step, with the drug"
+      " substance acceptance criteria and the criticality assigned in RA-001. {#tbl-cqa}")
 ```
 
-Host cell protein is the most consequential of the three, at moderate to high criticality,
-because it is the impurity present in the largest amount in the clarified harvest and
-because it carries the highest Tool #1 score in @tbl-cqa-gov. The second of the three,
-leached Protein A, is of low to moderate criticality and is the one attribute this step
-adds instead of removing. The third, residual DNA, is of very low criticality and is cleared by a wide margin over the train as a whole.
+The Tool #1 score in @tbl-cqa is the product of impact and uncertainty from the criticality
+assessment of the A-Mab case study, and the criticality level is the continuum position
+derived from it [@amab2009]. Host cell protein carries the highest score of the three and is
+moderate to high in criticality, because residual host cell protein is immunogenic and its
+level in the drug substance depends on the performance of three chromatographic steps in
+series. Leached Protein A is low to moderate, because the ligand is cleared efficiently
+downstream and the observed levels in the drug substance are far below the criterion. Residual
+DNA is very low in criticality, because the polyanionic molecule does not bind the ligand and
+is removed in the flow-through and the wash.
 
-The acceptance criteria in @tbl-cqa-gov apply to the drug substance and not to the Protein
-A pool. An intermediate has to be judged against a criterion that applies to an intermediate. For this reason the two criteria this report uses are defined in §7. In outline, pool host cell protein is judged against an in-process limit carried back from the drug-substance criterion through the clearance the polishing steps deliver. Leached Protein A keeps the drug-substance criterion itself, which is the conservative choice at a capture step.
+Two of these attributes were measured as responses in the designed experiments, pool host
+cell protein and leached Protein A. DNA in the pool was not a designed response. Residual DNA
+is measured by qPCR under AMV-3014 as part of the pool testing, and no log reduction is
+claimed for this step in this report. The drug substance capability for residual DNA is given
+in §8.
 
 ## Risk-based prioritization and parameter selection
 
-Every Protein A process parameter was assessed in RA-001 by risk ranking and filtering, each of them scored on potential impact to quality attributes and on potential interaction with other parameters [@amab2009]. Parameters were placed into three groups by that assessment: those
-warranting multivariate evaluation, those whose ranges could be supported by a univariate study and those needing no new study because platform ranges already cover them. That grouping is the scope this report executes. For each of the six parameters the outcome is recorded in @tbl-params.
+RA-001 ranked the process parameters of the capture step by their potential impact on the
+quality attributes in @tbl-cqa and by their potential to interact with other parameters, and
+it filtered them into three groups. Parameters with a high combined rank were taken into the
+multivariate designs. Parameters with a moderate rank, whose ranges could be supported one at
+a time, were taken into univariate assessment. Parameters controlled to a platform
+specification and carrying no plausible route to a quality attribute were not studied, and
+their ranges are held at the platform values.
 
-Of the `{python} n_params` parameters, `{python} n_multi` were carried into the multivariate designs: protein load,
-elution buffer pH, load flow rate and end of pool collect. Protein load and elution buffer pH were selected on the strength of the expected effect on pool host cell protein, while load flow rate and end of pool collect were selected on the expected effect on step yield and on the
-load by flow interaction the platform had already seen. All four were expected to
-interact, which is the condition under which a univariate study cannot support a range
-(PDA TR 60 makes the same point about one-factor-at-a-time experimentation).
+`{python} n_multi` parameters entered the multivariate design, protein load, elution buffer
+pH, load flow rate and end of pool collect. Protein load and elution buffer pH were ranked
+highest because a higher load leaves more host cell protein on the bed at the end of the wash
+and a lower elution pH releases more of it with the product. Load flow rate and end of pool
+collect were included because a faster load lets antibody break through before it reaches a
+free ligand and a later end of collection recovers antibody from the tail of the peak. Flow
+rate can interact with load, because both change how far down the bed the mass transfer zone
+reaches. `{python} n_uni` parameters, operating temperature and bed
+height, were assessed one at a time, and the reason for each is given in §4.4.
 
-Operating temperature and bed height were assigned to univariate assessment, since neither acts on the binding chemistry of the step: temperature affects the kinetics of adsorption and
-the stability of the eluted antibody over a narrow band, and bed height acts through
-residence time at a fixed linear velocity. Both are held to platform ranges by equipment
-design and are readily controlled, which is why a one-at-a-time assessment was judged
-sufficient for them in RA-001.
-
-The ranges themselves were set wider than the routine control ranges so that the study
-would describe the process over a knowledge space instead of only at the operating point.
-Each characterization range in @tbl-params is at least
-`{python} f"{range_ratio_min:.1f}"` times the width of the corresponding normal
-operating range. The wider ranges also provide the process understanding that is needed to support later movement within the design space.
+The characterization ranges were set wider than the routine control ranges, so that the study
+establishes a knowledge space rather than only the region the process will occupy. The ranges
+are given in @tbl-params.
 
 # Materials and methods
 
 ## Scale-down model and its qualification
 
-A scale-down chromatography system was qualified as a model of the manufacturing-scale
-step under SOP-1001. The model was designed on the established principles of
-chromatographic scaling, holding bed height, linear velocity, residence time, load in
-grams per litre of resin and all buffer volumes normalized to column volumes at their
-commercial-equivalent values, and column efficiency was verified before each campaign by
-plate count and peak asymmetry. Runs were executed in the temperature-controlled
-chromatography chamber EQ-CHR-118, which was within the calibration interval throughout execution and is next due on `{python} eq_chr_118_cal_due`.
+The studies were executed on a laboratory chromatography system qualified as a model of the
+commercial step under SOP-1001. The model was designed on the established principles of
+chromatography scaling. Bed height, linear velocity, protein load per volume of resin, and
+the equilibration, wash and elution volumes expressed in column volumes were held equal to
+the commercial values, and column efficiency was verified by plate count and peak asymmetry
+before each campaign. Because those quantities are held equal, the residence time and the
+number of transfer units of the small column match the commercial column, and the chemistry
+the antibody experiences is the same at both scales.
 
-The scale-down model was compared with manufacturing-scale performance on the attributes that matter for the claims in this report: step yield, pool volume, pool host
-cell protein and leached Protein A. No difference of practical consequence between the scales was found. The qualification record is filed under SOP-1001, with the model treated as representative for the purpose of defining operating ranges and of supporting the clearance contribution stated in §10. However, a qualification of this kind bounds what the model may be used for. It supports claims about the operating ranges and about the clearance a single cycle delivers, without saying anything about how the resin behaves after many cycles, which is why the resin life-cycle is addressed separately in §11.
+Qualification compared the model against at-scale performance for the input and output
+attributes of the step, which are step yield, pool host cell protein, leached Protein A and
+residual DNA. The comparison and its acceptance criteria are recorded in the qualification
+report cited by PCP-005 and are not reproduced here. The model is used in this report to
+support conclusions about the commercial step for those attributes, and for no others.
 
-Centre-point replicates provide the pure-error term against which lack of fit is tested.
-The centre points were executed at the set-point condition, `{python} cp_scr` of them in the screening design and `{python} cp_rsm` in the response-surface design. The spread of those replicates is reported in §5.1 and used in the lack-of-fit partition in §5.3.
+The centre-point replicates of each design were executed under the same conditions as the
+commercial set-point, and their spread is the pure error term used to test lack of fit in
+§5.3. That spread carries the analytical variability of the assays as well as the run to run
+variability of the model, so it is an upper bound on the reproducibility of the step itself.
 
 ## Operation
 
-Each run was executed to the operating sequence of SOP-2007: equilibration, load, post-load wash,
-low-pH elution with pool collection on the descending edge, strip, sanitization and
-storage. Only the four studied parameters were allowed to vary. Every other setting was held at the
-commercial-equivalent value, including the wash composition, the equilibration volume and
-the sanitization sequence.
+Clarified harvest from the depth filtration train (PCR-004) was loaded onto the equilibrated
+column at the protein load and the linear velocity set by the design. The column was washed
+to remove unbound and weakly retained material, and the antibody was eluted with a low-pH
+buffer at the pH set by the design. Pool collection started on the rising edge of the elution
+peak at the platform threshold and ended at the volume set by the end of pool collect
+parameter, expressed in column volumes. The pool was neutralized within the platform hold
+time and sampled before transfer to the low-pH viral inactivation step.
 
-Materials controlled to platform specification were verified for identity and quality and
-were not characterized in this study. Resin lots were qualified before use and were tracked under SOP-2008, which also governs packing, cycle counting and sanitization. Buffers were
-prepared and released against a pH and conductivity specification before use, a control
-that is directly relevant to the deviation reported in §13.1. The clarified harvest used
-as feed was drawn from material characterized in PCR-004.
+Resin lot, buffer composition and the sanitization sequence were held at their platform
+values throughout, and the resin was operated within the cycle limits of SOP-2008. These
+inputs are controlled by identity and quality testing on receipt and by the life-cycle
+controls of SOP-2008, and they were not varied in this study. Operation of the step follows
+SOP-2007.
 
 ## Analytical methods
 
-Every response and every released attribute was measured by a validated method.
-The controlled documents that govern this step are listed in @tbl-methods, with the performance figures for the two methods that carry the quantitative claims given in Appendix D.
+The validated methods applied at this step are listed in @tbl-sop and summarized in Appendix
+D. Pool host cell protein was measured by the generic process ELISA under AMV-3012, whose
+precision is `{python} f"{amv_3012_precision:g}"` % and whose limit of quantitation is
+`{python} f"{amv_3012_loq:g}"` ng/mg. Leached Protein A was measured by ELISA under AMV-3016,
+whose precision is `{python} f"{amv_3016_precision:g}"` %, whose limit of quantitation is
+`{python} f"{amv_3016_loq:g}"` ppm and whose accuracy is
+`{python} f"{amv_3016_accuracy:g}"` %. Residual DNA was measured by qPCR under AMV-3014 and
+size variants by SEC-HPLC under AMV-3011. Step yield was calculated from the protein
+concentration of the load and of the pool and the corresponding volumes.
 
-```{python}
-#| output: asis
-print(sop_table(sops=PROTEIN_A_SOP_REFS, amvs=PROTEIN_A_AMV_REFS))
-print("\n: Controlled procedures and validated analytical methods for Step 5. "
-      "{#tbl-methods}\n")
-```
-
-Pool host cell protein was measured by ELISA under AMV-3012 and is reported as ng of host
-cell protein per mg of antibody. Leached Protein A was measured by ELISA under AMV-3016
-and is reported in ppm, residual DNA by qPCR under AMV-3014 and size variants by SEC-HPLC under AMV-3011. Step yield was calculated from the
-antibody mass loaded and the antibody mass recovered in the eluate pool.
-
-The two ELISA methods differ in precision by a wide margin, which matters for the interpretation of §5.1 and §5.3.
-AMV-3012 has an intermediate precision of `{python} f"{hcp_prec:g}"` %RSD and AMV-3016 has
-`{python} f"{lpa_prec:g}"` %RSD, against observed effects that differ in relative size by about an order of magnitude between the two attributes. The share of total observed
-variance attributable to each assay is given in Appendix D and is used in §5.1 to separate
-analytical scatter from process variation.
+The two impurity assays differ in how much of the observed variation they contribute. The
+host cell protein ELISA reports a mass ratio against a total protein measurement, and its
+reported precision is the poorer of the two. The leached Protein A ELISA measures a low-abundance
+analyte in the presence of a large excess of the antibody it binds, and
+`{python} f"{100 * amv_3016_var_frac:.0f}"` % of the variance observed in the reported result
+is attributed to the method. That figure is used in §5.1 and §13.2 when the reproducibility
+of the leached Protein A response is discussed.
 
 ## Sampling plan
 
-Samples were taken from the load, the flow-through, the pooled wash and the eluate pool on
-every run. The eluate pool was assayed for host cell protein, leached Protein A, residual
-DNA and size variants, while the load and flow-through samples support the mass balance
-behind the reported step yield.
+Each run was sampled at the load, at the flow-through, at the end of the wash and at the
+eluate pool. The eluate pool sample carries the three responses of the design and is the
+sample the analysis rests on. Load samples were retained so that a pool result outside its expected trend
+could be traced to its feed, and the flow-through and wash samples were retained for
+investigation and were not routinely assayed.
 
-The centre-point condition was executed `{python} cp_scr` times in the screening design
-and `{python} cp_rsm` times in the response-surface design, giving
-`{python} cp_scr + cp_rsm` independent replicates of the set-point across the campaign.
-All runs within a design were executed in randomized order under SOP-1002.
+The screening design carried `{python} cp_scr` centre-point replicates and the
+response-surface design carried `{python} cp_rsm`. Replicates were distributed through the
+randomized run order rather than executed consecutively, so that the pure error term carries
+any drift across the campaign.
 
 ## Statistical methods
 
-Factors were coded so that the midpoint of each characterization range is zero and the
-edges are −1 and +1. At this step the midpoint of every characterization range coincides with the set-point of the parameter. Therefore the coded origin and the set-point condition are one and the same.
+Factors were coded so that the set-point is 0 and the edges of the characterization range are the
+coded levels −1/+1. For the four multivariate parameters the set-point coincides with the midpoint of
+the characterization range, so the coded centre of both designs is the commercial set-point.
+The screening data were fitted by ordinary least squares with all main effects and all
+two-factor interactions, and an effect is reported as twice the coded coefficient, which is
+the change in the response across the full range of the factor. The response-surface data
+were fitted with the full quadratic model in the same four factors. Terms were tested at
+α = `{python} ALPHA`.
 
-The screening data were analysed as an ordinary least-squares model in the four main
-effects and the six two-factor interactions, with an effect reported as twice the
-coefficient on the coded factor. The response-surface data were analysed as a full
-quadratic model in the same four factors, which gives `{python} n_terms_rsm` terms and
-leaves `{python} df_res_rsm` residual degrees of freedom. Significance is judged at
-α = `{python} alpha` throughout.
+Model adequacy was assessed by R², by adjusted R², by predicted R² from the PRESS statistic,
+by the overall F test, and by the lack of fit test that compares the residual variation not
+explained by the model with the pure error of the centre-point replicates. A response with no
+term significant at α = `{python} ALPHA` is reported as robust to the parameters across the
+ranges studied, and no model is used for it.
 
-Model adequacy is reported as the coefficient of determination, the adjusted coefficient,
-the predicted coefficient computed from the PRESS statistic, the model F ratio with the associated p-value, and lack of fit is tested by partitioning the residual sum of squares into a
-lack-of-fit component and the pure error from the centre-point replicates. A response for
-which no factor reaches significance is treated as robust over the ranges studied, in
-which case the factors are kept in the knowledge space as evidence of that robustness.
+Two acceptance criteria apply to the responses of this step, and they have different origins.
+The level of leached Protein A in the capture pool is already close to the drug substance
+criterion of `{python} f"{lpa_hi:g}"` ppm, and a backward calculation through the downstream
+clearance would return a criterion far wider than the pool ever reaches. Leached Protein A is
+therefore judged against the drug substance criterion itself. The drug substance criterion for
+host cell protein, `{python} f"{ds_hcp_hi:g}"` ng/mg, applies to material that has passed
+cation exchange and anion exchange, and it does not apply to the capture pool. Pool host cell
+protein is therefore judged against an in-process limit.
+The in-process limit was calculated by carrying the drug substance criterion back through the
+host cell protein clearance the downstream steps deliver in the nominal train, a factor of
+`{python} f"{down_hcp_fold:,.0f}"`, and dividing the result by an assurance margin of
+`{python} f"{ipc_margin:g}"`. The limit is `{python} f"{ipc_hi:,.0f}"` ng/mg. A limit set at the undivided ceiling would
+leave the drug substance dependent on every downstream step delivering its nominal clearance
+exactly. Step yield is a process performance attribute with
+no acceptance criterion, and it is reported without one.
 
-Commercial-scale capability was estimated by Monte-Carlo simulation of `{python} f"{n_mc:,}"` batches with every parameter drawn inside the normal operating range, and is reported as a one-sided Cpk against the drug-substance criterion. The proven acceptable ranges in §7 are computed from the same fitted response-surface models, in the two forms described there.
+Proven acceptable ranges were computed from the fitted response-surface models in two forms.
+The first holds the other parameters at their set-points and reports the range of the
+parameter over which the mean prediction meets the criterion. The second lets the other
+parameters vary within their normal operating ranges by Monte-Carlo, adds the residual
+variability of the model, and reports the range over which the
+`{python} PI_PCT` % predictive interval stays within the criterion. The second is a
+robustness criterion and is the narrower of the two. It uses
+`{python} f"{D.PAR_MC_N:,}"` draws at each of `{python} D.PAR_GRID` grid points across the
+characterization range, under a fixed seed.
+
+Commercial-scale capability was estimated by Monte-Carlo simulation of
+`{python} f"{V['n_monte_carlo']:,}"` batches with every parameter of the train varying within
+its normal operating range, and is reported as a one-sided Cpk against the drug substance
+criterion.
 
 # Study design
 
 ## Factors, ranges and the knowledge space
 
-All `{python} n_params` parameters of the step are given in @tbl-params with the
-set-points, normal operating ranges, characterization ranges, study type and final
-classification. The characterization
-range is the knowledge-space edge of each parameter and is not itself a proven acceptable
-range; the proven acceptable ranges are computed per attribute in §7.
+@tbl-params gives the parameters, their set-points, their normal operating ranges, the ranges
+across which they were characterized, and the classification each received from this study.
+The classification column is an outcome and is justified in §9. The range column is the
+characterization range, which is the edge of the knowledge space explored, and it is not a
+proven acceptable range. The proven acceptable ranges are computed per attribute in §7.
 
 ```{python}
 #| output: asis
 show(report_params(UO))
-print("\n: Process parameters of Step 5, with set-point, normal operating range, "
-      "characterization range, study type and final classification. {#tbl-params}\n")
+print()
+print(": Characterized parameters of the capture step, with set-points, normal operating"
+      " ranges, characterization ranges and final classification. {#tbl-params}")
 ```
 
-The letters used for the coded factors in the effect and coefficient tables are given in
-@tbl-legend. All four multivariate parameters appear in both designs, which means that the same letter is used for the same factor throughout this report.
+The characterization ranges are two to three times the width of the routine control ranges.
+Protein load was studied from `{python} prg_str('load')` against a normal operating range of
+`{python} nor_str('load')`, and elution buffer pH from `{python} prg_str('elution_ph')`
+against `{python} nor_str('elution_ph')`. The lower edge of the elution pH range was set at
+`{python} f"{PRG['elution_ph'][0]:g}"`, because platform experience indicates that antibody
+precipitation can occur below that value and a study that precipitated product would
+characterize a different step. The wider ranges give the process room to move inside a
+demonstrated region and support future changes within it.
+
+The four multivariate parameters are coded A to D in the effect and coefficient tables
+throughout this report. @tbl-legend gives the assignment.
 
 ```{python}
 #| output: asis
 show(D.factor_legend_df(UO))
-print("\n: Coded factor legend for the screening and response-surface designs. "
-      "{#tbl-legend}\n")
+print()
+print(": Coded factor legend for the screening and response-surface designs. {#tbl-legend}")
 ```
-
-The range of each factor was justified against prior knowledge instead of being set as a
-fixed multiple of the routine range. Protein load runs from
-`{python} f"{PR['load'][0]:g}"` to `{python} f"{PR['load'][1]:g}"` g/L resin, which spans
-the region from a lightly loaded column to a load approaching the dynamic binding capacity
-of the resin. Elution buffer pH runs from `{python} f"{PR['elution_ph'][0]:g}"` to
-`{python} f"{PR['elution_ph'][1]:g}"`, covering the band over which the antibody desorbs
-completely at the low edge and incompletely at the high edge. Load flow rate runs from
-`{python} f"{PR['flow'][0]:g}"` to `{python} f"{PR['flow'][1]:g}"` cm/hr, which is the velocity range the commercial column can deliver. End of pool collect runs from
-`{python} f"{PR['end_collect'][0]:g}"` to `{python} f"{PR['end_collect'][1]:g}"` column
-volumes, which brackets the descending edge of the elution peak.
 
 ## Screening design
 
-The screening was executed as a two-level full factorial in the four multivariate factors with `{python} cp_scr` centre points, giving `{python} n_scr` runs in total. A full factorial in
-four factors estimates every main effect and every two-factor interaction without
-aliasing, which a fractional design of the same size could not do. The resulting model carries `{python} n_terms_scr` terms against `{python} df_res_scr` residual degrees of freedom, which is a near-saturated fit. The purpose of the screening stage is to identify which factors matter, with the coded settings and the measured responses of all `{python} n_scr` runs given in Appendix A.
+The screening study was a two-level full factorial in the four multivariate parameters with
+`{python} cp_scr` centre-point replicates, `{python} n_scr` runs in all, executed in
+randomized order. A full factorial was used in place of a fraction for two reasons. Four
+factors cost only `{python} n_fact` factorial runs. A lower elution pH releases the host cell
+protein that a high load leaves on the bed, so an interaction between the two was expected,
+and a fractional design would have aliased some two-factor interactions with each other. All main effects and all two-factor
+interactions are therefore estimated clear of one another. Interactions of three factors and
+above are not in the model and fall into the residual.
+
+The screening model carries no quadratic term, so it identifies which parameters act and in
+which direction, and it does not describe curvature. The magnitudes it returns are refined by
+the response-surface model in §5.3, which is the predictive model of this report. The design
+matrix and the measured responses are in Appendix A.
 
 ## Response-surface design
 
-The response-surface design was a face-centred central composite design in the same four
-factors, with `{python} n_fact_rsm` factorial runs, `{python} n_axial_rsm` axial runs and
-`{python} cp_rsm` centre points, giving `{python} n_rsm` runs. Because the axial points sit
-on the faces of the coded cube, every run stayed inside the characterization ranges of
-@tbl-params and no run required a setting outside the knowledge space. The added axial
-points estimate the four quadratic terms, which is what turns a set of resolved effects
-into a predictive surface. The face-centred form was chosen in preference to a rotatable design for a practical reason: a rotatable central composite in four factors places the axial points beyond the cube, and settings outside the characterization ranges of @tbl-params would have taken the study outside the knowledge space RA-001 authorized. The response-surface model is the predictive model of this report and the basis of the design space in §6, with the design matrix and the measured responses given in Appendix B.
+The response-surface study was a face-centred central composite design in the same four
+parameters, `{python} n_rsm` runs, made up of `{python} n_fact` factorial points,
+`{python} n_axial` axial points at the faces of the cube and `{python} cp_rsm` centre-point
+replicates. The axial points were placed on the faces rather than outside them, so that no
+run exceeds the characterization range of any parameter and every run remains a condition the
+step could be operated at. The design estimates all main effects, all two-factor interactions
+and all four pure quadratic terms.
 
-Both designs were executed on the same scale-down configuration and with the same feed
-material, which makes the two datasets directly comparable. Neither design was invalidated
-or re-executed. Because the deviations recorded in §13 were dispositioned as retained, every run executed under this plan is included in the analysis reported below.
+All four screening factors were carried into the response-surface design. Two of them, load
+flow rate and end of pool collect, showed only small effects on the impurity responses in
+screening. Both were retained, because a faster load loses antibody to breakthrough and a later end
+of collection recovers antibody from the tail of the peak, and because dropping a factor
+from the design would have held it at its set-point and hidden any curvature it carries. The
+design matrix and the measured responses are in Appendix B.
 
 ## Univariate assessment
 
-Operating temperature and bed height were assessed one parameter at a time over the
-characterization ranges in @tbl-params, with the other parameters held at the set-point.
-Neither was included in the multivariate designs, for the reasons given in §2.3. Both were
-classified as general process parameters (@tbl-params). Under SOP-4001 a general process
-parameter is one whose variation over the range studied was not linked to a critical quality attribute. The classification rationale for the two parameters is set out in §9.
+Operating temperature and bed height were assessed one at a time across
+`{python} prg_str('temperature')` and `{python} prg_str('bed_height')` respectively, and
+neither was carried into the multivariate designs. A higher temperature raises the diffusion
+coefficient of the antibody, which speeds its transport into the pores of the bead, and it
+weakens the hydrophobic contacts at the interface between the Fc region and the ligand, which
+lowers the strength with which the antibody is held. The two act on capacity in opposite
+directions and both are small across the range studied compared with the effects of load and
+pH. The binding capacity of the resin is specified by its manufacturer across the whole range.
+A taller bed at a fixed linear velocity lengthens the residence time and raises the pressure
+drop across the column, and in scale-up the linear velocity is raised with it so that
+residence time is held constant. Within the range studied bed height is a property of the
+packing rather than of the chemistry.
+
+Both parameters were held at their set-points during the multivariate runs. The univariate
+assessments therefore support the ranges of the two parameters themselves, and they do not
+test whether either interacts with protein load, elution buffer pH, load flow rate or end of
+pool collect. That limit is stated again in §11.
 
 # Results
 
 ## Centre-point performance and reproducibility
 
-The centre-point replicates set the precision against which every effect in this section is judged, and the three responses differ sharply in that precision. The mean, standard deviation and coefficient of variation of each response over the `{python} cp_rsm` centre points of the response-surface design are given in @tbl-cv-rsm.
+The centre-point replicates were executed at the commercial set-point of all four
+multivariate parameters, so they measure the reproducibility of the scale-down model at the
+condition the process will be operated at. @tbl-centre gives the mean, the standard deviation
+and the coefficient of variation of each response over the
+`{python} cp_rsm` replicates of the response-surface design.
 
 ```{python}
 #| output: asis
 show(D.center_cv_df(UO, "rsm"))
-print("\n: Centre-point reproducibility in the response-surface design, and the pure-error "
-      "basis for the lack-of-fit tests in §5.3. {#tbl-cv-rsm}\n")
+print()
+print(": Centre-point performance of the response-surface design, over"
+      f" {cp_rsm} replicates at the set-point. " + "{#tbl-centre}")
 ```
 
-Step yield is the most reproducible response, at `{python} f"{cvr('step_yield'):.1f}"` %, with pool host cell protein next at `{python} f"{cvr('pool_hcp_ng_mg'):.1f}"` %, which
-is small against effects that run to several thousand ng/mg. Leached Protein A is the least precise of the three by a wide margin, at a coefficient of variation of `{python} f"{cvr('leached_protein_a_ppm'):.1f}"` % over the same `{python} cp_rsm` replicates (@tbl-cv-rsm). That coefficient of variation is larger than the validated intermediate precision of AMV-3016
-alone would produce (`{python} f"{lpa_prec:g}"` %RSD, Appendix D). Run-to-run variation in
-ligand release therefore contributes to the centre-point spread alongside the assay.
+Step yield is the most reproducible of the three responses, at
+`{python} f"{cenv(YLD):.1f}"` % of the mean. Pool host cell protein follows at
+`{python} f"{cenv(HCP):.1f}"` %, which is below the reported precision of the assay that
+measures it, so this estimate over `{python} cp_rsm` replicates does not resolve the run to
+run variability of the step itself. Leached Protein A is the least reproducible, at
+`{python} f"{cenv(LPA):.1f}"` % over a mean of `{python} f"{cenv(LPA, 'Mean'):.2f}"` ppm.
+Its spread is consistent with the analytical contribution described in §3.3, and one of the
+replicate results was investigated and re-assayed under DEV-005-02 (§13.2).
 
-The screening design gives a second, independent read of the same condition, which is reported in @tbl-cv-scr over `{python} cp_scr` replicates.
-
-```{python}
-#| output: asis
-show(D.center_cv_df(UO, "screening"))
-print("\n: Centre-point reproducibility in the screening design. {#tbl-cv-scr}\n")
-```
-
-Both designs place step yield as the most reproducible response (@tbl-cv-rsm, @tbl-cv-scr), although they disagree on pool host cell protein, where the screening centre points scatter at
-`{python} f"{cvr('pool_hcp_ng_mg', 'screening'):.1f}"` % against
-`{python} f"{cvr('pool_hcp_ng_mg'):.1f}"` % in the response-surface design. With only `{python} cp_scr` replicates the screening estimate is itself imprecise, which is why the lack-of-fit tests in §5.3 use the response-surface pure error.
+The screening design carried `{python} cp_scr` centre-point replicates. Their coefficients of
+variation were `{python} f"{cenv(HCP, screening=True):.1f}"` % for pool host cell protein,
+`{python} f"{cenv(YLD, screening=True):.1f}"` % for step yield and
+`{python} f"{cenv(LPA, screening=True):.1f}"` % for leached Protein A. The host cell protein
+figure rests on `{python} cp_scr` results and is a weak estimate of the pure error, which is
+one reason the response-surface design carried a fourth replicate. The pure error terms used
+in the lack of fit tests of §5.3 are the response-surface replicates.
 
 ## Screening: factor effects
 
-The factors that govern pool host cell protein and step yield were resolved in the screening stage. By contrast, nothing at all was resolved for leached Protein A. The fit of each screening model is given in @tbl-fit-scr.
+The screening models were fitted with all main effects and all two-factor interactions.
+@tbl-fit-scr gives their adequacy.
 
 ```{python}
 #| output: asis
 show(D.fit_summary_df(UO, "screening"))
-print("\n: Screening model fit for the three responses. {#tbl-fit-scr}\n")
+print()
+print(": Screening model adequacy for each response. {#tbl-fit-scr}")
 ```
 
-The models for pool host cell protein and step yield fit well, whereas the model for
-leached Protein A does not. Pool host cell protein and step yield
-reach R² of `{python} f"{fits_scr['pool_hcp_ng_mg']['R2']:.3f}"` and
-`{python} f"{fits_scr['step_yield']['R2']:.3f}"` with model p-values below
-α = `{python} alpha`, whereas leached Protein A reaches R² =
-`{python} f"{fits_scr['leached_protein_a_ppm']['R2']:.3f}"` with an adjusted R² of
-`{python} f"{fits_scr['leached_protein_a_ppm']['adjR2']:.3f}"` and a model p-value of
-`{python} f"{fits_scr['leached_protein_a_ppm']['p']:.2f}"`. A negative adjusted
-coefficient on a near-saturated fit means the terms explain less than their degrees of
-freedom cost, which is the signature of a null result.
+Two of the three responses are modelled well by the screening design and the third is not.
+Pool host cell protein and step yield give overall F tests significant at
+p `{python} pfmt(fit_scr[HCP]['p'])` and p `{python} pfmt(fit_scr[YLD]['p'])` respectively.
+The leached Protein A model returns an R² of
+`{python} f"{fit_scr[LPA]['R2']:.3f}"` with an adjusted R² of
+`{python} f"{fit_scr[LPA]['adjR2']:.3f}"` and an overall F test at
+p `{python} pfmt(fit_scr[LPA]['p'])`, so no parameter has a detectable effect on it across
+the ranges studied. The negative adjusted R² means the ten estimated terms explain less than the mean of
+the data would.
 
-Pool host cell protein was affected by elution buffer pH, by protein load and by the
-interaction between them. The effect estimates for pool host cell protein are given in @tbl-eff-hcp, in descending order of magnitude.
+@tbl-eff-hcp gives the six largest effects on pool host cell protein.
 
 ```{python}
 #| output: asis
-show(D.screening_effects_df(UO, "pool_hcp_ng_mg", top=6))
-print("\n: Screening effect estimates for pool host cell protein, the six largest by "
-      "magnitude. {#tbl-eff-hcp}\n")
+show(D.screening_effects_df(UO, HCP, top=6))
+print()
+print(": Largest screening effects on pool host cell protein, in coded factors, where an"
+      " effect is the change in the response across the full characterization range of the"
+      " factor. {#tbl-eff-hcp}")
 ```
 
-Raising elution buffer pH across the characterized range lowered pool host cell protein by
-`{python} f"{abs(eff('pool_hcp_ng_mg','B')):,.0f}"` ng/mg, while raising protein load
-raised it by `{python} f"{eff('pool_hcp_ng_mg','A'):,.0f}"` ng/mg. Both effects are large against a centre-point standard deviation of a few hundred ng/mg, at p < `{python} alpha`. The third of the significant effects is the load by pH interaction, at `{python} f"{eff('pool_hcp_ng_mg','AB'):,.0f}"` ng/mg (p =
-`{python} f"{eff_p('pool_hcp_ng_mg','AB'):.3f}"`). The negative sign means that the penalty for loading heavily is smaller when the elution is run at the high end of the pH range.
-`{python} n_sig_scr('pool_hcp_ng_mg')` of the `{python} n_terms_scr` terms reach significance, with every term involving load flow rate among the `{python} n_terms_scr - n_sig_scr('pool_hcp_ng_mg')` that do not.
+Pool host cell protein is dominated by two parameters. Raising elution buffer pH across its
+characterization range lowers pool host cell protein by
+`{python} f"{abs(eff(HCP, 'B')):,.0f}"` ng/mg (p `{python} pfmt(eff(HCP, 'B', 'p-value'))`),
+and raising protein load across its range raises it by
+`{python} f"{eff(HCP, 'A'):,.0f}"` ng/mg (p `{python} pfmt(eff(HCP, 'A', 'p-value'))`). Both
+effects are an order of magnitude larger than the centre-point standard deviation of
+`{python} f"{cenv(HCP, 'SD'):,.0f}"` ng/mg. The interaction between the two is significant
+(p `{python} pfmt(eff(HCP, 'AB', 'p-value'))`) and negative, which means the benefit of a
+higher elution pH is larger when the column is loaded closer to its capacity. Load flow rate
+and end of pool collect have no significant main effect on pool host cell protein in the
+screening design.
 
-Step yield was affected by more factors and by smaller amounts. The dominant factor for step yield is end of pool collect, at `{python} f"{eff('step_yield','D'):.3f}"`, which is a gain of about
-`{python} f"{100*eff('step_yield','D'):.1f}"` percentage points of yield across the
-collect range. Protein load and load flow rate each reduce yield, by
-`{python} f"{abs(eff('step_yield','A')):.3f}"` and
-`{python} f"{abs(eff('step_yield','C')):.3f}"` respectively, and the interaction between them is significant at `{python} f"{eff('step_yield','AC'):.3f}"` (p =
-`{python} f"{eff_p('step_yield','AC'):.4f}"`). The six largest estimates for step yield are given in @tbl-eff-yield.
+@tbl-eff-yield gives the six largest effects on step yield.
 
 ```{python}
 #| output: asis
-show(D.screening_effects_df(UO, "step_yield", top=6))
-print("\n: Screening effect estimates for step yield, the six largest by magnitude. "
-      "{#tbl-eff-yield}\n")
+show(D.screening_effects_df(UO, YLD, top=6))
+print()
+print(": Largest screening effects on step yield, in coded factors. {#tbl-eff-yield}")
 ```
 
-Leached Protein A returned no significant term at all. In @tbl-eff-lpa the largest of the
-six estimates is the load by flow interaction, at
-`{python} f"{eff('leached_protein_a_ppm','AC'):.3f}"` ppm with a p-value of
-`{python} f"{eff_p('leached_protein_a_ppm','AC'):.2f}"`.
+Extending the end of pool collection across its characterization range recovers antibody from
+the tail of the elution peak and raises step yield by
+`{python} pct(eff(YLD, 'D'))` (p `{python} pfmt(eff(YLD, 'D', 'p-value'))`), more than three
+times the centre-point standard deviation of the response. Protein load and load flow rate
+both lower yield, by
+`{python} pct(abs(eff(YLD, 'A')))` and `{python} pct(abs(eff(YLD, 'C')))` across their ranges,
+and their interaction is significant
+(p `{python} pfmt(eff(YLD, 'AC', 'p-value'))`) and negative. A high load run at a high flow
+rate therefore loses more yield than the two main effects predict on their own. The two
+remaining significant terms, the interactions of load flow rate and of elution pH with the end
+of pool collection, are each at or below
+`{python} pct(abs(eff(YLD, 'CD')))` across their ranges and are not carried into the
+interpretation.
 
-```{python}
-#| output: asis
-show(D.screening_effects_df(UO, "leached_protein_a_ppm", top=6))
-print("\n: Screening effect estimates for leached Protein A, the six largest by magnitude. "
-      "None reaches significance. {#tbl-eff-lpa}\n")
-```
-
-Every estimate in @tbl-eff-lpa is smaller than the centre-point standard deviation of the
-same response. No factor could therefore be separated from the run-to-run noise on this
-design. That null result is informative in itself. The four factors stay in the knowledge space as evidence that ligand release is insensitive to them over the ranges screened, which is the basis on which they are classified in §9.
-
-These effect magnitudes identify which factors matter, but they are not the predictive model of this report, because a near-saturated two-level fit with `{python} df_res_scr` residual degrees of freedom can neither separate curvature from error nor predict at an interior point of the region. Those estimates are refined by the response-surface models in §5.3.
+The screening design identifies which parameters act and in which direction. It carries no
+quadratic term, so it cannot say whether a response turns within the range, and the effect
+sizes it returns are averages across the cube. The response-surface models in §5.3 refine
+both.
 
 ## Response-surface models
 
-The response-surface stage produced one model that is adequate and predictive, one that is
-adequate, and one that is neither. The fit of all three is given in @tbl-fit-rsm.
+@tbl-fit-rsm gives the adequacy of the full quadratic models fitted to the response-surface
+data.
 
 ```{python}
 #| output: asis
 show(D.fit_summary_df(UO, "rsm"))
-print("\n: Response-surface model fit for the three responses. {#tbl-fit-rsm}\n")
+print()
+print(": Response-surface model adequacy for each response. {#tbl-fit-rsm}")
 ```
 
-Pool host cell protein is modelled well. The full quadratic model reaches R² =
-`{python} f"{fits_rsm['pool_hcp_ng_mg']['R2']:.3f}"`, adjusted R² =
-`{python} f"{fits_rsm['pool_hcp_ng_mg']['adjR2']:.3f}"` and predicted R² =
-`{python} f"{fits_rsm['pool_hcp_ng_mg']['predR2']:.3f}"`, with a model F of
-`{python} f"{fits_rsm['pool_hcp_ng_mg']['F']:.1f}"` (p =
-`{python} f"{fits_rsm['pool_hcp_ng_mg']['p']:.1e}"`). A predicted coefficient close to the
-adjusted coefficient means the model predicts a held-out run about as well as it fits the data used to build the model, which is the property the design space in §6 depends on. Step yield
-is adequate but less predictive, at R² =
-`{python} f"{fits_rsm['step_yield']['R2']:.3f}"` and predicted R² =
-`{python} f"{fits_rsm['step_yield']['predR2']:.3f}"`, which is enough to describe the
-yield surface and to support the classification of the two key process parameters in §9.
+The pool host cell protein model is the strongest of the three. It returns an R² of
+`{python} f"{fit_rsm[HCP]['R2']:.3f}"`, an adjusted R² of
+`{python} f"{fit_rsm[HCP]['adjR2']:.3f}"` and a predicted R² from the PRESS statistic of
+`{python} f"{fit_rsm[HCP]['predR2']:.3f}"`. The gap between the adjusted and the predicted
+value is small, so the model is not over-fitted and predicts a withheld run about as well as
+it fits the data it was built on. The step yield model returns an R² of
+`{python} f"{fit_rsm[YLD]['R2']:.3f}"` with a predicted R² of
+`{python} f"{fit_rsm[YLD]['predR2']:.3f}"`. That gap is wider, and the yield model is used
+below for direction and magnitude and not for prediction at a point.
 
-Leached Protein A yielded no usable model. The quadratic fit reaches R² = `{python} f"{fits_rsm['leached_protein_a_ppm']['R2']:.3f}"` (@tbl-fit-rsm), but the adjusted coefficient falls to `{python} f"{fits_rsm['leached_protein_a_ppm']['adjR2']:.3f}"` and the predicted
-coefficient is `{python} f"{fits_rsm['leached_protein_a_ppm']['predR2']:.3f}"`. A negative
-predicted coefficient means the model predicts a held-out run worse than the mean of the data predicts. The model F ratio is
-`{python} f"{fits_rsm['leached_protein_a_ppm']['F']:.2f}"` at p =
-`{python} f"{fits_rsm['leached_protein_a_ppm']['p']:.2f}"`, which is to say that the model
-as a whole explains no more than chance would. This report therefore makes no predictive use of it, with the treatment of the attribute set out below.
+The leached Protein A model returns an overall F test at
+p `{python} pfmt(fit_rsm[LPA]['p'])` and a predicted R² of
+`{python} f"{fit_rsm[LPA]['predR2']:.3f}"`. A negative predicted R² means the model predicts
+a withheld run worse than the mean of the data does. Leached Protein A is therefore reported
+as robust to all four parameters across the ranges studied, and no response-surface model for
+it is used to make a claim in this report. The single term that reaches significance in it,
+the quadratic in elution pH, is discussed with the coefficient table in Appendix C.
 
-The coefficient table for pool host cell protein is given in @tbl-coef-hcp, in which `{python} n_sig_rsm('pool_hcp_ng_mg')` of the `{python} n_terms_rsm` terms reach significance at α = `{python} alpha`.
+@tbl-anova-hcp partitions the variation in the pool host cell protein model.
 
 ```{python}
 #| output: asis
-show(D.rsm_coeff_df(UO, "pool_hcp_ng_mg"))
-print("\n: Full quadratic coefficients for pool host cell protein, on coded factors. "
-      "{#tbl-coef-hcp}\n")
+show(D.anova_lof_df(UO, HCP))
+print()
+print(": Analysis of variance for the pool host cell protein response-surface model, with"
+      " the residual split into lack of fit and pure error. {#tbl-anova-hcp}")
 ```
 
-Elution buffer pH carries the largest coefficient at
-`{python} f"{rcoef('pool_hcp_ng_mg','B'):,.0f}"` ng/mg per coded unit, with protein load
-next at `{python} f"{rcoef('pool_hcp_ng_mg','A'):,.0f}"`. The interaction of the two is significant at `{python} f"{rcoef('pool_hcp_ng_mg','AB'):,.0f}"`, reproducing the sign and roughly the
-magnitude estimated in the screening stage. The quadratic term in elution pH is
-significant at `{python} f"{rcoef('pool_hcp_ng_mg','B²'):,.0f}"` (p =
-`{python} f"{rcoef_p('pool_hcp_ng_mg','B²'):.4f}"`), which is the curvature a two-level
-design cannot see. End of pool collect reaches significance in this model at
-`{python} f"{rcoef('pool_hcp_ng_mg','D'):,.0f}"` ng/mg per coded unit, whereas the
-screening estimate for the same factor was not significant and carried the opposite sign
-(@tbl-eff-hcp). The two estimates do not conflict, because a non-significant screening estimate makes no claim about the sign. Therefore the response-surface estimate governs, in line with the framing set out in §5.2.
+The model term is significant at p `{python} pfmt(fit_rsm[HCP]['p'])`. The lack of fit test
+compares the part of the residual the model cannot explain with the pure error of the
+centre-point replicates, and it returns
+F = `{python} f"{fit_rsm[HCP]['F_lof']:.2f}"` at p
+`{python} pfmt(fit_rsm[HCP]['p_lof'])`. Lack of fit is therefore not significant at
+α = `{python} ALPHA`, and the quadratic model is an adequate description of the surface. The
+test rests on `{python} fit_rsm[HCP]['df_pe']` degrees of freedom of pure error, so it has
+limited power, and a lack of fit smaller than the one this design could detect would not have
+been found. The same test on the step yield model returns p
+`{python} pfmt(fit_rsm[YLD]['p_lof'])`.
 
-The residual for pool host cell protein is partitioned into lack of fit and pure error in @tbl-lof-hcp.
+@tbl-coef-hcp gives the coefficients of the pool host cell protein model in coded factors.
 
 ```{python}
 #| output: asis
-show(D.anova_lof_df(UO, "pool_hcp_ng_mg"))
-print("\n: Analysis of variance for pool host cell protein, with the residual partitioned "
-      "against the centre-point pure error. {#tbl-lof-hcp}\n")
+show(D.rsm_coeff_df(UO, HCP))
+print()
+print(": Coefficients of the full quadratic model for pool host cell protein, in coded"
+      " factors. {#tbl-coef-hcp}")
 ```
 
-Lack of fit does not reach significance at α = `{python} alpha` (F =
-`{python} f"{fits_rsm['pool_hcp_ng_mg']['F_lof']:.2f}"`, p =
-`{python} f"{fits_rsm['pool_hcp_ng_mg']['p_lof']:.3f}"`), which supports the quadratic
-form for this response. However, that p-value is the closest to α of the three responses, on a test that rests on `{python} cp_rsm` centre-point replicates. For this reason the result bounds the evidence for the model form without establishing it. The design space in §6 is bounded accordingly. The corresponding tests for step yield and leached
-Protein A are further from significance, at p =
-`{python} f"{fits_rsm['step_yield']['p_lof']:.2f}"` and p =
-`{python} f"{fits_rsm['leached_protein_a_ppm']['p_lof']:.2f}"` (Appendix C).
+The two main effects confirm the screening result and sharpen it. Elution buffer pH carries a
+coefficient of `{python} f"{coef(HCP, 'B'):,.0f}"` ng/mg per coded unit and protein load
+carries `{python} f"{coef(HCP, 'A'):,.0f}"` ng/mg per coded unit, and both are significant at
+p `{python} pfmt(coef(HCP, 'B', 'p-value'))` and p
+`{python} pfmt(coef(HCP, 'A', 'p-value'))`. Their interaction is significant at p
+`{python} pfmt(coef(HCP, 'AB', 'p-value'))` with a coefficient of
+`{python} f"{coef(HCP, 'AB'):,.0f}"` ng/mg. The quadratic term in elution pH is positive and
+significant at p `{python} pfmt(coef(HCP, 'B²', 'p-value'))`, so the surface is curved in pH.
+Pool host cell protein falls steeply as pH rises from the low edge of the range and the fall
+flattens toward the high edge, which means the penalty for operating below the set-point is
+larger than the benefit of operating above it.
 
-The diagnostics for pool host cell protein are given in @fig-diag-hcp, where the residuals show no structure against the predicted value, the normal plot is close to a straight line and the actual values fall on the identity line across the whole range of the response.
+Two further terms reach significance and both are small. The end of pool collection lowers
+pool host cell protein by `{python} f"{abs(coef(HCP, 'D')):,.0f}"` ng/mg per coded unit
+(p `{python} pfmt(coef(HCP, 'D', 'p-value'))`), and its interactions with protein load and
+with elution pH are significant at p `{python} pfmt(coef(HCP, 'AD', 'p-value'))` and p
+`{python} pfmt(coef(HCP, 'BD', 'p-value'))`. Load flow rate does not reach significance in
+this model (p `{python} pfmt(coef(HCP, 'C', 'p-value'))`).
+
+@tbl-coef-yield gives the coefficients of the step yield model.
+
+```{python}
+#| output: asis
+show(D.rsm_coeff_df(UO, YLD))
+print()
+print(": Coefficients of the full quadratic model for step yield, in coded factors."
+      " {#tbl-coef-yield}")
+```
+
+Extending the end of pool collection raises step yield by
+`{python} pct(coef(YLD, 'D'))` per coded unit (p
+`{python} pfmt(coef(YLD, 'D', 'p-value'))`). Protein load costs
+`{python} pct(abs(coef(YLD, 'A')))` per coded unit (p
+`{python} pfmt(coef(YLD, 'A', 'p-value'))`) and load flow rate costs
+`{python} pct(abs(coef(YLD, 'C')))` per coded unit (p
+`{python} pfmt(coef(YLD, 'C', 'p-value'))`). Their interaction is significant at p
+`{python} pfmt(coef(YLD, 'AC', 'p-value'))`. No quadratic term reaches significance, so
+within the ranges studied yield does not turn.
+
+The predicted responses at the set-point are
+`{python} f"{pred_c[HCP]:,.0f}"` ng/mg for pool host cell protein,
+`{python} pct(pred_c[YLD])` for step yield and
+`{python} f"{pred_c[LPA]:.2f}"` ppm for leached Protein A. The host cell protein prediction
+sits a factor of `{python} f"{hcp_headroom:.2f}"` below the in-process limit of
+`{python} f"{ipc_hi:,.0f}"` ng/mg derived in §3.5.
+
+@fig-contours-load shows the response surfaces over protein load and elution buffer pH with
+the other two parameters at their set-points, and @fig-contours-flow shows them over load
+flow rate and end of pool collect. In the first panel of @fig-contours-load the contours of
+pool host cell protein run diagonally across the plane rather than parallel to either axis, so
+the load that gives a given pool level depends on the elution pH in use.
+
+```{python}
+#| label: fig-contours-load
+#| fig-cap: "Response-surface predictions over protein load and elution buffer pH, with load flow rate and end of pool collect at their set-points."
+fig = D.fig_rsm_contours(UO, xf="load", yf="elution_ph")
+plt.show()
+```
+
+```{python}
+#| label: fig-contours-flow
+#| fig-cap: "Response-surface predictions over load flow rate and end of pool collect, with protein load and elution buffer pH at their set-points."
+fig = D.fig_rsm_contours(UO, xf="flow", yf="end_collect")
+plt.show()
+```
+
+@fig-diag-hcp gives the diagnostics of the pool host cell protein model, and @fig-diag-yield
+those of the step yield model. Each shows the standardized residuals against the predicted
+values, the normal quantile plot of the residuals, and the actual values against the predicted
+ones. The residuals of the host cell protein model are spread evenly across the predicted
+range and the actual values lie close to the diagonal. The residuals of the yield model are
+larger at the low end of the predicted range, where the design places the runs at high load
+and high flow rate.
 
 ```{python}
 #| label: fig-diag-hcp
-#| fig-cap: "Model diagnostics for pool host cell protein: standardized residuals against predicted value, normal quantile plot, and actual against predicted."
-_ = D.fig_diagnostics(UO, "pool_hcp_ng_mg")
+#| fig-cap: "Model diagnostics for the pool host cell protein response-surface model."
+fig = D.fig_diagnostics(UO, HCP)
 plt.show()
 ```
-
-The fitted surfaces are shown in @fig-surfaces over protein load and elution buffer pH,
-with the other two factors held at the design centre. Pool host cell protein rises steeply towards the corner at high load and low pH. The contours are curved instead of parallel, which is the interaction and the pH curvature already seen in @tbl-coef-hcp.
-Step yield varies over a narrow band across the same plane, and leached Protein A shows almost no gradient, consistent with a model that explains nothing.
 
 ```{python}
-#| label: fig-surfaces
-#| fig-cap: "Response-surface predictions for the three responses over protein load and elution buffer pH, with load flow rate and end of pool collect held at the design centre."
-_ = D.fig_rsm_contours(UO, "load", "elution_ph")
+#| label: fig-diag-yield
+#| fig-cap: "Model diagnostics for the step yield response-surface model."
+fig = D.fig_diagnostics(UO, YLD)
 plt.show()
 ```
-
-The leached Protein A model is retained as knowledge-space evidence and is put to no other use in this report. The diagnostics for that model are given in @fig-diag-lpa. Exactly one of the
-`{python} n_terms_rsm` terms reaches significance, the quadratic in elution pH at p =
-`{python} f"{rcoef_p('leached_protein_a_ppm','B²'):.3f}"`, which is about what testing
-that many terms at α = `{python} alpha` produces by chance. Lack of fit is far from significant (p = `{python} f"{fits_rsm['leached_protein_a_ppm']['p_lof']:.2f}"`, Appendix C). That test compares the residual with the pure error. The pure error for this response is large (`{python} f"{cvr('leached_protein_a_ppm'):.1f}"` % at the centre point). A
-non-significant result here therefore says only that the quadratic form is not contradicted
-by a noisy replicate set, which is not evidence that the model predicts.
-
-```{python}
-#| label: fig-diag-lpa
-#| fig-cap: "Model diagnostics for leached Protein A. The actual against predicted panel shows the scatter that a predicted R-squared below zero describes."
-_ = D.fig_diagnostics(UO, "leached_protein_a_ppm")
-plt.show()
-```
-
-The operative claim for leached Protein A is therefore made from the assayed pools
-directly. Across the `{python} n_pools` runs of the two designs, the pools ranged from
-`{python} f"{lpa_min:.2f}"` to `{python} f"{lpa_max:.2f}"` ppm, with a mean of `{python} f"{lpa_mean:.2f}"` ppm and a standard deviation of `{python} f"{lpa_sd:.2f}"` ppm, against an acceptance criterion of `{python} f"{lpa_lim:.0f}"` ppm, which `{python} f"{n_pools - lpa_over}"` of them met. The highest single pool left
-`{python} f"{lpa_head:.2f}"` ppm of margin, which is narrow on one run and is the reason
-the attribute is monitored on every batch (§10). However, the criterion applied here is the drug-substance specification, which is applied to the capture pool conservatively. Leached Protein A is cleared downstream of this step by cation exchange and anion exchange (PCR-007, PCR-008). In addition, only `{python} f"{lpa_ds_mean:.3f}"` ppm of leached Protein A is carried by the simulated drug substance at commercial scale (§8).
 
 ## Mechanistic interpretation
 
-The surfaces in @fig-surfaces follow from the physical chemistry of affinity capture and confirm the expectations recorded in §2.1. Elution buffer pH governs pool host cell
-protein because it sets the aggressiveness of desorption: a lower pH releases the antibody
-faster and also releases the more tightly associated host cell protein, which then
-co-elutes into the collected pool. The convex quadratic term means the effect is not uniform across the range: host cell protein falls steeply as pH rises from the low edge
-and then flattens above the set-point, which leaves the pool most sensitive to pH exactly
-where the pH is lowest.
+Host cell protein reaches the eluate by two routes. Some of it binds the resin backbone or
+the ligand weakly and elutes when the pH is lowered, and some associates with the antibody
+itself and is carried through as a complex. Both routes depend on how much antibody is
+bound and on how completely it is released. As the load approaches the dynamic binding
+capacity the mass transfer zone extends further down the bed, and host cell protein that
+the wash would otherwise have removed stays on the bed. A lower elution pH then releases
+that weakly bound host cell protein together with the product. A high load therefore
+leaves more weakly bound host cell protein for a low elution pH to release, and the two
+effects reinforce each other.
 
-Protein load acts through the capacity of the bed: at a light load the antibody occupies a small fraction of the available ligand and the impurity that binds non-specifically is
-washed away efficiently, whereas a load approaching dynamic binding capacity extends the
-mass-transfer zone and retains a greater share of the loaded impurity into the elution.
-The negative interaction between load and pH follows directly: at a high elution pH part of the impurity recruited by a heavy load is left behind on the resin in any case, which makes the two effects less than additive over the characterized ranges.
+The histidine residues at the interface between the Fc region and the ligand are already
+largely protonated across the elution range. Within that range a lower pH drives the
+residual affinity of the complex down further and protonates the carboxylate contacts that
+remain, so the antibody desorbs sooner and in a sharper peak and the weakly held host cell
+protein is released with it. Toward the high end of the range the peak is broader and
+later and carries less weakly held protein, and a further rise in pH releases little more.
+The surface in elution pH is therefore steep at the low edge of the range and shallow at
+the high one.
 
-Step yield is governed by where the pool is stopped. Collecting further down the
-descending edge recovers antibody that would otherwise go to strip, which is why end of pool collect carries the dominant positive term. By contrast, load and flow act in the opposite direction through breakthrough during the load phase. The interaction between them is negative (@tbl-eff-yield) because a short residence time matters most when the bed is already close to saturation.
+Host cell protein held weakly on the resin elutes early in the low-pH transition and not
+in the tail of the peak. Extending the collection therefore adds antibody to the pool
+without adding a proportionate mass of host cell protein, and the measured level per unit
+of antibody falls. At a high load more weakly held host cell protein is present to be
+diluted in this way, and at a high elution pH less of it reaches the pool to be diluted at
+all.
 
-Leaching of the affinity ligand behaves as a resin property over these ranges, since ligand release depends on the chemistry of the immobilization, on the cumulative cycle count and
-on the sanitization history, none of which is a parameter of a single run. Nothing in the data contradicts that account. The four operating parameters together explain no more of the pool variation than chance would, while the centre-point replicates scatter more widely than any factor moved the response.
+Antibody is lost when it breaks through during the load or when it is left on the column
+at the end of elution. Breakthrough rises as the load approaches the dynamic binding
+capacity and as residence time falls, because binding at the ligand is limited by
+diffusion into the pores of the bead. A run at a high load and a high flow rate therefore
+loses more antibody than either condition costs alone. Extending the pool collection
+recovers the tail of the elution peak and raises yield directly.
 
-These results also explain why a multivariate region is required in place of four
-independent ranges. The two parameters that bound the operating region interact, with the surface curved in one of them. A univariate range for protein load would have to be set at the load that is acceptable at the worst elution pH. A univariate range for elution pH would have to be set at the pH that is acceptable at the heaviest load. Consequently, both would be narrower than the process needs, whereas the multivariate region in §6 states the constraint the process actually faces.
+Ligand leaves the resin by hydrolysis of the immobilization chemistry and by proteolysis
+of exposed ligand, and the leached fragments elute with the antibody because they still
+bind the Fc region. The rate at which ligand is lost depends on the coupling chemistry of
+the resin, on the cumulative cycle number and on the sanitization history. None of those
+quantities is a parameter of a single run, and all were held constant across this study.
+Leached Protein A is therefore controlled by the resin life-cycle limits of SOP-2008 and
+by the clearance the downstream steps deliver, and not by the operating parameters of this
+step.
 
 # Design space
 
-The design space for Step `{python} step_no` is defined as the region in protein load, elution buffer pH, load flow rate and end of pool collect over which the fitted response-surface models
-predict a pool host cell protein at or below `{python} f"{hcp_ipc:,.0f}"` ng/mg and a
-leached Protein A at or below `{python} f"{lpa_lim:.0f}"` ppm. Evaluated on an even grid
-of `{python} f"{ds_n:,}"` settings across the characterized ranges,
-`{python} pct(ds_frac)` of the region meets both criteria. The binding constraint on that region is `{python} ds_binding`, since leached Protein A rejects `{python} pct(ds_rej_lpa)` of the grid on its own.
+The design space of the capture step is the region of the characterized ranges of the four
+multivariate parameters over which pool host cell protein and leached Protein A both meet
+the criteria that apply to them. Pool host cell protein must stay at or below the in-process limit of
+`{python} f"{ipc_hi:,.0f}"` ng/mg and leached Protein A at or below
+`{python} f"{lpa_hi:g}"` ppm, both derived in §3.5. The region was evaluated by predicting
+both responses from the response-surface models of §5.3 on an evenly spaced grid of
+`{python} f"{DS['n_points']:,}"` points across the four characterization ranges.
 
-The principal plane of the region is protein load against elution buffer pH (the plane drawn in @fig-surfaces). Load flow rate and end of pool collect do not bound the region within the characterized ranges. The role of load flow rate and end of pool collect in the control strategy is to govern step yield (§10). At the set-point the model predicts
-`{python} f"{hcp_sp:,.0f}"` ng/mg, which is `{python} f"{hcp_sp_ratio:.2f}"`-fold below
-the in-process limit.
+`{python} pct(DS['fraction'])` of the characterized region meets both criteria. Pool host
+cell protein rejects `{python} pct(DS['per_response'][HCP])` of the grid on its own, and
+it is the only response that rejects any of it. Leached Protein A rejects none, which
+follows from §5.3, where no parameter was found to have an effect on that response and the
+predicted
+level stays far below its criterion everywhere in the region. Only protein load and
+elution buffer pH change how much of the region is rejected.
 
-The worst case predicted by the same model within the characterized region is the corner at `{python} par_corner_txt`, at `{python} f"{hcp_par_worst:,.0f}"` ng/mg. That corner lies far outside the design space
-and is an edge of failure for the step rather than a setting the process may take.
-`{python} n_pool_over` of the `{python} n_pools` executed runs produced a pool above the in-process limit, all `{python} n_pool_over_lowph` of them at the low edge of the elution pH range. Those runs are the direct experimental evidence for where the boundary
-lies.
+The principal plane of the design space is protein load against elution buffer pH, and the
+constraint in that plane is joint rather than separate. With load flow rate and end of pool
+collect at their set-points, the highest protein load that meets the in-process limit is
+`{python} f"{max_load_at_ph(PRG['elution_ph'][0]):.1f}"` g/L resin at the low edge of the
+elution pH range, `{python} f"{max_load_at_ph(NOR['elution_ph'][0]):.1f}"` g/L resin at the
+low edge of the normal operating range, and
+`{python} f"{max_load_at_ph(SP['elution_ph']):.1f}"` g/L resin at the set-point. At an
+elution pH of `{python} f"{NOR['elution_ph'][1]:g}"` and above, the whole characterized load
+range meets the limit. The acceptable region in this plane is a wedge that opens as elution pH rises.
 
-The normal operating range is not wholly contained in the design space, and that gap has to be stated plainly. `{python} pct(1 - nor_ok)` of the settings inside the normal operating
-range exceed the in-process limit on the fitted model, the worst of them being the corner
-at `{python} nor_corner_txt`, at which the model predicts
-`{python} f"{hcp_nor_worst:,.0f}"` ng/mg. Three considerations bound what that means. The
-in-process limit is itself set `{python} f"{hcp_margin:g}"`-fold below the pool
-concentration of `{python} f"{hcp_ceiling:,.0f}"` ng/mg at which the downstream train
-would no longer bring a batch into specification, which makes an excursion above the limit
-an alert instead of a batch failure. At that same corner the batch would still reach specification, with the drug substance at `{python} f"{hcp_nor_worst_ds:.0f}"` ng/mg against a limit of `{python} f"{hcp_ds_lim:.0f}"` ng/mg, on the clearance the two polishing steps deliver in the nominal train. And the corner requires both parameters to sit at an unfavourable edge
-at the same time.
+The normal operating ranges lie inside the design space over most, and not all, of their
+extent. Predicting pool host cell protein across the box formed by the four normal operating
+ranges gives values from `{python} f"{nor_hcp_min:,.0f}"` to
+`{python} f"{nor_hcp_max:,.0f}"` ng/mg, and `{python} pct(nor_ok)` of that box meets the
+in-process limit. The part that does not is the corner at high protein load and low elution
+pH, and it is the same corner that the grid over the wider characterization ranges excludes.
+At the low edge of the elution pH range the mean model reaches the limit at a load of
+`{python} f"{max_load_at_ph(NOR['elution_ph'][0]):.1f}"` g/L resin, which is below the upper
+edge of the load range of `{python} f"{NOR['load'][1]:g}"` g/L resin. Protein load and
+elution buffer pH are therefore not independent within their routine ranges, and the control
+strategy in §10 holds them as a pair rather than as two separate limits.
 
-The operative constraint is therefore a joint one. Protein load and elution buffer pH must
-be held so that the pair lies inside the region, with neither read as an independent range at its own edge. At the top of the load normal operating range,
-`{python} f"{NOR['load'][1]:g}"` g/L resin, elution buffer pH must be at least `{python} f"{ph_at_load_hi:.2f}"` with the other two factors at their set-points. That
-value sits above the low edge of the pH normal operating range,
-`{python} f"{NOR['elution_ph'][0]:g}"`, which is the same finding expressed as a pH.
+Two bounds apply to this design space. The predictions are mean levels, so the reliability of
+the process at the edge of the region is close to half if the variability of the response is
+symmetrical about the mean, and an assurance statement needs an interval. The proven
+acceptable ranges in §7 supply that interval and are correspondingly narrower. The second
+bound is scale. The region was defined on the qualified scale-down model, and its edges have
+not been confirmed at commercial scale.
 
-Movement within the design space is not considered a change in the sense of ICH Q8, although all changes remain subject to the pharmaceutical quality system (ICH Q10). Movement outside the design space requires change control with a supporting assessment [@ichq8; @ichq10]. Three bounds apply to the
-claim. The region is defined only over the characterization ranges in @tbl-params and says
-nothing about settings beyond them. The models predict mean levels and carry no interval, which is why the assurance form of the claim is the NOR-propagated analysis in §7. And the whole region rests on the scale-down model qualified in §3.1, which was qualified on performance attributes and not on resin life-cycle behaviour. In practice the region is used in two ways: a proposed change to a set-point or a range is checked against the region before execution, and any excursion recorded during manufacture is assessed against it as part of the batch disposition.
+Movement within the design space is not a change from a regulatory filing perspective
+[@ichq8]. Planned movement is still assessed under the pharmaceutical quality system, with a
+prospective risk assessment of the particular move and a conclusion that existing knowledge
+supports it [@ichq10]. Movement outside the region, including operation at a protein load
+above the wedge boundary at the elution pH in use, is a change and is handled under change
+control.
 
 # Proven acceptable ranges
 
-The proven acceptable ranges complement the multivariate region with a per-attribute,
-per-parameter view. Since the acceptance basis differs between the two governed responses,
-and since the ranges cannot be read without knowing which criterion produced them, the two
-criteria are defined before the table. Pool host cell protein is judged against an
-`{python} hcp_basis` limit of `{python} f"{hcp_ipc:,.0f}"` ng/mg, carried back from the
-drug-substance criterion of `{python} f"{hcp_ds_lim:.0f}"` ng/mg through the clearance
-credited to cation exchange (`{python} f"{cex_fold:.0f}"`-fold) and anion exchange
-(`{python} f"{aex_fold:.1f}"`-fold), then divided by an assurance factor of
-`{python} f"{hcp_margin:g}"`. Leached Protein A has no in-process limit configured and is
-judged against the `{python} lpa_basis` criterion of
-`{python} f"{lpa_lim:.0f}"` ppm directly.
-
-Both analyses are given in @tbl-par for every governed attribute and every multivariate parameter, and the first column of ranges holds the other three factors at their set-points. The second propagates the normal operating range of the other three by Monte-Carlo of the fitted model and requires the 95 % predictive interval to stay within the criterion, which makes it a robustness statement instead of a mean-level one.
+A proven acceptable range is the range of one parameter over which the attribute in question
+meets its criterion when the other parameters are held or varied in a defined way. Two
+analyses were run for each of the two attributes with a criterion and each multivariate
+parameter, and @tbl-par gives both. The first holds the other three parameters at their set-points and uses the mean
+prediction. The second lets them vary within their normal operating ranges and requires the
+`{python} PI_PCT` % predictive interval of the attribute to stay within the criterion, so it
+is a robustness statement and the narrower of the two.
 
 ```{python}
 #| output: asis
-show(PAR)
-print("\n: Proven acceptable ranges per governed attribute and parameter, at set-point and "
-      "with the other parameters varying within their normal operating ranges. {#tbl-par}\n")
+show(D.par_table(UO))
+print()
+print(": Proven acceptable ranges per quality attribute and parameter, at the set-point and"
+      " propagated across the normal operating ranges. {#tbl-par}")
 ```
 
-Leached Protein A is acceptable across the whole characterization range of every parameter
-under the at-set-point analysis, and under NOR propagation for three of the four. The one
-exception is elution buffer pH, whose NOR-propagated range narrows to
-`{python} par_cell('leached_protein_a_ppm','elution_ph','PAR (NOR)')` against a
-characterization range of
-`{python} par_cell('leached_protein_a_ppm','elution_ph','Char. range')`. The excluded
-sliver lies at the high pH edge and follows from the quadratic term discussed in §5.3,
-which the analysis propagates because it is in the fitted model. Given that the model
-explains no more than chance, this narrowing should be read as an artefact of propagating
-a null model instead of as a demonstrated pH effect. Over the whole normal operating range
-the same model predicts a maximum of `{python} f"{nor_lpa_max:.2f}"` ppm.
+For pool host cell protein the analysis at the set-point returns almost the whole characterization
+range of protein load, `{python} rng_str(PAR_SP[(HCP, 'load')], unit=PUNIT['load'])`, and a
+range for elution buffer pH of
+`{python} rng_str(PAR_SP[(HCP, 'elution_ph')])` that stops short of
+the low edge of the characterized range. Both results follow from the surface described in
+§5.3. With the other parameters at their set-points there is enough headroom below the
+in-process limit for load to reach its upper edge, and the constraint appears only when
+elution pH is low.
 
-Pool host cell protein behaves differently, and the NOR-propagated ranges for that response are the binding result of this section. Under the at-set-point analysis three parameters are acceptable across their whole characterization ranges and elution buffer pH is acceptable from
-`{python} par_cell('pool_hcp_ng_mg','elution_ph','PAR (set-point)')`. Under NOR propagation every range narrows: protein load to `{python} par_cell('pool_hcp_ng_mg','load','PAR (NOR)')` g/L resin against a normal operating range of `{python} f"{NOR['load'][0]:g}"`–`{python} f"{NOR['load'][1]:g}"`, and elution buffer pH to
-`{python} par_cell('pool_hcp_ng_mg','elution_ph','PAR (NOR)')` against a normal operating
-range of
-`{python} f"{NOR['elution_ph'][0]:g}"`–`{python} f"{NOR['elution_ph'][1]:g}"`. Neither of
-the two proven acceptable ranges covers the whole of the corresponding routine range.
+The propagated analysis is stricter and it moves both ranges. The acceptable protein load
+becomes `{python} rng_str(PAR_NOR[(HCP, 'load')], unit=PUNIT['load'])`, which stops below the
+upper edge of the routine load range of `{python} f"{NOR['load'][1]:g}"` g/L resin. The
+acceptable elution buffer pH becomes
+`{python} rng_str(PAR_NOR[(HCP, 'elution_ph')])`, which stops above
+the lower edge of the routine pH range of `{python} f"{NOR['elution_ph'][0]:g}"`. Two
+statements follow. Neither the top of the load range nor the bottom of the pH range is
+supported when the other parameters vary across their routine ranges and the predictive
+interval is required to stay within the limit. The propagated analysis for each parameter
+varies the other one across its whole routine range, including the corner where a high
+load meets a low elution pH. The two ranges are therefore supported as a pair and not one
+at a time. Load flow rate and end of pool collect are
+acceptable across
+`{python} rng_str(PAR_NOR[(HCP, 'flow')], unit=PUNIT['flow'])` and
+`{python} rng_str(PAR_NOR[(HCP, 'end_collect')], unit=PUNIT['end_collect'])` under the same
+analysis, and both routine ranges lie inside those.
 
-That result is the univariate expression of the design-space finding in §6 and carries the
-same consequence. The upper part of the load normal operating range is proven only when elution buffer pH sits above the low part of the pH range. In the same way, the low part of the pH range is proven only at a load below the top of the load range. Load flow rate and end of
-pool collect behave differently again. Both of the NOR-propagated ranges,
-`{python} par_cell('pool_hcp_ng_mg','flow','PAR (NOR)')` cm/hr and
-`{python} par_cell('pool_hcp_ng_mg','end_collect','PAR (NOR)')` CV, contain the whole of the corresponding normal operating range. As a result, neither of the two constrains the operating region.
+For leached Protein A every parameter is acceptable across its whole characterization range
+under the analysis at the set-point. Under the propagated analysis the elution buffer pH range
+becomes `{python} rng_str(PAR_NOR[(LPA, 'elution_ph')])`, and the
+remaining three parameters stay at their full ranges. No effect of elution buffer pH on
+leached Protein A was demonstrated (§5.3). The upper bound comes from the residual
+variability of a response whose model explains little, which the propagated analysis
+carries into the predictive interval, and from the small margin the pool leaves at the
+set-point. The drug substance criterion of `{python} f"{lpa_hi:g}"` ppm is a factor of
+`{python} f"{lpa_hi / pred_c[LPA]:.1f}"` above the level the pool carries there.
 
-The governing parameter for pool host cell protein is shown in @fig-par-hcp and the governing parameter for leached Protein A in @fig-par-lpa. In each figure the acceptable region is shaded, the acceptance limit is drawn and the set-point and normal operating range are marked.
+@fig-par-hcp-ph shows the analysis for pool host cell protein against elution buffer pH,
+the parameter with the largest main effect on it, and @fig-par-hcp-load shows it against
+protein load. @fig-par-lpa shows
+leached Protein A against protein load. In each figure the left panel is the analysis at the
+set-point and the right panel is the propagated analysis, the acceptable region is shaded
+green, the acceptance limit is drawn as a dashed line, and the set-point and the normal
+operating range are marked. In the right panel of @fig-par-hcp-load the green region ends
+inside the marked normal operating range.
 
 ```{python}
-#| label: fig-par-hcp
-#| fig-cap: "Proven acceptable range for pool host cell protein against elution buffer pH, at set-point (left) and with the other parameters varying within their normal operating ranges (right)."
-_ = D.fig_par(UO, "pool_hcp_ng_mg", D.governing_factor(UO, "pool_hcp_ng_mg"))
+#| label: fig-par-hcp-ph
+#| fig-cap: "Proven acceptable range for pool host cell protein against elution buffer pH, at the set-point of the other parameters and propagated across their normal operating ranges."
+fig = D.fig_par(UO, HCP, D.governing_factor(UO, HCP))
+plt.show()
+```
+
+```{python}
+#| label: fig-par-hcp-load
+#| fig-cap: "Proven acceptable range for pool host cell protein against protein load."
+fig = D.fig_par(UO, HCP, "load")
 plt.show()
 ```
 
 ```{python}
 #| label: fig-par-lpa
-#| fig-cap: "Proven acceptable range for leached Protein A against protein load, at set-point (left) and with the other parameters varying within their normal operating ranges (right)."
-_ = D.fig_par(UO, "leached_protein_a_ppm", D.governing_factor(UO, "leached_protein_a_ppm"))
+#| fig-cap: "Proven acceptable range for leached Protein A against protein load, the parameter with the largest main effect on it."
+fig = D.fig_par(UO, LPA, D.governing_factor(UO, LPA))
 plt.show()
 ```
 
-The relationship between these ranges and the design space should be read in one direction
-only. A proven acceptable range is a univariate or NOR-robust statement about one
-parameter, whereas the design space of §6 is the multivariate region. Where a whole
-characterization range is proven acceptable, as it is for leached Protein A against three
-parameters, the binding constraint on the operating region is the multivariate corner and
-not any univariate range. Where a proven acceptable range is narrower than the routine
-range, as it is for protein load and elution buffer pH against pool host cell protein, the
-narrower result governs. Both statements are bounded by the characterization ranges in @tbl-params and by the fitted models of §5.3. Both analyses also share the limitation of the model they are computed from, since a proven acceptable range derived from a fitted surface can be no more reliable than that surface, which is why the leached Protein A rows of @tbl-par are reported without being relied on.
+The proven acceptable ranges and the design space of §6 answer different questions and are
+used differently. A proven acceptable range is a statement about one parameter with the others
+defined, and it is the basis for assessing a single parameter excursion. The design space is
+the multivariate region, and it is what the process is operated inside. Where the two disagree,
+as they do for protein load, the control strategy follows the narrower statement.
 
 # Process capability and robustness
 
-Capability at commercial scale was estimated by drawing `{python} f"{n_mc:,}"` simulated
-batches with every parameter distributed inside the normal operating range and propagating them through the process model. The resulting distribution of each governed attribute is reported in @tbl-cap against the drug-substance criterion, as a one-sided Cpk. Because the simulation propagates parameter variation through the fitted models of every step in the train, those figures are a statement about the process as a whole and not about this step alone.
+Commercial-scale capability was estimated by Monte-Carlo simulation of
+`{python} f"{V['n_monte_carlo']:,}"` batches, with every parameter of the train drawn within
+its normal operating range and the fitted models of each step applied in series. @tbl-cap
+gives the result for the impurity attribute this step introduces and the two it removes.
 
 ```{python}
 #| output: asis
-show(cap_for(["hcp", "residual_dna", "leached_protein_a"]))
-print("\n: Commercial-scale capability of the attributes governed at Step 5, from "
-      "Monte-Carlo simulation of NOR-bounded batches. {#tbl-cap}\n")
+show(cap_for(["leached_protein_a", "hcp", "residual_dna"]))
+print()
+print(": Commercial-scale capability for the impurity attribute introduced at the capture"
+      f" step and the two removed there, over {V['n_monte_carlo']:,} simulated batches. "
+      + "{#tbl-cap}")
 ```
 
-Host cell protein is the tightest of the three, at Cpk `{python} f"{cpk_hcp:.1f}"`. The simulated mean is `{python} f"{hcp_ds_mean:.1f}"` ng/mg with a standard deviation of `{python} f"{hcp_ds_sd:.1f}"`. The largest of the `{python} f"{n_mc:,}"` simulated batches reached `{python} f"{hcp_ds_max:.1f}"` ng/mg against a specification of
-`{python} f"{hcp_ds_lim:.0f}"` ng/mg. That capability is not delivered by this step alone: Protein A capture takes the harvest burden down to about
-`{python} f"{hcp_nom:,.0f}"` ng/mg in the nominal train, after which cation exchange
-(PCR-007) and anion exchange (PCR-008) contribute
-`{python} f"{cex_fold:.0f}"`-fold and `{python} f"{aex_fold:.1f}"`-fold in turn.
+All three attributes meet their drug substance criteria across the simulated batches. Host
+cell protein is the tightest of the three, at a mean of
+`{python} f"{cap_mean('hcp'):.1f}"` ng/mg against a criterion of
+`{python} f"{ds_hcp_hi:g}"` ng/mg and a one-sided Cpk of
+`{python} f"{cpk('hcp'):.2f}"`. The same attribute constrains the operating region of the
+step in §6, through the in-process limit derived in §3.5.
 
-The other two attributes sit far from the limits. Residual DNA reaches Cpk `{python} f"{cpk_dna:.1f}"` (@tbl-cap), with this step contributing
-`{python} f"{dna_lrv:g}"` log₁₀ of clearance and anion exchange contributing the rest
-(PCR-008). Leached Protein A reaches Cpk `{python} f"{cpk_lpa:,.0f}"` at a simulated mean
-of `{python} f"{lpa_ds_mean:.3f}"` ppm, which is `{python} f"{lpa_ds_ratio:,.0f}"`-fold
-below the criterion. An index of that size should be read as showing only that the attribute does not constrain the process, with @tbl-cap reporting it for completeness.
+The other two indices are large and are not informative as indices. Residual DNA reaches a
+Cpk of `{python} f"{cpk('residual_dna'):.1f}"` and leached Protein A a Cpk of
+`{python} f"{cpk('leached_protein_a'):,.0f}"`, because both attributes sit orders of magnitude
+below their criteria in the drug substance after the downstream clearance. The capture
+pool carries
+`{python} f"{pred_c[LPA]:.2f}"` ppm at the set-point, against a drug substance criterion of
+`{python} f"{lpa_hi:g}"` ppm, and cation exchange and anion exchange reduce that further
+before the drug substance is formed.
 
-Two bounds apply to these figures. They describe operation within the normal operating range and say nothing about the excursion corners discussed in §6. They also rest on the scale-down model and on the process model behind the simulation, neither of which represents the resin life-cycle. The tightest capability anywhere in the drug substance is
-`{python} f"{V['min_cpk']:.2f}"`, which belongs to a viral clearance attribute that this
-step makes no claim on (PCMR-001).
+The lowest capability index in the drug substance register is
+`{python} f"{V['min_cpk']:.2f}"`, and it belongs to the cumulative parvovirus clearance, which
+is set at anion exchange and reported in PCR-008. No capability of this step approaches it. No
+numerical acceptance threshold for Cpk is set in this package, and none is asserted here. The
+indices are reported with the mean and the criterion beside them, so the margin can be read
+directly.
+
+Robustness is the other half of the picture, and the three responses differ. Leached Protein A
+is robust to all four multivariate parameters across their characterization ranges, in the
+strict sense that no term reached significance at α = `{python} ALPHA` in either design. Step
+yield varies from `{python} pct(nor_yld_min)` to `{python} pct(nor_yld_max)` across the normal
+operating range box, which is a performance range and not a quality risk. Pool host cell
+protein is not robust in that sense, and it is the attribute the control strategy manages.
 
 # Parameter classification
 
-Each parameter was classified under SOP-4001 from the demonstrated effects in §5 and from
-the risk of leaving the design space in routine operation. The outcome is carried in @tbl-params, with the rationale for each parameter set out below.
+Parameters were classified under SOP-4001 from the effects demonstrated in this study and from
+the capability of the commercial equipment to hold each within the design space. A parameter
+whose variability affects a critical quality attribute is critical, and it is called
+well-controlled when the risk of falling outside the design space is low. A parameter that
+affects process consistency without affecting a quality attribute is a key process parameter.
+A parameter with no demonstrated effect on either is a general process parameter. The
+classification of each parameter is given in @tbl-params and the reason for each follows.
 
-- Protein load is classified as a well-controlled critical process parameter. Load carries
-  the second largest coefficient on pool host cell protein and interacts with elution
-  buffer pH (@tbl-coef-hcp). Because the NOR-propagated proven acceptable range for load,
-  `{python} par_cell('pool_hcp_ng_mg','load','PAR (NOR)')` g/L resin, does not cover the
-  upper part of the normal operating range, the parameter is linked to a critical quality
-  attribute and bounds the operating region. Load is set by a mass calculation from a
-  measured feed titre and is readily controlled, which keeps the risk of leaving the design
-  space low and makes the class well-controlled critical instead of critical.
+- Protein load was classified as a well-controlled critical process parameter. It raises pool
+  host cell protein by `{python} f"{eff(HCP, 'A'):,.0f}"` ng/mg across its characterization
+  range and it interacts with elution buffer pH, so its variability reaches a quality
+  attribute. It is set by the measured titre of the clarified harvest and the loaded volume,
+  both of which are measured before the load begins, so an excursion outside the design space
+  is unlikely and detectable.
+- Elution buffer pH was classified as a well-controlled critical process parameter. It carries
+  the largest single effect on pool host cell protein in the study,
+  `{python} f"{abs(eff(HCP, 'B')):,.0f}"` ng/mg across its characterization range. It is set
+  by the composition of a buffer that is prepared and released before use under SOP-2103, and
+  DEV-005-01 (§13.1) shows that a preparation error in that buffer is detected by the release
+  test. The control is therefore effective and the risk of an undetected excursion is low.
+- Load flow rate was classified as a key process parameter. It has no significant effect on
+  pool host cell protein in the response-surface model
+  (p `{python} pfmt(coef(HCP, 'C', 'p-value'))`) and no significant effect on leached Protein
+  A. It lowers step yield by `{python} pct(abs(eff(YLD, 'C')))` across its range and it
+  interacts with protein load in doing so, so it is controlled for process consistency.
+- End of pool collect was classified as a key process parameter. It carries the largest effect
+  on step yield in the study, `{python} pct(eff(YLD, 'D'))` across its characterization range.
+  Extending the collection also lowers pool host cell protein, by
+  `{python} f"{abs(coef(HCP, 'D')):,.0f}"` ng/mg per coded unit. Its whole characterization
+  range meets the in-process limit under both proven acceptable range analyses (@tbl-par), so it is
+  controlled for yield rather than for quality.
+- Operating temperature was classified as a general process parameter. It was assessed one at
+  a time across `{python} prg_str('temperature')`. A change of temperature across that range
+  moves the diffusion coefficient of the antibody and the strength of the contacts at the
+  ligand only slightly, and the binding capacity of the resin is specified by the
+  manufacturer across the whole of it.
+- Bed height was classified as a general process parameter. It was assessed one at a time
+  across `{python} prg_str('bed_height')`. A taller bed at a fixed linear velocity lengthens
+  the residence time and raises the pressure drop across the column, and the packing
+  specification of SOP-2008 holds both constant in scale-up.
 
-- Elution buffer pH is classified as a well-controlled critical process parameter. Elution
-  pH carries the largest coefficient of any term on pool host cell protein and the only significant curvature. However, the NOR-propagated proven acceptable range for elution pH, `{python} par_cell('pool_hcp_ng_mg','elution_ph','PAR (NOR)')`, does not cover the low part of the normal operating range. Buffer pH is prepared and released against a
-  specification before use. The deviation in §13.1 shows both that the control can fail and
-  that release testing detects it, which is what a well-controlled parameter means here.
-
-- Load flow rate is classified as a key process parameter, since flow affects step yield significantly and reduces it at high load through the load by flow interaction, while
-  reaching no significant effect on pool host cell protein in either design. The NOR-propagated proven acceptable range for flow, `{python} par_cell('pool_hcp_ng_mg','flow','PAR (NOR)')` cm/hr, covers the whole of the normal operating range. The parameter therefore governs process performance without constraining
-  a quality attribute, which is the key process parameter class.
-
-- End of pool collect is classified as a key process parameter, since collect volume carries the dominant effect on step yield and also reaches significance on pool host cell protein in
-  the response-surface model, at `{python} f"{rcoef('pool_hcp_ng_mg','D'):,.0f}"` ng/mg per
-  coded unit, smaller than the elution pH coefficient by a factor of
-  `{python} f"{d_vs_b_hcp:.0f}"`. Because the
-  NOR-propagated proven acceptable range,
-  `{python} par_cell('pool_hcp_ng_mg','end_collect','PAR (NOR)')` CV, covers the whole
-  normal operating range, the effect is real without bounding the region. The parameter is
-  classified as key on that basis and is monitored as a performance parameter.
-
-- Operating temperature is classified as a general process parameter. It was assessed one
-  parameter at a time over
-  `{python} f"{CFG.unit_op(UO).param('temperature').prange[0]:g}"`–`{python} f"{CFG.unit_op(UO).param('temperature').prange[1]:g}"` °C
-  and was not linked to any governed attribute. In operation it is held within a narrow band by the chromatography chamber EQ-CHR-118.
-
-- Bed height is classified as a general process parameter. It was assessed one parameter at
-  a time over
-  `{python} f"{CFG.unit_op(UO).param('bed_height').prange[0]:g}"`–`{python} f"{CFG.unit_op(UO).param('bed_height').prange[1]:g}"` cm,
-  acts only through residence time at a fixed linear velocity, and is fixed in operation by
-  the packing acceptance criteria in SOP-2008.
-
-The classification returns `{python} n_cpp` critical process parameters at this step, against `{python} n_wccpp` well-controlled critical, `{python} n_kpp` key and `{python} n_gpp` general. The absence of a critical process parameter follows from
-control capability and not from an absence of effect. Both well-controlled critical
-parameters have a demonstrated effect on a critical quality attribute, while both are held by instrumentation and by released buffers that make an excursion outside the design space unlikely and detectable. In addition, the two key process parameters are held to the normal operating ranges for consistency of yield and pool volume, which is the reason a parameter with no demonstrated link to a quality attribute is nonetheless part of the control strategy [@amab2009].
+The capture step therefore has `{python} cls_n.get('WC-CPP', 0)` well-controlled critical
+process parameters, `{python} cls_n.get('KPP', 0)` key process parameters and
+`{python} cls_n.get('GPP', 0)` general process parameters, and no critical process parameter. Both well-controlled critical process parameters have
+large, demonstrated effects on pool host cell protein. Protein load is fixed by the
+measured titre and the loaded volume before the load begins, and the elution buffer is
+released against its pH specification before it is used, so an excursion in either is
+detected before the pool is made. The joint constraint between them described in §6 is
+carried into the control strategy in §10 as a paired limit.
 
 # Contribution to the control strategy
 
-Step `{python} step_no` contributes six elements to the control strategy for the drug
-substance, stated here in the order a batch encounters them.
+The capture step contributes to the control strategy through parameter ranges, through
+in-process monitoring of the pool, through the life-cycle control of the resin, and through
+the material it hands to the steps that follow. Each element rests on a result reported above.
 
-Protein load and elution buffer pH are controlled within the normal operating ranges and jointly within the design space of §6. The joint constraint is the operative one, which is
-why the batch record carries it as a combined limit instead of as two independent ranges.
-Load flow rate and end of pool collect are controlled within their normal operating ranges as key process parameters, which assures consistent yield and pool volume without being
-linked to a quality attribute.
+Parameter ranges. The normal operating ranges in @tbl-params are carried into Stage 2 for all
+six parameters. The acceptable protein load depends on the elution pH in use (§6), and
+neither routine range is supported across its full width when the other parameter varies
+(§7). Protein load and elution buffer pH are therefore controlled as a pair. The paired
+limit is
+the wedge boundary of §6, and operation at a load above that boundary for the elution pH in
+use is a movement outside the design space.
 
-Pool host cell protein is monitored on every batch against the in-process limit of
-`{python} f"{hcp_ipc:,.0f}"` ng/mg by AMV-3012. A result above that limit is an alert that
-triggers assessment against the downstream clearance actually available, since the limit
-sits `{python} f"{hcp_margin:g}"`-fold below the concentration at which the train can no
-longer bring a batch into specification.
+In-process monitoring. Pool host cell protein is measured on every batch under AMV-3012 and is
+controlled against the in-process limit of `{python} f"{ipc_hi:,.0f}"` ng/mg derived in §3.5.
+That limit is not a specification and it is not the drug substance criterion. It is the level
+above which the downstream train would have to deliver more than its nominal clearance for the
+drug substance to meet its criterion, divided by an assurance margin of
+`{python} f"{ipc_margin:g}"`. The limit is derived from the clearance that cation exchange
+and anion exchange deliver. It moves if their performance changes, and it is re-derived
+whenever PCR-007 or PCR-008 is revised. Leached Protein A is measured on the pool under
+AMV-3016 and residual DNA under AMV-3014, both for monitoring.
 
-Leached Protein A is measured on the capture pool of every batch by AMV-3016 and trended
-against resin cycle number. This is the control that carries the attribute, because the
-characterization studies found no operating parameter that governs it (§5.3). Resin
-life-cycle limits, packing acceptance criteria and the sanitization sequence are held under SOP-2008. The batch trend is the evidence that leaching stays inside the criterion as the resin ages.
+Life-cycle control of the resin. §5.3 and §5.4 place the control for leached Protein A on the
+resin rather than on the operating parameters. The cycle limit, the sanitization sequence and
+the packing specification of SOP-2008 are therefore the controls that hold that attribute, and
+the study reported here does not substitute for them. This study was executed within those
+limits and does not characterize the effect of cumulative cycle number, which is established
+in the resin life-cycle study cited by SOP-2008.
 
-Elution buffer preparation is controlled by release testing against a pH specification before the buffer is used. The deviation in §13.1 arose in buffer preparation and was detected by that release test, which is the reason the control is named here as a contribution of the step. Finally, the four multivariate parameters are recorded on the batch record with the design-space constraint attached to the pair of quality-linked parameters, which allows a reviewer at disposition to see whether the batch was operated inside the region defined in §6.
+Cross-step contributions. Host cell protein and leached Protein A are reduced further by
+cation exchange (PCR-007) and anion exchange (PCR-008), and the cumulative capability of the
+train for both is reported in @tbl-cap. No viral clearance is claimed for this step, and the
+cumulative viral clearance claim rests on the low-pH hold (PCR-006), anion exchange (PCR-008)
+and small-virus retentive filtration (PCR-009). Residual DNA is removed here in the
+flow-through and the wash and further downstream, and no log reduction for it is claimed in
+this report.
 
-The step does not control any of the three governed attributes alone: cation exchange (PCR-007) and anion exchange (PCR-008) deliver the majority of the host cell protein clearance and both clear leached Protein A, while anion exchange delivers the majority of
-the DNA clearance. No viral clearance is claimed here. The consolidated control strategy,
-including the cumulative clearance and the parameter classes across the whole train, is
-given in PCMR-001.
+Release testing. Host cell protein, residual DNA and leached Protein A are tested on the drug
+substance against the criteria in @tbl-cqa. The capability of the commercial process against
+those criteria is in @tbl-cap. The control strategy for the whole train is consolidated in
+PCMR-001, and this report is one of its inputs.
 
 # Discussion
 
-The step is well understood over the ranges studied, although the understanding is distributed unevenly across the three responses. Pool host cell protein is described
-by a predictive model with a clear mechanism, an interaction and a curvature, which makes
-it the response that defines the operating region. Step yield is described adequately and matters for process consistency rather than for quality, whereas leached Protein A is described by no model at all. What is known about the attribute comes from the assayed pools and from the resin life-cycle programme.
+The capture step is now characterized to the depth the transfer requires. A higher protein
+load leaves more host cell protein on the bed at the end of the wash, and a lower elution
+buffer pH releases more of what is there into the pool. The two act on the same weakly
+held protein, so the penalty for a high load is larger at a low elution pH than at a high
+one. The response-surface model for pool host cell protein describes that behaviour with
+an R² of `{python} f"{fit_rsm[HCP]['R2']:.3f}"`, a predicted R² of
+`{python} f"{fit_rsm[HCP]['predR2']:.3f}"` and no significant lack of fit, and it is the
+model the design space and the proven acceptable ranges rest on. Extending the end of pool
+collection raises step yield, and a high load at a high flow rate lowers it. Leached
+Protein A is unaffected by all four parameters across the ranges studied.
 
-The finding that deserves the most attention is the gap between the normal operating range
-and the design space. `{python} pct(1 - nor_ok)` of the normal operating range exceeds the
-in-process limit for pool host cell protein on the fitted model, at the corner where a
-heavy load meets a low elution pH. Three things bound that finding, and none of them removes it: the in-process limit carries an assurance factor of
-`{python} f"{hcp_margin:g}"`. The drug substance stays within specification even at that
-corner, at `{python} f"{hcp_nor_worst_ds:.0f}"` ng/mg against
-`{python} f"{hcp_ds_lim:.0f}"`. And the corner requires two parameters to sit at
-unfavourable edges simultaneously, which routine operation at the set-point does not
-approach. The response is to state the constraint jointly in §6 and §10, and to keep the
-in-process monitor as the point of detection.
+The two analyses of §7 return different answers for protein load. At the set-point of the
+other parameters it is acceptable almost to the top of its characterization range. When
+the other parameters vary within their routine ranges and a predictive interval is
+required, it is acceptable only to `{python} f"{PAR_NOR[(HCP, 'load')][1]:.3g}"` g/L
+resin, which is below the top of its routine range. One is a mean prediction and the other
+is an assurance statement, and the control strategy uses the assurance statement.
 
-Confidence in the scale-down model rests on the qualification described in §3.1 and on the
-agreement between the two independently executed designs. The screening and
-response-surface models agree on the sign and approximate size of every large effect,
-having been executed as separate campaigns on the same configuration. The one
-disagreement, on end of pool collect against pool host cell protein, is between a
-non-significant screening estimate and a significant response-surface estimate. The disagreement is resolved in favour of the design that can resolve it.
+Confidence in the scale-down model rests on its qualification against at-scale performance for
+the attributes of this step and on the reproducibility of its centre points, which is
+`{python} f"{cenv(HCP):.1f}"` % for pool host cell protein and
+`{python} f"{cenv(YLD):.1f}"` % for step yield. The model holds bed height, linear velocity,
+load per volume of resin and the buffer volumes in column volumes equal to the commercial
+values, so the chemistry at the two scales is the same. The claims made on it extend to the
+attributes it was qualified against and no further.
 
-Both deviations recorded in §13 were analytical or preparative in origin and neither
-altered a dataset. The elution buffer prepared below target delivered a pH of
-`{python} f"{dev_005_01_ph_measured:g}"`, which sits inside the characterization range at a coded position of `{python} f"{dev_ph_coded:.2f}"`. The leached Protein A result that was initially out of trend was assayed again at
-`{python} f"{dev_005_02_retest_ppm:g}"` ppm. Both runs were retained, with the impact
-assessments given in §13.
+Two deviations were recorded and both were retained (§13). Neither changes a conclusion of
+this report. The buffer pH deviation affected one run of the response-surface design at a
+setting that carries no weight in the estimate of the elution pH main effect, and the response
+that run produced is consistent with its assigned setting. The leached Protein A deviation
+affected one result of a response for which no parameter effect was found.
 
-Four limitations apply to the conclusions of this report. The response-surface models
-predict mean levels and carry no interval of their own, which is why the assurance form of
-the range claim is the NOR-propagated analysis in §7 and why the design-space boundary
-should not be treated as a point of high reliability. A single feed state drawn from material characterized in PCR-004 was used in both designs, which leaves the effect of feed variability on this step bounded by that document instead of by this one. Both designs were run at a single resin lot and cycle count, which leaves leaching over the resin lifetime to SOP-2008 and to the
-batch trend described in §10. And the design space was verified at scale-down and not at commercial scale at the edges of the region, which is a general limitation of the approach [@amab2009].
+Five limitations bound what this report claims.
 
-No parameter at this step required the most stringent control class. Both quality-linked
-parameters are held by instrumentation and by released buffers with a low risk of leaving
-the design space, which is what distinguishes a well-controlled critical process parameter from a critical one under SOP-4001. Overall, the picture is of a step whose quality-relevant behaviour is concentrated in two parameters and whose remaining variation is either analytical or attributable to the resin, which is a simpler control problem than the parameter count of @tbl-params suggests.
+1. The design space and the proven acceptable ranges were established on the scale-down model,
+   and their edges have not been confirmed at commercial scale.
+2. The design space of §6 is built from mean predictions. The assurance statement is in §7 and
+   is narrower for protein load and for elution buffer pH.
+3. The lack of fit test for the pool host cell protein model rests on
+   `{python} fit_rsm[HCP]['df_pe']` degrees of freedom of pure error, so a small lack of fit
+   would not have been detected.
+4. Operating temperature and bed height were assessed one at a time and were held at their
+   set-points during the multivariate runs, so no interaction between either of them and the
+   four multivariate parameters has been tested.
+5. The in-process limit for pool host cell protein depends on the clearance that cation
+   exchange and anion exchange deliver in the nominal train, so it is not a property of this
+   step alone and is revised when theirs is.
+
+The study covers the platform resin. RA-004 concluded that an alternate Protein A resin would
+require independent characterization with no bridging from platform data, and nothing in this
+report applies to that resin.
 
 # Conclusions
 
-Protein A chromatography has been characterized at commercial-equivalent scale-down over
-`{python} n_params` parameters, `{python} n_multi` of them in a screening design of
-`{python} n_scr` runs followed by a response-surface design of `{python} n_rsm` runs. The
-step is well understood and robust within the ranges studied.
+The Protein A capture step was characterized on a qualified scale-down model under PCP-005,
+with a `{python} n_scr` run screening design and a `{python} n_rsm` run response-surface
+design in four parameters and two univariate assessments.
 
-A multivariate design space has been defined in protein load, elution buffer pH, load flow
-rate and end of pool collect, covering `{python} pct(ds_frac)` of the characterized region
-and bounded by pool host cell protein at high load and low elution pH. Protein load and
-elution buffer pH must be held jointly inside that region, since neither NOR-propagated
-proven acceptable range covers the whole of the corresponding routine range.
+Pool host cell protein rises with protein load and falls as elution buffer pH rises, and
+the two act on the same weakly held protein. Pool host cell protein is the only response
+that limits the operating region. `{python} pct(DS['fraction'])` of the characterized region meets the
+criteria for pool host cell protein and for leached Protein A, and the excluded part is
+the corner at high load and low elution pH. Within the routine ranges the same corner is the
+only part that breaches the in-process limit, so protein load and elution buffer pH are
+carried into Stage 2 as a jointly controlled pair. Leached Protein A is unaffected by all four
+multivariate parameters across the ranges studied and is controlled by the resin life
+cycle. Extending the end of pool collection raises step yield.
 
-All `{python} n_pools` capture pools met the leached Protein A criterion of
-`{python} f"{lpa_lim:.0f}"` ppm, at a maximum of `{python} f"{lpa_max:.2f}"` ppm, with no
-operating parameter identified as governing the attribute. At commercial scale the three governed attributes meet the drug-substance criteria, and the tightest of them is `{python} cpk_tight_name` at Cpk `{python} f"{cpk_tight:.1f}"`.
-
-Of the `{python} n_params` parameters, `{python} n_wccpp` were classified as well-controlled critical,
-`{python} n_kpp` as key and `{python} n_gpp` as general, with `{python} n_cpp` classified as
-critical. Two deviations were investigated and resolved without effect on the models,
-the region or the classifications.
-
-The step does not deliver the drug-substance host cell protein specification on its own, nor does it carry a viral clearance claim. These conclusions are rolled up into PCMR-001, which consolidates the design spaces, capabilities and classifications of the whole train.
+`{python} cls_n.get('WC-CPP', 0)` parameters were classified as well-controlled critical
+process parameters, `{python} cls_n.get('KPP', 0)` as key process parameters and
+`{python} cls_n.get('GPP', 0)` as general process parameters. No parameter of this step was
+classified as a critical process parameter. At commercial scale the impurity attribute
+this step introduces and the two it removes meet their drug substance criteria, and the
+tightest of the three is host
+cell protein at a Cpk of `{python} f"{cpk('hcp'):.2f}"`. Two deviations were recorded and both
+were retained after investigation. The step is fit for transfer to Novacyte Biologics, Grafton,
+WI, and this report rolls up into PCMR-001.
 
 # Deviations from the plan
 
-Two deviations were recorded during execution of PCP-005, each of them investigated to root cause, impact-assessed against the affected datasets and dispositioned as retained, and @tbl-dev summarizes the two.
+`{python} len(dev_facts(DOC))` deviations from PCP-005 were recorded during execution. Both
+were investigated, both were dispositioned as retained, and neither invalidated a study or
+required a re-execution. @tbl-dev lists them.
 
 ```{python}
 #| output: asis
 print(dev_register(DOC))
-print("\n: Deviations recorded during execution of PCP-005. {#tbl-dev}\n")
+print()
+print(": Deviations recorded during execution of PCP-005. {#tbl-dev}")
 ```
 
-## Elution buffer prepared below target (DEV-005-01)
+## DEV-005-01, elution buffer prepared below target
 
-An elution buffer lot, LOT-BUF-5290, was prepared below the target pH and was used on one run of the response-surface design. A pH of `{python} f"{dev_005_01_ph_measured:g}"` was measured at release testing, against a target of `{python} f"{SP['elution_ph']:g}"` for the centre-point condition. Because elution buffer
-pH carries the largest coefficient of any term on pool host cell protein (§5.3), a
-departure in this parameter is the most consequential preparation error the step can make.
+The elution buffer lot LOT-BUF-5290 was released at pH
+`{python} f"{dev_005_01_ph_measured:g}"` against a target of
+`{python} f"{SP['elution_ph']:g}"`, a shortfall of
+`{python} f"{dev_ph_gap:.2f}"` pH units. In coded units the released value is
+`{python} f"{dev_coded_ph:.2f}"`, which is about half way to the low edge of the
+characterized range. The lot was used on run `{python} dev_run` of the response-surface design. The
+deviation was raised at buffer release testing, and the investigation attributed it to an
+error in determining the titration endpoint during preparation. Preparation and release of the
+buffer are governed by SOP-2103.
 
-The root cause was identified during the investigation as a titration endpoint error in preparation.
-The pH meter was within calibration, the buffer components were within specification and the endpoint was called early by the operator. Retraining and a second-person verification at the endpoint were implemented for all subsequent buffer preparations.
+Two lines of evidence bound the impact. Run `{python} dev_run` is an axial point at the low
+level of end of pool collect, and its assigned level for elution buffer pH is the centre of
+the design. A run at the centre level of a factor contributes nothing to the least-squares
+estimate of that factor's main effect in this design, so the estimate of the elution pH
+coefficient in @tbl-coef-hcp does not depend on which of the two pH values that run received.
+Second, the pool host cell protein measured on the run is
+`{python} f"{dev_obs_hcp:,.0f}"` ng/mg. The fitted model predicts
+`{python} f"{dev_pred_nom:,.0f}"` ng/mg at the run's assigned settings and
+`{python} f"{dev_pred_off:,.0f}"` ng/mg if the elution pH is taken as the released value. The
+measured result sits within one root mean square error of
+`{python} f"{fit_rsm[HCP]['rmse']:,.0f}"` ng/mg of the first prediction and more than three
+root mean square errors below the second, so the response the column produced is consistent
+with the assigned setting and not with the released one.
 
-The impact assessment turned on where the delivered pH falls. A pH of
-`{python} f"{dev_005_01_ph_measured:g}"` sits inside the characterization range of
-`{python} f"{PR['elution_ph'][0]:g}"`–`{python} f"{PR['elution_ph'][1]:g}"` at a coded position of `{python} f"{dev_ph_coded:.2f}"`. Consequently, the run remained inside the region the response-surface model covers, with no extrapolation introduced. The affected run was analysed at the delivered setting and the deviation was dispositioned as retained. Lack of
-fit for pool host cell protein remains non-significant (@tbl-lof-hcp), which is the
-statistical evidence that the affected run is consistent with the fitted surface.
+The run was retained in the reported analysis. The investigation did not resolve whether the
+error lay in the preparation of the buffer or in the release measurement of it, and it did not
+need to, because both readings lead to the same disposition for the reasons above. The
+released value lies inside the characterized range for elution buffer pH, so the run remains a
+condition the step could be operated at in any case. The control that detected the error, the
+release test on the buffer before use, is carried into the control strategy in §10.
 
-## Leached Protein A result initially out of trend (DEV-005-02)
+## DEV-005-02, leached Protein A result out of trend
 
-A leached Protein A result was reported out of trend against the other pools of the
-campaign and was raised at analytical review. The value fell outside the range the
-remaining pools occupied, which for this response is a wide range: the campaign spans
-`{python} f"{lpa_min:.2f}"` to `{python} f"{lpa_max:.2f}"` ppm with a centre-point
-coefficient of variation of `{python} f"{cvr('leached_protein_a_ppm'):.1f}"` %.
+A leached Protein A result on one eluate pool of the response-surface set was flagged as out
+of trend at analytical review. The sample was re-assayed under AMV-3016 and returned
+`{python} f"{dev_005_02_retest_ppm:g}"` ppm. The investigation attributed the first result to
+suspected carryover in the assay, and the re-assayed value was reported.
 
-The probable cause was identified in the assay sequence as suspected carry-over between adjacent wells. The sample was assayed again under AMV-3016 and returned `{python} f"{dev_005_02_retest_ppm:g}"` ppm, which meets the acceptance criterion of `{python} f"{lpa_lim:.0f}"` ppm by a wide margin. The validated intermediate precision of the method is
-`{python} f"{lpa_prec:g}"` %RSD with a limit of quantitation of
-`{python} f"{lpa_loq:g}"` ppm, and `{python} f"{100*lpa_varfrac:.0f}"` % of the total observed variance in this response is attributable to the assay itself (Appendix D, @tbl-appd). Sequence
-controls and a bracketing blank were added to the routine sequence of the method.
+The impact on the study is bounded by what the response supports. Leached Protein A showed no
+significant effect of any parameter in either design (§5.2 and §5.3), and it is reported as
+robust to all four multivariate parameters rather than through a model, so a single reported
+value does not carry a coefficient or a design space boundary. The centre-point coefficient of
+variation for this response is `{python} f"{cenv(LPA):.1f}"` %, the largest of the three
+responses, and the method contributes a substantial share of it (§3.3). Neither the original
+nor the re-assayed result approaches the drug substance criterion of
+`{python} f"{lpa_hi:g}"` ppm.
 
-The run was retained, and the impact on this report is limited by the treatment of the attribute in §5.3, since no predictive model is fitted to leached Protein A and the
-operative claim is that all `{python} n_pools` assayed pools met the criterion of
-`{python} f"{lpa_lim:.0f}"` ppm. A re-assayed result of `{python} f"{dev_005_02_retest_ppm:g}"` ppm does not approach that criterion and does not change the conclusion. Neither of the two deviations altered a classification, a proven acceptable range or the design space.
+The deviation was dispositioned as retained. The pool result for leached Protein A is
+monitored rather than controlled to a limit, for the reasons given in §10, and
+`{python} f"{100 * amv_3016_var_frac:.0f}"` % of the variance of that result is attributed
+to the method (§3.3).
 
-# Appendices A–D
+# Appendices A-D
 
 ## Appendix A — Screening design matrix and responses
 
-The coded settings and measured responses of all `{python} n_scr` screening runs are given
-in @tbl-appa. Factor letters follow @tbl-legend and run types are factorial or centre.
+@tbl-appa-1 gives the coded settings of the `{python} n_scr` screening runs in the run order
+executed, and @tbl-appa-2 gives the responses measured on each. The factor letters are those
+of @tbl-legend.
 
 ```{python}
 #| output: asis
-show(D.coded_matrix_df(UO, "screening"))
-print("\n: Screening design matrix in coded factors, with measured responses. {#tbl-appa}\n")
+_a = D.coded_matrix_df(UO, "screening")
+_lab = [D.RESP_LABEL.get(r, r) for r in RESP]
+show(_a[[c for c in _a.columns if c not in _lab]])
+print()
+print(": Screening design matrix in coded factors. {#tbl-appa-1}")
+```
+
+```{python}
+#| output: asis
+show(_a[["Run", "Type"] + _lab])
+print()
+print(": Responses measured on the screening runs. {#tbl-appa-2}")
 ```
 
 ## Appendix B — Response-surface design matrix and responses
 
-The coded settings and measured responses of all `{python} n_rsm` response-surface runs
-are given in @tbl-appb. Axial runs sit on the faces of the coded cube.
+@tbl-appb-1 gives the coded settings of the `{python} n_rsm` response-surface runs, and
+@tbl-appb-2 gives the responses measured on each. The type column distinguishes the factorial
+points, the axial points at the faces of the cube and the centre-point replicates.
 
 ```{python}
 #| output: asis
-show(D.coded_matrix_df(UO, "rsm"))
-print("\n: Response-surface design matrix in coded factors, with measured responses. "
-      "{#tbl-appb}\n")
+_b = D.coded_matrix_df(UO, "rsm")
+show(_b[[c for c in _b.columns if c not in _lab]])
+print()
+print(": Response-surface design matrix in coded factors. {#tbl-appb-1}")
+```
+
+```{python}
+#| output: asis
+show(_b[["Run", "Type"] + _lab])
+print()
+print(": Responses measured on the response-surface runs. {#tbl-appb-2}")
 ```
 
 ## Appendix C — Full effect and coefficient tables
 
-@tbl-appc1 to @tbl-appc3 give every screening effect estimate for the three responses.
-@tbl-appc4 and @tbl-appc5 give the full quadratic coefficients for the two responses not
-tabulated in §5.3, and @tbl-appc6 and @tbl-appc7 give the corresponding analysis of
-variance.
+@tbl-appc-1 to @tbl-appc-3 give every term of the screening models, including the terms not
+significant at α = `{python} ALPHA` that the tables in §5.2 omit. @tbl-appc-4 gives the full
+quadratic coefficients for leached Protein A, the response whose model is not used in §5.3.
 
 ```{python}
 #| output: asis
-show(D.screening_effects_df(UO, "pool_hcp_ng_mg"))
-print("\n: All screening effect estimates for pool host cell protein. {#tbl-appc1}\n")
-show(D.screening_effects_df(UO, "step_yield"))
-print("\n: All screening effect estimates for step yield. {#tbl-appc2}\n")
-show(D.screening_effects_df(UO, "leached_protein_a_ppm"))
-print("\n: All screening effect estimates for leached Protein A. {#tbl-appc3}\n")
-show(D.rsm_coeff_df(UO, "step_yield"))
-print("\n: Full quadratic coefficients for step yield. {#tbl-appc4}\n")
-show(D.rsm_coeff_df(UO, "leached_protein_a_ppm"))
-print("\n: Full quadratic coefficients for leached Protein A. {#tbl-appc5}\n")
-show(D.anova_lof_df(UO, "step_yield"))
-print("\n: Analysis of variance for step yield. {#tbl-appc6}\n")
-show(D.anova_lof_df(UO, "leached_protein_a_ppm"))
-print("\n: Analysis of variance for leached Protein A. {#tbl-appc7}\n")
+show(D.screening_effects_df(UO, HCP))
+print()
+print(": Screening effects on pool host cell protein, all terms. {#tbl-appc-1}")
 ```
+
+```{python}
+#| output: asis
+show(D.screening_effects_df(UO, YLD))
+print()
+print(": Screening effects on step yield, all terms. {#tbl-appc-2}")
+```
+
+```{python}
+#| output: asis
+show(D.screening_effects_df(UO, LPA))
+print()
+print(": Screening effects on leached Protein A, all terms. {#tbl-appc-3}")
+```
+
+```{python}
+#| output: asis
+show(D.rsm_coeff_df(UO, LPA))
+print()
+print(": Coefficients of the full quadratic model for leached Protein A, in coded factors."
+      " {#tbl-appc-4}")
+```
+
+One term in @tbl-appc-4 reaches significance at α = `{python} ALPHA`, the quadratic in elution
+buffer pH, with a coefficient of `{python} f"{coef(LPA, 'B²'):.2f}"` ppm and p
+`{python} pfmt(coef(LPA, 'B²', 'p-value'))`. It is not carried into any conclusion. The model
+that contains it is not significant overall
+(p `{python} pfmt(fit_rsm[LPA]['p'])`), its predicted R² is
+`{python} f"{fit_rsm[LPA]['predR2']:.3f}"`, and one term in
+`{python} len(D.rsm_coeff_df(UO, LPA))` reaching the α = `{python} ALPHA` threshold is what
+that threshold produces by chance. Leached Protein A is reported as robust to all four
+parameters, as stated in §5.3.
 
 ## Appendix D — Analytical methods summary
 
-@tbl-appd gives the validated performance of the two methods that carry the quantitative
-claims of this report. The share of variance attributable to the assay is the figure used
-in §5.1 and §13.2 to separate analytical scatter from process variation.
+@tbl-appd summarizes the validated methods applied to the eluate pool. Performance
+characteristics are given for the two methods that carry the responses of the designed
+experiments. The remaining two are applied for monitoring, and their performance
+characteristics are held in their own validation reports.
 
 ```{python}
 #| output: asis
-show(methods_df)
-print("\n: Validated performance of the analytical methods used for the reported "
-      "responses. {#tbl-appd}\n")
+_meth = csv("dev_methods.csv").set_index("id")
+_rows = []
+for _mid, _title in PROTEIN_A_AMV_REFS:
+    if _mid in _meth.index:
+        _r = _meth.loc[_mid]
+        _rows.append([_mid, _title, f"{_r['precision_pct']:g}",
+                      f"{_r['loq']:g} {_r['loq_unit']}", f"{_r['accuracy_pct']:g}"])
+    else:
+        _rows.append([_mid, _title, "—", "—", "—"])
+show(pd.DataFrame(_rows, columns=["Method", "Title", "Precision (%)",
+                                  "Limit of quantitation", "Accuracy (%)"]))
+print()
+print(": Validated analytical methods applied at the capture step. {#tbl-appd}")
 ```
+
+<!-- ========================= BODY END ======================================== -->
 
 # References {.unnumbered}
 

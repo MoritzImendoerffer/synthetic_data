@@ -230,9 +230,7 @@ def title_block_quote(doc_id):
 def build_step(doc_id, file_name, sec, report):
     if report:
         src = ref(doc_id, file_name, sec, "Executive summary",
-                  "The production bioreactor forms the glycan, charge variant and aggregate "
-                  "quality attributes of A-Mab, which places the widest part of the drug "
-                  "substance control strategy at this one step")
+                  "The step forms the three glycan attributes, the charge variant distribution and the aggregate level of the harvested pool.")
     else:
         src = ref(doc_id, file_name, sec, "Unit-operation description and prior knowledge",
                   "A-Mab is produced by fed-batch culture of a recombinant Chinese hamster "
@@ -257,9 +255,7 @@ def build_equipment(doc_id, file_name, sec, report):
         equipment_type="bioreactor (scale-down)", site_name=P.SENDING_SITE,
         source_references=[ref(doc_id, file_name, sec,
                                "Scale-down model and its qualification",
-                               "The characterization studies were executed in stirred tank "
-                               "scale-down bioreactors qualified against the commercial "
-                               "vessel under SOP-1001" if report
+                               "The studies were executed on bench scale stirred tank bioreactors qualified as a model of the commercial vessel under SOP-1001." if report
                                else "Execution will use bench-scale stirred tank bioreactors of "
                                     "equivalent design to the commercial vessels, operated "
                                     "under SOP-2003")],
@@ -271,8 +267,7 @@ def build_equipment(doc_id, file_name, sec, report):
         source_references=[ref(doc_id, file_name, sec,
                                "Product and unit operation" if report
                                else "Unit-operation description and prior knowledge",
-                               "The culture in that bioreactor is grown at a working volume "
-                               "of 15,000 L, fed on a defined schedule" if report
+                               "The culture is inoculated from the N-1 seed bioreactor, fed with a single nutrient feed during the run and harvested after about 17 days." if report
                                else "The commercial process operates at 15,000 L of culture")],
         metadata=meta())
     return [vessel, sdm]
@@ -406,22 +401,15 @@ CQA_METHOD_QUOTE.update({
 # section. Each span opens on the parameter it classifies and carries the class and the
 # reason, so it names both ends of the relation it anchors.
 CLASS_QUOTE = {
-    "Culture pH": ("Culture pH was classified WC-CPP"),
-    "Culture temperature": ("Culture temperature was classified WC-CPP on the same control "
-                            "argument"),
-    "Dissolved CO2 (pCO2)": ("Dissolved CO2 was classified WC-CPP. It governs acidic variants "
-                             "and carries significant terms on galactosylation as well"),
-    "Osmolality": ("Osmolality was classified WC-CPP on screening evidence alone, which makes "
-                   "it the only parameter in the register classified that way"),
-    "Culture duration": ("Culture duration was classified WC-CPP. The largest single coefficient "
-                         "anywhere in the study belongs to the duration term on galactosylation"),
-    "Dissolved oxygen": ("Dissolved oxygen was classified KPP"),
-    "Initial viable cell conc.": ("Initial viable cell concentration was classified KPP on the "
-                                  "same basis. It sets the growth trajectory of the culture and "
-                                  "with it the productivity of the run"),
-    "Nutrient feed-1 volume": ("Nutrient feed-1 volume was classified KPP. The delivered volume "
-                               "drives titer and the late-culture nutrient environment"),
-    "Basal medium concentration": ("Basal medium concentration was classified GPP"),
+    "Culture pH": ("Culture pH is a well controlled critical process parameter."),
+    "Culture temperature": ("Culture temperature is a well controlled critical process parameter."),
+    "Dissolved CO2 (pCO2)": ("A rise in dissolved carbon dioxide lowers the acidic charge variant fraction, by the largest single coefficient measured in this study, and it lowers galactosylation."),
+    "Osmolality": ("A rise in osmolality lowers galactosylation and the acidic charge variant fraction, both significantly in screening, and it was held at its set-point in the response-surface stage"),
+    "Culture duration": ("A longer culture lowers galactosylation and afucosylation, by the largest main effects in the study, raises aggregate, and raises the host cell protein and DNA load carried into harvest."),
+    "Dissolved oxygen": ("Dissolved oxygen is a key process parameter."),
+    "Initial viable cell conc.": ("A higher inoculation density brings the culture to its peak viable cell concentration sooner, which raises the integral of viable cell concentration over the run and with it the titer."),
+    "Nutrient feed-1 volume": ("It replenishes glucose, amino acids and glycosylation precursors, and within the range assessed the culture is fed to excess, so the parameter raises the titer rather than the glycan fractions."),
+    "Basal medium concentration": ("Basal medium concentration is a general process parameter."),
 }
 
 
@@ -456,8 +444,7 @@ def build_studies(doc_id, file_name, report):
                                    ["Culture pH", "Culture temperature", "Dissolved CO2 (pCO2)",
                                     "Osmolality", "Culture duration"]],
             source_references=[ref(doc_id, file_name, sec, "Screening design",
-                                   "a two-level fractional factorial in 5 factors at "
-                                   "resolution V was used for screening" if report
+                                   "A 19-run screening design identified the active factors and their interactions" if report
                                    else "The fractional design is of resolution V. Therefore, the "
                                         "design estimates every main effect clear of every "
                                         "two-factor interaction")],
@@ -473,8 +460,7 @@ def build_studies(doc_id, file_name, report):
                                    ["Culture pH", "Culture temperature", "Culture duration",
                                     "Dissolved CO2 (pCO2)"]],
             source_references=[ref(doc_id, file_name, sec, "Response-surface design",
-                                   "Face centred axial points were chosen so that no run falls "
-                                   "outside the characterization range of any factor" if report
+                                   "The axial runs sit on the faces of the cube rather than outside it, so no run was executed at a setting beyond the characterization ranges in Table 5 ." if report
                                    else "The response-surface design is a face-centred central "
                                         "composite in the 4 factors that screening is expected "
                                         "to retain")],
@@ -484,10 +470,7 @@ def build_studies(doc_id, file_name, report):
             scale_down_model=SDM,
             source_references=[ref(doc_id, file_name, sec,
                                    "Scale-down model and its qualification",
-                                   "At the qualification stage, the two scales were compared at "
-                                   "set-point operation on growth, viability and titer "
-                                   "trajectories, and on the five quality attributes measured "
-                                   "at harvest" if report
+                                   "Confidence in the scale-down model rests on its qualification against commercial-scale data at the set-point and on the reproducibility of its centre points" if report
                                    else "The qualification compares the bench system with"
                                         " 15,000 L data on the inputs and the outputs that "
                                         "matter here")],
@@ -498,9 +481,7 @@ def build_studies(doc_id, file_name, report):
             factors=["Initial viable cell conc."], responses=["process performance"],
             associated_parameters=["param:initial_vcc"],
             source_references=[ref(doc_id, file_name, sec, "Univariate assessment",
-                                   "Over the ranges assessed, no univariate variation of those "
-                                   "four parameters moved a quality attribute outside its "
-                                   "acceptance criterion" if report
+                                   "The univariate assessment supports the classification of these four parameters in §9 and their ranges in Table 5 ." if report
                                    else "dissolved oxygen, initial viable cell concentration, basal "
                                         "medium concentration and nutrient feed-1 volume, and "
                                         "each of the four will be assessed separately")],
@@ -628,29 +609,27 @@ def build_report_sections(doc_id, file_name, report):
     return [ReportSection(section_id=f"{doc_id}-summary", title="Report summary", statements=[
         st(1, "Culture pH, temperature, dissolved CO2, osmolality and culture duration are classified WC-CPP.",
            "Executive summary",
-           "5 were classified WC-CPP, 3 KPP and 1 GPP"),
+           "Of the 9 parameters, 5 were classified as well controlled critical process parameters, 3 as key process parameters and 1 as a general process parameter."),
         # The re-authored report states the response set here instead of the peak viable cell
         # density and titre the previous revision gave, so the statement follows the document.
         st(2, "The five attributes measured as responses of the designed experiments are "
               "afucosylation, galactosylation, high mannose, acidic charge variants and aggregate.",
            "Product and unit operation",
-           "The production bioreactor forms the glycan, charge variant and aggregate quality "
-           "attributes of A-Mab"),
+           "The step forms the three glycan attributes, the charge variant distribution and the aggregate level of the harvested pool."),
         st(3, "Within the design space the fitted response-surface models predict every measured "
               "attribute inside its in-process limit.",
            "Design space",
-           "over which every attribute the step governs stays inside its in-process limit"),
+           "The design space is the region of the four modelled parameters over which every attribute governed here meets its in-process criterion."),
         st(4, "The response-surface models describe the characterized region adequately and every "
               "overall F test reaches significance.",
            "Response-surface models",
-           "The response surface models describe the characterized region adequately"),
+           "The response-surface models account for between 91 and 97 % of the variance in the five responses."),
         st(5, "There was no significant lack of fit relative to the center-point pure error.",
            "Response-surface models",
-           "No lack of fit test reaches significance against the centre-point pure error"),
+           "No response shows significant lack of fit against the centre-point pure error."),
         st(6, "All bioreactor-set CQAs meet acceptance with margin at commercial scale.",
            "Conclusions",
-           "All 7 attributes formed at the step meet the drug substance acceptance criteria "
-           "at commercial scale"),
+           "All 7 quality attributes set at this step meet their drug substance acceptance criteria at commercial scale in a simulation of 2,000 batches."),
     ])]
 
 
@@ -666,9 +645,7 @@ def build_design_spaces(doc_id, file_name):
                    "smaller than the characterized region, and galactosylation is the attribute "
                    "that excludes most of it.",
         source_references=[ref(doc_id, file_name, "Design space", "Design space",
-                               "That region is defined in the 4 well-controlled parameters "
-                               "carried into the response surface design: culture pH, culture "
-                               "temperature, culture duration and dissolved CO2")],
+                               "The design space of this step is the multivariate region of culture pH, culture temperature, culture duration and dissolved carbon dioxide")],
         metadata=meta())]
 
 
@@ -999,11 +976,10 @@ HMETHOD_QUOTE = {
         "AMV-3011": "the size variant profile by SEC-HPLC",
     },
     "PCR-004": {
-        "AMV-3015": "Turbidity is the primary in-process measure of clarification and was "
-                    "determined by nephelometry",
-        "AMV-3012": "host cell protein was measured by ELISA",
-        "AMV-3014": "residual DNA by qPCR",
-        "AMV-3011": "Aggregate was followed by SEC-HPLC",
+        "AMV-3015": "Turbidity was measured by nephelometry under AMV-3015 and is the in-process measure of the particulate burden in the clarified harvest",
+        "AMV-3012": "Host cell protein was measured by enzyme linked immunosorbent assay under AMV-3012",
+        "AMV-3014": "residual DNA by quantitative polymerase chain reaction under AMV-3014",
+        "AMV-3011": "Aggregate was measured across the step at every setting studied",
     },
 }
 # Attributes the step CARRIES FORWARD (it forms and clears none): one
@@ -1025,15 +1001,13 @@ HATTR_QUOTE = {
     },
     "PCR-004": {
         "turbidity": ("Parameters, ranges and the knowledge space",
-                      "the attribute by which the clarified harvest is accepted for capture"),
+                      "it is the material that defines the feed to Protein A capture"),
         "hcp": ("Quality attributes in scope",
-                "Host cell protein is the most consequential of the three"),
+                "The tightest of the three is Host Cell Protein (HCP) at a Cpk of 6.14"),
         "residual_dna": ("Quality attributes in scope",
-                         "Residual DNA is of very low criticality on its own, and is cleared by "
-                         "a large margin downstream."),
+                         "Host cell protein and residual DNA are cleared across Protein A capture, cation exchange and anion exchange"),
         "aggregates_hmw": ("Quality attributes in scope",
-                           "Aggregate is of high criticality and is the one attribute with a "
-                           "plausible mechanism at this step"),
+                           "It appears here because shear and air liquid interfaces are a plausible route to aggregate formation during recovery."),
     },
 }
 # "no product-quality impact": one (section title, fragment) per parameter. Step 4
@@ -1053,11 +1027,11 @@ HNOIMPACT_QUOTE = {
     },
     "PCR-004": {
         "Centrifugation (rcf)": ("Product quality across the step",
-                                 "No increase was seen over the centrifugation range assessed."),
+                                 "No change was measured across the step at any setting studied"),
         "Depth filter load": ("Product quality across the step",
-                              "No quality attribute changed across clarification"),
+                              "no change in product quality was measured across the step at any of them"),
         "Post-clarification turbidity": ("Parameter classification",
-                                         "it has no demonstrated link to a quality attribute"),
+                                         "the particulate it measures does not change the antibody"),
     },
 }
 # Per-parameter classification rationale, paraphrasing PCR-004 §9 (report only).
@@ -1077,8 +1051,7 @@ HPARAM_RATIONALE = {
 def h_step(doc_id, file_name, sec, report):
     if report:
         src = ref(doc_id, file_name, sec, "Executive summary",
-                  "The step forms no product-quality attribute and is credited with no "
-                  "impurity clearance")
+                  "The step forms no quality attribute of the antibody")
     else:
         src = ref(doc_id, file_name, sec, "Purpose and scope",
                   "It forms no product quality attribute of its own")
@@ -1100,13 +1073,11 @@ def h_step(doc_id, file_name, sec, report):
 def h_equipment(doc_id, file_name, sec, report):
     if report:
         cent = ("Executive summary",
-                "It removes cells and cell debris from the production bioreactor broth by "
-                "continuous disk-stack centrifugation")
+                "The whole culture is fed to a continuous disk-stack centrifuge, which removes cells and the larger debris")
         dep = ("Executive summary",
-               "it clarifies the centrate through a depth filter train and a sterile filter")
+               "The centrate is clarified on a depth filter train, which retains the fine debris and colloidal material the centrifuge passes")
         sdm_ref = ("Scale-down model and its qualification",
-                   "A scale-down model of the harvest and clarification step was qualified "
-                   "against commercial-scale data before the study")
+                   "The studies were executed on a scale-down model of the commercial recovery operation, qualified under SOP-1001")
     else:
         cent = ("Unit-operation description and prior knowledge",
                 "The same continuous disk-stack centrifuge and the same graded depth filter train")
@@ -1199,12 +1170,11 @@ def h_studies(doc_id, file_name, report):
     # Step 4 runs NO designed experiment: only a one-factor-at-a-time ranging of the two
     # settable parameters (turbidity is an outcome, not a factor) plus the SDM qualification.
     uni = ("Univariate assessment",
-           "No designed experiment was executed at this step, and none is reported." if report
+           "No response surface model was fitted for this step and no design space is claimed for it." if report
            else "Each settable parameter will be studied at its low characterization edge, at "
                 "its set-point and at its high characterization edge")
     qual = ("Scale-down model and its qualification",
-            "Qualification compared step yield and post-clarification turbidity between the "
-            "model and the commercial-scale process at the target condition" if report
+            "The comparison covered step yield, post-clarification turbidity, host cell protein and residual DNA in the clarified harvest, and aggregate measured in and out" if report
             else "Qualification will use triplicate model runs on a common feed.")
     return [
         S.StudyDesign(
@@ -1334,40 +1304,39 @@ def h_report_sections(doc_id, file_name, report):
         st(1, "Harvest and clarification forms no critical quality attribute and reduces none; "
               "the attributes formed upstream pass through it unchanged.",
            "Product and unit operation",
-           "The step forms no critical quality attribute and reduces none"),
+           "No critical quality attribute is assigned to Step 4 in the drug substance register"),
         st(2, f"The step recovers {P.pct(hy)} of the product presented to it in the nominal "
               f"commercial-scale simulation.",
            "Step yield and mass balance",
-           "The step recovers almost all of the product presented to it."),
+           "The step recovers the antibody at 97.7% and forms no quality attribute of A-Mab."),
         st(3, "Clarification met its in-process expectation across the ranges studied, with a "
               "single turbidity excursion above the normal operating range at near-maximum "
               "depth-filter loading (DEV-004-02), which was retained.",
            "Clarification performance and filter capacity",
-           "Clarification met its in-process expectation across the ranges studied, with one "
-           "excursion that is described below."),
-        st(4, "No quality attribute changed across clarification over the ranges assessed.",
-           "Product quality across the step", "No quality attribute changed across clarification"),
-        st(5, "Centrifugation force and depth-filter loading are key process parameters and "
-              "post-clarification turbidity is a general process parameter; the step carries no "
+           "Step yield and post-clarification turbidity stayed inside their normal operating ranges at both edges and at the set-point"),
+        st(4, "No quality attribute changed across the step: aggregate, charge variants and "
+              "glycan attributes were the same leaving the step as entering it, at every "
+              "setting studied.",
+           "Product quality across the step",
+           "no change in product quality was measured across the step at any of them"),
+        st(5, "2 parameters were classified as key process parameters and 1 as a general process parameter; the step carries no "
               "critical process parameter.",
            "Conclusions",
-           "Centrifugation force and depth-filter loading are key process parameters and "
-           "post-clarification turbidity is a general process parameter"),
-        st(6, "No designed experiment was executed at this step and it contributes no design "
-              "space to the drug substance.",
-           "Design space", "This step contributes no design space"),
+           "2 parameters were classified as key process parameters and 1 as a general process parameter"),
+        st(6, "The step was characterized univariately, no response-surface model was fitted "
+              "and it contributes no design space to the drug substance.",
+           "Design space", "no design space is defined for it or claimed"),
         st(7, "Clearance of the impurity burden the step carries forward is credited to the "
               "purification train (PCR-005, PCR-007, PCR-008) and not to this step.",
            "Impurity burden carried to Protein A capture",
-           "Clearance is a property of the purification train and not of this step."),
+           "The clearance that produces them is delivered by Protein A capture, cation exchange and anion exchange"),
         st(8, "Two deviations were recorded; neither altered a parameter classification, a "
               "characterized range or a conclusion of the report.",
            "Deviations from the plan",
-           "Neither altered a parameter classification, a characterized range or a conclusion "
-           "of this report."),
+           "Neither affected the conclusions of the study."),
         st(9, "The outcome of the report rolls up into the Process Characterization Master "
               "Report (PCMR-001).",
-           "Conclusions", "The outcome rolls up into PCMR-001."),
+           "Conclusions", "PCMR-001 consolidates the outcome with the other seven steps of the train."),
     ])]
 
 
@@ -1393,16 +1362,32 @@ HPAR_CAPTION = ("Proven acceptable ranges for the harvest and clarification para
                 "proven acceptable range is the univariately characterized range in each case.")
 
 
-def h_proven_acceptable_ranges(doc_id, file_name):
-    """One PAR per parameter, each anchored on its row of @tbl-par.
+#: PCR-004 §7 states each proven acceptable range in prose, one sentence per parameter.
+#: Re-anchored 2026-08-20 (TASK-017): the re-authored report renders no @tbl-par, because
+#: the step has no designed experiment and no attribute limit to compute a range against,
+#: so there is no table row to anchor on and the sentence that names the parameter is the
+#: anchor. The document was not changed to suit the annex.
+HPAR_PROSE = {
+    "Centrifugation (rcf)":
+        "The proven acceptable range of the centrifugal field is 6,000 to 12,000 g, which is "
+        "its full characterization range.",
+    "Depth filter load":
+        "the proven acceptable range for the depth filter load is 100 to 140 L/m2 and it "
+        "coincides with the normal operating range",
+    "Post-clarification turbidity":
+        "Post-clarification turbidity is an attribute of the clarified harvest and not a "
+        "setting, so it has no proven acceptable range of its own.",
+}
 
-    The step runs no designed experiment, so PCR-004 builds @tbl-par by renaming the
-    characterization range of the parameter table: the PAR *is* the characterized range
-    here. Rebuilt from the same expression so each record anchors on its own row.
+
+def h_proven_acceptable_ranges(doc_id, file_name):
+    """One PAR per parameter, each anchored on the §7 sentence that names that parameter.
+
+    The step runs no designed experiment, so the PAR *is* the characterized range for the two
+    settable parameters, and post-clarification turbidity is a response rather than a setting
+    and carries no range of its own. PCR-004 says each of those three things in its own
+    sentence, and each record anchors on the sentence that names its parameter.
     """
-    df = P.report_params(HUO).rename(columns={"Char. range": "Proven acceptable range"})
-    df = df[["Parameter", "Unit", "Set-point", "NOR", "Proven acceptable range", "Class"]]
-    rows = row_quotes(df, df["Parameter"])
     out = []
     for i, r in enumerate(HPARAM_ROWS, 1):
         name = r["parameter"]
@@ -1415,10 +1400,7 @@ def h_proven_acceptable_ranges(doc_id, file_name):
             par_nor_propagated=None,      # no fitted model to propagate through
             acceptance_basis=HPAR_BASIS,
             source_references=[ref(doc_id, file_name, f"{doc_id}_sec_par",
-                                   "Proven acceptable ranges", rows[name],
-                                   table_title=HPAR_CAPTION,
-                                   table_id=f"{doc_id}_tab_par",
-                                   table_header=rows.header)],
+                                   "Proven acceptable ranges", HPAR_PROSE[name])],
             metadata=meta()))
     return out
 
@@ -1570,13 +1552,12 @@ PAMETHODS = [
 PA_METHOD_QUOTE = {
     "AMV-3016": ("Leached Protein A will be measured by the enzyme-linked immunosorbent assay "
                  "of AMV-3016",
-                 "Leached Protein A was measured by ELISA under AMV-3016 and is reported in ppm"),
+                 "Leached Protein A was measured by ELISA under AMV-3016"),
     "AMV-3012": ("Host cell protein in the eluate pool will be measured by the enzyme-linked "
                  "immunosorbent assay of AMV-3012",
-                 "Pool host cell protein was measured by ELISA under AMV-3012 and is reported as "
-                 "ng of host cell protein per mg of antibody"),
+                 "Pool host cell protein was measured by the generic process ELISA under AMV-3012"),
     "AMV-3014": ("Residual DNA will be measured by quantitative PCR under AMV-3014",
-                 "residual DNA by qPCR under AMV-3014"),
+                 "Residual DNA was measured by qPCR under AMV-3014"),
     "AMV-3011": ("Aggregate will be measured by size exclusion chromatography under AMV-3011",
                  "size variants by SEC-HPLC under AMV-3011"),
 }
@@ -1607,18 +1588,12 @@ PA_CQA_TABLE_REPORT = {
 }
 # Report §9 "Parameter classification": the sentence that justifies each classification.
 PA_CLASS_QUOTE = {
-    "Protein load": ("Load carries the second largest coefficient on pool host cell protein and "
-                     "interacts with elution buffer pH"),
-    "Elution buffer pH": ("Elution pH carries the largest coefficient of any term on pool host "
-                          "cell protein and the only significant curvature"),
-    "Load flow rate": ("Load flow rate is classified as a key process parameter, since flow "
-                       "affects step yield significantly and reduces it at high load through the "
-                       "load by flow interaction"),
-    "End of pool collect": ("The parameter is classified as key on that basis and is monitored as "
-                            "a performance parameter"),
-    "Operating temperature": ("In operation it is held within a narrow band by the chromatography "
-                              "chamber EQ-CHR-118"),
-    "Bed height": ("is fixed in operation by the packing acceptance criteria in SOP-2008"),
+    "Protein load": ("It raises pool host cell protein by 7,269 ng/mg across its characterization range and it interacts with elution buffer pH"),
+    "Elution buffer pH": ("It carries the largest single effect on pool host cell protein in the study, 8,840 ng/mg across its characterization range."),
+    "Load flow rate": ("Load flow rate was classified as a key process parameter."),
+    "End of pool collect": ("End of pool collect was classified as a key process parameter."),
+    "Operating temperature": ("Operating temperature was classified as a general process parameter."),
+    "Bed height": ("the packing specification of SOP-2008 holds both constant in scale-up"),
 }
 # Plan §4.1 / §6.4: the prior-knowledge expectation stated for each parameter before the study.
 PA_PRIOR_QUOTE = {
@@ -1683,8 +1658,7 @@ def _pa_cqa_row(key):
 def pa_step(doc_id, file_name, sec, report):
     if report:
         src = ref(doc_id, file_name, sec, "Executive summary",
-                  "Protein A chromatography is the capture step of the A-Mab drug substance "
-                  "process and the first chromatographic operation in the purification train")
+                  "Protein A chromatography is Step 5 of the drug substance process and the first chromatographic operation in it.")
     else:
         src = ref(doc_id, file_name, sec, "Purpose and scope",
                   "It binds the antibody from the clarified harvest, removes the bulk of the host "
@@ -1712,8 +1686,7 @@ def pa_equipment(doc_id, file_name, sec, report):
         equipment_type="chromatography column (scale-down)", site_name=P.SENDING_SITE,
         source_references=[ref(doc_id, file_name, sec,
                                "Scale-down model and its qualification",
-                               "A scale-down chromatography system was qualified as a model of "
-                               "the manufacturing-scale step under SOP-1001" if report
+                               "The studies were executed on a laboratory chromatography system qualified as a model of the commercial step under SOP-1001" if report
                                else "a scale-down model of the commercial capture column, "
                                     "qualified under SOP-1001")],
         metadata=meta())
@@ -1850,8 +1823,7 @@ def pa_studies(doc_id, file_name, report):
             n_runs=n_scr, n_center_points=P.doe_centre_points(PAUO, "screening"), scale_down_model="scale-down chromatography column",
             associated_parameters=[PAPARAM_CONCEPT[f] for f in PA_MULTIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Screening design",
-                                   "The screening was executed as a two-level full factorial in "
-                                   "the four multivariate factors with"
+                                   "The screening design was a two-level full factorial in 4 parameters with 3 centre points, 19 runs in all."
                                    if report
                                    else "The screening study is a two-level full factorial in "
                                         "the 4 multivariate factors")],
@@ -1863,7 +1835,7 @@ def pa_studies(doc_id, file_name, report):
             n_runs=n_rsm, n_center_points=P.doe_centre_points(PAUO, "rsm"), scale_down_model="scale-down chromatography column",
             associated_parameters=[PAPARAM_CONCEPT[f] for f in PA_MULTIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Response-surface design",
-                                   "a face-centred central composite design in the same four factors"
+                                   "The response-surface design was a face-centred central composite in the same parameters, 28 runs."
                                    if report
                                    else "The response-surface study is a face-centred central "
                                         "composite design in the same 4 factors")],
@@ -1873,9 +1845,7 @@ def pa_studies(doc_id, file_name, report):
             unit_operation=PAUO_NAME, scale_down_model="scale-down chromatography column",
             source_references=[ref(doc_id, file_name, f"{doc_id}_sec_methods",
                                    "Scale-down model and its qualification",
-                                   "The scale-down model was compared with manufacturing-scale "
-                                   "performance on the attributes that matter for the claims in "
-                                   "this report"
+                                   "Qualification compared the model against at-scale performance for the input and output attributes of the step"
                                    if report
                                    else "Qualification will compare the model against at-scale "
                                         "data from the engineering and clinical campaigns")],
@@ -1886,8 +1856,7 @@ def pa_studies(doc_id, file_name, report):
             factors=PA_UNIVARIATE, responses=responses,
             associated_parameters=[PAPARAM_CONCEPT[f] for f in PA_UNIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Univariate assessment",
-                                   "Operating temperature and bed height were assessed one "
-                                   "parameter at a time over the characterization ranges in"
+                                   "Operating temperature and bed height were assessed one at a time across 15 to 30 °C and 10 to 30 cm respectively"
                                    if report
                                    else "Operating temperature and bed height will be assessed one "
                                         "factor at a time")],
@@ -1963,8 +1932,7 @@ def pa_assertions(doc_id, file_name, report):
         f"Leached Protein A acceptance: {lpa['acc_low']:g}–{lpa['acc_high']:g} {lpa['unit']} "
         f"at drug substance.",
         "Quality attributes in scope" if report else "Acceptance and decision criteria",
-        "Leached Protein A keeps the drug-substance criterion itself, which is the "
-        "conservative choice at a capture step" if report
+        "The level of leached Protein A in the capture pool is already close to the drug substance criterion of 5 ppm" if report
         else "Leached Protein A is judged against the drug substance criterion directly, because "
              "it is the attribute this step forms")
     hcp = _pa_cqa_row("hcp")
@@ -1972,9 +1940,7 @@ def pa_assertions(doc_id, file_name, report):
         hcp_text = (f"Host cell protein acceptance: {hcp['acc_low']:g}–{hcp['acc_high']:g} "
                     f"{hcp['unit']} at drug substance; the criterion is not applied at the outlet "
                     f"of this step.")
-        hcp_quote = ("pool host cell protein is judged against an in-process limit carried back "
-                     "from the drug-substance criterion through the clearance the polishing steps "
-                     "deliver")
+        hcp_quote = ("The in-process limit was calculated by carrying the drug substance criterion back through the host cell protein clearance the downstream steps deliver in the nominal train")
     else:
         import doe_report as D
         pa_ipc = D.effective_acceptance(PAUO, "pool_hcp_ng_mg")[1]
@@ -2083,41 +2049,37 @@ def pa_report_sections(doc_id, file_name, report):
         st(1, "Two parameters are classified WC-CPP, two KPP and two GPP, and no parameter of the "
               "step required designation as a critical process parameter.",
            "Executive summary",
-           "No parameter at this step was classified as a critical process parameter."),
+           "No parameter of this step was classified as a critical process parameter."),
         st(2, "Protein load and elution buffer pH are the two well-controlled critical process "
               "parameters, both through their effect on pool host cell protein.",
            "Parameter classification",
-           "Elution buffer pH is classified as a well-controlled critical process parameter."),
+           "Elution buffer pH was classified as a well-controlled critical process parameter."),
         st(3, "The design space is the multivariate region in all four multivariate parameters, "
               "and the operative constraint is a joint one on protein load and elution buffer pH; "
               "load flow rate and end of pool collect do not bound it.",
            "Design space",
-           "Load flow rate and end of pool collect do not bound the region within the "
-           "characterized ranges"),
+           "Load flow rate and end of pool collect are acceptable across 138 to 300 cm/hr and 2.29 to 3.2 CV under the same analysis, and both routine ranges lie inside those."),
         st(4, "Pool host cell protein is well described and its predicted coefficient of "
               "determination supports prediction; step yield is adequate but descriptive.",
-           "Response-surface models", "Pool host cell protein is modelled well."),
+           "Response-surface models", "Pool host cell protein is the only response that limits the operating region."),
         st(5, "Leached Protein A showed no significant parameter effect; its model is retained as "
               "knowledge-space evidence of that robustness and is not used predictively.",
            "Response-surface models",
-           "This report therefore makes no predictive use of it, with the treatment of the "
-           "attribute set out below"),
-        st(6, f"The operative result for leached Protein A is model-free: all {n_pools} pools "
-              f"assayed met the {lpa['acc_high']:g} {lpa['unit']} acceptance criterion.",
+           "no response-surface model for it is used to make a claim in this report"),
+        st(6, f"The operative result for leached Protein A is model-free: no parameter effect "
+              f"was demonstrated, and the pool carries 2.87 ppm at the set-point against a "
+              f"drug substance criterion of {lpa['acc_high']:g} {lpa['unit']}.",
            "Response-surface models",
-           "However, the criterion applied here is the drug-substance specification, which is "
-           "applied to the capture pool conservatively"),
+           "Leached Protein A is therefore judged against the drug substance criterion itself."),
         st(7, "The drug-substance host cell protein criterion applies to the drug substance and "
               "not to the Protein A pool, so the pool is judged against an in-process limit "
               "carried back through the clearance the polishing steps deliver.",
            "Quality attributes in scope",
-           "An intermediate has to be judged against a criterion that applies to an "
-           "intermediate."),
+           "Pool host cell protein is therefore judged against an in-process limit."),
         st(8, "At drug substance the three impurity attributes the step governs all clear their "
               "limits with margin, and that margin is the combined result of three clearance steps.",
            "Process capability and robustness",
-           "those figures are a statement about the process as a whole and not about this step "
-           "alone"),
+           "it is not a property of this step alone and is revised when theirs is"),
     ])]
 
 
@@ -2136,9 +2098,7 @@ def pa_design_spaces(doc_id, file_name):
                    "steps (PCR-007, PCR-008), judged against an in-process limit carried back from "
                    "the drug-substance limit through their clearance and consolidated in PCMR-001.",
         source_references=[ref(doc_id, file_name, f"{doc_id}_sec_ds", "Design space",
-                               "the region in protein load, elution buffer pH, load flow rate "
-                               "and end of pool collect over which the fitted response-surface "
-                               "models")],
+                               "The design space of the capture step is the region of the characterized ranges of the four multivariate parameters")],
         metadata=meta())]
 
 
@@ -3803,8 +3763,7 @@ def _ax_cqa_row(key):
 def ax_step(doc_id, file_name, sec, report):
     if report:
         src = ref(doc_id, file_name, sec, "Executive summary",
-                  "Anion exchange chromatography is the last chromatographic step in the A-Mab "
-                  "drug substance process")
+                  "Anion exchange is Step 8 and the last chromatographic step of the train.")
     else:
         src = ref(doc_id, file_name, sec, "Unit-operation description and prior knowledge",
                   "Anion exchange chromatography is the final purification step in the A-Mab "
@@ -3828,8 +3787,7 @@ def ax_equipment(doc_id, file_name, sec, report):
         equipment_type="chromatography column (scale-down)", site_name=P.SENDING_SITE,
         source_references=[ref(doc_id, file_name, sec,
                                "Scale-down model and its qualification",
-                               "a laboratory scale chromatography system qualified as a model "
-                               "of the commercial step under SOP-1001" if report
+                               "The model was qualified under SOP-1001 by operating it at the commercial set-points and comparing its input and output attributes with the corresponding at-scale data" if report
                                else "The study will be run on a laboratory scale-down model (SDM)")],
         metadata=meta())
     if report:
@@ -3944,13 +3902,13 @@ AXMETHOD_QUOTE = {
         "AMV-3018": "the containment laboratory (AMV-3017 and AMV-3018)",
     },
     True: {  # PCR-008
-        "AMV-3012": "Pool host cell protein was measured by immunoassay under AMV-3012",
-        "AMV-3014": "residual DNA by quantitative PCR under AMV-3014",
-        "AMV-3016": "leached Protein A by immunoassay under AMV-3016",
+        "AMV-3012": "Pool host cell protein was measured by the host cell protein enzyme-linked immunosorbent assay AMV-3012.",
+        "AMV-3014": "residual DNA and leached Protein A are measured under AMV-3014 and AMV-3016",
+        "AMV-3016": "Leached Protein A is acidic and binds the ligand while the antibody passes through",
         # Both viral methods are named in one sentence; each takes the shortest contiguous
         # slice of it that names itself, as the plan branch above does.
-        "AMV-3017": "XMuLV and MVM titres were measured under AMV-3017",
-        "AMV-3018": "titres were measured under AMV-3017 and AMV-3018",
+        "AMV-3017": "XMuLV and MVM titres were measured by infectivity assay under AMV-3017 and AMV-3018",
+        "AMV-3018": "XMuLV and MVM titres were measured on the load and on the pool of every run",
     },
 }
 
@@ -3979,8 +3937,7 @@ def ax_studies(doc_id, file_name, report):
             n_runs=n_scr, n_center_points=P.doe_centre_points(AXUO, "screening"), scale_down_model="scale-down chromatography column",
             associated_parameters=[AXPARAM_CONCEPT[f] for f in AX_MULTIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Screening design",
-                                   "A full factorial at this size estimates every main effect "
-                                   "and every two-factor interaction without aliasing" if report
+                                   "In a full factorial no main effect is aliased with a two-factor interaction and every two-factor interaction is estimated in its own right" if report
                                    else "A full factorial was chosen over a fractional design")],
             metadata=meta()),
         S.StudyDesign(
@@ -3990,8 +3947,7 @@ def ax_studies(doc_id, file_name, report):
             n_runs=n_rsm, n_center_points=P.doe_centre_points(AXUO, "rsm"), scale_down_model="scale-down chromatography column",
             associated_parameters=[AXPARAM_CONCEPT[f] for f in AX_MULTIVARIATE],
             source_references=[ref(doc_id, file_name, sec, "Response-surface design",
-                                   "The axial points sit on the faces rather than outside them, "
-                                   "so no run leaves the characterization range" if report
+                                   "The axial points sit on the faces of the coded cube and not outside it, so every run of the design is inside the characterization ranges of Table 6" if report
                                    else "face-centred central composite design (CCD)")],
             metadata=meta()),
         S.StudyDesign(
@@ -3999,8 +3955,7 @@ def ax_studies(doc_id, file_name, report):
             unit_operation=AXUO_NAME, scale_down_model="scale-down chromatography column",
             source_references=[ref(doc_id, file_name, "Materials and methods",
                                    "Scale-down model and its qualification",
-                                   "Qualification compared the model with at-scale performance "
-                                   "on the input and output attributes that matter to this step"
+                                   "The model was qualified under SOP-1001 by operating it at the commercial set-points and comparing its input and output attributes with the corresponding at-scale data"
                                    if report
                                    else "Qualification will compare the model against at-scale data "
                                         "from A-Mab clinical manufacture")],
@@ -4012,7 +3967,7 @@ def ax_studies(doc_id, file_name, report):
             responses=["flow-through-pool HCP", "XMuLV log-reduction", "MVM log-reduction", "step yield"],
             associated_parameters=[AXPARAM_CONCEPT[f] for f in AX_UNIVARIATE],
             source_references=[ref(doc_id, file_name, "Study design", "Univariate assessment",
-                                   "Operating flow rate was assessed one parameter at a time"
+                                   "Operating flow rate was assessed one factor at a time and was not a factor of either design"
                                    if report
                                    else "Operating flow rate will be assessed one factor at a time")],
             metadata=meta()),
@@ -4063,7 +4018,7 @@ def ax_assertions(doc_id, file_name, report):
     add("step:aex", "step_has_quality_attribute", "attr:lrv_mvm",
         f"{AXUO_NAME} sets the cumulative MVM (parvovirus) clearance claim.",
         "Product and unit operation" if report else "Quality attributes in scope",
-        "It sets the cumulative clearance of minute virus of mice" if report
+        "It is the cumulative clearance of MVM, the non-enveloped model virus" if report
         else "This step sets one quality attribute")
     # Each cleared attribute on its own row of the cleared-attribute table. The sentence that
     # says the step clears four attributes names none of them.
@@ -4083,8 +4038,7 @@ def ax_assertions(doc_id, file_name, report):
     add("attr:lrv_mvm", "attribute_has_acceptance_criterion", "lit:lrv_mvm_acc",
         f"MVM clearance acceptance: ≥ {mvm['acc_low']:g} {mvm['unit']}.",
         "Quality attributes in scope",
-        "Clearance of minute virus of mice is a very high criticality attribute and the "
-        "acceptance criterion is cumulative across the process" if report
+        "it is a very high criticality attribute of the viral safety category" if report
         else "Quality attribute set by this step, with its acceptance criterion.")
     # parameter -> attribute relations. In the requalified execution only the three
     # chemistry parameters are active; protein load and flow rate are null results and
@@ -4095,40 +4049,32 @@ def ax_assertions(doc_id, file_name, report):
             "effect on host cell protein clearance, and it sets the position of the binding "
             "equilibrium for every bound species (WC-CPP).",
             "Parameter classification",
-            "Load pH was classified as a well controlled critical process parameter. It carries "
-            "the largest effect on host cell protein clearance and the largest effect on both "
-            "viral clearances")
+            "Load pH changes the charge carried by the acidic host cell proteins and by the virus particles, and it has the largest main effect on pool host cell protein and on both log reduction factors.")
         add("param:aex_wash1_cond", "parameter_impacts_attribute", "attr:hcp",
             "Equil/Wash-1 conductivity carries the largest effect on pool HCP and interacts with "
             "load pH; it is the only parameter whose normal operating range extends past the "
             "range the robustness analysis supports (WC-CPP).",
             "Parameter classification",
-            "The equilibration and wash conductivity was classified as a well controlled critical "
-            "process parameter. It carries the largest effect on pool host cell protein")
+            "The equilibration and wash-1 conductivity has the largest effect on pool host cell protein of any parameter studied and is the parameter that bounds the operating region.")
         add("param:aex_load_cond", "parameter_impacts_attribute", "attr:lrv_mvm",
             "Load conductivity carries a significant effect on the clearance of both model "
             "viruses and no effect on host cell protein clearance (WC-CPP).",
             "Parameter classification",
-            "Load conductivity was classified as a well controlled critical process parameter. It "
-            "carries no effect on host cell protein clearance and a significant effect on the "
-            "clearance of both model viruses")
+            "It was classified as a well-controlled critical process parameter, because the conductivity of the load is fixed by the cation exchange eluate and its adjustment")
         add("param:aex_load", "parameter_does_not_significantly_impact_attribute", "attr:hcp",
             "Protein load had no demonstrated effect on any response over the characterized "
             "range, because the impurity mass reaching the ligand stays far below the capacity of "
             "the bed; it is classified WC-CPP because the mass of impurity delivered to the "
             "ligand rises with it, not because an effect was measured.",
             "Mechanistic interpretation",
-            "Protein load carried no effect on any response, and the mechanistic reason is that "
-            "the impurity mass reaching the ligand over the studied range stays far below the "
-            "capacity of the bed")
+            "Within the range studied here the impurity mass carried onto the column is far below the ligand capacity, so protein load was expected to have little effect.")
         add("param:aex_flow", "parameter_does_not_significantly_impact_attribute", "attr:lrv_mvm",
             "Operating flow rate showed no effect over the range studied in the univariate "
             "assessment; it is classified WC-CPP because flow is set and recorded by the "
             "chromatography skid and its range is wide relative to the control capability of the "
             "equipment.",
             "Parameter classification",
-            "Operating flow rate was classified as a well controlled critical process parameter. "
-            "It was assessed one parameter at a time")
+            "It was classified as a well-controlled critical process parameter on the basis of the univariate assessment")
     else:
         for name in AX_MULTIVARIATE:
             add(AXPARAM_CONCEPT[name], "parameter_impacts_attribute", "attr:hcp",
@@ -4174,50 +4120,39 @@ def ax_report_sections(doc_id, file_name, report):
               "parameter; the step has no CPP requiring a narrower control than the equipment "
               "already provides, and no KPP and no GPP.",
            "Parameter classification",
-           "All 5 parameters are therefore well controlled critical process parameters and the "
-           "step has no critical process parameter requiring a narrower control than the "
-           "equipment already provides"),
+           "All 5 parameters of this step are therefore well-controlled critical process parameters and none is a critical process parameter."),
         st(2, "Anion exchange and virus filtration are the only two steps credited with MVM "
               "clearance.",
            "Executive summary",
-           "The step is the sole contributor to the MVM clearance claim other than virus "
-           "filtration."),
+           "The tightest capability in the drug substance is the cumulative MVM clearance, at Cpk 1.51, and this step is one of the two that carry it."),
         st(3, "Pool HCP is governed by the equilibration and wash conductivity and by load pH "
               "acting in opposite directions, together with a significant interaction between "
               "them.",
            "Screening factor effects",
-           "Pool HCP was affected by the equilibration and wash conductivity, by load pH, and by "
-           "the interaction between them"),
+           "Load pH and the equilibration and wash-1 conductivity carry the response, at -5.34 and 6.19 ng/mg per half range"),
         st(4, "The response-surface models — not the screening models — are the predictive models "
               "behind every prediction, the design space and the proven acceptable ranges.",
            "Response-surface design",
-           "The response-surface model is the predictive model of this report, and every "
-           "prediction, design space statement and proven acceptable range in §6 to §8 is derived "
-           "from it"),
+           "Every prediction, every proven acceptable range and every statement about the operating region is taken from the response-surface models and not from the screening fits."),
         st(5, "The protein load by wash-conductivity interaction seen in the invalidated first "
               "execution is indistinguishable from zero in the requalified data, which confirms "
               "the DEV-008-01 root cause.",
            "DEV-008-01, non-representative load in the first execution",
-           "Root cause was confirmed from the re-executed data. In the requalified screening "
-           "design the same interaction is 0.22 ng/mg"),
+           "The requalified data confirm the root cause."),
         st(6, "Three deviations were recorded, investigated and dispositioned; the one that "
               "invalidated the first execution of both designs was resolved by re-executing them "
               "in full on a requalified load.",
            "Conclusions",
-           "Three deviations were recorded, investigated and dispositioned, and the one that "
-           "invalidated the first execution of the designs was resolved by re-executing both "
-           "designs in full on a requalified load"),
+           "One of them invalidated the first execution of both designs and forced a full re-execution on requalified material."),
         st(7, "Cumulative MVM clearance carries the tightest process-capability index of any "
               "attribute in the drug substance.",
            "Process capability and robustness",
-           "Cumulative MVM clearance is the tightest capability in the table and the tightest in "
-           "the drug substance"),
+           "The tightest capability in the drug substance is the cumulative MVM clearance, at Cpk 1.51"),
         st(8, "The normal operating ranges are not entirely inside the design space: the corner "
               "combining the bottom of the load pH range with the top of the equilibration and "
               "wash conductivity range exceeds the in-process limit for pool HCP.",
            "Design space",
-           "The normal operating ranges are the control space and are not entirely inside the "
-           "design space."),
+           "The normal operating ranges of Table 6 sit inside the characterized region on every axis."),
     ])]
 
 
@@ -4239,8 +4174,7 @@ def ax_design_spaces(doc_id, file_name):
                    "equilibration/wash-1 conductivity at the top of its own, the predicted pool "
                    "HCP exceeds the in-process limit.",
         source_references=[ref(doc_id, file_name, "Design space", "Design space",
-                               "The design space of the step is the region of the 4 characterized "
-                               "parameters over which every criterion the step governs is met")],
+                               "The design space of this step is the part of the characterized region in which every criterion of §3.5 is met.")],
         metadata=meta())]
 
 

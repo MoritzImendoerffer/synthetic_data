@@ -46,209 +46,133 @@ DOC = "PCR-008"
 UO = "aex"
 UO_TITLE = "Anion Exchange Chromatography (Step 8)"
 
-# --- responses, factors, coded letters -------------------------------------
-RESPS = D.responses(UO)
-R_HCP, R_XMULV, R_MVM, R_YIELD = RESPS
-R_GOVERNED = [R_HCP, R_XMULV, R_MVM]
-F_PH, F_WASH, F_COND, F_LOAD = D.rsm_factors(UO)
-LET = D.factor_letters(UO)
-STEP_NO = CFG.unit_op(UO).step
+# --- doc-local derived scalars (pulled from the model; never typed) ---
+RESP = D.responses(UO)
+R_HCP, R_XMULV, R_MVM, R_YIELD = RESP
 
-# --- design structure -------------------------------------------------------
+# design structure, read from the executed designs
+_scr_types = csv(f"doe_{UO}_screening.csv").run_type.value_counts().to_dict()
+_rsm_types = csv(f"doe_{UO}_rsm.csv").run_type.value_counts().to_dict()
 n_scr = doe_runs(UO, "screening")
 n_rsm = doe_runs(UO, "rsm")
-cp_scr = doe_centre_points(UO, "screening")
-cp_rsm = doe_centre_points(UO, "rsm")
-n_fact = len(D.screening_factors(UO))
-n_rsm_fact = len(D.rsm_factors(UO))
-n_resp = len(RESPS)
+n_scr_cp = doe_centre_points(UO, "screening")
+n_rsm_cp = doe_centre_points(UO, "rsm")
+n_scr_fact = int(_scr_types.get("factorial", 0))
+n_rsm_fact = int(_rsm_types.get("factorial", 0))
+n_rsm_axial = int(_rsm_types.get("axial", 0))
+n_factors = len(D.rsm_factors(UO))
+n_resp = len(RESP)
+n_terms_scr = 1 + n_factors + n_factors * (n_factors - 1) // 2
+n_terms_rsm = n_terms_scr + n_factors
+
+# fitted models
+FSCR = {r: D.fit(UO, "screening", r) for r in RESP}
+FRSM = {r: D.fit(UO, "rsm", r) for r in RESP}
 
 
-def run_type_n(kind, kind_of_run):
-    d = csv(f"doe_{UO}_{kind}.csv")
-    return int((d.run_type == kind_of_run).sum())
+def eff(resp, term, col="Effect", superseded=False):
+    """One cell of the screening effect table (effect = 2 x coded coefficient)."""
+    d = D.screening_effects_df(UO, resp, superseded=superseded)
+    return float(d.loc[d["Term"] == term, col].iloc[0])
 
 
-n_scr_factorial = run_type_n("screening", "factorial")
-n_rsm_factorial = run_type_n("rsm", "factorial")
-n_rsm_axial = run_type_n("rsm", "axial")
-n_2fi = n_fact * (n_fact - 1) // 2
-
-# --- parameters -------------------------------------------------------------
-rp = report_params(UO)
-n_par = len(rp)
-n_wccpp = int((rp["Class"] == "WC-CPP").sum())
-n_multi = int((rp["Study"] == "multivariate").sum())
-n_uni = int((rp["Study"] == "univariate").sum())
+def coef(resp, term, col="Coef."):
+    """One cell of the response-surface coefficient table."""
+    d = D.rsm_coeff_df(UO, resp)
+    return float(d.loc[d["Term"] == term, col].iloc[0])
 
 
-def par(f):
-    return CFG.unit_op(UO).param(f)
-
-
-def sp(f):
-    return par(f).setpoint
-
-
-def nor(f):
-    return par(f).nor
-
-
-def prange(f):
-    return par(f).prange
-
-
-def par_name(f):
-    return par(f).name
-
-
-# --- fitted models ----------------------------------------------------------
-FIT = {k: {r: D.fit(UO, k, r) for r in RESPS} for k in ("screening", "rsm")}
-SEFF = {r: D.screening_effects_df(UO, r) for r in RESPS}
-SEFF_SUP = {r: D.screening_effects_df(UO, r, superseded=True) for r in RESPS}
-RCOEF = {r: D.rsm_coeff_df(UO, r) for r in RESPS}
-
-
-def eff(resp, term, sup=False):
-    d = (SEFF_SUP if sup else SEFF)[resp]
-    return float(d.loc[d["Term"] == term, "Effect"].iloc[0])
-
-
-def effp(resp, term, sup=False):
-    d = (SEFF_SUP if sup else SEFF)[resp]
-    return float(d.loc[d["Term"] == term, "p-value"].iloc[0])
-
-
-def coef(resp, term):
-    d = RCOEF[resp]
-    return float(d.loc[d["Term"] == term, "Coef."].iloc[0])
-
-
-def coefp(resp, term):
-    d = RCOEF[resp]
-    return float(d.loc[d["Term"] == term, "p-value"].iloc[0])
-
-
-def fitv(resp, field, kind="rsm"):
-    return float(FIT[kind][resp][field])
-
-
-def pval(x):
-    return "< 0.001" if x < 0.001 else f"= {x:.3f}"
-
-
-def cvrow(resp, kind, col):
+def cv(resp, kind="rsm", col="%CV"):
     d = D.center_cv_df(UO, kind)
     return float(d.loc[d["Response"] == D.RESP_LABEL[resp], col].iloc[0])
 
 
-r2_min = min(fitv(r, "R2") for r in R_GOVERNED)
-r2_max = max(fitv(r, "R2") for r in R_GOVERNED)
-predr2_min = min(fitv(r, "predR2") for r in R_GOVERNED)
-lof_p_min = min(fitv(r, "p_lof") for r in R_GOVERNED)
-
-# --- acceptance criteria and model predictions ------------------------------
-ACC = {r: D.effective_acceptance(UO, r) for r in RESPS}
-hcp_limit = ACC[R_HCP][1]
-mvm_floor = ACC[R_MVM][0]
-xmulv_floor = ACC[R_XMULV][0]
-hcp_ds_limit = D.acceptance_for(UO, R_HCP)[1]
-hcp_margin = CFG.ipc_limits["steps"][UO][R_HCP]["from_ds_backcalc"]["margin"]
-SETP = {f: sp(f) for f in D.rsm_factors(UO)}
+def pred(resp, **natural):
+    return float(D.predict(UO, resp, natural=natural)[0])
 
 
-def predict_at(resp, **over):
-    point = dict(SETP)
-    point.update(over)
-    return float(D.predict(UO, resp, natural=point)[0])
+def sp(p):
+    return CFG.unit_op(UO).param(p).setpoint
 
 
-# --- design space, capability, modular clearance ----------------------------
-DS = D.design_space_grid(UO)
-ds_pct = 100 * DS["fraction"]
+def nor(p, i):
+    return CFG.unit_op(UO).param(p).nor[i]
 
 
-def nor_box(n=11):
-    """Every governed response predicted over a grid spanning the normal operating ranges."""
-    fs = D.rsm_factors(UO)
-    grids = np.meshgrid(*[np.linspace(*nor(f), n) for f in fs], indexing="ij")
-    pts = {f: g.ravel() for f, g in zip(fs, grids)}
-    ok = np.ones(pts[fs[0]].shape, dtype=bool)
-    out = {}
-    for r in R_GOVERNED:
-        lo, hi, stype = ACC[r]
-        y = D.predict(UO, r, natural=pts)
-        good = (y <= hi) if stype == "upper" else (y >= lo)
-        out[r] = (float(y.min()), float(y.max()))
-        ok &= good
-    out["pass"] = float(ok.mean())
-    out["n"] = int(ok.size)
-    return out
+def prange(p, i):
+    return CFG.unit_op(UO).param(p).prange[i]
 
 
-NORBOX = nor_box()
-nor_pass_pct = 100 * NORBOX["pass"]
-hcp_nor_max = NORBOX[R_HCP][1]
-mvm_nor_min = NORBOX[R_MVM][0]
-xmulv_nor_min = NORBOX[R_XMULV][0]
-par_ph_nor_lo = D.par_nor_propagated(UO, R_HCP, F_PH)["par_nat"][0]
-par_wash_nor_hi = D.par_nor_propagated(UO, R_HCP, F_WASH)["par_nat"][1]
-ds_binding = D.RESP_LABEL[DS["binding"]]
-ds_binding_rej = 100 * DS["per_response"][DS["binding"]]
-ds_viral_rej = 100 * max(DS["per_response"][r] for r in (R_XMULV, R_MVM))
-
-CAP_KEYS = ["lrv_mvm", "lrv_xmulv", "hcp", "residual_dna", "leached_protein_a"]
+def at_setpoint(resp, **over):
+    """Model prediction with every factor at its set-point except those named."""
+    nat = {f: sp(f) for f in D.rsm_factors(UO)}
+    nat.update(over)
+    return pred(resp, **nat)
 
 
-def cap_val(key, col):
-    return float(cap.loc[cap["key"] == key, col].iloc[0])
+# acceptance criteria the analysis judges the step against
+hcp_ipc = D.effective_acceptance(UO, R_HCP)[1]
+hcp_ds = D.acceptance_for(UO, R_HCP)[1]
+mvm_floor = D.acceptance_for(UO, R_MVM)[0]
+xmulv_floor = D.acceptance_for(UO, R_XMULV)[0]
+
+# viral clearance ledger and the nominal step performance
+VC = csv("viral_clearance.csv").set_index("step")
+mvm_step = float(VC.loc["Anion Exchange (AEX)", "MVM"])
+xmulv_step = float(VC.loc["Anion Exchange (AEX)", "XMuLV"])
+mvm_cum = float(VC.loc["Cumulative", "MVM"])
+xmulv_cum = float(VC.loc["Cumulative", "XMuLV"])
+mvm_req = float(cqa_reg[cqa_reg.key == "lrv_mvm"].iloc[0]["acc_low"])
+xmulv_req = float(cqa_reg[cqa_reg.key == "lrv_xmulv"].iloc[0]["acc_low"])
+PS = csv("process_summary.csv").set_index("step")
+hcp_in = float(PS.loc[7, "hcp_out_ng_mg"])
+hcp_out = float(PS.loc[8, "hcp_out_ng_mg"])
+hcp_fold = float(PS.loc[8, "hcp_clearance_fold"])
+yield_nom = float(PS.loc[8, "step_yield"])
+
+# size of the region that meets every criterion this step is judged against
+DSG = D.design_space_grid(UO)
+ds_frac = DSG["fraction"]
+ds_reject_hcp = DSG["per_response"][R_HCP]
+ds_points = DSG["n_points"]
+n_governed = len(DSG["per_response"])
+
+# capability of the attributes this step sets or clears
+CAPK = ["lrv_mvm", "lrv_xmulv", "hcp", "residual_dna", "leached_protein_a"]
 
 
-vc = csv("viral_clearance.csv").set_index("step")
-AEX_ROW = D.VIRAL_STEP_ROW[UO]
-VF_ROW = D.VIRAL_STEP_ROW["virus_filtration"]
-LP_ROW = D.VIRAL_STEP_ROW["viral_inactivation"]
+def cpk(key):
+    return float(cap[cap.key == key].iloc[0]["Cpk"])
 
 
-def vclr(step_row, virus):
-    return float(vc.loc[step_row, virus])
+def cap_mean(key):
+    return float(cap[cap.key == key].iloc[0]["mean"])
 
 
-psum = csv("process_summary.csv").set_index("step")
+def cap_sd(key):
+    return float(cap[cap.key == key].iloc[0]["sd"])
 
 
-def nominal(col):
-    return float(psum.loc[STEP_NO, col])
+# the invalidated first execution, kept for root-cause confirmation only
+SUP_SCR = csv(f"doe_{UO}_screening_superseded.csv")
+REP_SCR = csv(f"doe_{UO}_screening.csv")
+sup_hcp_max = float(SUP_SCR[R_HCP].max())
+rep_hcp_max = float(REP_SCR[R_HCP].max())
+sup_hcp_corner = float(D.predict(UO, R_HCP, natural=dict(load_ph=sp("load_ph"),
+                                                         wash1_cond=prange("wash1_cond", 1),
+                                                         load_cond=sp("load_cond"),
+                                                         load=prange("load", 1)),
+                                 superseded=True)[0])
+rep_hcp_corner = at_setpoint(R_HCP, wash1_cond=prange("wash1_cond", 1),
+                             load=prange("load", 1))
 
-
-# --- superseded (invalidated) first execution -------------------------------
-sup_scr = csv(f"doe_{UO}_screening_superseded.csv")
-rep_scr = csv(f"doe_{UO}_screening.csv")
-sup_hcp_max = float(sup_scr[R_HCP].max())
-rep_hcp_max = float(rep_scr[R_HCP].max())
-sup_hcp_mean = float(sup_scr[R_HCP].mean())
-rep_hcp_mean = float(rep_scr[R_HCP].mean())
-
-# --- deviation DEV-008-03 bounding calculation ------------------------------
-dev3_offset = dev_008_03_buffer_ph_target - dev_008_03_buffer_ph_measured
-dev3_coded = dev3_offset / ((prange(F_PH)[1] - prange(F_PH)[0]) / 2)
-dev3_hcp_bound = abs(coef(R_HCP, LET[F_PH])) * dev3_coded
-dev3_mvm_bound = abs(coef(R_MVM, LET[F_PH])) * dev3_coded
+# parameter counts for this step
+PARAMS = report_params(UO)
+n_params = len(PARAMS)
+n_multi = int((PARAMS["Study"] == "multivariate").sum())
+n_uni = int((PARAMS["Study"] == "univariate").sum())
+n_wc_cpp = int((PARAMS["Class"] == "WC-CPP").sum())
 n_dev = len(dev_facts(DOC))
-
-# --- analytical methods summary (Appendix D) --------------------------------
-AMV = dict(AEX_AMV_REFS)
-appd = pd.DataFrame(
-    [
-        ["AMV-3012", AMV["AMV-3012"], "Host cell protein", "Immunoassay", "ng/mg"],
-        ["AMV-3014", AMV["AMV-3014"], "Residual DNA", "Quantitative PCR", "ng/dose"],
-        ["AMV-3016", AMV["AMV-3016"], "Leached Protein A", "Immunoassay", "ppm"],
-        ["AMV-3017", AMV["AMV-3017"], "XMuLV infectivity", "Cell-based titration", "log10 LRF"],
-        ["AMV-3018", AMV["AMV-3018"], "MVM infectivity", "Cell-based titration and qPCR", "log10 LRF"],
-        ["AMV-3013", AMV["AMV-3013"], "Charge variants", "Imaged capillary isoelectric focusing", "% of total"],
-    ],
-    columns=["Method", "Title", "Analyte", "Technique", "Reportable"],
-)
 ```
 
 ```{python}
@@ -272,1355 +196,1404 @@ print(SYN_BANNER)
 
 ## Abbreviations {.unnumbered}
 
-ADCC, antibody dependent cellular cytotoxicity. AEX, anion exchange chromatography.
-AMV, analytical method validation. BLA, Biologics License Application. CCD, central
-composite design. CEX, cation exchange chromatography. CPP, critical process parameter.
-CQA, critical quality attribute. Cpk, one sided process capability index. CV, coefficient
-of variation. DNA, deoxyribonucleic acid. DoE, design of experiments. DS, drug substance.
-ELISA, enzyme linked immunosorbent assay. GPP, general process parameter. HCP, host cell
-protein. ICH, International Council for Harmonisation. icIEF, imaged capillary isoelectric
-focusing. IgG1, immunoglobulin G subclass. KPP, key process parameter. LRF, log
-reduction factor. MSAT, Manufacturing Science and Technology. MVM, minute virus of mice.
-NOR, normal operating range. OLS, ordinary least squares. PAR, proven acceptable range.
-PPQ, process performance qualification. QbD, quality by design. RMSE, root mean square
-error. RSM, response surface methodology. SD, standard deviation. SDM, scale-down model.
-SOP, standard operating procedure. TCID50, median tissue culture infectious dose. UV,
-ultraviolet absorbance. WC-CPP, well controlled critical process parameter. XMuLV,
-xenotropic murine leukaemia virus. qPCR, quantitative polymerase chain reaction.
+AEX, anion exchange chromatography; ANOVA, analysis of variance; BLA, Biologics License
+Application; CCD, central composite design; CEX, cation exchange chromatography; Cpk, process
+capability index (one sided); CPP, critical process parameter; CQA, critical quality attribute;
+CV, coefficient of variation; DNA, deoxyribonucleic acid; DoE, design of experiments; DS, drug
+substance; ELISA, enzyme-linked immunosorbent assay; GPP, general process parameter; HCP, host
+cell protein; icIEF, imaged capillary isoelectric focusing; IgG1, immunoglobulin G subclass 1;
+KPP, key process parameter; LOQ, limit of quantitation; LRF, log reduction factor; MSAT,
+Manufacturing Science and Technology; MVM, minute virus of mice; NOR, normal operating range;
+OLS, ordinary least squares; PAR, proven acceptable range; PRESS, predicted residual error sum
+of squares; qPCR, quantitative polymerase chain reaction; RSM, response surface methodology;
+SDM, scale-down model; SOP, standard operating procedure; TCID50, 50 % tissue culture
+infectious dose; UV, ultraviolet; WC-CPP, well-controlled critical process parameter; XMuLV,
+xenotropic murine leukaemia virus.
 
 {{< pagebreak >}}
 
+<!-- ========================= BODY START (author here) =========================
+     Write every section in authoring/section_plan.yaml order for this doc-type,
+     each with its scaffold / register / rigor obligations. Numbers = inline exprs.
+     ========================================================================== -->
+
 # Executive summary {.unnumbered}
 
-Anion exchange chromatography is the last chromatographic step in the A-Mab drug substance
-process. It is operated in flow-through mode. At the load pH the antibody carries a net
-positive charge and passes through the quaternary amine ligand, while species that are
-negatively charged at that pH bind. The step therefore removes host cell protein, residual
-DNA, leached Protein A and virus particles without eluting the product. This report
-presents the Stage 1 characterization of the step, executed against the plan PCP-008 on a
-qualified scale-down model of the commercial process, which is fed from a
-`{python} f"{V['commercial_scale_l']:,.0f}"` L production bioreactor. The scope of the
-study was set by the pre-characterization risk assessment RA-001.
+Anion exchange chromatography is the final polishing step of the A-Mab drug substance
+process. The step is operated in flow-through mode, and the commercial process runs at
+`{python} f"{V['commercial_scale_l']:,}"` L. It was characterized against the approved
+protocol PCP-008 on a qualified scale-down column model, and this report presents the
+executed study. The report defines the operating region, reports a proven acceptable range
+for each parameter and each attribute the step is judged on, classifies every parameter, and
+states what the step contributes to the control strategy.
 
-Of the `{python} f"{n_par}"` parameters carried into the study,
-`{python} f"{n_multi}"` were studied in a multivariate design and
-`{python} f"{n_uni}"` was assessed one parameter at a time. A two-level full factorial
-screening design of `{python} f"{n_scr}"` runs was followed by a face-centred central
-composite design of `{python} f"{n_rsm}"` runs in the same
-`{python} f"{n_rsm_fact}"` factors. Every run was assayed for
-`{python} f"{n_resp}"` responses. The study recorded `{python} f"{n_dev}"` deviations,
-which are reported in §13. One of them invalidated the first execution of both designs,
-which were re-executed in full on a requalified load. The analysis reported here is the
-re-executed study.
+Of the `{python} n_params` process parameters of the step, `{python} n_multi` were studied
+in a multivariate design and `{python} n_uni` was assessed one at a time. The multivariate
+work consisted of a
+`{python} n_scr`-run two-level screening design and a `{python} n_rsm`-run face-centred
+central composite design in the same `{python} n_factors` factors. The responses measured on
+the flow-through pool were pool host cell protein, the log reduction factors for XMuLV and
+for MVM, and step yield.
 
-Raising the load pH drives more of the host cell protein population below its isoelectric
-point and onto the quaternary amine ligand, which lowers the concentration left in the
-pool, and raising the conductivity of the equilibration and wash buffer screens that
-electrostatic interaction and releases weakly bound host cell protein back into the pool.
-Raising the load pH also binds more XMuLV and MVM particles, whose surfaces are acidic at
-that pH, and raising the load conductivity screens those particles from the ligand and
-lowers the log reduction factor of each. Protein load carried no effect on any response over the
-range studied, and the univariate assessment of operating flow rate identified none over
-its range. The response-surface models for pool HCP,
-XMuLV LRF and MVM LRF explain between `{python} f"{r2_min:.2f}"` and
-`{python} f"{r2_max:.2f}"` of the variance in the data, with no significant lack of fit
-(the smallest lack-of-fit p-value is `{python} f"{lof_p_min:.2f}"`). Step yield is high in
-flow-through mode and no parameter affected it. Over the characterized region,
-`{python} f"{ds_pct:.0f}"` % of the parameter combinations meet every criterion the step
-governs. Pool HCP is the response that constrains the region and the viral responses reject
-none of it. The normal operating ranges are not fully covered. At the least favourable
-point inside them the model predicts pool HCP of
-`{python} f"{hcp_nor_max:.1f}"` ng/mg against an in-process limit of
-`{python} f"{hcp_limit:.1f}"` ng/mg, and §7, §8 and §10 report what follows for the
-control strategy.
+Raising load pH gives the acidic host cell proteins a larger net negative charge and holds
+more of them on the quaternary amine ligand, and it lowered pool host cell protein by
+`{python} f"{abs(eff(R_HCP, 'A')):.1f}"` ng/mg across the range studied. Raising the
+conductivity of the equilibration and wash-1 buffer screens that charge and releases the most
+weakly held of those proteins into the pool, and it raised pool host cell protein by
+`{python} f"{eff(R_HCP, 'B'):.1f}"` ng/mg. Virus particles are held on the same ligand by the
+acidic groups on their surface, and both log reduction factors fell as load pH fell and as
+load conductivity rose. The antibody carries a net positive charge at the load pH and is not
+retained, and no factor changed step yield over the ranges studied. The response-surface
+models for pool host cell protein and for the two log reduction factors show no significant
+lack of fit against the reproducibility of the scale-down model (@tbl-rsm-fit).
 
-The step is the sole contributor to the MVM clearance claim other than virus filtration.
-It delivers `{python} f"{vclr(AEX_ROW, 'MVM'):.2f}"` log10 of the cumulative
-`{python} f"{vclr('Cumulative', 'MVM'):.2f}"` log10 against a requirement of
-`{python} f"{cap_val('lrv_mvm', 'acc_low'):.1f}"` log10, and
-`{python} f"{vclr(AEX_ROW, 'XMuLV'):.2f}"` log10 of the cumulative enveloped-virus
-clearance. Cumulative MVM clearance carries a one-sided Cpk of
-`{python} f"{cap_val('lrv_mvm', 'Cpk'):.2f}"`, which is the tightest capability of the
-drug substance. All `{python} f"{n_par}"` parameters were classified as well controlled
-critical process parameters. The step contributes parameter ranges, an in-process limit on
-pool host cell protein, a modular viral clearance claim and a control on the hold time of
-the incoming cation exchange pool to the control strategy. These outcomes roll up into
-PCMR-001.
+Of the characterized region, `{python} pct(ds_frac)` meets every criterion the step is judged
+against, evaluated on a grid of `{python} f"{ds_points:,}"` operating points. The host cell
+protein criterion excludes `{python} pct(ds_reject_hcp)` of that region and the two viral
+criteria exclude no part of it. The normal operating ranges of all
+`{python} n_factors` multivariate parameters lie inside the characterized region, and for
+pool host cell protein the range that survives propagation of the other parameters through
+their normal operating ranges is narrower than the characterization range for two of them
+(@tbl-par).
+
+At commercial scale the cumulative MVM clearance has a capability of
+`{python} f"{cpk('lrv_mvm'):.2f}"` against the requirement of
+`{python} f"{mvm_req:g}"` log10, which is the tightest capability of any A-Mab drug substance
+attribute. The cumulative XMuLV clearance has a capability of
+`{python} f"{cpk('lrv_xmulv'):.2f}"` and host cell protein a capability of
+`{python} f"{cpk('hcp'):.2f}"`. This step contributes `{python} f"{mvm_step:.2f}"` log10 of
+the MVM claim and `{python} f"{xmulv_step:.2f}"` log10 of the XMuLV claim. The remainder
+comes from low-pH inactivation (PCR-006) and small-virus retentive filtration (PCR-009), and
+no part of the cumulative claim rests on this step alone.
+
+All `{python} n_params` parameters were classified as well-controlled critical process
+parameters. The study recorded `{python} n_dev` deviations. One of them established that the load
+material used in the first execution of both designs was not representative of the routine
+process, and both designs were invalidated and re-executed in full on a requalified load
+(§13.1). The analysis in this report is the re-executed study throughout. The outcomes
+summarized here roll up into the master report PCMR-001.
 
 # Introduction
 
 ## Product and unit operation
 
-A-Mab is a humanized IgG1 monoclonal antibody. Its primary mechanism of action is antibody
-dependent cellular cytotoxicity, and the glycan attributes that modulate that mechanism are
-formed in the production bioreactor and are not changed downstream. The drug substance
-process is a platform process. Protein A capture is followed by low-pH viral inactivation,
-cation exchange chromatography, anion exchange chromatography, small virus retentive
-filtration and ultrafiltration with diafiltration.
+A-Mab is a humanized IgG1 monoclonal antibody produced in a fed-batch mammalian cell culture
+and purified by the Novacyte platform train. The train is Protein A capture, low-pH viral
+inactivation, cation exchange chromatography, anion exchange chromatography, small-virus
+retentive filtration and ultrafiltration with diafiltration. Anion exchange is Step 8 and the
+last chromatographic step of the train. The commercial process is operated at
+`{python} f"{V['commercial_scale_l']:,}"` L of production bioreactor volume.
 
-Anion exchange chromatography is Step `{python} f"{STEP_NO}"` of that train. The step is
-operated in flow-through mode on a strong anion exchange resin carrying a quaternary amine
-ligand. The column is equilibrated, the cation exchange pool is adjusted and loaded, and
-the product is collected in the flow-through and the first wash. The antibody has a basic
-isoelectric point and is positively charged at the load pH, so it does not bind. Host cell
-proteins that are acidic at the load pH, residual DNA, leached Protein A and virus
-particles carry a net negative charge at that pH and bind the ligand.
+The step uses a strong anion exchange resin carrying a quaternary amine ligand and is operated
+in flow-through mode. At the load pH the antibody carries a net positive charge, because its
+isoelectric point lies well above the load pH, and it passes through the bed. Species that are
+negatively charged at that pH bind to the ligand and are removed. These are residual DNA, the
+acidic fraction of the host cell protein population, leached Protein A, and virus particles,
+whose surfaces are acidic. The step therefore removes impurities without binding the product,
+and step yield is high.
 
-The step forms no quality attribute. It sets the cumulative clearance of minute virus of
-mice, and it is a clearance step for enveloped virus, host cell protein, residual DNA and
-leached Protein A. In the nominal process the step reduces host cell protein
-`{python} f"{nominal('hcp_clearance_fold'):.1f}"`-fold to
-`{python} f"{nominal('hcp_out_ng_mg'):.1f}"` ng/mg and recovers
-`{python} f"{pct(nominal('step_yield'))}"` of the product mass. Viral clearance is claimed
-for the step and the basis for that claim is given in §8.
+Two of the removals are claimed as viral clearance. The step is credited with
+`{python} f"{xmulv_step:.2f}"` log10 of clearance for the enveloped model virus XMuLV and
+`{python} f"{mvm_step:.2f}"` log10 for the non-enveloped model virus MVM, and both claims are
+modular in the sense of ICH Q5A(R2) [@ichq5a]. The MVM capsid has no lipid envelope, so the
+low-pH hold at Step 6 leaves the particle infectious and the cumulative MVM requirement is met
+by the binding of MVM to the ligand here and its retention by the virus filter at Step 9. The
+MVM attribute is registered against this step in the drug substance quality attribute register
+(@tbl-cqa-set). The step also clears host cell protein, residual DNA and leached Protein A,
+all of which are formed or introduced upstream and are registered against the steps that form
+them (@tbl-cqa-clear).
+
+No aggregate clearance and no charge-variant modification are claimed for this step. Aggregate
+is controlled at cation exchange (PCR-007) and the charge-variant distribution is set in the
+production bioreactor (PCR-003).
 
 ## Objectives
 
-The objectives of the study were the following.
+The objectives of the study reported here were the following.
 
-(i) Quantify the relationship between each process parameter and the quality attributes
-    and process performance attributes the step governs, over ranges wider than the
-    intended routine control ranges.
-(ii) Define the operating region within which the step meets every criterion it is
-     responsible for.
-(iii) Establish a proven acceptable range for each parameter against each attribute it
-      governs, and determine where the normal operating ranges sit inside them.
-(iv) Classify each parameter according to its demonstrated impact and the risk that it
-     leaves the operating region, per SOP-4001.
-(v) Justify the ranges to be verified in Stage 2 and state what this step contributes to
-    the control strategy.
+(i) Quantify the relationship between each studied process parameter and each quality
+attribute and performance attribute measured at the step, over ranges wider than the intended
+normal operating ranges.
+
+(ii) Define the operating region within which the step meets every criterion it is judged
+against, and identify the attribute that bounds it.
+
+(iii) Establish a proven acceptable range for each parameter against each attribute that
+carries an acceptance criterion at this step, both alone and with the remaining parameters
+varying within their normal operating ranges.
+
+(iv) Classify each parameter according to the decision logic of SOP-4001 and the criticality
+framework of the A-Mab control strategy [@amab2009].
+
+(v) Justify the ranges to be run in Stage 2 and state what the step contributes to the
+control strategy, including the in-process controls that follow from the study.
 
 ## Regulatory and scientific basis
 
-The study is a Stage 1 process design activity in the lifecycle approach to process
-validation [@fda2011]. The enhanced approach of ICH Q8, Q9 and Q11 was applied, with
-prior knowledge and a documented risk assessment used to set the study scope and with
-criticality treated as a continuum rather than as a binary classification [@ichq8;
-@ichq9; @ichq11]. Viral clearance is evaluated as a modular claim under ICH Q5A(R2),
-which requires each contributing step to be studied independently on a qualified small
-scale spiking model [@ichq5a]. The process model, the quality attribute framework and the
-risk ranking method follow the A-Mab case study [@amab2009].
+The study is a Stage 1 process design activity in the sense of the FDA process validation
+guidance [@fda2011]. It follows the enhanced approach of ICH Q8(R2) and ICH Q11
+[@ichq8; @ichq11], in which prior knowledge and a risk assessment direct the experimental
+work, and the experimental work then puts limits on a process that prior knowledge already
+describes.
+Criticality is treated as a continuum in the sense of ICH Q9 [@ichq9], so an attribute is
+assigned a level of criticality and the levels called high and very high are called critical.
+The viral clearance claims follow ICH Q5A(R2) [@ichq5a], which allows the clearance of a
+process to be built from independently studied modules. The process model, the quality
+attribute framework and the risk methodology follow the A-Mab case study [@amab2009].
+
+Scale-down models were qualified under SOP-1001 and the designed experiments were designed,
+executed and analysed under SOP-1002. The step itself was operated under SOP-2011 and the
+resin was packed, sanitized and life-cycled under SOP-2008. Parameter classification follows
+SOP-4001.
 
 ## Related documents
 
-The characterization package this report belongs to is listed in @tbl-related. RA-001
-scoped the study, PCP-008 specified it, and this report records what was executed and
-what it established.
+This report is one of the per-step reports of the A-Mab characterization campaign. It executes
+the protocol PCP-008, takes its scope from the pre-characterization risk assessment RA-001,
+and rolls up into the master report PCMR-001.
 
 ```{python}
 #| output: asis
 print(related_docs_md(DOC))
-print()
-print(": Related documents in the characterization package. {#tbl-related}")
+print("\n: Related documents. {#tbl-related}\n")
 ```
 
 # Prior knowledge and quality risk basis
 
 ## Platform and prior-product knowledge
 
-The anion exchange polishing step has been operated in flow-through mode for three
-previously licensed antibodies produced on the same platform (X-Mab, Y-Mab and Z-Mab) and
-throughout A-Mab clinical manufacture. The resin, the buffer system and the mode of
-operation are unchanged for A-Mab. This experience establishes the mechanism of separation
-and the parameters that control it. The studies reported here bound the ranges over which
-that mechanism holds for A-Mab.
+Anion exchange chromatography in flow-through mode has been used for three previously licensed
+Novacyte antibodies (X-Mab, Y-Mab and Z-Mab) and throughout A-Mab clinical manufacture. The
+resin, the ligand chemistry, the bed height and the buffer system are the platform ones, and
+the operating conditions have not changed materially between these products. The body of
+experience shows that the step removes acidic impurities and virus particles reproducibly and
+that the product recovery is high.
 
-The separation rests on a single equilibrium. An impurity binds the quaternary amine
-ligand according to its net charge at the load pH and according to how strongly the ionic
-strength of the buffer shields that charge. Load pH and conductivity are therefore the
-two parameters expected to set the clearance of every bound species, and the antibody is
-expected to pass through unretained across the whole range because its isoelectric point
-lies well above the load pH.
+The load pH fixes the charge each species in the feed carries relative to its isoelectric
+point. Raising it makes the acidic host cell proteins, the DNA and the virus particles more
+negative and holds them more tightly on the quaternary amine ligand, while the antibody stays
+positive and flows through, so a higher load pH was expected to lower pool host cell protein
+and to raise both log reduction factors. The equilibration and wash-1 buffer fills the bed
+while the bound species are held there, and the ions it carries screen the attraction between
+those species and the ligand. Raising its conductivity was therefore expected to release the
+species that carry the least charge, which is the opposite direction to a rise in load pH. The
+load carries ions of its own, and raising the load conductivity screens the same attraction
+while the impurities and the virus particles are still competing for the ligand, so it was
+expected to lower removal as well.
 
-Host cell proteins
-are a population with a distribution of isoelectric points. Raising the load pH moves more
-of that population below its isoelectric point and into the bound fraction, and raising the
-conductivity of the equilibration and wash buffer shields the interaction and allows the
-more weakly bound species through with the product. DNA is a polyanion at any pH the step
-could operate at, binds strongly, and is expected to be cleared by orders of magnitude with
-little dependence on the operating parameters. Leached Protein A is acidic and binds while
-the antibody passes through, except where it remains complexed with the antibody through
-the Fc region. Retrovirus-like particles and the parvovirus model both carry acidic
-surfaces and bind by the same electrostatic mechanism, so their clearance is expected to
-fall as load pH drops and as conductivity rises. Yield in flow-through mode is expected to
-be high and to be insensitive to the parameters, because loss can only occur if the
-antibody's charge approaches neutrality at the load pH.
+Protein load in flow-through mode is the mass of antibody passed per volume of resin. What
+reaches the pool with it is the impurity mass it carries, because the ligand holds a finite
+mass of bound species and a load heavy enough to approach that mass lets host cell protein
+break through. Within the range studied here the impurity mass carried onto the
+column is far below the ligand capacity, so protein load was expected to have little effect.
+Raising the operating flow rate shortens the time the fluid spends in the bed and leaves a
+species less time to reach the ligand. Host cell protein, DNA and virus particles are small
+and highly charged and bind within a fraction of the residence time this range spans, so a
+higher flow rate was expected to lower removal only slightly.
 
-Prior knowledge does not establish where within the proposed ranges the clearance of each
-species becomes limiting, and it does not establish whether the parameters interact. Those
-two questions are what the designed experiments in §4 were run to answer.
+Two further expectations come from prior product experience. Residual DNA is a polyanion at
+any pH the step could be operated at, so it binds the anion exchanger strongly and is cleared
+by orders of magnitude irrespective of the operating point. Leached Protein A is acidic and
+binds the ligand while the antibody passes through, so the step removes the ligand fragments
+introduced by the capture step. Neither attribute was carried into the designed experiments,
+for the reasons given in §3.3.
 
 ## Quality attributes in scope
 
-@tbl-cqa-set gives the attribute this step sets. Criticality was assigned by the impact
-and uncertainty assessment of the A-Mab framework, in which an attribute scored high or
-very high is treated as critical [@amab2009].
+One drug substance attribute is registered against this step. It is the cumulative clearance
+of MVM, the non-enveloped model virus, and it is a very high criticality attribute of the
+viral safety category.
 
 ```{python}
 #| output: asis
 show(cqas_for(UO))
-print()
-print(": Quality attribute set by the anion exchange step. {#tbl-cqa-set}")
+print("\n: Drug substance quality attribute set by this step. {#tbl-cqa-set}\n")
 ```
 
-Clearance of minute virus of mice is a very high criticality attribute and the acceptance
-criterion is cumulative across the process. The step is judged against the log reduction
-it must deliver for the cumulative requirement to be met, which is derived in §7.
+The criticality levels in @tbl-cqa-set and @tbl-cqa-clear come from the A-Mab attribute
+assessment, in which the impact of an attribute on safety and efficacy is combined with the
+uncertainty in that impact to give the Tool #1 score [@amab2009]. Attributes scored high or
+very high are treated as critical. The assessment scores MVM clearance at the highest severity
+in the register, because no later step and no release test compensates for virus that leaves
+this step in the pool.
 
-@tbl-cqa-clear gives the attributes the step clears but does not set. Each is formed
-upstream and is brought to its drug substance criterion by more than one step.
+Four further attributes are cleared but not formed at this step, and they are listed in
+@tbl-cqa-clear with the same columns. Their acceptance criteria apply to the drug substance,
+so this step is judged against the fraction of each criterion that must be met at its own
+outlet, as described in §3.5.
 
 ```{python}
 #| output: asis
-show(cqas_by_keys(["lrv_xmulv", "hcp", "residual_dna", "leached_protein_a"]))
-print()
-print(": Quality attributes cleared by the anion exchange step. {#tbl-cqa-clear}")
+show(cqas_by_keys(["hcp", "residual_dna", "leached_protein_a", "lrv_xmulv"]))
+print("\n: Drug substance quality attributes cleared at this step. {#tbl-cqa-clear}\n")
 ```
 
-Charge variants and the glycan attributes are not affected by charge-based separation at
-the levels present in A-Mab and are not measured across this step. They are formed in the
-production bioreactor and are reported in PCR-003. Aggregate is reduced principally by
-cation exchange and is reported in PCR-007.
+Host cell protein and the two viral attributes were measured in the designed experiments.
+Residual DNA and leached Protein A were not, and §3.3 gives the reason.
 
 ## Risk-based prioritization and parameter selection
 
-RA-001 ranked every parameter of the step on its potential impact on a quality attribute
-and on its potential to interact with other parameters, and assigned each one a study
-type. `{python} f"{n_multi}"` parameters were assigned to a multivariate design because each of them
-changes either the net charge an impurity carries at the load pH or the ionic strength
-that screens that charge, and two parameters moving one adsorption equilibrium were
-expected to interact. Operating flow
-rate was assigned to a univariate assessment because it acts on residence time rather
-than on the equilibrium, and the binding of the small, highly charged species this step
-removes is fast relative to the residence time the range spans. Parameters held to
-platform specification, such as the buffer species and the resin, are identity and quality
-controlled rather than characterized.
+The scope of this study was set by the pre-characterization risk assessment RA-001, which
+ranked every parameter of the step by its potential impact on a quality attribute and by its
+potential to interact with other parameters, and then filtered the ranked list into study
+types. Parameters that scored high on impact, on interaction potential or on both were
+assigned to the multivariate designs. Parameters that scored high on impact but low on
+interaction potential were assigned to univariate assessment. Parameters whose ranges are set
+by the equipment or by the platform and which carry no plausible route to a quality attribute
+were not studied, and their ranges are held at the platform values.
 
-The ranges taken forward were widened well beyond the intended routine control ranges, so
-that the study bounds the knowledge space rather than the control space. @tbl-params in §4
-gives both. An excursion beyond a normal operating range can then be assessed
-against measured runs.
+The assessment carried `{python} n_multi` parameters into the multivariate designs. These are
+load pH, the equilibration and wash-1 conductivity, load conductivity and protein load. Load
+pH changes the charge the acidic impurities and the virus particles carry, the two
+conductivities change the ionic strength that screens that charge, and protein load changes
+the mass of impurity competing for the ligand. Each of the four therefore changes how tightly
+those species are held, so the effect of one was expected to depend on the level of another,
+and a multivariate design was needed to estimate that dependence. Operating flow rate was assigned to univariate assessment, because its
+route to an attribute is the residence time and because that route does not depend on the
+level of the other parameters.
+
+Buffer identity, buffer molarity, bed height, column diameter, sanitization regime and resin
+lot are controlled to the platform specification and were not characterized. They are subject
+to identity and quality control on receipt and to the resin life-cycle controls of SOP-2008.
+Their exclusion is a decision recorded in RA-001 and is not revisited here.
 
 # Materials and methods
 
 ## Scale-down model and its qualification
 
-The studies were executed on a laboratory scale chromatography system qualified as a model
-of the commercial step under SOP-1001. The model was designed on established principles of
-chromatographic scaling. Bed height, linear flow velocity, protein load per volume of
-resin, and the equilibration, load, wash and strip volumes normalized to column volumes
-were held equal to the commercial values. Column efficiency was verified by plate count and
-peak asymmetry before each campaign, and the resin was drawn from lots released for use
-at scale and operated within the cycle number limits of SOP-2008.
+The study was executed on a scale-down column model of the commercial step. The model uses the
+same resin, the same ligand chemistry and the same buffer system as the commercial column, and
+it is scaled on the established principles of chromatographic scaling. Bed height, linear flow
+velocity, protein load per volume of resin, and the equilibration, wash and pool volumes
+normalized to column volumes are held equal to the commercial values, so that the residence
+time and the number of column volumes each species experiences are the same at the two scales.
+Column packing was verified by plate count and peak asymmetry before each campaign under
+SOP-2008. The column was operated in the temperature-controlled chromatography chamber
+EQ-CHR-118, which was within its calibration interval throughout execution.
 
-Qualification compared the model with at-scale performance on the input and output
-attributes that matter to this step, which are the host cell protein, residual DNA and
-leached Protein A concentrations of the load and of the pool, and the step yield. The
-comparison was made on replicate runs at the set-point conditions. No difference in column
-efficiency or in step performance between scales was identified, and the model is
-therefore suitable for the studies reported here.
+The model was qualified under SOP-1001 by operating it at the commercial set-points and
+comparing its input and output attributes with the corresponding at-scale data. The attributes
+compared were product recovery, pool protein concentration, pool host cell protein and the
+pool volume expressed in column volumes. No statistically significant difference between
+scales was found, and the qualification record is maintained under SOP-1001. On that basis the
+conclusions drawn from the model in this report are applied to the commercial step.
 
-Viral clearance cannot be measured at manufacturing scale, because live virus may not be
-introduced into a manufacturing facility. A separate small scale spiking model was
-qualified for the viral runs under ICH Q5A(R2) [@ichq5a]. The spiking model uses the same
-column geometry, resin from the same released lots and the same buffers as the process model, with
-the load spiked with XMuLV or MVM before adjustment. Spike volume was held low enough that
-the load composition was not materially altered, and unspiked controls were run alongside
-to confirm that the spike did not change the host cell protein or yield performance of the
-step.
+Reproducibility of the model within a design is measured by its centre-point replicates.
+Screening carried `{python} n_scr_cp` centre points and the response-surface design carried
+`{python} n_rsm_cp`, and these replicates provide the pure-error term against which lack of
+fit is tested in §5.3. Their dispersion is reported in §5.1.
 
-The centre-point replicates of each design are the reproducibility measurement of the model
-under the conditions of the study. They provide the pure-error term used in the lack-of-fit
-tests in §5.3, and their spread is reported in §5.1.
+Two limits apply to the model. It reproduces the chemistry of the step and not the packing
+variability of a commercial column, so column performance at scale is verified by plate count
+and asymmetry at each packing under SOP-2008, and not by this study. It also uses resin
+within the early part of its life cycle, so the effect of cumulative cycles on clearance is
+covered by the resin life-cycle programme of SOP-2008 and not by the models fitted here.
 
 ## Operation
 
-Each run followed SOP-2011. The column was sanitized and equilibrated with the
-equilibration buffer to the conductivity given by the run setting. The cation exchange pool
-was adjusted to the load pH and load conductivity of the run and loaded to the protein load
-of the run at the operating flow rate. The product was collected in the flow-through and
-the first wash, and collection was stopped on the trailing edge of the ultraviolet
-absorbance trace. Deviation DEV-008-02 concerns that collection set-point and is reported
-in §13.2. The column was stripped and sanitized after each run and was not re-used across
-runs within a design block.
+The step is operated in flow-through mode under SOP-2011. The column is equilibrated with the
+equilibration buffer, whose conductivity is one of the studied parameters. The load is the
+cation exchange eluate from Step 7, adjusted to the target load pH and to the target load
+conductivity before it is applied. The product passes through the bed while the acidic species
+bind, and the flow-through is collected. A wash with the equilibration buffer follows the load
+and recovers the product held in the interstitial volume, and the wash is collected into the
+same pool.
 
-The load for every run in the reported execution was drawn from a single requalified
-cation exchange pool lot, so that load composition is a constant of the study rather than
-a source of variance. Load charge variant content was verified by icIEF before the study
-began. The reason that verification exists is DEV-008-01, which is reported in §13.1.
+Pool collection starts and stops on the ultraviolet absorbance of the column effluent. The
+trailing-edge stop set-point used in both executions of the study was
+`{python} f"{dev_008_02_uv_pool_stop_original_mau:g}"` mAU. Reconciliation of the pool
+fractions after execution showed that this set-point was slightly permissive, and it was
+corrected to `{python} f"{dev_008_02_uv_pool_stop_corrected_mau:g}"` mAU. The investigation,
+the impact assessment and the verification runs are in §13.2.
+
+The load material for the executed study was the requalified cation exchange eluate
+LOT-CEX-8851, whose charge-variant profile was verified against the routine process before the
+designs were run. The load material used in the first, invalidated execution was LOT-CEX-8842,
+and §13.1 gives the reason it was not representative.
+
+Buffer identity and molarity, resin lot, bed height and column diameter are controlled to the
+platform specification. They are subject to identity and quality control on receipt and to the
+life-cycle controls of SOP-2008, and they were held at their platform values in every run.
+They are therefore controlled inputs to this study and not characterized parameters.
 
 ## Analytical methods
 
-@tbl-sop lists the controlled procedures and validated methods used. Pool host cell
-protein was measured by immunoassay under AMV-3012, residual DNA by quantitative PCR under
-AMV-3014 and leached Protein A by immunoassay under AMV-3016. XMuLV and MVM titres were
-measured under AMV-3017 and AMV-3018 and are reported as the log10 reduction factor across
-the step. Charge variants of the load were measured by icIEF under AMV-3013. Step yield was
-calculated from the product mass in the pool relative to the product mass loaded. Method
-performance is summarized in Appendix D.
+Each response was measured by a validated method. Pool host cell protein was measured by the
+host cell protein enzyme-linked immunosorbent assay AMV-3012. XMuLV and MVM titres were
+measured by infectivity assay under AMV-3017 and AMV-3018, and the log reduction factor of a
+run is the difference between the titre applied to the column and the titre recovered in the
+pool, each expressed per unit volume and corrected for the volumes involved. Step yield was
+calculated from the protein concentration of the load and of the pool, measured by ultraviolet
+absorbance at 280 nm, and from the recorded volumes. The charge-variant profile of the load
+material was measured by imaged capillary isoelectric focusing under AMV-3013, and residual
+DNA and leached Protein A are measured under AMV-3014 and AMV-3016. The controlled documents
+for the step and its methods are listed in @tbl-sop.
 
 ```{python}
 #| output: asis
 print(sop_table(sops=AEX_SOP_REFS, amvs=AEX_AMV_REFS))
-print()
-print(": Controlled procedures and validated analytical methods. {#tbl-sop}")
+print("\n: Controlled documents for this step. {#tbl-sop}\n")
 ```
 
-The variance of the host cell protein immunoassay is the largest analytical contribution to
-the responses of this study, and it is not separable from process variance in the designs
-as executed. The centre-point spread reported in §5.1 therefore bounds the sum of the two.
-Every statement about reproducibility in this report is made against that combined term.
+Method performance bounds what the study can resolve. The host cell protein assay has an
+intermediate precision of `{python} f"{amv_3012_precision:g}"` % relative standard deviation
+and a limit of quantitation of `{python} f"{amv_3012_loq:g}"` ng/mg, and about
+`{python} pct(amv_3012_var_frac)` of the variance observed on a host cell protein result is
+attributable to the assay. The infectivity assays are more precise on the log10 scale, at
+`{python} f"{amv_3017_precision:g}"` % for XMuLV and `{python} f"{amv_3018_precision:g}"` %
+for MVM, with limits of quantitation of `{python} f"{amv_3017_loq:g}"` and
+`{python} f"{amv_3018_loq:g}"` log10 TCID50 per mL. Full method performance is given in
+Appendix D.
+
+Residual DNA and leached Protein A were measured on the pools but were not carried into the
+designed experiments as responses. Two reasons apply. DNA is a polyanion at every pH the step
+can be operated at and binds the anion exchanger under every condition in the design, so no
+parameter dependence was expected within the ranges studied. Both attributes also sit far
+below their drug substance criteria at the outlet of the process, at
+`{python} f"{cap_mean('residual_dna'):.4f}"` ng per dose against a criterion of
+`{python} f"{cqa_reg[cqa_reg.key=='residual_dna'].iloc[0]['acc_high']:g}"` ng per dose and
+`{python} f"{cap_mean('leached_protein_a'):.3f}"` ppm against a criterion of
+`{python} f"{cqa_reg[cqa_reg.key=='leached_protein_a'].iloc[0]['acc_high']:g}"` ppm (§8). A
+designed experiment on either attribute would have resolved differences that carry no
+consequence for the drug substance.
 
 ## Sampling plan
 
-Load, flow-through pool and strip samples were taken on every run. The pool sample is the
-mixed pool over the whole collected fraction, so the reported pool concentration is the
-mass average and not a point value on the trailing edge. Host cell protein, residual DNA
-and leached Protein A were assayed on the load and the pool of every run. Virus titres were
-assayed on the spiked load and the pool of every run of the spiking model. The screening
-design carried `{python} f"{cp_scr}"` centre-point replicates and the response-surface
-design carried `{python} f"{cp_rsm}"` (§4). Assays were run in single determination on
-process samples, with the assay controls of the method validation applied to each plate.
+One load sample and one pool sample were taken from every run of both designs. The load sample
+was assayed for protein concentration, host cell protein and charge variants, and the pool
+sample for protein concentration, host cell protein, residual DNA and leached Protein A. Every
+design run was executed as a virus spiking run on the qualified small-scale spiking model, so
+XMuLV and MVM titres were measured on the load and on the pool of every run. Spiking studies
+are performed in a containment laboratory on a separate column of the same scale-down design,
+as required for a modular clearance claim under ICH Q5A(R2) [@ichq5a].
+
+Centre points were distributed through the run order of each design and not grouped together,
+so
+that a drift in the model or in an assay over a campaign would appear as dispersion between
+replicates. The screening design carried `{python} n_scr_cp` centre points and the
+response-surface design carried `{python} n_rsm_cp`. Run order within each design was
+randomized under SOP-1002.
 
 ## Statistical methods
 
-The coded levels −1 and +1 correspond to the low and high edges of each characterization
-range, and every model was fitted on the coded factors by ordinary least squares. The
-screening data were fitted with a model carrying all `{python} f"{n_fact}"` main effects
-and all `{python} f"{n_2fi}"` two-factor interactions. An effect is reported as twice the
-coded coefficient, which is the change in the response between the low and high edges of
-the range. The response-surface data were fitted with the full quadratic model in the
-`{python} f"{n_rsm_fact}"` factors. Significance was assessed at α = 0.05 throughout.
+Every factor was coded so that the edges of its characterization range are −1 and +1 and the
+midpoint of that range is 0. Coding puts the factors on a common scale, so a coefficient is
+the change in the response over half the characterization range of its factor and coefficients
+can be compared across factors of different units. An effect in a screening table is twice the
+coded coefficient, which is the change in the response between the low and the high edge of
+the range.
 
-Model adequacy was judged on the coefficient of determination, the adjusted and predicted
-coefficients of determination, the overall F-test, and an analysis of variance in which the
-residual sum of squares is partitioned into lack of fit and pure error. The pure-error term
-comes from the centre-point replicates, so a significant lack of fit means the model misses
-structure that the replicates show to be real. The predicted coefficient of determination
-is computed from the prediction error sum of squares, which refits the model with each run
-removed in turn and is therefore the measure that penalizes an over-fitted model.
+The screening designs were analysed by ordinary least squares with all main effects and all
+two-factor interactions, which is `{python} n_terms_scr` terms including the intercept. The
+response-surface designs were analysed with the full quadratic model, which adds the squared
+term of each factor and gives `{python} n_terms_rsm` terms. A term was treated as significant
+at α = 0.05. Model adequacy was assessed from the coefficient of determination, its adjusted
+form, the predicted form computed from PRESS by leave-one-out deletion, the model F ratio and
+its p value, and the analysis of variance partition of the residual into lack of fit and pure
+error. The pure-error term is the dispersion between the centre-point replicates, so a
+significant lack of fit means the model misses structure that is larger than the
+reproducibility of the model itself.
 
-A factor with no term significant at α = 0.05 in either design is reported as having no
-demonstrated effect over the range studied. Such a parameter may still change the response
-outside the range studied, or by an amount this design has too little power to resolve.
+The screening design identifies which factors matter and gives a first estimate of their size.
+The response-surface model is the predictive model of this report. Every prediction, every
+proven acceptable range and every statement about the operating region is taken from the
+response-surface models and not from the screening fits.
+
+Three criteria are used to judge the step. Pool host cell protein is judged against an
+in-process limit of `{python} f"{hcp_ipc:.1f}"` ng/mg. That limit was obtained by carrying
+the drug substance criterion of `{python} f"{hcp_ds:g}"` ng/mg back through the host cell
+protein clearance credited to the steps that follow this one, which gives the pool
+concentration a batch may carry and still reach the criterion, and by then setting the limit a
+factor below that concentration. A limit set at the concentration itself would hold only while
+every later step delivered its nominal clearance exactly. The two viral responses are judged
+against the step contribution the cumulative claim requires. The cumulative MVM requirement is
+`{python} f"{mvm_req:g}"` log10 and the other steps of the train are credited with
+`{python} f"{mvm_cum - mvm_step:.2f}"` log10, so this step must deliver
+`{python} f"{mvm_floor:.2f}"` log10. The same calculation for XMuLV gives a required
+contribution of `{python} f"{xmulv_floor:.2f}"` log10. Step yield has no acceptance criterion
+at this step and no proven acceptable range is computed for it.
 
 Commercial-scale capability was estimated by Monte-Carlo simulation of
-`{python} f"{V['n_monte_carlo']:,}"` batches with every parameter varying inside its
-normal operating range, propagated through the fitted models of the whole train, and is
-reported as a one-sided Cpk against the drug substance criterion (§8).
+`{python} f"{V['n_monte_carlo']:,}"` batches of the whole train. Each batch draws every
+parameter of every step from a normal distribution centred on its set-point with a standard
+deviation of one sixth of the width of its normal operating range, truncated at the edges of
+the characterization range. Capability is reported as a one-sided Cpk, computed against the
+upper limit for an impurity and against the lower limit for a clearance requirement, because a
+one-sided attribute is not penalized by its distance from a limit that does not apply to it.
 
 # Study design
 
 ## Factors, ranges and the knowledge space
 
-@tbl-params gives the parameters, their set-points, their normal operating ranges and the
-characterization ranges over which they were studied. The characterization range is the
-knowledge space edge and is not a proven acceptable range. The proven acceptable ranges are
-computed per attribute in §7.
+@tbl-params gives the five parameters of the step with their set-points, their normal
+operating ranges, the ranges over which they were characterized, the study type each received
+and the classification each was given by this study. The classification column is the outcome
+of §9 and is repeated here so that the parameter set can be read in one place.
 
 ```{python}
 #| output: asis
 show(report_params(UO))
-print()
-print(": Parameters, ranges, study type and final classification. {#tbl-params}")
+print("\n: Process parameters, ranges, study type and classification. {#tbl-params}\n")
 ```
 
-The characterization range of every parameter is at least twice the width of its normal
-operating range. Load pH was studied over
-`{python} f"{prange(F_PH)[0]:g}"` to `{python} f"{prange(F_PH)[1]:g}"` against a normal
-operating range of `{python} f"{nor(F_PH)[0]:g}"` to `{python} f"{nor(F_PH)[1]:g}"`, and
-the equilibration and wash conductivity over
-`{python} f"{prange(F_WASH)[0]:g}"` to `{python} f"{prange(F_WASH)[1]:g}"` mS/cm against a
-normal operating range of `{python} f"{nor(F_WASH)[0]:g}"` to
-`{python} f"{nor(F_WASH)[1]:g}"` mS/cm. Protein load was studied from
-`{python} f"{prange(F_LOAD)[0]:g}"` to `{python} f"{prange(F_LOAD)[1]:g}"` g per litre of
-resin, which reaches well below and somewhat above the routine range, because load is the
-parameter most likely to expose a capacity limit on the bound species. The upper edge of
-the load pH range was set by the point at which the antibody itself begins to acquire
-appreciable negative charge, and the lower edge by the point at which impurity binding
-weakens.
+The characterization ranges are deliberately wider than the normal operating ranges. Load pH
+was studied from `{python} f"{prange('load_ph', 0):g}"` to
+`{python} f"{prange('load_ph', 1):g}"` against a normal operating range of
+`{python} f"{nor('load_ph', 0):g}"` to `{python} f"{nor('load_ph', 1):g}"`, and the
+equilibration and wash-1 conductivity from `{python} f"{prange('wash1_cond', 0):g}"` to
+`{python} f"{prange('wash1_cond', 1):g}"` mS/cm against a normal operating range of
+`{python} f"{nor('wash1_cond', 0):g}"` to `{python} f"{nor('wash1_cond', 1):g}"` mS/cm.
+Protein load was studied from `{python} f"{prange('load', 0):g}"` to
+`{python} f"{prange('load', 1):g}"` g per L of resin, which reaches well above the upper edge
+of its normal operating range of `{python} f"{nor('load', 1):g}"` g per L. Studying wider
+ranges serves two purposes. It exposes the step to conditions it would meet only under a
+combined excursion, and it leaves room for movement of the operating point within a
+characterized region without new experimental work.
 
-@tbl-legend gives the coded letter used for each factor in the effect and coefficient
-tables that follow.
+The characterized region is the knowledge space of the step. It is the four-dimensional box
+whose edges are the characterization ranges in @tbl-params. The design space is the part of
+that box in which every criterion is met, and it is reported in §6. The normal operating
+ranges lie inside both.
+
+The four multivariate factors are coded A to D in the effect and coefficient tables of §5 and
+of Appendix C. @tbl-legend gives the mapping.
 
 ```{python}
 #| output: asis
 show(D.factor_legend_df(UO))
-print()
-print(": Coded factor legend. {#tbl-legend}")
+print("\n: Coded factor legend. {#tbl-legend}\n")
 ```
 
 ## Screening design
 
-The screening study was a two-level full factorial in the `{python} f"{n_fact}"` factors
-with `{python} f"{n_scr_factorial}"` factorial runs and `{python} f"{cp_scr}"`
-centre-point replicates, `{python} f"{n_scr}"` runs in total, executed in randomized
-order. A full factorial at this size estimates every main effect and every two-factor
-interaction without aliasing. The purpose of the screening study is to identify which parameters carry an effect
-and which do not. It does not resolve curvature, and the magnitudes it returns are refined
-by the response-surface study. The design matrix and the measured responses are in
-Appendix A.
+The screening design was a two-level full factorial in the `{python} n_factors` multivariate
+factors, `{python} n_scr_fact` factorial runs augmented with `{python} n_scr_cp` centre
+points, for `{python} n_scr` runs in total. The full factorial was run in preference to a
+fractional design because each of the four factors changes how tightly the same acidic
+species are held on the same ligand, so an interaction between any two of them was expected. In a full factorial no main effect is aliased with a two-factor
+interaction and every two-factor interaction is estimated in its own right, so an interaction
+found in this design is a property of the data and not of the aliasing structure. The design
+supports `{python} n_terms_scr` model terms and leaves
+`{python} n_scr - n_terms_scr` residual degrees of freedom. The coded matrix and the measured
+responses are in Appendix A.
 
 ## Response-surface design
 
-The response-surface study was a face-centred central composite design in the same
-`{python} f"{n_rsm_fact}"` factors, with `{python} f"{n_rsm_factorial}"` factorial runs,
-`{python} f"{n_rsm_axial}"` axial runs at the faces of the cube and
-`{python} f"{cp_rsm}"` centre-point replicates, `{python} f"{n_rsm}"` runs in total. The
-axial points sit on the faces rather than outside them, so no run leaves the
-characterization range and the design supports a quadratic term in each factor without
-extrapolating. All `{python} f"{n_fact}"` screening factors were carried forward. Load pH, the
-equilibration and wash conductivity and load conductivity each carried a significant effect
-on at least one response. Protein load carried none, and it was retained because the mass
-of impurity delivered to the ligand rises with it, and a capacity limit approached at high
-load would appear as curvature that a two-level design cannot estimate. The response-surface model is
-the predictive model of this report, and every prediction, design space statement and
-proven acceptable range in §6 to §8 is derived from it. The design matrix and the measured
+The response-surface design was a face-centred central composite design in the same
+`{python} n_factors` factors. It comprises `{python} n_rsm_fact` factorial runs,
+`{python} n_rsm_axial` axial runs and `{python} n_rsm_cp` centre points, for
+`{python} n_rsm` runs. The axial points sit on the faces of the coded cube and not outside it,
+so every run of the design is inside the characterization ranges of @tbl-params
+and no prediction from the model requires extrapolation beyond a range the step was operated
+over. The design adds the four squared terms to the screening model and so allows curvature in
+each factor to be estimated. It leaves `{python} n_rsm - n_terms_rsm` residual degrees of
+freedom, of which `{python} n_rsm_cp - 1` are pure error. The coded matrix and the measured
 responses are in Appendix B.
+
+The same four factors were carried from screening into the response surface. Screening
+found large effects on host cell protein for load pH and the equilibration and wash-1
+conductivity, and large effects on the two log reduction factors for load pH and load
+conductivity, so dropping any factor would have lost a term that carries one of the three
+attributes.
 
 ## Univariate assessment
 
-Operating flow rate was assessed one parameter at a time over
-`{python} f"{prange('flow')[0]:g}"` to `{python} f"{prange('flow')[1]:g}"` cm/hr rather
-than in the multivariate design. Flow rate sets the residence time in the bed. Binding of
-the small, highly charged species this step removes is fast on the timescale the range
-spans, and there is no mechanism by which residence time would change the position of the
-binding equilibrium that load pH and conductivity control. An interaction with the
-multivariate factors was therefore not expected, and the runs were spent on load pH and the
-two conductivities, which change the charge of the bound species and the ionic strength
-that screens it. Residence time still determines how completely host cell protein and virus
-particles reach the ligand before the fluid leaves the bed, and §9 gives the classification
-of the parameter.
+Operating flow rate was assessed one factor at a time over the range in @tbl-params. It
+changes only the time a species has to reach the ligand before the fluid moves on, and it
+changes neither the charge that species carries nor the ionic strength that screens it, which
+is why RA-001 ranked its potential to interact with the other parameters low and assigned it
+to a univariate assessment. No effect estimate for flow rate is reported in §5,
+because it was not a factor of either design, and its classification in §9 rests on the
+univariate assessment together with the control capability of the pump.
 
 # Results
 
 ## Centre-point performance and reproducibility
 
-@tbl-cv-rsm gives the mean, the standard deviation and the coefficient of variation of
-each response over the `{python} f"{cp_rsm}"` centre-point replicates of the
-response-surface design. These replicates were run at identical settings, so their spread
-is the combined process and analytical variability of the model, and it is the pure-error
-term against which lack of fit is tested in §5.3.
+The centre-point replicates measure the reproducibility of the scale-down model together with
+the assays, at one operating point, within one campaign. @tbl-cv-scr gives the replicates of
+the screening design and @tbl-cv-rsm those of the response-surface design.
+
+```{python}
+#| output: asis
+show(D.center_cv_df(UO, "screening"))
+print("\n: Centre-point reproducibility, screening design. {#tbl-cv-scr}\n")
+```
 
 ```{python}
 #| output: asis
 show(D.center_cv_df(UO, "rsm"))
-print()
-print(": Centre-point reproducibility, response-surface design. {#tbl-cv-rsm}")
+print("\n: Centre-point reproducibility, response-surface design. {#tbl-cv-rsm}\n")
 ```
 
-Pool HCP is the least precise response at `{python} f"{cvrow(R_HCP, 'rsm', '%CV'):.1f}"` %
-coefficient of variation, which is consistent with the precision of the immunoassay at the
-concentrations this step delivers. The two viral responses reproduce at
-`{python} f"{cvrow(R_XMULV, 'rsm', '%CV'):.1f}"` % and
-`{python} f"{cvrow(R_MVM, 'rsm', '%CV'):.1f}"` %, which for a log10 quantity is a spread of
-a few tenths of a log and is normal for an infectivity titration. Step yield reproduces at
-`{python} f"{cvrow(R_YIELD, 'rsm', '%CV'):.1f}"` %. The centre points of the screening
-design gave `{python} f"{cvrow(R_HCP, 'screening', '%CV'):.1f}"` % on pool HCP and
-`{python} f"{cvrow(R_MVM, 'screening', '%CV'):.1f}"` % on MVM LRF, so the two designs
-reproduce to the same degree and their results may be read together.
+Pool host cell protein is the least precise response in both designs, at
+`{python} f"{cv(R_HCP, 'screening'):.1f}"` % in screening and
+`{python} f"{cv(R_HCP, 'rsm'):.1f}"` % in the response-surface design. Much of that dispersion
+is analytical. The host cell protein assay carries an intermediate precision of
+`{python} f"{amv_3012_precision:g}"` % and accounts for about
+`{python} pct(amv_3012_var_frac)` of the variance of a result, so the process contribution to
+the observed spread is smaller than the total. The two viral responses reproduce at
+`{python} f"{cv(R_XMULV, 'rsm'):.1f}"` % and `{python} f"{cv(R_MVM, 'rsm'):.1f}"` % of their
+means, which on the log10 scale is a standard deviation of
+`{python} f"{D.center_cv_df(UO, 'rsm').loc[D.center_cv_df(UO, 'rsm').Response == D.RESP_LABEL[R_XMULV], 'SD'].iloc[0]:.2f}"`
+and
+`{python} f"{D.center_cv_df(UO, 'rsm').loc[D.center_cv_df(UO, 'rsm').Response == D.RESP_LABEL[R_MVM], 'SD'].iloc[0]:.2f}"`
+log10. Step yield reproduces at `{python} f"{cv(R_YIELD, 'rsm'):.1f}"` %.
 
-The consequence for the rest of this section is that an effect on pool HCP has to be large
-to be detected, and that a difference of a few tenths of a log in a viral response is not
-distinguishable from assay noise. Both bounds are applied where they matter below.
+The centre points of the two designs agree with each other. Pool host cell protein averaged
+`{python} f"{D.center_cv_df(UO, 'screening').loc[0, 'Mean']:.1f}"` ng/mg in screening and
+`{python} f"{D.center_cv_df(UO, 'rsm').loc[0, 'Mean']:.1f}"` ng/mg in the response-surface
+design, a difference well inside the dispersion of either set. Both designs were executed on
+the same requalified load material, and their agreement supports reading the screening and the
+response-surface results as one study.
 
-## Screening factor effects
+## Screening: factor effects
 
-@tbl-fit-scr summarizes the screening models. An effect is the change in the response
-between the low and the high edge of the characterization range.
+@tbl-scr-fit summarizes the screening models. Three of the four responses gave a significant
+model and step yield did not.
 
 ```{python}
 #| output: asis
 show(D.fit_summary_df(UO, "screening"))
-print()
-print(": Screening model summary, all responses. {#tbl-fit-scr}")
+print("\n: Screening model summary, all responses. {#tbl-scr-fit}\n")
 ```
 
-Pool HCP was affected by the equilibration and wash conductivity, by load pH, and by the
-interaction between them. @tbl-eff-hcp gives the six largest effects. Raising the
-equilibration and wash conductivity across its range raised pool HCP by
-`{python} f"{eff(R_HCP, LET[F_WASH]):.1f}"` ng/mg (p `{python} pval(effp(R_HCP, LET[F_WASH]))`)
-and raising load pH across its range lowered it by
-`{python} f"{abs(eff(R_HCP, LET[F_PH])):.1f}"` ng/mg
-(p `{python} pval(effp(R_HCP, LET[F_PH]))`). The interaction between the two is
-`{python} f"{eff(R_HCP, LET[F_PH] + LET[F_WASH]):.1f}"` ng/mg
-(p `{python} pval(effp(R_HCP, LET[F_PH] + LET[F_WASH]))`), which is about half the size of
-either main effect. Neither load conductivity nor protein load affected pool HCP.
+Pool host cell protein was affected by the equilibration and wash-1 conductivity, by load pH
+and by the interaction between the two. @tbl-scr-hcp gives the effect estimates in order of
+size. Raising the equilibration and wash-1 conductivity from
+`{python} f"{prange('wash1_cond', 0):g}"` to `{python} f"{prange('wash1_cond', 1):g}"` mS/cm
+raised pool host cell protein by `{python} f"{eff(R_HCP, 'B'):.1f}"` ng/mg
+(p = `{python} f"{eff(R_HCP, 'B', 'p-value'):.1g}"`). Raising load pH from
+`{python} f"{prange('load_ph', 0):g}"` to `{python} f"{prange('load_ph', 1):g}"` lowered it by
+`{python} f"{abs(eff(R_HCP, 'A')):.1f}"` ng/mg
+(p = `{python} f"{eff(R_HCP, 'A', 'p-value'):.1g}"`). The two effects are of similar size and
+opposite sign. Moving load pH across its range binds about as much host cell protein as moving
+the buffer conductivity across its own range releases. The interaction between them was
+`{python} f"{eff(R_HCP, 'AB'):.1f}"` ng/mg
+(p = `{python} f"{eff(R_HCP, 'AB', 'p-value'):.1g}"`) and is negative, so raising load pH
+removes more host cell protein when the conductivity is high than when it is low. Neither load
+conductivity nor protein load reached significance for this response.
 
 ```{python}
 #| output: asis
-show(D.screening_effects_df(UO, R_HCP, top=6))
-print()
-print(": Screening effects on pool HCP, six largest. {#tbl-eff-hcp}")
+show(D.screening_effects_df(UO, R_HCP))
+print("\n: Screening effect estimates, pool host cell protein. {#tbl-scr-hcp}\n")
 ```
 
-Both viral responses behaved the same way as each other and differently from pool HCP.
-@tbl-eff-mvm gives the effects on MVM LRF. Raising load pH across its range raised MVM LRF
-by `{python} f"{eff(R_MVM, LET[F_PH]):.2f}"` log10
-(p `{python} pval(effp(R_MVM, LET[F_PH]))`) and raising load conductivity lowered it by
-`{python} f"{abs(eff(R_MVM, LET[F_COND])):.2f}"` log10
-(p `{python} pval(effp(R_MVM, LET[F_COND]))`). The corresponding effects on XMuLV LRF are
-`{python} f"{eff(R_XMULV, LET[F_PH]):.2f}"` log10
-(p `{python} pval(effp(R_XMULV, LET[F_PH]))`) and
-`{python} f"{eff(R_XMULV, LET[F_COND]):.2f}"` log10
-(p `{python} pval(effp(R_XMULV, LET[F_COND]))`). No interaction reached significance for
-either virus.
+The two viral responses were affected by load pH and by load conductivity, and by nothing
+else. For MVM, shown in @tbl-scr-mvm, load pH raised the log reduction factor by
+`{python} f"{eff(R_MVM, 'A'):.2f}"` log10 across its range
+(p = `{python} f"{eff(R_MVM, 'A', 'p-value'):.1g}"`) and load conductivity lowered it by
+`{python} f"{abs(eff(R_MVM, 'C')):.2f}"` log10
+(p = `{python} f"{eff(R_MVM, 'C', 'p-value'):.1g}"`). The XMuLV response behaved the same way,
+with an effect of `{python} f"{eff(R_XMULV, 'A'):.2f}"` log10 for load pH
+(p = `{python} f"{eff(R_XMULV, 'A', 'p-value'):.1g}"`) and
+`{python} f"{abs(eff(R_XMULV, 'C')):.2f}"` log10 for load conductivity
+(p = `{python} f"{eff(R_XMULV, 'C', 'p-value'):.1g}"`). The equilibration and wash-1
+conductivity, which dominates the host cell protein response, did not reach significance for
+either virus. No interaction reached significance for either viral response in this design.
 
 ```{python}
 #| output: asis
-show(D.screening_effects_df(UO, R_MVM, top=6))
-print()
-print(": Screening effects on MVM LRF, six largest. {#tbl-eff-mvm}")
+show(D.screening_effects_df(UO, R_MVM))
+print("\n: Screening effect estimates, MVM log reduction factor. {#tbl-scr-mvm}\n")
 ```
 
-The equilibration and wash conductivity, which changed pool HCP more than any other
-parameter, did not reach significance on either virus. Its effect on MVM LRF is
-`{python} f"{eff(R_MVM, LET[F_WASH]):.2f}"` log10
-(p `{python} pval(effp(R_MVM, LET[F_WASH]))`) and on XMuLV LRF
-`{python} f"{eff(R_XMULV, LET[F_WASH]):.2f}"` log10
-(p `{python} pval(effp(R_XMULV, LET[F_WASH]))`). Both are within the reproducibility of the
-titration reported in §5.1. Raising the equilibration and wash conductivity releases host
-cell protein into the pool and releases no measurable quantity of either virus.
+Step yield gave no significant model, at F = `{python} f"{FSCR[R_YIELD]['F']:.2f}"` on
+p = `{python} f"{FSCR[R_YIELD]['p']:.2f}"`, and no individual term reached α = 0.05. The
+largest estimate was that of load conductivity, at
+`{python} f"{eff(R_YIELD, 'C'):.3f}"` of the fraction recovered, which is smaller than the
+dispersion between the centre points of the same design. The step recovers the product
+irrespective of where it is operated within these ranges.
 
-No parameter affected step yield. The screening model for yield is not significant overall
-(p `{python} pval(fitv(R_YIELD, 'p', 'screening'))`) and the largest single effect,
-`{python} f"{eff(R_YIELD, LET[F_COND]):.4f}"` on a fraction, is smaller than the
-centre-point standard deviation of the response. The antibody does not adsorb to the
-ligand at any setting in the design, so no parameter of the binding equilibrium can remove
-product from the pool.
+The predicted coefficient of determination in @tbl-scr-fit is negative for XMuLV, at
+`{python} f"{FSCR[R_XMULV]['predR2']:.2f}"`. A screening design with
+`{python} n_scr - n_terms_scr` residual degrees of freedom and ten estimated terms leaves
+little room for a deletion test, and this value says that the screening fit for XMuLV should
+not be used to predict an unrun condition. It is used here only to identify which factors act,
+and the response-surface model of §5.3 carries the prediction.
 
-The screening models for pool HCP and MVM LRF fit the data closely
-(R² = `{python} f"{fitv(R_HCP, 'R2', 'screening'):.2f}"` and
-`{python} f"{fitv(R_MVM, 'R2', 'screening'):.2f}"`), but the model is nearly saturated at
-`{python} f"{n_scr}"` runs and its predicted coefficient of determination for XMuLV LRF is
-negative (`{python} f"{fitv(R_XMULV, 'predR2', 'screening'):.2f}"`). No prediction in this
-report rests on the screening models.
+The screening designs identify the factors and give a first estimate of their size. The
+estimates are refined by the response-surface models, and where the two disagree in magnitude
+the response-surface estimate is the one used.
 
 ## Response-surface models
 
-@tbl-fit-rsm summarizes the response-surface models. These are the predictive models of
-the study.
+@tbl-rsm-fit summarizes the response-surface models. Pool host cell protein and the two log
+reduction factors gave significant models with the largest part of their variation explained,
+and step yield again gave no model.
 
 ```{python}
 #| output: asis
 show(D.fit_summary_df(UO, "rsm"))
-print()
-print(": Response-surface model summary, all responses. {#tbl-fit-rsm}")
+print("\n: Response-surface model summary, all responses. {#tbl-rsm-fit}\n")
 ```
 
-The models for pool HCP, XMuLV LRF and MVM LRF are all significant and explain between
-`{python} f"{r2_min:.2f}"` and `{python} f"{r2_max:.2f}"` of the variance in the data. The
-predicted coefficients of determination remain positive for all three, with the smallest at
-`{python} f"{predr2_min:.2f}"` for MVM LRF. The model for step yield is not significant
-(p `{python} pval(fitv(R_YIELD, 'p'))`), which repeats the screening result. Step yield maps
-to no acceptance criterion at this step and is reported as a process performance attribute
-only.
-
-@tbl-coef-hcp gives the full coefficient table for pool HCP and @tbl-anova-hcp its analysis
-of variance. Load pH and the equilibration and wash conductivity carry coefficients of
-`{python} f"{coef(R_HCP, LET[F_PH]):.2f}"` and
-`{python} f"{coef(R_HCP, LET[F_WASH]):.2f}"` ng/mg per coded unit, and their interaction
-`{python} f"{coef(R_HCP, LET[F_PH] + LET[F_WASH]):.2f}"`
-(p `{python} pval(coefp(R_HCP, LET[F_PH] + LET[F_WASH]))`). No quadratic term is
-significant, so the fitted surface is a plane whose slope along one axis changes with the
-level of the other. Lack of fit is not significant
-(p `{python} pval(fitv(R_HCP, 'p_lof'))`), which means the residual scatter is what the
-centre-point replicates already showed the assay and the process to carry.
+The host cell protein model explains `{python} pct(FRSM[R_HCP]['R2'])` of the variation, with
+an adjusted value of `{python} pct(FRSM[R_HCP]['adjR2'])` and a predicted value of
+`{python} pct(FRSM[R_HCP]['predR2'])`. Its residual standard deviation is
+`{python} f"{FRSM[R_HCP]['rmse']:.2f}"` ng/mg, which is of the same order as the centre-point
+standard deviation in @tbl-cv-rsm. @tbl-rsm-hcp gives the coefficients. Load pH and the
+equilibration and wash-1 conductivity carry the response, at
+`{python} f"{coef(R_HCP, 'A'):.2f}"` and `{python} f"{coef(R_HCP, 'B'):.2f}"` ng/mg per half
+range, and their interaction is retained at
+`{python} f"{coef(R_HCP, 'AB'):.2f}"` (p = `{python} f"{coef(R_HCP, 'AB', 'p-value'):.2f}"`).
+No squared term reached significance, so the surface is close to a plane over the
+characterization range. Load conductivity and protein load have coefficients of
+`{python} f"{coef(R_HCP, 'C'):.2f}"` and `{python} f"{coef(R_HCP, 'D'):.2f}"` ng/mg per half
+range, neither of which is distinguishable from zero.
 
 ```{python}
 #| output: asis
 show(D.rsm_coeff_df(UO, R_HCP))
-print()
-print(": Response-surface coefficients, pool HCP. {#tbl-coef-hcp}")
+print("\n: Response-surface coefficients, pool host cell protein. {#tbl-rsm-hcp}\n")
 ```
 
-```{python}
-#| output: asis
-show(D.anova_lof_df(UO, R_HCP))
-print()
-print(": Analysis of variance with lack of fit, pool HCP. {#tbl-anova-hcp}")
-```
-
-@tbl-coef-mvm and @tbl-anova-mvm give the same two tables for MVM LRF, which is the
-attribute this step sets. Load pH and load conductivity carry coefficients of
-`{python} f"{coef(R_MVM, LET[F_PH]):.2f}"` and
-`{python} f"{coef(R_MVM, LET[F_COND]):.2f}"` log10 per coded unit, both with
-p `{python} pval(coefp(R_MVM, LET[F_PH]))` and
-p `{python} pval(coefp(R_MVM, LET[F_COND]))`. The two are of nearly equal magnitude and
-opposite sign. No interaction and no quadratic term is significant, and lack of fit is not
-significant (p `{python} pval(fitv(R_MVM, 'p_lof'))`). The surface for MVM clearance is
-therefore a plane over the region studied, tilted by load pH one way and by load
-conductivity the other.
+The MVM model explains `{python} pct(FRSM[R_MVM]['R2'])` of the variation and the XMuLV model
+`{python} pct(FRSM[R_XMULV]['R2'])`. Their coefficients are in @tbl-rsm-mvm and
+@tbl-rsm-xmulv. Load pH raises the MVM log reduction factor by
+`{python} f"{coef(R_MVM, 'A'):.2f}"` log10 per half range and load conductivity lowers it by
+`{python} f"{abs(coef(R_MVM, 'C')):.2f}"` log10 per half range, and the two coefficients are
+almost equal in size. The XMuLV model has the same pair of terms with almost the same
+coefficients. One interaction, between load pH and protein load, reached significance for
+XMuLV at `{python} f"{coef(R_XMULV, 'AD'):.2f}"` log10
+(p = `{python} f"{coef(R_XMULV, 'AD', 'p-value'):.2f}"`). It is about a third of the load pH
+main effect and it is the only significant interaction among the two viral responses in either
+design. With `{python} n_terms_rsm` terms in the model, a term of that p value is expected
+about once in twenty by chance. The region defined in §6 is bounded by pool host cell protein
+and by no viral response, so it is the same region whether this term is kept or dropped.
 
 ```{python}
 #| output: asis
 show(D.rsm_coeff_df(UO, R_MVM))
-print()
-print(": Response-surface coefficients, MVM LRF. {#tbl-coef-mvm}")
+print("\n: Response-surface coefficients, MVM log reduction factor. {#tbl-rsm-mvm}\n")
+```
+
+```{python}
+#| output: asis
+show(D.rsm_coeff_df(UO, R_XMULV))
+print("\n: Response-surface coefficients, XMuLV log reduction factor. {#tbl-rsm-xmulv}\n")
+```
+
+The predicted coefficient of determination is `{python} pct(FRSM[R_MVM]['predR2'])` for MVM
+and `{python} pct(FRSM[R_XMULV]['predR2'])` for XMuLV. The MVM value is the weakest of the
+three responses that carry an acceptance criterion, and it says that a run deleted from the
+design is predicted with
+appreciably more error than the fit within the design suggests. The margin between the
+predicted clearance and the required contribution is large enough to absorb that error at
+every point of the characterized region (§6), and the statement made from this model is a
+statement about the mean level of clearance and not about an individual run.
+
+Lack of fit was tested against the pure error of the centre-point replicates for each of the
+three responses that carry an acceptance criterion. @tbl-anova-hcp, @tbl-anova-xmulv and @tbl-anova-mvm give the partitions. Lack of
+fit is not significant for any of the three, at p = `{python} f"{FRSM[R_HCP]['p_lof']:.2f}"`
+for host cell protein, p = `{python} f"{FRSM[R_XMULV]['p_lof']:.2f}"` for XMuLV and
+p = `{python} f"{FRSM[R_MVM]['p_lof']:.2f}"` for MVM. The quadratic model therefore misses no
+structure that is large compared with the reproducibility of the scale-down model itself.
+
+```{python}
+#| output: asis
+show(D.anova_lof_df(UO, R_HCP))
+print("\n: Analysis of variance with lack of fit, pool host cell protein. {#tbl-anova-hcp}\n")
+```
+
+```{python}
+#| output: asis
+show(D.anova_lof_df(UO, R_XMULV))
+print("\n: Analysis of variance with lack of fit, XMuLV log reduction factor. {#tbl-anova-xmulv}\n")
 ```
 
 ```{python}
 #| output: asis
 show(D.anova_lof_df(UO, R_MVM))
-print()
-print(": Analysis of variance with lack of fit, MVM LRF. {#tbl-anova-mvm}")
+print("\n: Analysis of variance with lack of fit, MVM log reduction factor. {#tbl-anova-mvm}\n")
 ```
 
-XMuLV LRF behaves in the same way, with coefficients of
-`{python} f"{coef(R_XMULV, LET[F_PH]):.2f}"` and
-`{python} f"{coef(R_XMULV, LET[F_COND]):.2f}"` log10 per coded unit on load pH and load
-conductivity. Its one significant interaction, load pH with protein load at
-`{python} f"{coef(R_XMULV, LET[F_PH] + LET[F_LOAD]):.2f}"` log10 per coded unit
-(p `{python} pval(coefp(R_XMULV, LET[F_PH] + LET[F_LOAD]))`), is smaller than the
-centre-point standard deviation of the titration and is not treated as a design constraint.
-The full coefficient and variance tables for XMuLV LRF and for step yield are in Appendix
-C.
-
-@fig-contours-ph-wash shows the four fitted surfaces over load pH and the equilibration and
-wash conductivity, with the remaining factors at the centre of the design. The panel for
-pool HCP falls from the top left to the bottom right of the plane, and the spacing of its
-contours widens as load pH rises, which is the interaction seen in @tbl-coef-hcp. The two
-viral panels rise with load pH and are flat along the conductivity axis, and the yield
-panel is flat in both directions.
+@fig-contour-ph-wash shows the fitted surfaces over load pH and the equilibration and wash-1
+conductivity, and @fig-contour-ph-cond shows them over load pH and load conductivity. The
+first pair of axes carries the host cell protein response, whose contours run diagonally
+across the panel and reach their highest values at low load pH with high conductivity. The
+second pair carries the two viral responses, whose contours run in the opposite sense, with
+clearance highest at high load pH and low load conductivity. In both panels the step yield
+surface is flat.
 
 ```{python}
-#| label: fig-contours-ph-wash
-#| fig-cap: "Fitted response surfaces over load pH and the equilibration and wash conductivity, remaining factors at the centre of the design."
-_ = D.fig_rsm_contours(UO, xf=F_PH, yf=F_WASH)
+#| label: fig-contour-ph-wash
+#| fig-cap: "Fitted response surfaces over load pH and the equilibration and wash-1 conductivity, one panel per response."
+fig = D.fig_rsm_contours(UO, xf="load_ph", yf="wash1_cond")
 plt.show()
 ```
 
-@fig-contours-ph-cond shows the same four surfaces over load pH and load conductivity. Here
-both viral panels carry a gradient along both axes, with the highest clearance at high load
-pH with low load conductivity and the lowest at the opposite corner, and the pool HCP panel
-varies with load pH alone. Read together, the two figures show that raising the
-equilibration and wash buffer conductivity releases host cell protein into the pool while
-leaving both log reduction factors unchanged, and that raising the load conductivity lowers
-both log reduction factors while leaving pool HCP unchanged.
-
 ```{python}
-#| label: fig-contours-ph-cond
-#| fig-cap: "Fitted response surfaces over load pH and load conductivity, remaining factors at the centre of the design."
-_ = D.fig_rsm_contours(UO, xf=F_PH, yf=F_COND)
+#| label: fig-contour-ph-cond
+#| fig-cap: "Fitted response surfaces over load pH and load conductivity, one panel per response."
+fig = D.fig_rsm_contours(UO, xf="load_ph", yf="load_cond")
 plt.show()
 ```
 
-@fig-diag-hcp and @fig-diag-mvm give the diagnostics for the two models the control
-strategy rests on. In each case the standardized residuals scatter without pattern against
-the predicted value, the normal quantile plot is close to linear, and the actual values
-track the predicted values along the identity line. The diagnostics for XMuLV LRF are in
-Appendix C.
+Model diagnostics for the two attributes that carry the control strategy are given in
+@fig-diag-hcp and @fig-diag-mvm. Each figure plots the standardized residuals against the
+predicted value, the normal quantile plot of those residuals, and the predicted value against
+the measured value. The residuals of both models scatter about zero with no trend against the
+predicted value, the quantile plots are close to linear, and the predicted values track the
+measured ones across the whole range of the response. No run was excluded from either fit.
 
 ```{python}
 #| label: fig-diag-hcp
-#| fig-cap: "Model diagnostics for pool HCP."
-_ = D.fig_diagnostics(UO, R_HCP)
+#| fig-cap: "Model diagnostics for the pool host cell protein response-surface model."
+fig = D.fig_diagnostics(UO, R_HCP)
 plt.show()
 ```
 
 ```{python}
 #| label: fig-diag-mvm
-#| fig-cap: "Model diagnostics for MVM LRF."
-_ = D.fig_diagnostics(UO, R_MVM)
+#| fig-cap: "Model diagnostics for the MVM log reduction factor response-surface model."
+fig = D.fig_diagnostics(UO, R_MVM)
 plt.show()
 ```
 
+The models predict mean levels of each response over the ranges of the parameters included in
+them. At an operating point where the predicted mean sits exactly on a limit, about half of
+the batches run at that point would fall on the wrong side of the limit if the variation about
+the mean is symmetric. For that reason the proven acceptable ranges in §7 are determined from
+a predictive interval as well as from the mean, and the design space in §6 is stated on mean
+predictions and is read together with §7.
+
 ## Mechanistic interpretation
 
-Every effect identified in §5.2 and §5.3 follows from the adsorption of negatively charged
-species onto the quaternary amine ligand. The split between the two conductivities was not
-anticipated before the study.
+Host cell proteins reach the column as a population with a distribution of isoelectric points,
+and only the fraction that carries a net negative charge at the load pH is held on the
+quaternary amine ligand. Raising the load pH brings the buffer above the isoelectric point
+of more of that population, gives those proteins a net negative charge and holds them on the
+ligand, which is why pool host cell protein falls as load pH rises.
+Raising the conductivity of the equilibration and wash-1 buffer raises the ionic strength in
+the bed, screens the attraction between the ligand and the species that carry the least
+charge, and releases those species into the pool, which is why pool host cell protein rises
+with conductivity. A species that carries more negative charge at a high load pH holds its
+place through a larger rise in ionic strength than a weakly charged one, so the release caused
+by the buffer conductivity is smaller at high load pH than at low load pH, and the model
+records that as a negative interaction. No squared term is significant for this response, so
+no isoelectric point acts as a threshold inside the range studied. A population spread across
+many isoelectric points gives a surface of that shape, and a single protein with one binding
+constant would instead give a sharp change at the pH where its charge reverses.
 
-Raising the load pH moves more of the host cell protein
-population below its isoelectric point, so a larger fraction of the population is
-negatively charged and binds, and the pool concentration falls. Raising the conductivity of
-the equilibration and wash buffer raises the ionic strength in the bed, which shields the
-electrostatic interaction and releases the more weakly bound species into the pool. The
-two coefficients in @tbl-coef-hcp carry opposite signs. Both changes move the same
-adsorption equilibrium between the host cell protein population and the ligand, load pH by
-changing the charge the protein carries and conductivity by screening it.
+Virus particles carry many acidic groups on their surface and are held on the ligand more
+tightly than most host cell proteins, and they are captured while the load itself passes
+through the bed. The ionic strength during the load is the one the load carries, which is why
+raising load conductivity lowers both log reduction factors. The wash that follows does not
+lift a bound particle off the ligand, which is why the conductivity of the equilibration and
+wash-1 buffer appears in neither viral model. Its coefficient is
+`{python} f"{coef(R_MVM, 'B'):.3f}"` log10 per half range for MVM
+(p = `{python} f"{coef(R_MVM, 'B', 'p-value'):.2f}"`) and
+`{python} f"{coef(R_XMULV, 'B'):.3f}"` log10 for XMuLV
+(p = `{python} f"{coef(R_XMULV, 'B', 'p-value'):.2f}"`). A fraction of the host cell protein
+population is held weakly enough for the wash to displace it, and raising the conductivity of
+that wash raises the fraction displaced. Prior knowledge expected the wash to release virus
+particles by the same route, and over the range from
+`{python} f"{prange('wash1_cond', 0):g}"` to `{python} f"{prange('wash1_cond', 1):g}"` mS/cm
+it did not.
 
-The slope of pool HCP against
-the equilibration and wash conductivity is
-`{python} f"{coef(R_HCP, LET[F_WASH]) + coef(R_HCP, LET[F_PH] + LET[F_WASH]):.2f}"` ng/mg
-per coded unit at the top of the load pH range and
-`{python} f"{coef(R_HCP, LET[F_WASH]) - coef(R_HCP, LET[F_PH] + LET[F_WASH]):.2f}"` ng/mg
-per coded unit at the bottom of it. A given rise in conductivity releases more host cell
-protein at low load pH than at high load pH. At low pH the bound population is dominated by species whose net negative charge
-is small, and a weakly held species is displaced by a given increase in ionic strength more
-readily than a strongly held one. Raising the load pH therefore lowers pool HCP and
-flattens its dependence on conductivity at the same time, and the operating region in §6 is
-wider at the top of the load pH range.
+The coefficients of load pH and of load conductivity are almost the same for MVM as for
+XMuLV. Both particles are held by the attraction between the acidic groups on their surface
+and the quaternary amine ligand, and the lipid envelope that XMuLV carries and MVM lacks takes
+no part in that attraction. The two differ in the absolute clearance they achieve, and the
+step is credited with `{python} f"{xmulv_step:.2f}"` log10 for XMuLV and
+`{python} f"{mvm_step:.2f}"` log10 for MVM. Removal here is independent of the low-pH hold at
+Step 6, which disrupts the lipid envelope of XMuLV and leaves the MVM capsid infectious, and
+independent of the virus filter at Step 9, which retains both particles by size.
 
-Raising the load pH increases the log reduction factor of both viruses and raising the load
-conductivity decreases it, while the equilibration and wash conductivity changes neither.
-Both model viruses carry acidic
-surfaces and bind by the same electrostatic mechanism as the acidic host cell proteins, so
-the load pH dependence is expected and is nearly identical for the two viruses. A virus
-particle is a large,
-highly charged body present at a low number concentration, and it partitions to the ligand
-during the load itself, when it competes with the impurity mass arriving with the antibody.
-The ionic strength it experiences is therefore the ionic strength of the load. The host
-cell protein population, by contrast, continues to partition throughout the equilibration
-and the wash. Raising the conductivity of the equilibration and wash buffer therefore
-returns more of the weakly bound host cell protein to the pool. The virus particles have
-left the mobile phase before the wash buffer enters the bed, and the weakly bound host cell
-protein has not.
+Protein load had no significant effect on any response over a range reaching
+`{python} f"{prange('load', 1):g}"` g per L of resin. The ligand binds the impurities and the
+virus particles and not the antibody, so the capacity that can be exhausted is the capacity
+for the bound species, and the impurity mass carried onto the column at the top of this range
+stays far below it. The first execution of this study, run on a load whose acidic charge
+variant burden was raised, did show a protein load effect on pool host cell protein, and
+§13.1 gives what caused it.
 
-Protein load carried no effect on any response, and the mechanistic reason is that the
-impurity mass reaching the ligand over the studied range stays far below the capacity of
-the bed for the bound species. The load range was widened to
-`{python} f"{prange(F_LOAD)[1]:g}"` g per litre of resin precisely to look for the point
-where that ceases to be true, and the surfaces show no approach to it. The conclusion holds
-for a load of representative charge distribution. A load carrying a raised acidic charge
-variant content behaves differently (§13.1).
-
-The antibody remains positively charged across the whole load pH range and does not adsorb
-to the ligand, so no setting of the binding equilibrium can remove product from the pool.
-The measured yield of `{python} f"{pct(nominal('step_yield'))}"` at the nominal condition is
-set by the collection boundaries and the column hold-up volume. Only the pool collection
-set-point moved it (§13.2).
+Step yield showed no dependence on any factor. The antibody carries a net positive charge at
+every load pH in the range studied, because its isoelectric point lies well above that range,
+so it is not retained on the ligand and its recovery follows the volumes collected. The one
+route by which a studied parameter could lower recovery is a load pH high enough for part of
+the antibody population to approach its isoelectric point and bind, and the upper edge of the
+range studied, `{python} f"{prange('load_ph', 1):g}"`, stays well below it.
 
 # Design space
 
-The design space of the step is the region of the `{python} f"{n_rsm_fact}"` characterized
-parameters over which every criterion the step governs is met. It was evaluated by
-predicting pool HCP, XMuLV LRF and MVM LRF from their fitted response-surface models on
-an evenly spaced grid over the coded cube and testing every grid point against its
-criterion. Of the `{python} f"{DS['n_points']:,}"` grid points evaluated,
-`{python} f"{ds_pct:.0f}"` % meet every criterion simultaneously.
+The design space of this step is the part of the characterized region in which every criterion
+of §3.5 is met. It was evaluated by predicting the `{python} n_governed` responses that carry
+an acceptance criterion from the response-surface models, on an evenly spaced grid over the
+four characterized ranges, at
+`{python} f"{ds_points:,}"` operating points in total, and testing each point against every
+criterion.
 
-Pool HCP is the response that constrains the region. It rejects
-`{python} f"{ds_binding_rej:.0f}"` % of the characterized region on its own, and the two
-viral responses reject `{python} f"{ds_viral_rej:.0f}"` % of it. The rejected region is the
-corner that combines low load pH with high equilibration and wash conductivity. At the
-corner of the characterized region least favourable to pool HCP, which sets load pH to
-`{python} f"{prange(F_PH)[0]:g}"` and the equilibration and wash conductivity to
-`{python} f"{prange(F_WASH)[1]:g}"` mS/cm with load conductivity and protein load at their
-upper edges, the model predicts pool HCP of
-`{python} f"{predict_at(R_HCP, **{F_PH: prange(F_PH)[0], F_WASH: prange(F_WASH)[1], F_COND: prange(F_COND)[1], F_LOAD: prange(F_LOAD)[1]}):.1f}"`
-ng/mg against an in-process limit of `{python} f"{hcp_limit:.1f}"` ng/mg. That corner is an
-edge of failure of the step, and both parameters are outside their normal operating ranges
-there.
+Of the characterized region, `{python} pct(ds_frac)` meets every criterion. The host cell
+protein criterion excludes `{python} pct(ds_reject_hcp)` of the region and the two viral
+criteria exclude no part of it, so within the ranges studied the step delivers its required
+contribution to both viral claims everywhere, including at the corner least favourable to
+clearance. At the lowest load pH and the highest load conductivity
+of the characterized region the model predicts `{python} f"{at_setpoint(R_MVM, load_ph=prange('load_ph', 0), load_cond=prange('load_cond', 1)):.2f}"`
+log10 for MVM against a required `{python} f"{mvm_floor:.2f}"` log10, and
+`{python} f"{at_setpoint(R_XMULV, load_ph=prange('load_ph', 0), load_cond=prange('load_cond', 1)):.2f}"`
+log10 for XMuLV against a required `{python} f"{xmulv_floor:.2f}"` log10, with the other two
+parameters at their set-points.
 
-The principal plane of the design space is therefore load pH against the equilibration and
-wash conductivity, and it is the plane shown in @fig-contours-ph-wash. Its boundary runs
-from low conductivity at low pH to high conductivity at high pH. The plane of load pH
-against load conductivity, shown in @fig-contours-ph-cond, carries the viral clearance and
-imposes no boundary inside the characterized region, because both viral criteria are met
-everywhere in it. Protein load imposes no boundary on any plane.
+The boundary of the design space therefore lies where pool host cell protein meets its
+in-process limit, and it lies in the plane of load pH against the equilibration and wash-1
+conductivity. @fig-contour-ph-wash shows that plane. The excluded corner is the one at low
+load pH and high conductivity, where the host cell proteins carry the least negative charge
+and the ions in the buffer screen what charge they carry. At the set-point the model predicts `{python} f"{at_setpoint(R_HCP):.1f}"` ng/mg
+against an in-process limit of `{python} f"{hcp_ipc:.1f}"` ng/mg. At the extreme corner of the
+characterized region, with load pH at `{python} f"{prange('load_ph', 0):g}"` and the
+equilibration and wash-1 conductivity at `{python} f"{prange('wash1_cond', 1):g}"` mS/cm, it
+predicts `{python} f"{at_setpoint(R_HCP, load_ph=prange('load_ph', 0), wash1_cond=prange('wash1_cond', 1)):.1f}"`
+ng/mg, which is above that limit.
 
-Three ranges are nested. The characterization ranges in @tbl-params bound the knowledge
-space, which is what the study explored. The design space is the part of that space in
-which every criterion is met, which is the `{python} f"{ds_pct:.0f}"` % just described. The
-normal operating ranges are the control space and are not entirely inside the design space.
-Predicting the three responses over a grid spanning the normal operating ranges,
-`{python} f"{nor_pass_pct:.1f}"` % of that grid meets every criterion. The part that does
-not is the corner at which load pH sits at the bottom of its range while the equilibration
-and wash conductivity sits at the top of its own, where the model predicts pool HCP of
-`{python} f"{hcp_nor_max:.1f}"` ng/mg against the in-process limit of
-`{python} f"{hcp_limit:.1f}"` ng/mg. The viral responses stay well inside their criteria
-everywhere in the same grid, at
-`{python} f"{mvm_nor_min:.2f}"` log10 for MVM and
-`{python} f"{xmulv_nor_min:.2f}"` log10 for XMuLV at their least favourable points. The
-exceedance is `{python} f"{hcp_nor_max - hcp_limit:.1f}"` ng/mg on an in-process limit. §7
-quantifies it parameter by parameter and §10 states the controls that respond to it.
+Three bounds apply to this design space. It is defined on mean predictions from the
+response-surface models, so a point on its boundary is a point at which half the batches would
+exceed the limit, and §7 gives the ranges that survive a predictive interval. It is defined
+over the four parameters of the multivariate design and no other, so it says nothing about a
+parameter held at its platform value in every run. It is defined on the scale-down model, and
+design space boundaries are not confirmed at commercial scale at the edges of the ranges.
 
-Movement within the design space is not a regulatory change, as stated in ICH Q8(R2), but
-every change is still assessed under the pharmaceutical quality system of ICH Q10
-[@ichq8; @ichq10]. A planned move within the design space requires a prospective
-assessment against the models reported here, and a move outside it requires new data. Two
-bounds apply to the region as stated. It is defined on mean predictions of the fitted
-models, so the assurance at its boundary is approximately half, and the normal operating
-ranges rather than the boundary are what the control strategy commits to. It is also
-defined on a scale-down model and has not been confirmed at commercial scale at its edges.
+The normal operating ranges of @tbl-params sit inside the characterized region on every axis.
+For load pH, the equilibration and wash-1 conductivity and load conductivity the routine
+process is operated near the middle of the characterized range, and for protein load the
+normal operating range reaches closer to the upper edge. Operation anywhere inside the design
+space is expected to meet every criterion, and under ICH Q8(R2) movement within it is not
+regarded as a change for filing purposes [@ichq8]. Movement is still assessed prospectively
+under the change management system of the pharmaceutical quality system, as ICH Q10 requires
+[@ichq10]. Operation outside the design space requires an assessment against this report and
+against the in-process results of the affected batch.
 
 # Proven acceptable ranges
 
-A proven acceptable range is the range of one parameter over which the attribute in
-question remains acceptable. @tbl-par gives the ranges obtained for each governed attribute
-against each response-surface factor, in natural units, together with the criterion each
-was measured against and the characterization range that bounds the search.
+A proven acceptable range is the part of a parameter's characterization range over which the
+attribute in question stays within the criterion that applies to it, with the other parameters
+of the design accounted for. It is a statement about one parameter and one attribute at a
+time, and it is reported here for every combination of the `{python} n_factors` multivariate
+parameters with the `{python} len(D.par_table(UO).CQA.unique())` attributes the step is judged
+on.
+
+Two analyses were run for each combination. The first scans the parameter across its
+characterization range with the other three parameters of the design held constant, and
+reports the range over which the predicted mean meets the criterion. The second varies the
+other three parameters within their normal operating ranges by Monte-Carlo sampling of the
+fitted model, adds the residual variation of the model to each draw, and reports the range
+over which the 95 % predictive interval of the attribute stays within the criterion. The
+second analysis is the more demanding of the two, because it requires the attribute to hold
+not only on average but across the spread the rest of the operating point produces.
+
+@tbl-par gives both analyses for every parameter and attribute, together with the criterion
+each was measured against. The criterion for pool host cell protein is the in-process limit
+of §3.5. The criteria for the two viral responses are the step contributions the cumulative
+claims require.
 
 ```{python}
 #| output: asis
 show(D.par_table(UO))
-print()
-print(": Proven acceptable ranges by attribute and parameter. {#tbl-par}")
+print("\n: Proven acceptable ranges, by attribute and parameter. {#tbl-par}\n")
 ```
 
-The criterion column needs its basis stated, because it differs between the attributes.
-Pool HCP is judged against an in-process limit of `{python} f"{hcp_limit:.1f}"` ng/mg
-rather than against the drug substance criterion of
-`{python} f"{hcp_ds_limit:.0f}"` ng/mg. The in-process limit is carried back from the drug
-substance criterion through the clearance the steps downstream of this one deliver, and
-then divided by a safety factor of `{python} f"{hcp_margin:g}"`. Judging an
-intermediate against the drug substance criterion would credit this step with clearance
-that later steps provide. The safety factor keeps the drug substance from depending on
-every downstream step delivering its nominal clearance exactly. The two viral criteria are step contributions to a
-cumulative requirement. MVM clearance must reach `{python} f"{mvm_floor:.2f}"` log10 at this
-step, which is the cumulative requirement of
-`{python} f"{cap_val('lrv_mvm', 'acc_low'):.1f}"` log10 less the
-`{python} f"{vclr('Cumulative', 'MVM') - vclr(AEX_ROW, 'MVM'):.2f}"` log10 the other steps
-of the train deliver. XMuLV clearance must reach `{python} f"{xmulv_floor:.2f}"` log10 on
-the same basis.
+For the two viral responses every parameter is acceptable across its whole characterization
+range under both analyses. This follows from the size of the margin. The smallest predicted
+MVM clearance anywhere in the characterized region is well above the contribution the
+cumulative claim requires of this step, and the predictive interval that the Monte-Carlo
+analysis adds is narrow beside that margin.
 
-Two analyses were run for each attribute and parameter. The first scans the fitted model
-over the characterization range of the parameter and reports the contiguous range in which
-the prediction meets the criterion. The second propagates the normal operating ranges of
-the other parameters by Monte-Carlo, draws the residual variability of the model with them,
-and reports the range in which the 95 % predictive interval stays inside the criterion. The
-second is a robustness statement and is narrower than the first wherever the parameters
-interact.
+For pool host cell protein two parameters are bounded. Load pH is acceptable over
+`{python} D.par_table(UO).iloc[0]["PAR (set-point)"]` under the first analysis, and the range
+narrows to `{python} D.par_table(UO).iloc[0]["PAR (NOR)"]` under the second. The equilibration
+and wash-1 conductivity is acceptable over
+`{python} D.par_table(UO).iloc[1]["PAR (set-point)"]` mS/cm under the first analysis and over
+`{python} D.par_table(UO).iloc[1]["PAR (NOR)"]` mS/cm under the second. Load conductivity and
+protein load are acceptable across their whole ranges under both.
 
-Pool HCP is the only attribute whose proven acceptable range is narrower than the
-characterization range. Load pH is acceptable from
-`{python} f"{D.par_at_design_centre(UO, R_HCP, F_PH)['par_nat'][0]:.2f}"` upward in the
-first analysis and from
-`{python} f"{D.par_nor_propagated(UO, R_HCP, F_PH)['par_nat'][0]:.2f}"` upward in the
-second, against a normal operating range that starts at
-`{python} f"{nor(F_PH)[0]:g}"`. The equilibration and wash conductivity is acceptable up to
-`{python} f"{D.par_at_design_centre(UO, R_HCP, F_WASH)['par_nat'][1]:.2f}"` mS/cm in the
-first analysis and up to
-`{python} f"{D.par_nor_propagated(UO, R_HCP, F_WASH)['par_nat'][1]:.2f}"` mS/cm in the
-second, against a normal operating range that ends at `{python} f"{nor(F_WASH)[1]:g}"`
-mS/cm. Load conductivity and protein load are acceptable across their whole
-characterization ranges for pool HCP, and all four parameters are acceptable across their
-whole characterization ranges for both viruses.
+The second analysis therefore excludes part of the normal operating range for these two
+parameters. The normal operating range of load pH runs from
+`{python} f"{nor('load_ph', 0):g}"` to `{python} f"{nor('load_ph', 1):g}"`, and its lower part
+lies below the proven acceptable range under the second analysis. The normal operating range
+of the equilibration and wash-1 conductivity runs from
+`{python} f"{nor('wash1_cond', 0):g}"` to `{python} f"{nor('wash1_cond', 1):g}"` mS/cm, and
+its upper part lies above. Both exclusions come from the same corner of the operating region,
+where the host cell proteins carry the least negative charge and the ions in the buffer screen
+what charge they carry. With load pH
+at the bottom of its normal operating range and the equilibration and wash-1 conductivity at
+the top of its own, and load conductivity and protein load at their set-points, the model
+predicts
+`{python} f"{at_setpoint(R_HCP, load_ph=nor('load_ph', 0), wash1_cond=nor('wash1_cond', 1)):.1f}"`
+ng/mg against the in-process limit of `{python} f"{hcp_ipc:.1f}"` ng/mg. At the set-point of
+both parameters the same model predicts `{python} f"{at_setpoint(R_HCP):.1f}"` ng/mg.
 
-The two analyses do not agree about the normal operating ranges. On the first analysis the normal operating range
-of every parameter lies inside its proven acceptable range. On the second the normal
-operating ranges of load pH and of the equilibration and wash conductivity each extend past
-it, at the low end for pH and at the high end for conductivity. The two analyses answer
-different questions. The first moves one parameter and
-holds the rest, and on that basis the whole of each normal operating range is acceptable.
-The second lets the other parameters vary within their own normal operating ranges and adds
-the residual variability of the model, and the upper tail of that distribution crosses the
-in-process limit before the parameter reaches the edge of its range. The lower part of the
-load pH range and the upper part of the
-equilibration and wash conductivity range are therefore supported for mean performance and
-not for the 95 % predictive bound.
+Three things bound what that exclusion means. The in-process limit is not the drug substance
+criterion. It sits a factor below the drug substance criterion of
+`{python} f"{hcp_ds:g}"` ng/mg, so a pool at the limit still yields drug substance inside that
+criterion. The nominal process operates at `{python} f"{hcp_out:.1f}"` ng/mg in the pool,
+which is well below the limit. The drug substance capability for host cell protein is
+`{python} f"{cpk('hcp'):.2f}"` (§8). The corner is nonetheless the part of the operating
+region with the least margin, and §10 states the control that follows from it.
 
-@fig-par-hcp shows the pool HCP range against the equilibration and wash conductivity,
-which is the parameter with the largest main effect on it. The left panel is the first
-analysis and the right panel the second, with the acceptance limit drawn, the acceptable
-region shaded green, and the set-point and the normal operating range marked. The widening
-of the predictive interval in the right panel is what moves the boundary inward.
+@fig-par-hcp, @fig-par-xmulv and @fig-par-mvm show one proven acceptable range for each of
+the three attributes, plotted against the parameter with the largest main effect on it. Each
+figure has two panels, the first analysis on the left and the second on the right. The
+acceptance limit is drawn as a dashed line, the acceptable region of the parameter is shaded
+green, the normal operating range is shaded grey and the set-point is marked. The right-hand
+panel adds the median and the 95 % predictive interval of the Monte-Carlo analysis.
 
 ```{python}
 #| label: fig-par-hcp
-#| fig-cap: "Proven acceptable range, pool HCP against the equilibration and wash conductivity."
-_ = D.fig_par(UO, R_HCP, D.governing_factor(UO, R_HCP))
-plt.show()
-```
-
-@fig-par-mvm and @fig-par-xmulv show the same two analyses for the two viral attributes
-against load pH, which is the parameter with the largest main effect on both. In each
-figure the predicted clearance stays above the required step contribution across the whole
-characterization range, including at the low pH edge, and the acceptable region covers the
-plot.
-
-```{python}
-#| label: fig-par-mvm
-#| fig-cap: "Proven acceptable range, MVM LRF against load pH."
-_ = D.fig_par(UO, R_MVM, D.governing_factor(UO, R_MVM))
+#| fig-cap: "Proven acceptable range of the equilibration and wash-1 conductivity for pool host cell protein."
+fig = D.fig_par(UO, R_HCP, D.governing_factor(UO, R_HCP))
 plt.show()
 ```
 
 ```{python}
 #| label: fig-par-xmulv
-#| fig-cap: "Proven acceptable range, XMuLV LRF against load pH."
-_ = D.fig_par(UO, R_XMULV, D.governing_factor(UO, R_XMULV))
+#| fig-cap: "Proven acceptable range of load pH for the XMuLV log reduction factor."
+fig = D.fig_par(UO, R_XMULV, D.governing_factor(UO, R_XMULV))
 plt.show()
 ```
 
-The ranges in @tbl-par are univariate statements and the design space in §6 is a
-multivariate one. A univariate range answers what may be done with one parameter, and it
-cannot express the corner in which two parameters move together. Operation is committed to
-the design space, and a single parameter excursion is assessed against the proven
-acceptable range of that parameter. Where the two differ, as they do for load pH and the
-equilibration and wash conductivity, the design space is the tighter of the two.
+```{python}
+#| label: fig-par-mvm
+#| fig-cap: "Proven acceptable range of load pH for the MVM log reduction factor."
+fig = D.fig_par(UO, R_MVM, D.governing_factor(UO, R_MVM))
+plt.show()
+```
+
+The proven acceptable ranges and the design space answer different questions and are read
+together. A proven acceptable range is a one-dimensional statement, useful when a single
+parameter moves and the rest of the operating point does not. The design space of §6 is the
+multivariate region, and it is what applies when two parameters move at once. The two agree on
+which attribute bounds this step. Host cell protein bounds both and the viral responses bound
+neither, and in both analyses the parameters it bounds are load pH and the equilibration and
+wash-1 conductivity.
 
 # Process capability and robustness
 
-@tbl-cap gives the commercial-scale capability of the attributes this step sets or clears.
-The estimate comes from a Monte-Carlo simulation of
-`{python} f"{V['n_monte_carlo']:,}"` batches with every parameter of the train varying
-inside its normal operating range, propagated through the fitted models of every step, and
-is reported as a one-sided Cpk against the drug substance criterion.
+Capability was estimated at commercial scale by the Monte-Carlo simulation described in §3.5,
+over `{python} f"{V['n_monte_carlo']:,}"` simulated batches of the whole train.
+@tbl-capability gives the attributes this step sets or clears.
 
 ```{python}
 #| output: asis
-show(cap_for(CAP_KEYS))
-print()
-print(": Commercial-scale capability of the attributes this step sets or clears. {#tbl-cap}")
+show(cap_for(CAPK))
+print("\n: Commercial-scale capability of the attributes this step sets or clears. {#tbl-capability}\n")
 ```
 
-Cumulative MVM clearance is the tightest capability in the table and the tightest in the
-drug substance, at a Cpk of `{python} f"{cap_val('lrv_mvm', 'Cpk'):.2f}"` against a
-requirement of `{python} f"{cap_val('lrv_mvm', 'acc_low'):.1f}"` log10. The simulated mean
-is `{python} f"{cap_val('lrv_mvm', 'mean'):.2f}"` log10 with a standard deviation of
-`{python} f"{cap_val('lrv_mvm', 'sd'):.2f}"`, so the margin between the mean and the
-requirement is `{python} f"{cap_val('lrv_mvm', 'mean') - cap_val('lrv_mvm', 'acc_low'):.2f}"`
-log10. Cumulative XMuLV clearance is next at
-`{python} f"{cap_val('lrv_xmulv', 'Cpk'):.2f}"`. Host cell protein, residual DNA and leached
-Protein A all carry capability of an entirely different order, because each is cleared by
-several steps in series and the drug substance criterion sits orders of magnitude above the
-delivered concentration.
+The cumulative MVM clearance has the tightest capability of any A-Mab drug substance
+attribute, at Cpk `{python} f"{cpk('lrv_mvm'):.2f}"`. The simulated batches average
+`{python} f"{cap_mean('lrv_mvm'):.2f}"` log10 against a requirement of
+`{python} f"{mvm_req:g}"` log10, with a standard deviation of
+`{python} f"{cap_sd('lrv_mvm'):.2f}"` log10, so the margin is
+`{python} f"{(cap_mean('lrv_mvm') - mvm_req) / cap_sd('lrv_mvm'):.1f}"` standard deviations.
+The cumulative XMuLV clearance is next, at Cpk `{python} f"{cpk('lrv_xmulv'):.2f}"`. Both
+requirements come from the viral safety assessment and not from what the process can deliver.
+Each cumulative figure also sums three steps, so its spread carries the variability of all
+three.
 
-@tbl-vc gives the modular clearance the two claims rest on. This step contributes
-`{python} f"{vclr(AEX_ROW, 'MVM'):.2f}"` log10 of MVM clearance and virus filtration
-contributes `{python} f"{vclr(VF_ROW, 'MVM'):.2f}"` log10. Low-pH inactivation contributes
-nothing to the MVM claim, because a non-enveloped parvovirus is not inactivated by low pH.
-Two steps therefore carry the entire MVM claim and this is one of them. For XMuLV the claim rests on three steps,
-with `{python} f"{vclr(LP_ROW, 'XMuLV'):.2f}"` log10 from low-pH inactivation,
-`{python} f"{vclr(AEX_ROW, 'XMuLV'):.2f}"` log10 from this step and
-`{python} f"{vclr(VF_ROW, 'XMuLV'):.2f}"` log10 from virus filtration. The three mechanisms
-are orthogonal, since low-pH treatment acts on the envelope, this step acts on surface
-charge and virus filtration acts on size. No clearance is claimed for Protein A or for
-cation exchange chromatography, although both remove virus.
+Host cell protein is capable at Cpk `{python} f"{cpk('hcp'):.2f}"`, with a mean of
+`{python} f"{cap_mean('hcp'):.1f}"` ng/mg against a criterion of
+`{python} f"{hcp_ds:g}"` ng/mg. Residual DNA is capable at Cpk
+`{python} f"{cpk('residual_dna'):.2f}"`. The leached Protein A statistic in @tbl-capability
+carries no information. The simulated mean is
+`{python} f"{cap_mean('leached_protein_a'):.3f}"` ppm against a criterion of
+`{python} f"{cqa_reg[cqa_reg.key=='leached_protein_a'].iloc[0]['acc_high']:g}"` ppm, and at
+that distance the index measures the spread of the simulation and says nothing about how close
+the process comes to the limit.
 
-```{python}
-#| output: asis
-show(csv("viral_clearance.csv"))
-print()
-print(": Modular viral clearance by step, log10 reduction factor. {#tbl-vc}")
-```
+This step contributes to each of these attributes without determining any of them alone. In
+the nominal process it clears host cell protein `{python} f"{hcp_fold:.1f}"`-fold, from
+`{python} f"{hcp_in:.1f}"` ng/mg in the cation exchange eluate to
+`{python} f"{hcp_out:.1f}"` ng/mg in its own pool, and the Protein A and cation exchange steps
+carry the clearance before it. It contributes `{python} f"{mvm_step:.2f}"` log10 of the
+cumulative MVM claim of `{python} f"{mvm_cum:.2f}"` log10, and
+`{python} f"{xmulv_step:.2f}"` log10 of the cumulative XMuLV claim of
+`{python} f"{xmulv_cum:.2f}"` log10. The remainder of the MVM claim comes from small-virus
+retentive filtration (PCR-009) and the remainder of the XMuLV claim from low-pH inactivation
+(PCR-006) and the same filter. The consolidated ledger is in PCMR-001.
 
-Robustness inside the normal operating ranges was assessed by predicting each of the three
-responses over the grid spanning those ranges described in §6 and taking its least
-favourable point. Pool HCP reaches `{python} f"{hcp_nor_max:.1f}"` ng/mg, which is above
-its in-process limit of `{python} f"{hcp_limit:.1f}"` ng/mg. MVM LRF falls to
-`{python} f"{mvm_nor_min:.2f}"` log10 against the required
-`{python} f"{mvm_floor:.2f}"` log10 and XMuLV LRF to
-`{python} f"{xmulv_nor_min:.2f}"` log10 against the required
-`{python} f"{xmulv_floor:.2f}"` log10.
+Three bounds apply to the capability figures. They are estimated from qualified scale-down
+models with every parameter drawn inside its normal operating range, so they describe a
+process operated as intended and not a process in excursion. They are estimates from a model
+and are confirmed at commercial scale during Stage 2, which has not been executed. And the
+viral figures are cumulative over three steps, so a shortfall at any one of them moves the
+attribute this step is registered against.
 
-The viral margins are wide and the host cell protein margin is not. The step is robust for
-viral clearance across its normal operating ranges by more than a log in each case, and it
-is at its in-process limit for host cell protein at the least favourable point in those
-ranges. That exceedance is bounded in two ways. It is an exceedance of an in-process limit
-that already carries a safety factor of `{python} f"{hcp_margin:g}"` over the
-concentration the downstream train can still bring to specification, and the drug substance
-criterion of `{python} f"{hcp_ds_limit:.0f}"` ng/mg is met with a Cpk of
-`{python} f"{cap_val('hcp', 'Cpk'):.1f}"` at a simulated mean of
-`{python} f"{cap_val('hcp', 'mean'):.1f}"` ng/mg. It is also predicted at a point the
-process does not operate at, since it requires load pH at the bottom of its range while the
-equilibration and wash conductivity sits at the top of its own. §10 carries an in-process
-limit on the pool and a review of the conductivity range before Stage 2.
+The step is robust in the sense that matters for a flow-through polishing step. Yield showed
+no significant dependence on any studied parameter in either design, and the nominal step
+yield is `{python} pct(yield_nom)`. Both viral clearances meet their required contributions
+over the entire characterized region. The one attribute with a boundary inside the
+characterized region is pool host cell protein, and that boundary is the in-process limit,
+which sits a factor below the drug substance criterion of `{python} f"{hcp_ds:g}"` ng/mg.
 
 # Parameter classification
 
-Each parameter was classified under SOP-4001 from its demonstrated effect on a quality
-attribute and from the risk that it leaves the design space in routine operation. A
-parameter whose variability affects a critical quality attribute is a critical process
-parameter, and it is designated well controlled where the risk of falling outside the
-design space is low [@amab2009]. @tbl-params carries the outcome.
+Every parameter was classified under SOP-4001 from the effects demonstrated in this study and
+from the risk of the parameter leaving its range in routine operation. A parameter whose
+variation affects a critical quality attribute is a critical process parameter or a
+well-controlled critical process parameter, and what separates the two is the risk of the
+parameter falling outside the design space and not the size of its effect. A parameter
+with no demonstrated link to a quality attribute, which is monitored because it keeps the
+process consistent, is a key process parameter. @tbl-params carries the classification of each
+parameter and the reasons are given here.
 
-- Load pH was classified as a well controlled critical process parameter. It carries the
-  largest effect on host cell protein clearance and the largest effect on both viral
-  clearances, and it is the parameter that sets the position of the binding equilibrium
-  for every bound species. It is designated well controlled because it is set by titration
-  of a defined buffer system before the load and is measured in process, and because the
-  excursion that would matter is a fall in load pH, which that measurement detects before
-  the load begins.
+Load pH changes the charge carried by the acidic host cell proteins and by the virus
+particles, and it has the largest main effect on pool host cell protein and on both log
+reduction factors. It was classified as a well-controlled critical process parameter. The load
+is titrated against a measured pH before it is applied and holds within a narrow band of its
+target in routine operation, so the risk of operating outside the characterized range is
+low.
 
-- The equilibration and wash conductivity was classified as a well controlled critical
-  process parameter. It carries the largest effect on pool host cell protein and it is the
-  only parameter whose normal operating range extends past the range the robustness
-  analysis supports (§7). It is designated well controlled rather than critical because
-  buffer conductivity is verified at release and monitored in line during equilibration and
-  washing, so the control capability of the equipment is far tighter than the range, and
-  because the attribute it acts on is held by an in-process limit as well as by the range.
+The equilibration and wash-1 conductivity has the largest effect on pool host cell protein of
+any parameter studied and is the parameter that bounds the operating region. It was classified
+as a well-controlled critical process parameter, because it is fixed by buffer preparation and
+verified against the buffer release specification before the buffer reaches the column, so the
+risk of operating outside the characterized range is low. The lot described in §13.3 was found
+by that testing before use.
 
-- Load conductivity was classified as a well controlled critical process parameter. It
-  carries no effect on host cell protein clearance and a significant effect on the
-  clearance of both model viruses, at
-  `{python} f"{coef(R_MVM, LET[F_COND]):.2f}"` log10 per coded unit for MVM. It is
-  designated well controlled because the load conductivity is set by the adjustment of the
-  cation exchange pool and is verified before the load begins.
+Load conductivity carries the ions that screen the attraction between the virus particles and
+the ligand during the load, and both log reduction factors fall as it rises. Pool host cell
+protein does not move with it. It was classified as a well-controlled critical process
+parameter, because the conductivity of the load is fixed by the cation exchange eluate and its
+adjustment, both of which are controlled by the preceding step and measured before the load is
+applied.
 
-- Protein load was classified as a well controlled critical process parameter. No effect on
-  any response was demonstrated over
-  `{python} f"{prange(F_LOAD)[0]:g}"` to `{python} f"{prange(F_LOAD)[1]:g}"` g per litre of
-  resin, and the mechanistic reason is that the impurity mass stays far below the capacity
-  of the bed (§5.4). It is retained in the critical class because the mass of impurity
-  delivered to the ligand rises with the protein load, so a load whose charge distribution
-  has shifted breaks impurity through at high load before it does so at low load.
-  DEV-008-01 records that behaviour (§13.1).
+Protein load showed no significant effect on any response over a range reaching
+`{python} f"{prange('load', 1):g}"` g per L of resin. It was nonetheless classified as a
+well-controlled critical process parameter. The ligand holds a finite mass of bound species,
+and a load that carries enough impurity to approach that mass lets host cell protein pass into
+the pool. The first, invalidated execution of this study, run on material with a raised acidic
+charge variant burden, reached
+`{python} f"{sup_hcp_max:.1f}"` ng/mg at the top of the load range against an in-process limit
+of `{python} f"{hcp_ipc:.1f}"` ng/mg (§13.1). The representative material studied here carries
+too little bound impurity for that effect to appear within the range, and protein load is
+therefore controlled as a parameter whose variation can reach a critical quality attribute.
 
-- Operating flow rate was classified as a well controlled critical process parameter. It
-  was assessed one parameter at a time (§4.4). Raising the flow rate shortens the residence
-  time in the bed and leaves host cell protein and virus particles less time to reach the
-  ligand, and no effect of that kind was identified over the range studied. It is designated well controlled because flow is set and
-  recorded by the chromatography skid and its range is wide relative to the control
-  capability of the equipment.
+Operating flow rate was assessed one factor at a time and was not a factor of either design,
+so no effect estimate is reported for it. It was classified as a well-controlled critical
+process parameter on the basis of the univariate assessment, and it sits with the other four
+because the pump holds the flow rate close to its set-point against a measured value, which
+keeps the residence time inside the range assessed.
 
-All `{python} f"{n_wccpp}"` parameters are therefore well controlled critical process
-parameters and the step has no critical process parameter requiring a narrower control
-than the equipment already provides. The step has no key process parameter and no general
-process parameter. Every parameter of the step changes either the charge of the bound
-species or the ionic strength that screens it, and both changes move the clearance of a
-very high criticality attribute.
+All `{python} n_params` parameters of this step are therefore well-controlled critical process
+parameters and none is a critical process parameter. The whole train carries
+`{python} class_counts()['CPP']` critical process parameter, the inactivation pH of the low-pH
+hold (PCR-006), where the range is narrow and the consequence of falling below it is
+immediate. Nothing at this step has that character. The classification
+counts for the campaign are consolidated in PCMR-001.
 
 # Contribution to the control strategy
 
 The step contributes five elements to the control strategy of the drug substance process.
 
-The first is the set of parameter ranges in @tbl-params. Each parameter is controlled to
-its normal operating range. Those ranges lie inside the design space defined in §6 except
-at the corner combining the bottom of the load pH range with the top of the equilibration
-and wash conductivity range, and the robustness analysis in §7 places the supported region
-at load pH at or above `{python} f"{par_ph_nor_lo:.2f}"` and the equilibration and wash
-conductivity at or below `{python} f"{par_wash_nor_hi:.1f}"` mS/cm. Two actions follow. The
-normal operating range of the equilibration and wash conductivity should be reviewed
-against @tbl-par before the Stage 2 ranges are fixed, and until it is, operation at the top
-of that range should be avoided when the load pH is at the bottom of its own. Neither
-parameter needs a tighter control than the equipment already delivers. Both remain well
-controlled critical process parameters (§9).
+The first is the set of parameter ranges in @tbl-params. The four multivariate parameters are
+operated within the normal operating ranges given there, and those ranges lie inside the
+region characterized by this study. The ranges are carried into the batch record and into the
+Stage 2 protocol.
 
-The second is in-process control of pool host cell protein against the limit of
-`{python} f"{hcp_limit:.1f}"` ng/mg derived in §7. The nominal step delivers
-`{python} f"{nominal('hcp_out_ng_mg'):.1f}"` ng/mg, and the limit is what confirms that the
-step handed the downstream train a load it can bring to the drug substance criterion. A
-batch that runs at the unfavourable corner described above is detected by this control.
-Residual DNA and leached Protein A are monitored across the step and are controlled by
-release testing of the drug substance. DNA is a polyanion at every pH the step can operate
-at and leached Protein A is acidic at the load pH, so both stay adsorbed to the ligand
-across the ranges in @tbl-params.
+The second is in-process control of the pool. Pool host cell protein is measured on every
+batch under AMV-3012 and judged against the in-process limit of §3.5. That measurement is the
+control that covers the corner identified in §7, where load pH at the bottom of its normal
+operating range and the equilibration and wash-1 conductivity at the top of its own leave the
+least margin to the limit. Pool protein concentration and step yield are recorded on every
+batch as process consistency measures.
 
-The third is the modular viral clearance claim of §8. The step contributes
-`{python} f"{vclr(AEX_ROW, 'MVM'):.2f}"` log10 of MVM clearance and
-`{python} f"{vclr(AEX_ROW, 'XMuLV'):.2f}"` log10 of XMuLV clearance to a cumulative claim
-consolidated in PCMR-001. Load pH and load conductivity are the two parameters that claim
-depends on, and both are controlled and verified before the load begins.
+The third is the pool collection method. The trailing-edge stop set-point was corrected from
+`{python} f"{dev_008_02_uv_pool_stop_original_mau:g}"` mAU to
+`{python} f"{dev_008_02_uv_pool_stop_corrected_mau:g}"` mAU following the investigation in
+§13.2, and the corrected value is the one specified for commercial operation.
 
-The fourth is a control on the feed to the step, which arises from DEV-008-01. A maximum
-hold time was placed on the neutralized cation exchange pool before it is adjusted and
-loaded, and charge variant content of the load is verified by icIEF under AMV-3013 before
-the step is run. Neither control existed when the first execution of the designs was run
-and the deviation is the reason both exist now (§13.1).
+The fourth is a control on the feed to the step, which follows from the investigation in
+§13.1. The hold time of the neutralized cation exchange eluate before it is loaded onto this
+step is specified and recorded, and the `{python} dev_008_01_neutralized_hold_h` h hold that
+produced the non-representative material lies outside what the specification allows. The
+charge-variant profile of the load is verified by icIEF under AMV-3013 when a hold is extended
+beyond that specification.
 
-The fifth is life-cycle control of the resin under SOP-2008. The models reported here were
-fitted on a resin operated within its qualified cycle limits, and the clearance the step
-claims is conditional on that. Cycle number, sanitization and column efficiency are
-therefore controlled and trended, and column repacking is triggered on efficiency rather
-than on cycle count alone.
+The fifth is the set of life-cycle controls. Column packing is verified by plate count and
+peak asymmetry, and resin cycling, sanitization and replacement follow SOP-2008. The models in
+this report were fitted on resin within the early part of its life cycle, so cumulative cycle
+number is controlled by that programme and not by the ranges reported here.
 
-The glycan attributes, the charge variants and the aggregate content of the drug
-substance are formed or reduced upstream and are reported in PCR-003 and PCR-007. Leached
-Protein A is set by the capture step and is reported in PCR-005. Enveloped virus clearance
-is set principally by low-pH inactivation and is reported in PCR-006. The remaining MVM
-clearance is delivered by virus filtration and is reported in PCR-009. This report claims
-only what @tbl-cap and @tbl-vc attribute to Step `{python} f"{STEP_NO}"`.
+Attributes that this step does not control are controlled elsewhere and are named here so that
+the strategy can be read as a whole. Aggregate is controlled at cation exchange (PCR-007). The
+glycan and charge-variant attributes are formed and controlled in the production bioreactor
+(PCR-003). Enveloped virus is inactivated at Step 6 (PCR-006) and both model viruses are
+retained at Step 9 (PCR-009). Residual DNA and leached Protein A are cleared at this step and
+at the two chromatographic steps before it, and are tested on the drug substance. The
+combination of these contributions is consolidated in PCMR-001.
 
 # Discussion
 
-Raising the load pH increases the adsorption of every acidic species in the feed onto the
-quaternary amine ligand, and raising the buffer conductivity decreases it. The two
-parameters move one adsorption equilibrium in opposite directions, load pH by changing the
-net charge a species carries relative to its isoelectric point and conductivity by
-screening that charge. Prior knowledge did not distinguish the two conductivities of the step.
-Raising the equilibration and wash buffer conductivity releases host cell protein into the
-pool and leaves both log reduction factors unchanged, and raising the load conductivity
-lowers both log reduction factors and leaves pool host cell protein unchanged. The two
-attributes are therefore controlled by different parameters, and an excursion in one
-conductivity does not carry an implication for the other attribute. The step holds a tight
-host cell protein limit and a wide viral margin at the same time.
+Two removals share one ligand at this step and answer to different parameters. Host cell
+protein removal falls when the conductivity of the equilibration and wash-1 buffer rises,
+because part of the population is held weakly enough for the wash to displace it. Virus
+removal does not fall, because a virus particle presents many acidic groups to the ligand at
+once and stays bound through the wash. Prior knowledge treated the ionic strength in the bed
+as acting on everything held on the ligand, and this study confines that expectation to the
+weakly held fraction. The operating region is bounded in the plane of load pH against the
+equilibration and wash-1 conductivity for the same reason, and it runs to the edge of the
+characterized range in load conductivity and in protein load.
 
-The model matched at-scale
-performance on the attributes that matter to this step at the set-point condition (§3.1).
-Its centre-point replicates reproduce at
-`{python} f"{cvrow(R_HCP, 'rsm', '%CV'):.1f}"` % on the least precise response, which is
-the precision of the assay rather than of the process. Lack of fit is not significant for
-any of the three responses, which means the models describe the data to within the
-reproducibility the replicates establish. The viral results carry an additional
-qualification, since they were generated on a separate spiking model whose load is spiked
-with live virus. That model reproduces the process model's geometry, resin and buffers, but
-the spike itself is a difference from the process and the clearance claim is bounded by it.
+The scale-down model supports these conclusions for the reasons given in §3.1, and the
+centre-point reproducibility in §5.1 puts a number on how well it repeats. The two designs
+gave centre-point means that agree within their dispersion. Pool host cell protein and the two
+log reduction factors gave models with no significant lack of fit against that
+reproducibility.
 
-Three deviations were recorded and are reported in §13. One of them invalidated the first
-execution of both designs. The load used in that execution had been held neutralized long
-enough to raise its acidic charge variant content by roughly half, and the deamidated
-antibody competed with the impurities for the ligand at high load. Both designs were
-re-executed in full on a requalified load and the anomalous interaction is absent from the
-re-executed data. The other two deviations were bounded and did not change any conclusion.
+Three deviations were recorded and all three are closed. One of them invalidated the first
+execution of both designs and forced a full re-execution on requalified material. The
+re-executed study is the study
+reported here, and the first execution is retained only as evidence for the root cause. The
+other two were a permissive pool collection set-point, which was corrected, and a buffer
+released below its pH acceptance range on one screening run, which was retained. §13 gives
+each in full.
 
-The normal operating ranges as they stand are not fully supported. The corner combining the
-bottom of the load pH range with the top of the equilibration and wash conductivity range
-puts the predicted pool host cell protein at
-`{python} f"{hcp_nor_max:.1f}"` ng/mg against an in-process limit of
-`{python} f"{hcp_limit:.1f}"` ng/mg, and the robustness analysis withdraws support from the
-lower part of the load pH range and the upper part of the conductivity range. The
-consequence for the drug substance is small, because the in-process limit carries a
-safety factor of `{python} f"{hcp_margin:g}"` and the drug substance criterion is met
-with wide margin (§8). §10 carries the review of the conductivity range as an action.
+Four limitations bound what this report establishes. The models are fitted on a scale-down
+column and design space boundaries are not confirmed at commercial scale at the edges of the
+ranges. The viral clearance figures come from a small-scale spiking model operated under
+containment, which is the accepted basis for a modular claim under ICH Q5A(R2) [@ichq5a] but
+is not the commercial column. The models are mean-level models, so a point on the boundary of
+the design space is a point at which about half of batches would exceed the limit, and this is
+why the proven acceptable ranges of §7 are also computed from a predictive interval. And the
+whole study was run on resin within the early part of its life cycle, so the effect of resin
+age on clearance is managed by SOP-2008 and not by these models.
 
-Four limitations bound what this report claims. The models are fitted on a scale-down
-model, and the design space has not been confirmed at commercial scale at its edges. The
-models predict mean levels, so the assurance at the edge of the design space is
-approximately half and the control strategy commits to the normal operating ranges rather
-than to the boundary. The viral clearance claim is modular and rests on a small scale
-spiking model, so it is a claim about the step and not about the process, and the
-cumulative claim is made in PCMR-001. The clearance the step delivers is conditional on the
-resin being operated inside its qualified life cycle, which is a control rather than a
-result of this study. Each of these is managed forward by the elements listed in §10 and
-each is verified in Stage 2.
+The tightest capability in the drug substance is the cumulative MVM clearance, at Cpk
+`{python} f"{cpk('lrv_mvm'):.2f}"`, and this step is one of the two that carry it. A future
+change to load pH or to load conductivity, even inside the characterized region, is therefore
+assessed against the cumulative claim in PCMR-001 and not against this step alone.
 
 # Conclusions
 
-The anion exchange step has been characterized on a qualified scale-down model over ranges
-at least twice the width of the intended control ranges. Raising the load pH lowers pool
-host cell protein and raising the equilibration and wash conductivity raises it, and the
-two interact. Raising the load pH raises the log reduction factor of both model viruses and
-raising the load conductivity lowers it. Protein load carries no
-demonstrated effect over the range studied and the univariate assessment of operating flow
-rate identified none over its own. A design space has been defined over
-`{python} f"{ds_pct:.0f}"` % of the characterized region, bounded by pool host cell protein
-at the corner combining low load pH with high equilibration and wash conductivity. The
-normal operating ranges lie inside that region other than at the same corner, where the
-predicted pool host cell protein reaches
-`{python} f"{hcp_nor_max:.1f}"` ng/mg against an in-process limit of
-`{python} f"{hcp_limit:.1f}"` ng/mg, and the range of the equilibration and wash
-conductivity is to be reviewed against the proven acceptable ranges before the Stage 2
-ranges are fixed. All `{python} f"{n_par}"` parameters were classified as well controlled
-critical process parameters.
+The anion exchange step was characterized on a qualified scale-down model over ranges wider
+than its normal operating ranges. Of its `{python} n_params` parameters, `{python} n_multi`
+were studied in a
+`{python} n_scr`-run screening design and a `{python} n_rsm`-run response-surface design, and
+`{python} n_uni` was assessed one at a time.
 
-The attributes the step governs meet their criteria at commercial scale. Cumulative MVM
-clearance carries a Cpk of `{python} f"{cap_val('lrv_mvm', 'Cpk'):.2f}"`, which is the
-tightest capability of the drug substance, and the step contributes
-`{python} f"{vclr(AEX_ROW, 'MVM'):.2f}"` log10 of that clearance. Three deviations were
-recorded, investigated and dispositioned, and the one that invalidated the first execution
-of the designs was resolved by re-executing both designs in full on a requalified load. The
-step is ready for Stage 2 verification and its outcomes roll up into PCMR-001.
+Pool host cell protein falls as load pH rises and rises as the conductivity of the
+equilibration and wash-1 buffer rises, because the first holds the acidic proteins on the
+ligand and the second screens the charge that holds them. Both log reduction factors fall as
+load pH falls and as load conductivity rises, because virus particles are bound by the acidic
+groups on their surface while the load passes. No studied parameter changes step yield, and
+the antibody is not retained on the ligand at any load pH in the range. The response-surface
+models of these three attributes are adequate, show no significant lack of fit, and are the
+predictive models of this report.
+
+Of the characterized region, `{python} pct(ds_frac)` meets every criterion the step is judged
+against, and pool host cell protein is the attribute that bounds it. Proven acceptable ranges
+are reported for every parameter against every attribute that carries an acceptance criterion
+at this step. The two viral clearances are
+acceptable across every characterization range under both analyses, and pool host cell protein
+bounds load pH and the equilibration and wash-1 conductivity when the rest of the operating
+point is allowed to vary within its normal operating ranges.
+
+At commercial scale the attributes this step sets or clears are capable, and the tightest
+is the cumulative MVM clearance at Cpk `{python} f"{cpk('lrv_mvm'):.2f}"`, which this step
+shares with small-virus retentive filtration. All `{python} n_params` parameters were
+classified as well-controlled critical process parameters.
+
+The study recorded `{python} n_dev` deviations, and all of them were investigated and closed.
+The first execution of
+both designs was invalidated by a non-representative load and re-executed in full, and the
+re-executed study is what this report analyses. The ranges, the in-process controls and the
+classifications reported here are proposed for Stage 2 and roll up into PCMR-001.
 
 # Deviations from the plan
 
-Execution of the study recorded `{python} f"{n_dev}"` deviations from PCP-008.
-@tbl-dev lists them with the point at which each was detected and its disposition. Each is
-then reported with what went wrong, what the investigation found, what the impact was and
-how it was dispositioned.
+Execution of the study recorded `{python} n_dev` deviations from PCP-008. @tbl-dev lists them
+with the activity that detected each one and its disposition, and the subsections that follow
+give the investigation and the impact assessment of each.
 
 ```{python}
 #| output: asis
 print(dev_register(DOC))
-print()
-print(": Deviations recorded during execution of PCP-008. {#tbl-dev}")
+print("\n: Deviation register for this study. {#tbl-dev}\n")
 ```
 
-## DEV-008-01, non-representative load in the first execution
+## DEV-008-01 — non-representative load in the first execution
 
-In the first execution of both designs the flow-through pool carried up to
-`{python} f"{sup_hcp_max:.0f}"` ng/mg host cell protein, against an in-process limit of
-`{python} f"{hcp_limit:.1f}"` ng/mg and a mean across the design of
-`{python} f"{sup_hcp_mean:.0f}"` ng/mg. The high results were confined to the runs that
-combined the highest protein load with the highest equilibration and wash conductivity, and
-that pattern appeared in the screening design as an interaction between protein load and
-the equilibration and wash conductivity of
-`{python} f"{eff(R_HCP, LET[F_WASH] + LET[F_LOAD], sup=True):.1f}"` ng/mg
-(p `{python} pval(effp(R_HCP, LET[F_WASH] + LET[F_LOAD], sup=True))`), which was the
-largest interaction in that dataset. Prior knowledge offered no mechanism by which protein
-load should interact with that conductivity at loads far below the capacity of the bed.
+The first execution of both designs was run on a load whose charge-variant profile was not
+representative of the routine process. Verification of the load material by icIEF under
+AMV-3013 measured acidic charge variants at
+`{python} f"{dev_008_01_acidic_variants_deamidated_pct:g}"` % of the total, against
+`{python} f"{dev_008_01_acidic_variants_requalified_pct:g}"` % in the requalified material
+used for the reported study. The affected lot was LOT-CEX-8842.
 
-The investigation examined the load material. Charge variant analysis of the load lot by
-icIEF under AMV-3013 returned acidic charge variants at
-`{python} f"{dev_008_01_acidic_variants_deamidated_pct:.1f}"` % of total, against
-`{python} f"{dev_008_01_acidic_variants_requalified_pct:.1f}"` % in representative material.
-The batch record for the cation exchange pool lot LOT-CEX-8842 showed a neutralized hold of
-`{python} f"{dev_008_01_neutralized_hold_h:g}"` hours before the pool was adjusted and
-loaded. The root cause was assigned as asparagine deamidation promoted by that extended
-neutralized hold. Deamidation converts an amide to a carboxylate, so it lowers the
-isoelectric point of the affected molecules. A fraction of the antibody therefore carried
-enough negative charge at the load pH to bind the ligand, compete with the impurities for
-capacity and displace weakly bound host cell protein into the pool. The interaction with
-protein load follows directly, because the competing product mass rises with the load.
+The investigation traced the elevated acidic fraction to the hold of the neutralized cation
+exchange eluate, which ran `{python} dev_008_01_neutralized_hold_h` h before the material was
+loaded. An extended hold at neutral pH promotes asparagine deamidation, and deamidation
+converts asparagine to aspartate, which lowers the isoelectric point of the affected molecules
+and moves them into the acidic fraction. The root cause was therefore the hold time and not
+the step, and the material entering the column was not the material the commercial process
+delivers.
 
-The impact assessment concluded that the load was not representative of the material the
-commercial process delivers to the step, and that the operating region derived from it
-would be a region for a deamidated feed rather than for the process. Both designs were
-therefore invalidated for operating region definition and were re-executed in full on a
-requalified, representative cation exchange pool. Root cause was confirmed from the
-re-executed data. In the requalified screening design the same interaction is
-`{python} f"{eff(R_HCP, LET[F_WASH] + LET[F_LOAD]):.2f}"` ng/mg
-(p `{python} pval(effp(R_HCP, LET[F_WASH] + LET[F_LOAD]))`), which is indistinguishable
-from zero, and the highest pool host cell protein anywhere in the design falls to
-`{python} f"{rep_hcp_max:.0f}"` ng/mg with a design mean of
-`{python} f"{rep_hcp_mean:.0f}"` ng/mg. Nothing in the step, the resin or the buffers
-changed between the two executions.
+The consequence for the first execution was a load-dependent loss of host cell protein
+clearance. In the screening data of that execution, protein load interacted with the
+equilibration and wash-1 conductivity with an effect of
+`{python} f"{eff(R_HCP, 'BD', superseded=True):.1f}"` ng/mg
+(p = `{python} f"{eff(R_HCP, 'BD', 'p-value', superseded=True):.1g}"`), and protein load itself
+carried a main effect of `{python} f"{eff(R_HCP, 'D', superseded=True):.1f}"` ng/mg
+(p = `{python} f"{eff(R_HCP, 'D', 'p-value', superseded=True):.1g}"`). Pool host cell protein
+reached `{python} f"{sup_hcp_max:.1f}"` ng/mg at the corner of the design combining the
+highest protein load with the highest conductivity and the lowest load pH, well above the
+in-process limit of `{python} f"{hcp_ipc:.1f}"` ng/mg. A deamidated antibody carries more
+negative charge than the routine product, so a fraction of it bound the ligand instead of
+flowing through. At a high protein load that fraction occupied ligand the host cell proteins
+would otherwise have occupied, and the higher wash conductivity then released what little host
+cell protein remained bound.
 
-The first execution is retained as a superseded dataset. It was used only to confirm root
-cause and no result in §5 to §9 of this report comes from it. Two controls were added to
-the step as a result, a maximum hold time on the neutralized cation exchange pool and
-verification of the load charge variant content by icIEF before the step is run (§10).
+Both designs were declared invalid for the definition of the operating region and were
+re-executed in full on requalified, representative material, the cation exchange eluate
+LOT-CEX-8851, whose charge-variant profile was verified before execution. The requalified data
+confirm the root cause. The same interaction between protein load and the equilibration and
+wash-1 conductivity is `{python} f"{eff(R_HCP, 'BD'):.2f}"` ng/mg
+(p = `{python} f"{eff(R_HCP, 'BD', 'p-value'):.2f}"`) in the reported screening design, which is
+smaller than the standard error of the estimate, and the highest pool host cell protein
+measured anywhere in that design is `{python} f"{rep_hcp_max:.1f}"` ng/mg. The models fitted
+to the two executions differ accordingly. At the highest protein load and the highest
+equilibration and wash-1 conductivity of the design, the first execution predicts
+`{python} f"{sup_hcp_corner:.1f}"` ng/mg and the reported execution predicts
+`{python} f"{rep_hcp_corner:.1f}"` ng/mg.
 
-## DEV-008-02, permissive pool collection set-point
+The first execution is retained as a superseded dataset and is used in this report only to
+confirm the root cause. No effect estimate, model, proven acceptable range or classification
+in this report is derived from it. The deviation is closed as invalidated and re-executed, and
+the control that prevents its recurrence is the hold-time specification described in §10.
 
-Collection of the flow-through pool was stopped on the trailing edge of the ultraviolet
-trace at `{python} f"{dev_008_02_uv_pool_stop_original_mau:g}"` mAU in both executions of
-the designs. Reconciliation of the pool fractions after execution showed that this
-set-point collects further into the trailing edge than the method intends, and the
-corrected set-point is `{python} f"{dev_008_02_uv_pool_stop_corrected_mau:g}"` mAU. The
-trailing edge is the part of the flow-through that carries the highest host cell protein
-concentration, since weakly bound species are released late.
+## DEV-008-02 — permissive pool collection set-point
 
-The impact is a bias on one response and it acts in one direction. Collecting further into
-the trailing edge adds host cell protein to the pool, so every pool host cell protein
-result in this report is biased high relative to the corrected method, and no result is
-biased low. The bias is common to every run of both designs, since the set-point was the
-same on all of them, so it displaces the fitted surface without changing the effects
-estimated from it. The in-process limit, the design space boundary and the proven
-acceptable ranges derived in §6 and §7 are therefore conservative with respect to the
-corrected method.
+The trailing-edge stop set-point for pool collection was
+`{python} f"{dev_008_02_uv_pool_stop_original_mau:g}"` mAU in both executions of the study,
+which is more permissive than the method intends. Reconciliation of the pool fractions after
+execution, using the host cell protein results of AMV-3012, showed that pool collection
+continued further into the trailing edge than specified, so each pool carried a small
+additional volume of late material.
 
-The correction was made in the method and was verified. `{python} f"{dev_008_02_ver_n:g}"`
-verification runs were executed at the corrected set-point, of which
-`{python} f"{dev_008_02_ver_robust_n:g}"` were at corners of the normal operating ranges.
-Pool host cell protein at the corrected set-point was consistent with the fitted surface
-after allowing for the removed trailing edge. The verification set is small and its mean
-carries a 95 % confidence interval of
-`{python} f"{dev_008_02_ci_hw:.1f}"` % relative, derived from the precision of AMV-3012 and
-the number of runs. The models in §5.3 were not refitted on it. The deviation
-was dispositioned as corrected by modelling and verification runs, and the corrected
-set-point is what the commercial method specifies.
+The set-point applied identically to every run of both designs, so it shifted every pool in
+the same direction by about the same amount. An estimated effect is a difference between runs,
+and a shift shared by all of them cancels out of every difference, so the effects,
+coefficients and interactions reported in §5 are unaffected. What the shift can bias is the
+absolute level of pool host cell protein, and the extra late material it collected raises that
+level, so the operating region in §6 and the ranges in §7 are narrower than the corrected
+method would give.
 
-## DEV-008-03, equilibration and wash buffer released below its pH range
+The set-point was corrected to
+`{python} f"{dev_008_02_uv_pool_stop_corrected_mau:g}"` mAU. The pool composition at the
+corrected set-point was modelled from the collected fractions, and the correction was
+confirmed by `{python} dev_008_02_ver_n` verification runs at the corrected set-point,
+`{python} dev_008_02_ver_robust_n` of them at the edges of the operating range. That
+verification set has a limit. With the precision of AMV-3012 and
+`{python} dev_008_02_ver_n` runs, a difference smaller than
+`{python} f"{dev_008_02_ci_hw:g}"` % of the mean cannot be resolved at 95 % confidence, so the
+verification bounds the effect of the correction without measuring it exactly. The deviation is
+closed, and the corrected set-point is carried into the control strategy (§10).
 
-The equilibration and wash buffer lot LOT-BUF-8815 was released at pH
-`{python} f"{dev_008_03_buffer_ph_measured:.2f}"` against an acceptance range whose lower
-limit is `{python} f"{dev_008_03_buffer_ph_low_limit:.1f}"` and a target of
-`{python} f"{dev_008_03_buffer_ph_target:.1f}"`. The lot was used on one screening run. The
-deviation was detected at buffer release testing under SOP-2103 and the root cause was
-assigned as a titration endpoint error at buffer preparation.
+## DEV-008-03 — equilibration and wash-1 buffer released below its pH range
 
-The impact was bounded from the effects measured in this study. A lower buffer pH weakens
-the binding of the acidic species in the bed, which acts in the same direction as a lower
-load pH. Taking the load pH coefficient of the response-surface model as an upper bound on
-the sensitivity of the step to a pH offset of this size, an offset of
-`{python} f"{dev3_offset:.2f}"` pH units corresponds to at most
-`{python} f"{dev3_hcp_bound:.1f}"` ng/mg on the pool host cell protein of that run and at
-most `{python} f"{dev3_mvm_bound:.2f}"` log10 on its MVM clearance. The host cell protein
-bound is below the centre-point standard deviation of the assay reported in §5.1 and the
-clearance bound is within the reproducibility of the titration. The affected run is a
-factorial run of the screening design.
+The equilibration and wash-1 buffer lot LOT-BUF-8815 was released at pH
+`{python} f"{dev_008_03_buffer_ph_measured:g}"` against a lower acceptance limit of
+`{python} f"{dev_008_03_buffer_ph_low_limit:g}"` and a target of
+`{python} f"{dev_008_03_buffer_ph_target:g}"`. The lot was used on one factorial run of the
+screening design. The excursion was found by buffer release testing under SOP-2103, and the
+root cause was a titration endpoint error at buffer preparation.
 
-The run was therefore retained in the analysis and the deviation was dispositioned as
-retained. The buffer preparation procedure was reviewed and the titration endpoint check
-was reinforced under SOP-2103. No result in this report depends on that single run.
+The impact is bounded on three grounds. The affected run is one factorial run of the screening
+design, and this report uses the screening design to identify which factors act and not to
+predict a response. The response-surface design, which carries every prediction, every proven
+acceptable range and the operating region, was executed entirely on buffer released within its
+acceptance range. And a buffer pH below target leaves the acidic host cell proteins less
+negatively charged in the bed, so it would raise pool host cell protein in that run and could
+not have made the step look better than it is.
 
-# Appendix A. Screening design matrix and responses {.unnumbered}
+The run was retained in the screening analysis and the deviation is closed as retained. Buffer
+release testing under SOP-2103 catches a preparation error of this kind before the buffer
+reaches the column, and it did so here.
 
-@tbl-appa-design gives the coded settings of the screening design and @tbl-appa-resp the
-measured responses of each run. The coded letters are those of @tbl-legend.
+# Appendix A — Screening design matrix and responses {.unnumbered}
+
+@tbl-appa gives the executed screening design in coded units with the measured responses. The
+factor letters are those of @tbl-legend, the coded levels −1 and +1 are the edges of each
+characterization range and 0 is the midpoint of that range, and the run column is the design
+position and not the execution order, which was randomized.
 
 ```{python}
 #| output: asis
-_m = D.coded_matrix_df(UO, "screening")
-_fac_cols = ["Run", "Type"] + [LET[f] for f in D.screening_factors(UO)]
-_resp_cols = [c for c in _m.columns if c not in _fac_cols]
-show(_m[_fac_cols])
-print()
-print(": Screening design, coded factor settings. {#tbl-appa-design}")
-print()
-show(_m[["Run"] + _resp_cols])
-print()
-print(": Screening design, measured responses. {#tbl-appa-resp}")
+show(D.coded_matrix_df(UO, "screening"))
+print("\n: Screening design in coded units, with measured responses. {#tbl-appa}\n")
 ```
 
-# Appendix B. Response-surface design matrix and responses {.unnumbered}
+# Appendix B — Response-surface design matrix and responses {.unnumbered}
 
-@tbl-appb-design gives the coded settings of the face-centred central composite design and
-@tbl-appb-resp the measured responses of each run.
+@tbl-appb gives the executed response-surface design in the same form. The axial runs sit at
+the face of the coded cube, so every level in the table is at an edge or at the midpoint of a
+characterization range.
 
 ```{python}
 #| output: asis
-_m = D.coded_matrix_df(UO, "rsm")
-_fac_cols = ["Run", "Type"] + [LET[f] for f in D.rsm_factors(UO)]
-_resp_cols = [c for c in _m.columns if c not in _fac_cols]
-show(_m[_fac_cols])
-print()
-print(": Response-surface design, coded factor settings. {#tbl-appb-design}")
-print()
-show(_m[["Run"] + _resp_cols])
-print()
-print(": Response-surface design, measured responses. {#tbl-appb-resp}")
+show(D.coded_matrix_df(UO, "rsm"))
+print("\n: Response-surface design in coded units, with measured responses. {#tbl-appb}\n")
 ```
 
-# Appendix C. Full effect and coefficient tables {.unnumbered}
+# Appendix C — Full effect and coefficient tables {.unnumbered}
 
-@tbl-appc-eff-hcp to @tbl-appc-eff-yield give every estimated effect of the screening
-models, including the terms not significant at α = 0.05.
+The screening effect tables for pool host cell protein and for MVM are in §5.2, and the
+response-surface coefficient tables for pool host cell protein, MVM and XMuLV are in §5.3.
+This appendix gives the remaining tables. @tbl-appc1 and @tbl-appc2 give the screening effects
+for XMuLV and for step yield, and @tbl-appc3 gives the response-surface coefficients for step
+yield.
 
 ```{python}
 #| output: asis
-show(D.screening_effects_df(UO, R_HCP))
-print()
-print(": Screening effects, pool HCP, all terms. {#tbl-appc-eff-hcp}")
-print()
 show(D.screening_effects_df(UO, R_XMULV))
-print()
-print(": Screening effects, XMuLV LRF, all terms. {#tbl-appc-eff-xmulv}")
-print()
-show(D.screening_effects_df(UO, R_MVM))
-print()
-print(": Screening effects, MVM LRF, all terms. {#tbl-appc-eff-mvm}")
-print()
+print("\n: Screening effect estimates, XMuLV log reduction factor. {#tbl-appc1}\n")
+```
+
+```{python}
+#| output: asis
 show(D.screening_effects_df(UO, R_YIELD))
-print()
-print(": Screening effects, step yield, all terms. {#tbl-appc-eff-yield}")
+print("\n: Screening effect estimates, step yield. {#tbl-appc2}\n")
 ```
-
-@tbl-appc-coef-xmulv to @tbl-appc-anova-yield give the response-surface coefficients and
-the analysis of variance for the two responses not shown in §5.3.
 
 ```{python}
 #| output: asis
-show(D.rsm_coeff_df(UO, R_XMULV))
-print()
-print(": Response-surface coefficients, XMuLV LRF. {#tbl-appc-coef-xmulv}")
-print()
-show(D.anova_lof_df(UO, R_XMULV))
-print()
-print(": Analysis of variance with lack of fit, XMuLV LRF. {#tbl-appc-anova-xmulv}")
-print()
 show(D.rsm_coeff_df(UO, R_YIELD))
-print()
-print(": Response-surface coefficients, step yield. {#tbl-appc-coef-yield}")
-print()
-show(D.anova_lof_df(UO, R_YIELD))
-print()
-print(": Analysis of variance with lack of fit, step yield. {#tbl-appc-anova-yield}")
+print("\n: Response-surface coefficients, step yield. {#tbl-appc3}\n")
 ```
 
-@fig-diag-xmulv gives the diagnostics of the XMuLV model.
+# Appendix D — Analytical methods summary {.unnumbered}
 
-```{python}
-#| label: fig-diag-xmulv
-#| fig-cap: "Model diagnostics for XMuLV LRF."
-_ = D.fig_diagnostics(UO, R_XMULV)
-plt.show()
-```
+@tbl-appd1 lists the validated methods used to measure the responses and the load material of
+this study, with the analyte each measures and the form in which each result is reported.
+@tbl-appd2 gives the validated performance of those methods for which a performance record is
+held, as intermediate precision, limit of quantitation, accuracy and the share of the total
+observed variance attributable to the method.
 
-@tbl-appc-cv-scr gives the centre-point reproducibility of the screening design, which
-supports the comparison made in §5.1.
+| Reference | Technique | Analyte | Reported as |
+|---|---|---|---|
+| AMV-3012 | Enzyme-linked immunosorbent assay | Host cell protein | ng per mg of product |
+| AMV-3013 | Imaged capillary isoelectric focusing | Charge variants of the load | % of total peak area |
+| AMV-3014 | Quantitative polymerase chain reaction | Residual DNA | ng per dose |
+| AMV-3016 | Enzyme-linked immunosorbent assay | Leached Protein A | ppm |
+| AMV-3017 | Infectivity titre by TCID50 | XMuLV | log10 TCID50 per mL |
+| AMV-3018 | Infectivity titre by TCID50 with qPCR confirmation | MVM | log10 TCID50 per mL |
 
-```{python}
-#| output: asis
-show(D.center_cv_df(UO, "screening"))
-print()
-print(": Centre-point reproducibility, screening design. {#tbl-appc-cv-scr}")
-```
-
-# Appendix D. Analytical methods summary {.unnumbered}
-
-@tbl-appd lists the validated methods used in the study with the analyte each measures and
-the form in which the result is reported.
+: Validated analytical methods used in this study. {#tbl-appd1}
 
 ```{python}
 #| output: asis
-show(appd)
-print()
-print(": Validated analytical methods used in the study. {#tbl-appd}")
+_perf = csv("dev_methods.csv")
+_perf = _perf[_perf["id"].isin([a for a, _ in AEX_AMV_REFS])].rename(
+    columns={"id": "Reference", "name": "Method", "precision_pct": "Precision (%)",
+             "loq": "LOQ", "loq_unit": "LOQ unit", "accuracy_pct": "Accuracy (%)",
+             "variance_fraction": "Variance share"})
+show(_perf[["Reference", "Method", "Precision (%)", "LOQ", "LOQ unit", "Accuracy (%)",
+            "Variance share"]])
+print("\n: Validated performance of the analytical methods. {#tbl-appd2}\n")
 ```
+
+<!-- ========================= BODY END ======================================== -->
 
 # References {.unnumbered}
 

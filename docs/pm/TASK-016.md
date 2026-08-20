@@ -3,13 +3,13 @@ type: pm-task
 epic: 2026-08-19_02_fifth-round-plan-then-batches
 sprint: 2026-08-19_02_fifth-round-plan-then-batches
 task: TASK-016
-status: todo
+status: blocked
 kind: document
 title: "Author PCR-005 (Protein A Chromatography (Step 5)) in one pass under the rebuilt apparatus, with one content-review cycle"
 generated: true
-waiting_on: the assistant
-tags: [pm/task, pm/todo]
-about: ["PCR-005"]
+waiting_on: another task
+tags: [pm/task, pm/blocked]
+about: ["PCR-005", "PCR-008"]
 ---
 
 > [!warning] Generated from `.claude/work/2026-08-19_02_fifth-round-plan-then-batches/state.json` by `scripts/pm_notes.py`.
@@ -17,11 +17,11 @@ about: ["PCR-005"]
 
 # TASK-016 — Author PCR-005 (Protein A Chromatography (Step 5)) in one pass under the rebuilt apparatus, with one content-review cycle
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `blocked` · **Waiting on:** another task · **Board:** [[_Board]]
 
 ## Why it exists
 
-97 annex quotes, 39 rhetorical spans to re-anchor later in this batch's annex task. PCR-005 is at an earlier round (round three / Track D / round two); re-done so the corpus has ONE register.
+97 annex quotes, 39 rhetorical spans to re-anchor later in this batch's annex task. PCR-005 is at an earlier round (round three / Track D / round two); re-done so the corpus has ONE register. BLOCKED by D8 B1 = FAIL (2026-08-20): the owner preferred the old PCR-008 in the sampled reading; the batches do not continue until D8 settles.
 
 ## Acceptance criteria
 
@@ -37,6 +37,7 @@ about: ["PCR-005"]
 ## Documents it is about
 
 - **PCR-005** — `pc_package/PCR-005_protein_a.qmd`
+- **PCR-008** — `pc_package/PCR-008_aex.qmd`
 
 ## Files it touched
 

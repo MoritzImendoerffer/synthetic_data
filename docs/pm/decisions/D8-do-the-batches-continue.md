@@ -22,7 +22,7 @@ human check where it is worth most, at the boundary between batches, at a fifth 
 
 | batch | documents | document read | verdict | date |
 |---|---|---|---|---|
-| B1 | PCR-006, PCR-008, PCR-009, PCR-010 | — | — | — |
+| B1 | PCR-006, PCR-008, PCR-009, PCR-010 | PCR-008 | **FAIL — the owner preferred the OLD text** ("clearly A wins. I could not find sentences in A which sound machine written"; A was the old document) | 2026-08-20 |
 | B2 | PCR-004, PCR-003, PCR-005 | — | — | — |
 | B3 | PCP-004, PCP-006, PCP-008, PCP-009, PCP-010 | — | — | — |
 | B4 | PCP-003, PCP-007 | — | — | — |
@@ -30,3 +30,25 @@ human check where it is worth most, at the boundary between batches, at a fifth 
 
 **What the plan assumes meanwhile.** Each batch's document tasks start only after the previous
 batch's row reads PASS.
+
+---
+
+**B1 read on 2026-08-20 — FAIL, and the unit is stopped.** The promoted `PCR-008` stays in the
+corpus until you decide. The options:
+
+**Option A — re-author `PCR-008`** under the same regime (a fresh one-pass agent, one review
+cycle, another blind reading of old vs new). Costs one authoring day; tests whether this was a
+draw of the die or a property of the document.
+
+**Option B — revert `PCR-008` to the old text by name** (restore its qmd/docx/pdf, its 25-span
+YAML and the `ax_*` builder region from the commit before promotion, re-ground). The corpus then
+carries the old register for this one document, deliberately recorded.
+
+**Option C — accept the new `PCR-008` and continue to B2.** Your reading found no machine sentence
+in either text; the preference was for A on overall reading quality. If you can say what A does
+better, that becomes a finding for the regime; if not, this may be reading noise, and the next
+sample will tell.
+
+Also worth weighing: `PCR-006`, `PCR-009` and `PCR-010` from the same batch were promoted on the
+same pipeline and have not been read — a second sample from B1 (Option D) would say whether
+`PCR-008` is an outlier before anything is re-done.

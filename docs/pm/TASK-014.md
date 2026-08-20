@@ -3,13 +3,13 @@ type: pm-task
 epic: 2026-08-19_02_fifth-round-plan-then-batches
 sprint: 2026-08-19_02_fifth-round-plan-then-batches
 task: TASK-014
-status: todo
+status: blocked
 kind: document
 title: "Author PCR-004 (Harvest and Clarification (Step 4)) in one pass under the rebuilt apparatus, with one content-review cycle"
 generated: true
-waiting_on: the assistant
-tags: [pm/task, pm/todo]
-about: ["PCR-004"]
+waiting_on: another task
+tags: [pm/task, pm/blocked]
+about: ["PCR-004", "PCR-008"]
 ---
 
 > [!warning] Generated from `.claude/work/2026-08-19_02_fifth-round-plan-then-batches/state.json` by `scripts/pm_notes.py`.
@@ -17,11 +17,11 @@ about: ["PCR-004"]
 
 # TASK-014 — Author PCR-004 (Harvest and Clarification (Step 4)) in one pass under the rebuilt apparatus, with one content-review cycle
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `blocked` · **Waiting on:** another task · **Board:** [[_Board]]
 
 ## Why it exists
 
-76 annex quotes, 36 rhetorical spans to re-anchor later in this batch's annex task. Non-DoE report (report_nondoe): no screening/RSM, no mechanistic subsection; do not fabricate a DoE.
+76 annex quotes, 36 rhetorical spans to re-anchor later in this batch's annex task. Non-DoE report (report_nondoe): no screening/RSM, no mechanistic subsection; do not fabricate a DoE. BLOCKED by D8 B1 = FAIL (2026-08-20): the owner preferred the old PCR-008 in the sampled reading; the batches do not continue until D8 settles.
 
 ## Acceptance criteria
 
@@ -37,6 +37,7 @@ about: ["PCR-004"]
 ## Documents it is about
 
 - **PCR-004** — `pc_package/PCR-004_harvest.qmd`
+- **PCR-008** — `pc_package/PCR-008_aex.qmd`
 
 ## Files it touched
 

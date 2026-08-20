@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **13 of 44 done** · 3 blocked · 28 todo
+**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **14 of 44 done** · 3 blocked · 27 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -59,7 +59,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-039]] | `todo` | the assistant | measurement | Rebuild-and-reground proof after batch B5 |
 | [[TASK-040]] | `todo` | the assistant | measurement | Write the batches' results page |
 | [[TASK-041]] | `todo` | the assistant | documentation | Move the findings into docs, update the roadmap, retire or reduce the proposal, and ship |
-| [[TASK-042]] | `todo` | the assistant | document | Re-author PCR-008 (attempt 2) in one pass under the same regime, with one content-review cycle |
 | [[TASK-043]] | `todo` | the assistant | measurement | Blind reading: round-zero PCR-008 vs attempt 2 — HALT for the owner (D8) |
 | [[TASK-044]] | `todo` | the assistant | annex | Dispose of PCR-008 per the reading: promote attempt 2, or revert to round-zero by name; re-ground either way |
 
@@ -80,6 +79,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-011]] | `done` | — | annex | Promote batch B1 (PCR-006, PCR-008, PCR-009, PCR-010): render, re-cut spans, re-anchor, re-ground |
 | [[TASK-012]] | `done` | — | measurement | Sampled blind reading of one document from batch B1 — HALT for the owner (D8) |
 | [[TASK-013]] | `done` | — | measurement | Rebuild-and-reground proof after batch B1 |
+| [[TASK-042]] | `done` | — | document | Re-author PCR-008 (attempt 2) in one pass under the same regime, with one content-review cycle |
 
 ---
 

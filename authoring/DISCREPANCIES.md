@@ -56,12 +56,12 @@ set-points**:
 > — PCP-006 (low-pH viral inactivation)
 
 > "The first holds the other parameters at their set-points and evaluates the fitted
-> response-surface model across the parameter's characterization range."
+> response surface model across the parameter’s characterization range."
 > — PCP-008 (anion exchange)
 
 > "The first holds the other parameter at its set-point and scans the parameter of interest
-> across its characterization range on a grid of 81 points, using the fitted response-surface
-> model."
+> across its characterization range on a grid of 201 points, using the fitted
+> response-surface model."
 > — PCP-009 (small-virus retentive filtration)
 
 PCP-003 makes the same commitment ("The first holds the other factors at the set-points in

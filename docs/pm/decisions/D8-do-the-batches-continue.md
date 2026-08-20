@@ -138,3 +138,27 @@ sentences under it ("because every effect is a contrast over all runs"). The aut
 covers the convention case, but a review return can still push an author to delete correct prose.
 Watched, not changed, because changing the reviewer's questions mid-campaign would re-split the
 measurement as well as the corpus.
+
+---
+
+**B3 released and PCR-004 re-authored, both decided by the owner on 2026-08-20.**
+
+B3 (the five plans PCP-004, PCP-006, PCP-008, PCP-009, PCP-010) is released and authoring despite
+the B2 split, on the PCR-003 PASS.
+
+`PCR-004` is re-authored as attempt 2 rather than reverted or accepted (TASK-049 → TASK-050 →
+TASK-051), running alongside B3 so it costs no campaign time. The promoted attempt 1 stays in the
+corpus until that reading disposes of it.
+
+**One thing not to over-read when the result comes.** The `PCR-008` sequence had a variable in it:
+attempts 1 and 2 were written before rule 4 was amended and attempt 3 after, so the amendment was
+what changed. `PCR-004` attempt 1 was already written under the amended rule, so attempt 2 under an
+unchanged regime tests the draw and nothing else. If it passes, that says the first draft was
+unlucky; if it fails again, that is the second independent signal that a non-DoE report is where
+this apparatus is weakest — and `PCP-004` and `PCP-010`, the plans for the two steps without a DoE,
+are in B3 and will say the same thing or not.
+
+**Still open, and nobody has decided it:** whether the non-DoE case needs its own rule, and whether
+the reviewer's question 1 should gain a scope line so it stops flagging true statements that a step
+governs nothing. Both are recorded findings, neither is acted on.
+

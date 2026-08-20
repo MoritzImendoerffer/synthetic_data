@@ -23,6 +23,7 @@ human check where it is worth most, at the boundary between batches, at a fifth 
 | batch | documents | document read | verdict | date |
 |---|---|---|---|---|
 | B1 | PCR-006, PCR-008, PCR-009, PCR-010 | PCR-008 | **FAIL — the owner preferred the OLD text** ("clearly A wins. I could not find sentences in A which sound machine written"; A was the old document) | 2026-08-20 |
+| B1 (second sample, option D) | — | PCR-009 | **PASS — the owner preferred the NEW text** ("I like A better, it has shorter sentences and explains everything a bit more clearly") | 2026-08-20 |
 | B2 | PCR-004, PCR-003, PCR-005 | — | — | — |
 | B3 | PCP-004, PCP-006, PCP-008, PCP-009, PCP-010 | — | — | — |
 | B4 | PCP-003, PCP-007 | — | — | — |
@@ -52,3 +53,11 @@ sample will tell.
 Also worth weighing: `PCR-006`, `PCR-009` and `PCR-010` from the same batch were promoted on the
 same pipeline and have not been read — a second sample from B1 (Option D) would say whether
 `PCR-008` is an outlier before anything is re-done.
+
+---
+
+**With both samples in (2026-08-20):** the regime's effect is what the owner names as the reason
+for preferring the new `PCR-009`; `PCR-008` is the outlier, an old text the owner reads as clean.
+What remains to decide is `PCR-008` itself — re-author under the same regime and re-read blind
+(recommended), revert it by name, or accept the promoted text — and whether B2 releases now on the
+`PCR-009` PASS (recommended) or waits for the `PCR-008` disposition.

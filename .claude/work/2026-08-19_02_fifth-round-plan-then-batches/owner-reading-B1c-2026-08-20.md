@@ -41,3 +41,63 @@ text before and might recognize it, and was asked to say so if they did.
 - The owner did not say whether they recognized the round-zero text from the earlier reading.
 
 The reading is complete. The key is opened next, below this line.
+
+## The key, opened after the reading above was committed (`16b7643`)
+
+`blind-key-B1c.md`: **new = B**. Verified by checksum on the extracted text of the first three
+pages, because the embedded dates of `A.pdf` and `B.pdf` were normalized at staging and the file
+bytes therefore differ from their sources:
+
+| file | first-pages text hash | source |
+|---|---|---|
+| `A.pdf` | `6b4f149537c6` | `B1-old-PCR-008.pdf` — the round-zero report |
+| `B.pdf` | `4a34d7808bed` | `pc_package/PCR-008_aex.DRAFT.pdf` — attempt 2 |
+
+So: **A = the ROUND-ZERO PCR-008**; **B = attempt 2**, one pass under the rebuilt apparatus with
+one content-review cycle.
+
+## The rule, applied mechanically
+
+`decisions.pass_rule`: PASS iff the owner judges the NEW document the better text AND quotes fewer
+than five sentences from it.
+
+- New document judged better: **no** — the owner preferred A, the round-zero text.
+- Sentences quoted from the new document: **5**, quoted as "hard to read" with "some phrases in it
+  that sound AI generated". Not fewer than five.
+
+Both legs fail. **TASK-043 = FAIL**, 2026-08-20. Per TASK-044 the disposition on FAIL is to revert
+`PCR-008` to the round-zero text by name, and B2's release is re-put to the owner.
+
+## What this reading adds that the first one did not
+
+The first `PCR-008` reading recorded a preference with no diagnosis: "clearly A wins. I could not
+find sentences in A which sound machine written." This one names the passage and the reason, and
+the two documents can be compared on it directly. Both quoted passages are the scale-down model
+qualification paragraph.
+
+The round-zero paragraph states the convention and then says what the convention buys:
+
+> "This convention holds residence time and mass transport constant across scales, and all buffer
+> volumes are expressed in column volumes, so the same proportional quantities are used at both
+> scales."
+
+The attempt-2 paragraph enumerates what the model keeps, and never says why keeping those things
+makes it a model:
+
+> "The model keeps the bed height of the commercial column, the linear velocity, the protein load
+> per litre of resin and the resin type, and its equilibration, wash, collection and strip volumes
+> are normalized to column volumes."
+
+The owner's stated ground is "the reasoning is better to understand and follow". The round-zero
+text carries one causal sentence about scale invariance; the new text carries a list of held
+quantities, a packed appositive ("Scale-independent settings, which are the four multivariate
+parameters and the flow rate, were operated at the values the commercial process will use") and a
+coinage ("commercial-equivalent operation") that run 2's judge flagged the same class of elsewhere.
+
+This is a finding about the regime, not about this draft alone, and it is the second consecutive
+FAIL for `PCR-008` under it. It goes to the batches' results page (TASK-040):
+
+**the content-review questions push the author toward naming a physical cause wherever a causal
+verb stands, and toward deleting clauses that file a finding — and in a Materials and methods
+paragraph, where the "cause" is a scaling convention rather than a species, that pressure removed
+the explanatory sentence and left an inventory.** The owner read the inventory as machine prose.

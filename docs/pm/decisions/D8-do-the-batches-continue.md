@@ -24,6 +24,7 @@ human check where it is worth most, at the boundary between batches, at a fifth 
 |---|---|---|---|---|
 | B1 | PCR-006, PCR-008, PCR-009, PCR-010 | PCR-008 | **FAIL — the owner preferred the OLD text** ("clearly A wins. I could not find sentences in A which sound machine written"; A was the old document) | 2026-08-20 |
 | B1 (second sample, option D) | — | PCR-009 | **PASS — the owner preferred the NEW text** ("I like A better, it has shorter sentences and explains everything a bit more clearly") | 2026-08-20 |
+| B1 (PCR-008 attempt 2, re-author) | — | PCR-008 | **FAIL — the owner preferred the ROUND-ZERO text** ("I like A better. The reasoning is better to understand and follow"); five sentences quoted from the new text as sounding AI generated | 2026-08-20 |
 | B2 | PCR-004, PCR-003, PCR-005 | — | — | — |
 | B3 | PCP-004, PCP-006, PCP-008, PCP-009, PCP-010 | — | — | — |
 | B4 | PCP-003, PCP-007 | — | — | — |
@@ -68,3 +69,35 @@ What remains to decide is `PCR-008` itself — re-author under the same regime a
 session.** TASK-042 (author + review) → TASK-043 (blind reading, round-zero vs attempt 2) →
 TASK-044 (promote or revert by name). **B2's release remains undecided** and its tasks stay
 blocked until the owner releases them.
+
+---
+
+**PCR-008 attempt 2 read on 2026-08-20 — FAIL, on both legs of the rule.** The owner preferred the
+round-zero text again and quoted five sentences from the new one, so the re-author did not
+reproduce the `PCR-009` result. Two attempts at this document under the same frozen regime have now
+lost to the text that preceded the campaign, which answers the question TASK-042 was set to test:
+attempt 1 was not simply a bad draw.
+
+This reading, unlike the first, says why. Both quoted passages are the scale-down model
+qualification paragraph. The round-zero paragraph explains what the scaling convention buys
+("This convention holds residence time and mass transport constant across scales"); the attempt-2
+paragraph lists what the model keeps and never says why keeping those things makes it a model. The
+owner's ground was "the reasoning is better to understand and follow". Recorded in full in
+`owner-reading-B1c-2026-08-20.md` and carried to the results page.
+
+**Disposition, per the plan:** TASK-044 reverts `PCR-008` to the round-zero text by name — the
+qmd, docx, pdf and 25-span YAML from the commit before promotion, and only the `ax_*` report
+branches of `build_ground_truth.py`, which has moved since. The corpus then carries the old
+register for this one document, deliberately and on the record.
+
+**Two questions are open for the project owner.**
+
+1. **Does B2 release?** It has been undecided since the first `PCR-008` FAIL and its tasks
+   (TASK-014, TASK-015, TASK-016) are still blocked. The evidence is now three sampled readings
+   PASS (the probe, `PCR-007`, `PCP-005`, and `PCR-009` in B1) against two FAILs, both of them on
+   `PCR-008`. On that record `PCR-008` looks like the outlier the second B1 sample suggested it was,
+   and B2 releasing is the reading of the evidence; the alternative is to treat the paragraph-level
+   finding above as a reason to stop and change the regime first.
+2. **Does the scale-down qualification finding change the regime?** The regime is frozen for the
+   duration of the unit by the owner's own decision, and a change mid-campaign re-splits the
+   corpus. The finding is recorded either way.

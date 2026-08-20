@@ -30,3 +30,21 @@ AFTER the key was opened would let the session steer the answer, so the key stay
 question is put first.
 
 The reading continues below.
+
+## The deciding question, put before the key was opened
+
+Asked: "Taking §2.1 as a whole — or more of the document if you read further — which of the two
+reads as a paper?", with A, B and "no difference" offered, and separately whether the owner wanted
+to read further before deciding.
+
+**Answer: A.** And: **§2.1 is enough**, decide on what is there.
+
+## What the reading says, complete, before the key
+
+- Which reads as a paper: **A**.
+- Sentence level: A, on sentence length. Paragraph level: B, on the logical structure of the
+  paragraphs relative to each other. The owner resolved the split in favour of A.
+- Sentences quoted as machine prose: **none**, from either document.
+- Scope: §2.1, by the owner's choice, told that it was theirs to widen.
+
+The reading is complete. The key is opened next, below this line.

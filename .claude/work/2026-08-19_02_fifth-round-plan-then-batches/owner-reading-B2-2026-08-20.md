@@ -51,3 +51,56 @@ Whether the owner opened any key file before reporting is not known to this sess
 assumed either way.
 
 The keys are opened below this line.
+
+## The keys, opened after the reading above was committed
+
+| document | key file | verified by first-pages text hash |
+|---|---|---|
+| `PCR-004` | `new = A` | `B2-PCR-004-A.pdf` = the promoted text, `-B` = the pre-campaign text |
+| `PCR-003` | `new = B` | `B2-PCR-003-B.pdf` = the promoted text, `-A` = the pre-campaign text |
+| `PCR-005` | `new = A` | not read |
+
+The owner reported in new/old terms, and the keys confirm those terms were used correctly: the
+passage quoted for `PCR-003` belongs to `B2-PCR-003-A.pdf`, which the key and the checksum both
+identify as the pre-campaign text.
+
+## The rule, applied mechanically
+
+`decisions.pass_rule`: PASS iff the owner judges the NEW document the better text AND quotes fewer
+than five sentences from it.
+
+**`PCR-003` — PASS.** The new document was judged better. Sentences quoted from it: 0; the one
+quoted passage is from the old text.
+
+**`PCR-004` — FAIL.** The old document was judged better, so the first leg fails. Sentences quoted
+from the new text: 0.
+
+**`PCR-005` — not read**, no verdict.
+
+## What this batch says
+
+`B2` splits. The two documents read go opposite ways, and the split falls exactly where the other
+evidence in this unit already pointed.
+
+`PCR-004` is the batch's only **non-DoE** report. Its §6 does not describe a design space; it
+explains why the step has none. Three independent signals now agree that this is where the
+rebuilt apparatus is weakest:
+
+1. this reading, which prefers the pre-campaign text;
+2. the owner's cross-document ranking earlier the same day, which placed `PCR-004` last of three
+   on the same paragraph and called its sentences "in general weird";
+3. the content review, where 16 of `PCR-004`'s 26 run-1 Q1 flags were sentences stating that the
+   step governs no critical quality attribute — true, necessary sentences that question 1 has no
+   exemption for.
+
+And the counts point the other way, which is the finding worth keeping: `PCR-004` converged
+*best* of the whole batch on the four review questions (26/5/7/15 → 4/0/0/8) and is the document
+the owner likes least. `PCR-008` attempt 3 converged *worst* (20/8/7/17 → 17/4/7/12) and is the
+document the owner likes most. The review counts are not the quality, on the two documents where
+a human has now read both versions.
+
+`PCR-003` is the clean PASS: the largest report in the corpus, a full DoE, its new §6 never shown
+to the owner in advance, and the owner identified the old text correctly from its prose alone.
+
+**The open question is what a non-DoE report needs**, since `PCR-010` (UF/DF) is the other one and
+was promoted in B1 without ever being read.

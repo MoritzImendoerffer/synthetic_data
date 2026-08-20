@@ -1,0 +1,525 @@
+---
+title: "Process Characterization Report"
+subtitle: "A-Mab Drug Substance — Harvest and Clarification (Step 4) — PCR-004"
+author: "Process Development / Manufacturing Science & Technology (MSAT)"
+date: 2026-07-24
+format:
+  docx:
+    reference-doc: reference.docx
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    fig-cap-location: bottom
+    tbl-cap-location: top
+  pdf:
+    documentclass: scrreprt
+    mainfont: "DejaVu Serif"
+    sansfont: "DejaVu Sans"
+    monofont: "DejaVu Sans Mono"
+    mathfont: "DejaVu Math TeX Gyre"
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    colorlinks: true
+    geometry: margin=1in
+    fig-pos: 'H'
+    fig-cap-location: bottom
+    tbl-cap-location: top
+bibliography: references.bib
+execute:
+  echo: false
+  warning: false
+  cache: false
+jupyter: python3
+---
+
+```{python}
+#| tags: [setup]
+import sys, os
+sys.path.insert(0, os.path.abspath("."))
+from _pcpkg import *  # noqa: F401,F403
+import doe_report as D
+import matplotlib.pyplot as plt
+import scipy.stats as sstat
+
+DOC = "PCR-004"
+UO = "harvest"
+UO_TITLE = "Harvest and Clarification (Step 4)"
+
+# --- doc-local derived scalars (pulled from the model; never typed) ------------
+UOC = CFG.unit_op(UO)
+STEP = UOC.step
+PARAMS = {p.key: p for p in UOC.parameters}
+cf = PARAMS["centrifuge_g"]            # centrifugation (rcf)
+dfl = PARAMS["depth_filter_load"]      # depth filter load
+tb = PARAMS["turbidity"]               # post-clarification turbidity
+
+
+def _n(x):
+    """Plain magnitude, thousands separated."""
+    return f"{x:,g}"
+
+
+def nor_str(p):
+    return f"{_n(p.nor[0])} to {_n(p.nor[1])}"
+
+
+def par_str(p):
+    return f"{_n(p.prange[0])} to {_n(p.prange[1])}"
+
+
+def width_ratio(p):
+    """How many times wider the characterization range is than the NOR."""
+    return (p.prange[1] - p.prange[0]) / (p.nor[1] - p.nor[0])
+
+
+# Step performance, from the seeded model outputs.
+psum = csv("process_summary.csv")
+ywf = csv("yield_waterfall.csv")
+har_row = psum[psum.step == STEP].iloc[0]
+usp_row = psum[psum.step == STEP - 1].iloc[0]
+mass_in_g = float(usp_row.product_mass_g)
+mass_out_g = float(har_row.product_mass_g)
+mass_loss_g = mass_in_g - mass_out_g
+har_turbidity = float(har_row.turbidity_ntu)
+har_yield = float(ywf[ywf.step == STEP].step_yield.iloc[0])
+har_cum_yield = float(ywf[ywf.step == STEP].cumulative_yield.iloc[0])
+har_yield_cv = float(UOC.raw["yield"]["cv"])
+
+step_perf = pd.DataFrame(
+    [["Product mass entering the step", f"{mass_in_g:,.0f} g"],
+     ["Product mass leaving the step", f"{mass_out_g:,.0f} g"],
+     ["Product mass not recovered", f"{mass_loss_g:,.0f} g"],
+     ["Step yield", pct(har_yield)],
+     ["Run to run variability of the step yield (CV)", pct(har_yield_cv)],
+     ["Cumulative yield through Step 4", pct(har_cum_yield)],
+     ["Post-clarification turbidity", f"{har_turbidity:g} {tb.unit}"]],
+    columns=["Quantity", "Value at the set-point condition"])
+
+train_yield = ywf.copy()
+train_yield["Step yield"] = train_yield.step_yield.apply(pct)
+train_yield["Cumulative yield"] = train_yield.cumulative_yield.apply(pct)
+train_yield = train_yield.rename(columns={"step": "Step",
+                                          "unit_operation": "Unit operation"})
+train_yield = train_yield[["Step", "Unit operation", "Step yield", "Cumulative yield"]]
+
+# Parameter counts and classes.
+n_params = len(UOC.parameters)
+class_counts_uo = pd.Series([p.classification for p in UOC.parameters]).value_counts().to_dict()
+n_kpp = class_counts_uo.get("KPP", 0)
+n_gpp = class_counts_uo.get("GPP", 0)
+n_univariate = sum(1 for p in UOC.parameters if p.study == "univariate")
+
+# Quality attributes the step can influence (it sets none of them).
+HARVEST_CQA_KEYS = ["hcp", "residual_dna", "aggregates_hmw"]
+har_cqas = cqas_by_keys(HARVEST_CQA_KEYS)
+har_cap = cap_for(HARVEST_CQA_KEYS)
+_cpk = har_cap["Cpk"].astype(float)
+har_cap_tight = har_cap.loc[_cpk.idxmin()]
+har_cap_tight_cqa = str(har_cap_tight["CQA"])
+har_cap_tight_cpk = float(har_cap_tight["Cpk"])
+n_sets_cqa = len(cqas_for(UO))
+
+# Analytical method performance, for the methods with a validation summary.
+meth = csv("dev_methods.csv")
+har_amv_ids = [a for a, _ in HARVEST_AMV_REFS]
+har_meth = meth[meth.id.isin(har_amv_ids)].copy()
+har_meth["Precision (%RSD)"] = har_meth.precision_pct.apply(lambda v: f"{v:g}")
+har_meth["Accuracy (%)"] = har_meth.accuracy_pct.apply(lambda v: f"{v:g}")
+har_meth["LOQ"] = har_meth.apply(lambda r: f"{r.loq:g} {r.loq_unit}", axis=1)
+har_meth["Share of observed variance"] = har_meth.variance_fraction.apply(pct)
+har_meth = har_meth.rename(columns={"id": "Reference", "name": "Method"})
+har_meth = har_meth[["Reference", "Method", "Precision (%RSD)", "Accuracy (%)",
+                     "LOQ", "Share of observed variance"]]
+
+# Deviations.
+n_dev = len(dev_facts(DOC))
+```
+
+```{python}
+#| output: asis
+print(title_block(DOC, UO_TITLE))
+print()
+print(SYN_BANNER)
+```
+
+## Approvals {.unnumbered}
+
+| Role | Function | Name (synthetic) | Signature | Date |
+|---|---|---|---|---|
+| Author | Process Development / MSAT | — | — | — |
+| Reviewer | Analytical Development | — | — | — |
+| Reviewer | Manufacturing Science | — | — | — |
+| Reviewer | Statistics | — | — | — |
+| Approver | Quality Assurance | — | — | — |
+
+: Approval record (synthetic; signatures not applied). {#tbl-appr}
+
+## Abbreviations {.unnumbered}
+
+| Abbreviation | Expansion |
+|---|---|
+| ADCC | antibody dependent cellular cytotoxicity |
+| AEX | anion exchange chromatography |
+| AMV | analytical method validation |
+| BLA | Biologics License Application |
+| CEX | cation exchange chromatography |
+| CPP | critical process parameter |
+| Cpk | one-sided process capability index |
+| CPV | continued process verification |
+| CQA | critical quality attribute |
+| CV | coefficient of variation |
+| DNA | deoxyribonucleic acid |
+| GPP | general process parameter |
+| HCP | host cell protein |
+| HMW | high molecular weight |
+| ICH | International Council for Harmonisation |
+| IgG1 | immunoglobulin G, subclass one |
+| KPP | key process parameter |
+| LOQ | limit of quantitation |
+| MSAT | Manufacturing Science and Technology |
+| NOR | normal operating range |
+| NTU | nephelometric turbidity unit |
+| PAR | proven acceptable range |
+| PPQ | process performance qualification |
+| qPCR | quantitative polymerase chain reaction |
+| RSD | relative standard deviation |
+| SEC-HPLC | size exclusion high performance liquid chromatography |
+| SOP | standard operating procedure |
+| WC-CPP | well controlled critical process parameter |
+
+: Abbreviations used in this report. {#tbl-abbr}
+
+{{< pagebreak >}}
+
+# Executive summary {.unnumbered}
+
+Harvest and clarification is Step 4 of the A-Mab drug substance process. The step separates the antibody from cells and cell debris by continuous disk-stack centrifugation, clarifies the centrate on a depth filter train, and passes the clarified harvest through a sterilising grade filter into the Protein A load vessel. This report presents the characterization study executed under the protocol PCP-004 on a qualified scale-down model of the commercial operation at `{python} f"{V['commercial_scale_l']:,}"` L. The study scope was set by the risk assessment RA-001.
+
+Step 4 forms no quality attribute of A-Mab and sets `{python} f"{n_sets_cqa:d}"` critical quality attributes of the drug substance. What the step decides is the condition of the feed delivered to Protein A capture. The study was therefore designed around process performance and feed quality rather than around a product quality attribute, and no clearance of host cell protein, residual DNA or aggregate is claimed for the step.
+
+`{python} f"{n_params:d}"` parameters were carried into the study from RA-001 and all `{python} f"{n_univariate:d}"` were assessed one at a time. No parameter of this step reached the score at which RA-001 assigns a multivariate design, because none of them acts on a critical quality attribute. `{python} f"{n_kpp:d}"` parameters were classified as key process parameters and `{python} f"{n_gpp:d}"` as a general process parameter. The step has no critical process parameter and no well controlled critical process parameter.
+
+At the set-point condition the step yield was `{python} pct(har_yield)` with a run to run coefficient of variation of `{python} pct(har_yield_cv)`, and the post-clarification turbidity was `{python} f"{har_turbidity:g}"` `{python} tb.unit`. Aggregate, charge variants and glycan attributes were unchanged across the step at every setting studied. Post-clarification turbidity rose as the depth filter load approached the upper edge of its characterization range, which is the one response that bounds an operating range at this step.
+
+`{python} f"{n_dev:d}"` deviations were recorded during execution and both were retained. Neither affected the conclusions of the study. The depth filter lot control and the in-process turbidity monitoring that follow from them are carried into the control strategy in §10.
+
+The proven acceptable ranges, the normal operating ranges and the parameter classifications reported here are proposed for Stage 2 and roll up into the master report PCMR-001.
+
+# Introduction
+
+## Product and unit operation
+
+A-Mab is a humanized IgG1 monoclonal antibody. Its principal mechanism of action is antibody dependent cellular cytotoxicity, so the glycan attributes formed in the production bioreactor are linked to efficacy. The drug substance process is a platform process that runs from the production bioreactor through harvest and clarification, Protein A capture, low pH viral inactivation, cation exchange, anion exchange, small virus retentive filtration, and ultrafiltration and diafiltration. @fig-flow shows the train and the principal role of each step.
+
+![The A-Mab drug substance process train. Harvest and clarification is Step 4, between the production bioreactor and Protein A capture.](../outputs/figures/fig_process_flow.png){#fig-flow width=98%}
+
+Harvest and clarification is the first recovery operation. The whole culture is fed to a continuous disk-stack centrifuge, which removes cells and the larger debris. The centrate is clarified on a depth filter train, which retains the fine debris and colloidal material the centrifuge passes. The clarified harvest is then passed through a sterilising grade filter and held for Protein A capture. The step is operated at the commercial scale of `{python} f"{V['commercial_scale_l']:,}"` L, and the scale-down model used for this study reproduces that operation on the basis described in §3.1.
+
+The step forms no quality attribute of the antibody. Under platform conditions the antibody is not modified by centrifugation or by depth filtration, and the glycan, charge variant and size variant attributes leave the step as they entered it. What the step decides is the condition of the feed to Protein A capture. Two things make up that condition. The first is how much intact cell material and fine debris the clarified harvest carries, because that material fouls the capture column and shortens resin life. The second is how much host cell protein and DNA is released by cells that break during the operation rather than in the reactor, because that burden is added to the load the capture step has to clear.
+
+## Objectives
+
+The objectives of the study were (i) to quantify the relationship between the operating parameters of the step and its performance responses, (ii) to establish the operating region within which the clarified harvest meets the feed requirements of Protein A capture, (iii) to establish a proven acceptable range and a normal operating range for each parameter, (iv) to classify each parameter against the decision logic of SOP-4001, and (v) to justify the Stage 2 ranges and the contribution of this step to the control strategy.
+
+## Regulatory and scientific basis
+
+The study is a Stage 1 process design activity in the lifecycle approach to process validation [@fda2011]. It follows the enhanced development approach of ICH Q8 and ICH Q11 [@ichq8; @ichq11], in which process understanding built from prior knowledge and risk assessment is bounded by characterization and delivered as a control strategy. Criticality is treated as a continuum rather than as a binary label, in the sense of ICH Q9 [@ichq9]. The process model, the quality attribute framework and the risk methodology follow the A-Mab case study [@amab2009].
+
+ICH Q5A is not invoked for this step. No viral clearance is claimed for harvest and clarification, and no spiking study was performed on it. The viral safety of the drug substance rests on low pH viral inactivation, anion exchange and small virus retentive filtration, and the modular claim is consolidated in PCMR-001.
+
+## Related documents
+
+@tbl-related lists the documents this report depends on and the document it rolls up into. RA-001 set the scope of the study, PCP-004 is the protocol this report executes, and PCMR-001 consolidates the outcome with the other seven steps of the train.
+
+```{python}
+#| output: asis
+print(related_docs_md(DOC))
+```
+
+: Documents related to this report. {#tbl-related}
+
+# Prior knowledge and quality risk basis
+
+## Platform and prior-product knowledge
+
+Recovery by continuous centrifugation followed by depth filtration is the platform recovery operation at Novacyte Biologics. It has been used for the manufacture of three previously licensed humanized IgG1 antibodies (X-Mab, Y-Mab and Z-Mab) and for A-Mab clinical and engineering material. The equipment, the media grades and the sequence of operations have not changed across those products. The large body of experience from that history has shown that the step recovers the antibody consistently and does not alter it, so characterization of A-Mab confirms and bounds the platform behaviour rather than discovering it.
+
+The physical chemistry of the step explains what each parameter can do, and it is the basis on which the study was designed. Host cell protein in the clarified harvest is the burden that left the reactor plus whatever is released by cells that lyse under the shear of the centrifuge feed zone and under the pressure drop across the depth filter. Harvest does not clear host cell protein. A gentle harvest keeps the load close to what left the reactor, and a harsh one adds intracellular protein to it. DNA is released by the same lysis. DNA fragments and nucleosomes also foul depth filters and Protein A resin, and the depth filter media are positively charged, so the depth filtration stage adsorbs a fraction of the DNA and debris the centrifuge passes.
+
+Aggregate is a different case. Aggregate can rise at harvest only if the antibody meets shear or an air liquid interface strong enough to unfold it, at the centrifuge feed zone or in a foaming transfer. Within normal operation the exposure is brief and the effect is expected to be small. Aggregate was therefore measured across the step as a mechanism to check rather than as an expected finding.
+
+## Quality attributes in scope
+
+Step 4 sets no critical quality attribute of A-Mab, so the register of attributes set by this step is empty. Three attributes of the drug substance can nevertheless be influenced by how the step is operated, and they were measured across it. @tbl-cqa lists them with their acceptance criteria and their criticality from the drug substance register.
+
+```{python}
+#| output: asis
+show(har_cqas)
+```
+
+: Quality attributes that harvest and clarification can influence. None of them is set by this step. {#tbl-cqa}
+
+Host cell protein and residual DNA are process impurities formed in the production bioreactor and cleared by the purification train. They appear here because lysis during recovery adds to the burden that the capture and polishing steps have to remove. Aggregate is a size variant formed in the bioreactor and reduced principally at cation exchange. It appears here because shear and air liquid interfaces are a plausible route to aggregate formation during recovery. The criticality of each attribute was assigned in the drug substance register by the impact and uncertainty assessment of the case study, and this report does not revise it.
+
+## Risk-based prioritization and parameter selection
+
+RA-001 ranked every parameter of the train on its potential impact on a critical quality attribute and on its potential to interact with other parameters, and used the combined score to assign a study type. For harvest and clarification the impact ranking was low for every parameter, because the step forms no attribute and no clearance is claimed for it. No parameter of this step reached the score at which a multivariate design is assigned. `{python} f"{n_params:d}"` parameters were carried forward for univariate assessment, and the remaining operating conditions of the step were left at platform settings under SOP-2005 and SOP-2006 and were identity controlled rather than characterized.
+
+The two parameters that carry the outcome of the step are the centrifugal field and the depth filter load. The centrifugal field sets the sedimentation velocity of cells and debris and so decides how completely they are removed at a given feed rate, and it also sets the shear the culture meets. The depth filter load decides whether the filter media are still retaining fine particles at the end of the batch. Post-clarification turbidity was carried as the third parameter of the study. It is not a set parameter but a property of the clarified harvest that the other two produce, and it was characterized because it is the in-process measure of the particulate burden delivered to Protein A capture.
+
+The ranges assessed were widened relative to the routine control ranges so that the study would show where performance changes rather than only that it holds at target. The characterization range of the centrifugal field is `{python} f"{width_ratio(cf):.0f}"` times the width of its normal operating range, and the characterization range of the depth filter load is `{python} f"{width_ratio(dfl):.0f}"` times the width of its normal operating range.
+
+# Materials and methods
+
+## Scale-down model and its qualification
+
+The studies were executed on a scale-down model of the commercial recovery operation, qualified under SOP-1001. The model comprises a bench scale disk-stack centrifuge operated at the same relative centrifugal field and the same feed zone residence time as the commercial machine, and a depth filter train of the same media grades operated at the same load per unit area and the same flux. Matching the centrifugal field and the residence time preserves the sedimentation behaviour of cells and debris, and matching the load per unit area preserves the saturation state of the filter media at the end of the batch. Those are the two mechanisms the step turns on, which is why the model is scaled on them.
+
+The model was qualified against commercial equivalent runs by comparing the attributes that enter the step and the attributes that leave it. The comparison covered step yield, post-clarification turbidity, host cell protein and residual DNA in the clarified harvest, and aggregate measured in and out. The scale-down model was accepted as representative on that basis, and the studies reported here were executed on it. The limitation of the model is stated in §11. Shear history in a continuous centrifuge is not fully preserved by matching the centrifugal field alone, because the feed zone geometry differs between the bench machine and the commercial machine, and this is the principal reason the host cell protein and DNA levels leaving the step are treated as a feed input to the capture step rather than as a specification of this one.
+
+## Operation
+
+The step is operated as a single continuous pass under SOP-2005 and SOP-2006. Whole culture is transferred from the production bioreactor to the centrifuge at a controlled feed rate. The centrate is collected and fed directly to the depth filter train, which is flushed and conditioned before use. The filtrate is passed through a sterilising grade filter into the clarified harvest vessel, and the vessel is held under controlled conditions until Protein A capture begins. The centrifuge bowl discharge interval, the feed rate, the buffer used for the post-use flush and the hold temperature are platform settings under those two procedures. They were held at their platform values throughout the study and were not varied.
+
+Cell density and viability at harvest are properties of the culture rather than settings of this step, and they are characterized in PCR-003. They were held at the platform target for the study so that the effect of the parameters of this step could be read without a confounded input. The consequence for the claims made here is stated in §11.
+
+## Analytical methods
+
+@tbl-sop lists the controlled procedures and the validated analytical methods cited by this report. Turbidity was measured by nephelometry under AMV-3015 and is the in-process measure of the particulate burden in the clarified harvest. Host cell protein was measured by enzyme linked immunosorbent assay under AMV-3012 and residual DNA by quantitative polymerase chain reaction under AMV-3014, both on the clarified harvest and on the bioreactor harvest that fed it. Aggregate was measured by size exclusion chromatography under AMV-3011 on the same pair of samples. A summary of method performance is given in Appendix B.
+
+```{python}
+#| output: asis
+print(sop_table(sops=HARVEST_SOP_REFS, amvs=HARVEST_AMV_REFS))
+```
+
+: Controlled procedures and validated analytical methods cited by this report. {#tbl-sop}
+
+The precision of the turbidity method matters to the conclusions of §5.4, because the response that bounds the depth filter load is turbidity itself. The method has a precision of `{python} f"{har_meth.set_index('Reference').loc['AMV-3015','Precision (%RSD)']}"` %RSD and a limit of quantitation of `{python} f"{har_meth.set_index('Reference').loc['AMV-3015','LOQ']}"`, which resolves a reading at the upper edge of the normal operating range well enough to act on it. Host cell protein by immunoassay is the least precise of the four methods, at `{python} f"{har_meth.set_index('Reference').loc['AMV-3012','Precision (%RSD)']}"` %RSD, and differences in host cell protein across the step were interpreted against that figure.
+
+## Sampling plan
+
+Samples were drawn at four points. The bioreactor harvest was sampled in the production vessel immediately before transfer, and it is the input reference for every attribute compared across the step. The centrate was sampled after the centrifuge and before the depth filter train, which separates the contribution of the centrifuge from the contribution of the filters. The depth filter pool was sampled after clarification. The clarified harvest was sampled after the sterilising grade filter, and it is the material that defines the feed to Protein A capture.
+
+Turbidity was measured on the centrate and on the clarified harvest for every run, which is what allows the effect of the depth filter load to be read separately from the effect of the centrifugal field. Host cell protein, residual DNA and aggregate were measured on the bioreactor harvest and on the clarified harvest. The set-point condition was executed as replicate runs so that the run to run variability of the step could be estimated independently of the parameter settings, and that estimate is reported in §5.1.
+
+## Statistical methods
+
+The step was characterized univariately. Each parameter was varied across its characterization range while the others were held at their set-points, and each setting was compared against the replicated set-point condition. No response surface model was fitted for this step and no design space is claimed for it, because the step governs no critical quality attribute and there is no attribute limit for a model to be judged against. The run to run variability of the replicated set-point condition is the reference against which a difference at a range edge was judged.
+
+A univariate design cannot resolve interactions between parameters, where the effect of one parameter on a response depends on the level of another. The centrifugal field and the depth filter load are the two parameters at this step whose effects could in principle interact, since a higher field delivers a centrate with less solid material to the filter train. That limitation was accepted at the design stage in RA-001 on the grounds that the step governs no critical quality attribute, and it is restated in §11 as a bound on what this report claims.
+
+Commercial-scale capability was estimated by Monte-Carlo simulation of `{python} f"{V['n_monte_carlo']:,}"` batches with every parameter of the train sampled inside its normal operating range, and is reported as a one-sided Cpk against the drug substance acceptance criterion of each attribute. The simulation is a property of the whole train and not of this step, and §8 states what part of it Step 4 accounts for.
+
+# Study design
+
+## Factors, ranges and the knowledge space
+
+@tbl-params gives the three parameters with their set-points, their normal operating ranges, the ranges over which they were characterized, the classification each was given after the study, and the study type. The characterization ranges are the edges of the knowledge space of the step. They are not proven acceptable ranges, which are derived from the results in §7.
+
+```{python}
+#| output: asis
+show(report_params(UO))
+```
+
+: Parameters of harvest and clarification, with the ranges studied and the resulting classification. {#tbl-params}
+
+The centrifugal field was characterized over `{python} par_str(cf)` `{python} cf.unit` around a set-point of `{python} _n(cf.setpoint)` `{python} cf.unit`. The lower edge was chosen to be below the field at which the platform expects complete removal of cells at the commercial feed rate, so that the study would show incomplete clarification rather than only confirm it. The upper edge was chosen to exceed the routine maximum, so that the shear driven release of intracellular material would be visible if it were appreciable. The depth filter load was characterized over `{python} par_str(dfl)` `{python} dfl.unit` around a set-point of `{python} _n(dfl.setpoint)` `{python} dfl.unit`, with the upper edge above the loading at which the platform expects the media to saturate. Post-clarification turbidity was characterized over `{python} par_str(tb)` `{python} tb.unit`, which spans the readings the platform has produced from a well clarified harvest and from a poorly clarified one.
+
+## Univariate characterization design
+
+Each parameter was studied on its own. The centrifugal field was run at the low edge of its characterization range, at its set-point and at the high edge, with the depth filter load and every platform setting held at target. The depth filter load was then run at the low edge, at its set-point and at the high edge, with the centrifugal field at its set-point. The design produces the effect of each parameter on the responses at the set-point of the other, which is the region in which the commercial process is operated.
+
+Post-clarification turbidity was not set as an input. It was recorded as a response on every run of both series and was assessed against its own normal operating range, which is how it is treated in routine operation. Its characterization range is the span over which the assessment is supported by data.
+
+Each run was assessed on step yield, on centrate and post-clarification turbidity, and on host cell protein, residual DNA and aggregate measured in and out. Yield and turbidity carry the process performance question. The three attribute measurements carry the question of whether the step alters or adds to what the bioreactor delivered.
+
+## Verification runs
+
+The set-point condition was executed as replicate runs distributed across the study rather than as a block, so that the reproducibility estimate would carry the ordinary variation of operators, filter lots and culture material. Those runs are also the verification of the step as it is proposed for Stage 2, since the set-point condition is what the commercial process will run. Their results are reported in §5.1 and the mass balance they support in §5.2.
+
+# Results
+
+## Performance at the set-point condition
+
+@tbl-perf gives the performance of the step at the set-point condition. The two rows that carry the argument are the step yield and the post-clarification turbidity, because those are the responses the parameters act on.
+
+```{python}
+#| output: asis
+show(step_perf)
+```
+
+: Performance of harvest and clarification at the set-point condition. {#tbl-perf}
+
+The step yield was `{python} pct(har_yield)`, with a run to run coefficient of variation of `{python} pct(har_yield_cv)` across the replicated set-point runs. The reproducibility is good enough that a difference of a few percent in yield at a range edge would have been detected, and none was. Post-clarification turbidity at the set-point condition was `{python} f"{har_turbidity:g}"` `{python} tb.unit`, which sits in the lower half of the normal operating range of `{python} nor_str(tb)` `{python} tb.unit`. The clarified harvest produced at the set-point condition therefore carries a particulate burden well inside the range the capture step is qualified to accept.
+
+## Mass balance and step yield
+
+The product mass entering the step was `{python} f"{mass_in_g/1000:.1f}"` kg and the mass leaving it was `{python} f"{mass_out_g/1000:.1f}"` kg, a loss of `{python} f"{mass_loss_g/1000:.1f}"` kg. The loss is accounted for by the antibody held in the cell pellet and in the discharged solids, by the hold up volume of the depth filter train, and by the volume retained in the post-use flush. No unexplained loss was found in the reconciliation.
+
+@fig-yield places the step in the yield of the whole train. Harvest and clarification is the second largest single step loss of the drug substance process after cation exchange, and the cumulative yield through Step 4 is `{python} pct(har_cum_yield)` of the mass produced in the bioreactor. The overall yield of the train is `{python} pct(V['overall_yield'])`, which delivers `{python} f"{V['ds_mass_kg']:g}"` kg of drug substance at a batch scale of `{python} f"{V['commercial_scale_l']:,}"` L.
+
+![Cumulative product yield across the drug substance train. Step 4 is the second point on the curve.](../outputs/figures/fig_yield_waterfall.png){#fig-yield width=92%}
+
+## Centrifugation
+
+The centrifugal field was assessed at the low edge of its characterization range, at its set-point and at the high edge, with the depth filter load at its set-point. Step yield and post-clarification turbidity remained inside their normal operating ranges at every setting, and no setting changed the disposition of the step.
+
+The direction of the two competing effects was as the physical chemistry of the separation predicts. A higher field raises the sedimentation velocity of cells and debris and so removes them more completely at a given feed rate, which lowers the centrate turbidity. The same higher field raises the shear in the feed zone and at the disc stack, and shear damaged cells release intracellular host cell protein and DNA into the centrate. The parameter therefore trades clarity against lysis, and the field is set at `{python} _n(cf.setpoint)` `{python} cf.unit` because that is the region in which both are acceptable rather than because either is optimal.
+
+Neither effect was large enough within the characterized range to move a response outside its operating range. Host cell protein and residual DNA in the clarified harvest are cleared downstream by Protein A capture, cation exchange and anion exchange, and their levels are reported and controlled as feed inputs in PCR-005, PCR-007 and PCR-008 rather than as attributes of this step. The study supports the centrifugal field as a key process parameter, and the reasoning is given in §9.
+
+## Depth filter load
+
+The depth filter load was assessed at the low edge of its characterization range, at its set-point and at the high edge, with the centrifugal field at its set-point. Step yield was unaffected across the range. Post-clarification turbidity rose as the load approached the upper edge, and it is the response that bounds this parameter.
+
+On one run at a load near the maximum of the characterization range the post-clarification turbidity reached `{python} f"{dev_004_02_turbidity_max_ntu:g}"` `{python} tb.unit`. That reading is above the upper edge of the normal operating range of turbidity, which is `{python} nor_str(tb)` `{python} tb.unit`, and inside the characterization range of `{python} par_str(tb)` `{python} tb.unit`. The excursion was recorded as the deviation DEV-004-02 and is described in §13.2.
+
+The mechanism is the finite capacity of the media. A depth filter retains fine debris and colloids in the depth of the matrix, and as that capacity fills the pressure drop rises and the media pass an increasing fraction of the fine particulate they had been retaining. Loading beyond the point of saturation therefore raises the turbidity of the filtrate directly, and at the extreme it forces cells and debris through the pores. Load per unit area is what decides whether the filter is still doing its job at the end of the batch, which is why the parameter is expressed per unit area and not as a batch volume.
+
+The consequence for the operating range is stated in §7. The normal operating range of the depth filter load, `{python} nor_str(dfl)` `{python} dfl.unit`, is the range over which post-clarification turbidity was shown to stay inside its own normal operating range. The wider characterization range is supported for step yield but is not proposed for routine operation.
+
+## Post-clarification turbidity
+
+Post-clarification turbidity was recorded on every run as the in-process measure of the particulate burden delivered to Protein A capture. At the set-point condition it was `{python} f"{har_turbidity:g}"` `{python} tb.unit`. Across the centrifugal field series it stayed inside the normal operating range at every setting. Across the depth filter load series it stayed inside the normal operating range except at the loading near the maximum described in §5.4.
+
+The measurement supports that use. The precision and the quantitation limit of the method are given in §3.3, and both are such that a reading near the upper edge of the normal operating range is distinguishable from the edge itself. Turbidity is a surrogate for the particulate load and not a direct measure of the species that foul a Protein A column, and §11 states what follows from that.
+
+## Product quality across the step
+
+Aggregate, charge variants and glycan attributes were measured in the bioreactor harvest and in the clarified harvest. No change was measured across the step at any setting studied, and the values leaving the step were indistinguishable from the values entering it within the precision of the methods. The result confirms the platform expectation and the mechanism given in §2.1. Aggregate can rise at harvest only if the antibody meets shear or an air liquid interface strong enough to unfold it, and within the ranges studied the exposure at the centrifuge feed zone and in the transfer is too brief for that.
+
+Host cell protein and residual DNA leaving the step were consistent with the burden delivered by the bioreactor. Some DNA is adsorbed by the positively charged depth filter media and some host cell protein is retained with the solids, so a reduction across the step is measurable. The reduction is not predictable across filter lots and loadings, and for that reason no clearance is claimed for Step 4. The host cell protein and DNA levels leaving the production bioreactor are assumed to carry through harvest and clarification to serve as the input to Protein A capture, which is the assumption PCR-005 works from.
+
+# Operating ranges in place of a design space
+
+A design space is the multidimensional combination of input variables and process parameters that has been demonstrated to provide assurance of quality [@ichq8]. It is defined for a step whose parameters act on a critical quality attribute, because it is the attribute limit that closes the region. Step 4 governs no critical quality attribute, so no design space is defined for it and none is claimed. The corresponding statement for this step is a set of univariate operating ranges, and the evidence for them is in §7.
+
+The relationship between the ranges is the ordinary one. The knowledge space of the step is the set of characterization ranges in @tbl-params, which is the region over which data exist. The proven acceptable range of each parameter lies inside that region and is the part of it over which acceptable performance was demonstrated. The normal operating range lies inside the proven acceptable range and is where the commercial process is operated. For the centrifugal field the normal operating range is `{python} nor_str(cf)` `{python} cf.unit` inside a characterization range of `{python} par_str(cf)` `{python} cf.unit`, and for the depth filter load it is `{python} nor_str(dfl)` `{python} dfl.unit` inside `{python} par_str(dfl)` `{python} dfl.unit`.
+
+Because there is no design space for this step, movement of a parameter outside its normal operating range is not covered by the regulatory position of ICH Q8 on movement within a design space. Such a move is assessed under the change management system of the pharmaceutical quality system [@ichq10], against the proven acceptable ranges in §7 and against the effect on the feed delivered to Protein A capture.
+
+# Proven acceptable ranges
+
+For a step that governs a critical quality attribute, the proven acceptable range of a parameter is the range over which the attribute has been shown to stay inside its acceptance criterion. Step 4 governs no such attribute, so the acceptance basis here is process performance and the quality of the feed delivered to the capture step. Two responses carry that basis. Step yield carries the process performance question and post-clarification turbidity carries the feed quality question, since the particulate burden it measures is what fouls the capture column and shortens resin life.
+
+The proven acceptable range of the centrifugal field is `{python} par_str(cf)` `{python} cf.unit`, which is its full characterization range. Step yield and post-clarification turbidity stayed inside their normal operating ranges at both edges and at the set-point, and no change in product quality was measured across the step at any of them. The claim is bounded by the design. It holds with the depth filter load at its set-point, and the study did not examine whether a low field and a high load together behave as the two single factor series predict.
+
+The depth filter load requires the two responses to be separated. Against step yield the proven acceptable range is `{python} par_str(dfl)` `{python} dfl.unit`, since yield was unaffected across the characterization range. Against post-clarification turbidity the range over which the response was shown to stay inside its own normal operating range is `{python} nor_str(dfl)` `{python} dfl.unit`, because loading near the maximum of the characterization range produced the excursion described in §5.4. The narrower of the two is what governs, so the proven acceptable range proposed for the depth filter load is `{python} nor_str(dfl)` `{python} dfl.unit` and it coincides with the normal operating range. A loading above that range is not a quality failure and is not treated as one. It delivers a clarified harvest whose particulate burden is higher than the capture step is qualified against, and it is handled as a feed input assessment under §10.
+
+Post-clarification turbidity is an attribute of the clarified harvest and not a setting, so it has no proven acceptable range of its own. Its normal operating range of `{python} nor_str(tb)` `{python} tb.unit` is the acceptance range applied in process, and its characterization range of `{python} par_str(tb)` `{python} tb.unit` is the span over which the platform has data. A reading between the two is assessed against the effect on the capture step rather than against a product quality limit.
+
+All three ranges were established on a qualified scale-down model with the culture at its platform target for cell density and viability. They are supported for a harvest of that quality. A culture harvested at a markedly lower viability delivers more debris and more intracellular material to the same equipment, and the ranges above are not extended to that case.
+
+# Process capability and robustness
+
+@tbl-cap gives the commercial-scale capability of the three drug substance attributes that harvest and clarification can influence. The values were estimated by Monte-Carlo simulation of `{python} f"{V['n_monte_carlo']:,}"` batches with every parameter of the train sampled inside its normal operating range, and each Cpk is one-sided against the acceptance criterion of the attribute.
+
+```{python}
+#| output: asis
+show(har_cap)
+```
+
+: Commercial-scale capability of the drug substance attributes that Step 4 can influence. {#tbl-cap}
+
+These are capabilities of the drug substance and not of this step. They are given here because these three attributes are the ones the operation of Step 4 can affect, and not because Step 4 delivers them. The clearance that produces them is delivered by Protein A capture, cation exchange and anion exchange, and it is reported in PCR-005, PCR-007 and PCR-008. The tightest of the three is `{python} har_cap_tight_cqa` at a Cpk of `{python} f"{har_cap_tight_cpk:.2f}"`, and it is the one most sensitive to the burden the recovery step delivers, because host cell protein released by lysis is added to the load the purification train has to clear.
+
+The robustness of the step itself is carried by the two responses of §5. Step yield was unaffected across the characterization range of both parameters, and post-clarification turbidity was inside its normal operating range everywhere except at the loading near the maximum. The step is therefore robust to the parameter variation the commercial process will see, which is variation inside the normal operating ranges rather than across the characterization ranges. Capability is estimated from qualified scale-down models and is confirmed at commercial scale during Stage 2.
+
+# Parameter classification
+
+Each parameter was classified under the decision logic of SOP-4001 from the effect demonstrated in §5 and from the risk of the parameter leaving its range in commercial operation. A parameter is critical when its variability affects a critical quality attribute. No parameter of this step meets that condition, because the step forms no attribute and no clearance is claimed for it, so the step has no critical process parameter and no well controlled critical process parameter. The classifications are given in @tbl-params and the reasoning for each is below.
+
+- **Centrifugation (rcf).** Classified as a key process parameter. The field acts on process performance through the completeness of solid removal and through shear driven lysis, and both directions were confirmed in §5.3. Neither acts on a critical quality attribute. The parameter is monitored and controlled within `{python} nor_str(cf)` `{python} cf.unit` because it determines the particulate and impurity burden delivered to the capture step, which is a process consistency question rather than a product quality one.
+
+- **Depth filter load.** Classified as a key process parameter. The load decides whether the media are still retaining fine particulate at the end of the batch, and loading near the maximum of the characterization range raised post-clarification turbidity above its normal operating range in §5.4. The response it acts on is feed quality to Protein A capture and not a critical quality attribute, so the parameter is key rather than critical. It is controlled within `{python} nor_str(dfl)` `{python} dfl.unit`, which is the range in §7 over which turbidity was shown to stay inside its own operating range.
+
+- **Post-clarification turbidity.** Classified as a general process parameter. It is a property of the clarified harvest produced by the other two parameters rather than a setting an operator selects, and it acts on no quality attribute of the antibody. It is monitored on every batch under AMV-3015 within `{python} nor_str(tb)` `{python} tb.unit`, because it is the earliest indication that the depth filter train is at the end of its capacity.
+
+The classification of this step contributes `{python} f"{n_kpp:d}"` key process parameters and `{python} f"{n_gpp:d}"` general process parameter to the consolidated register in PCMR-001.
+
+# Contribution to the control strategy
+
+Step 4 contributes to the control strategy in four ways, none of which is a product quality control.
+
+The first is parameter control. The centrifugal field and the depth filter load are controlled within the normal operating ranges in @tbl-params, and the batch record carries them as key process parameters under SOP-2005 and SOP-2006. The second is in-process monitoring. Post-clarification turbidity is measured on the clarified harvest of every batch under AMV-3015 and assessed against `{python} nor_str(tb)` `{python} tb.unit`, for the reason given in §9.
+
+The third is material control on the depth filter media. The pre-use flush of each filter lot is performed and verified before the lot is used, and the flush turbidity is recorded against an alert level under SOP-2006. That control follows from the deviation DEV-004-01 in §13.1, in which a lot released a flush turbidity above the alert level after an insufficient initial flush volume. The fourth is the feed input control at the capture step. The host cell protein, residual DNA and particulate burden of the clarified harvest are the load attributes of Protein A capture, and PCR-005 reports the ranges over which that step was characterized against them. This report supplies the assumption that those burdens carry through Step 4 unchanged.
+
+The step contributes nothing to the viral safety claim and nothing to the release specification of the drug substance. Aggregate is controlled at cation exchange and reported in PCR-007. Host cell protein and residual DNA are cleared across Protein A capture, cation exchange and anion exchange and are reported in PCR-005, PCR-007 and PCR-008. The viral clearance claim rests on low pH viral inactivation, anion exchange and small virus retentive filtration, and is consolidated in PCMR-001. The contribution of Step 4 is that it delivers a feed of consistent and characterized quality to the steps that do the clearing.
+
+# Discussion
+
+The study confirms the platform position on recovery and bounds it for A-Mab. The step recovers the antibody at `{python} pct(har_yield)` with a run to run coefficient of variation of `{python} pct(har_yield_cv)`, it does not alter the antibody, and it delivers a clarified harvest whose particulate burden is well inside the range the capture step accepts. The two parameters that carry the outcome behave as the physical chemistry of the separation predicts, and the response that bounds the operating region is post-clarification turbidity rather than any product quality attribute.
+
+Confidence in the scale-down model rests on the two mechanisms the step turns on. The model matches the centrifugal field and the feed zone residence time, which preserves sedimentation, and it matches the load per unit area and the flux, which preserves the saturation state of the filter media. Both were compared against commercial equivalent runs at qualification. The model is nevertheless a bench machine, and the shear history a cell experiences in a commercial disk-stack centrifuge is not reproduced exactly by matching the field alone. The consequence is that the absolute host cell protein and DNA levels leaving the step are not claimed from small scale data, and they are treated as feed inputs to be confirmed at commercial scale during Stage 2.
+
+Three further limitations bound what this report claims. The design was univariate, so an interaction between the centrifugal field and the depth filter load would not have been detected, and the proven acceptable range of each parameter in §7 holds with the other at its set-point. The study was executed with the culture at the platform target for cell density and viability, so the ranges are supported for a harvest of that quality and are not extended to a markedly less viable culture. Turbidity is a surrogate for the particulate burden rather than a measure of the species that foul a Protein A column, so a turbidity reading inside its operating range is evidence of an acceptable feed and not proof of one.
+
+Each of these is managed forward rather than closed here. The interaction question is addressed at the capture step, where PCR-005 characterizes Protein A capture against a range of load attributes wider than the variation Step 4 produces. The viability question is managed by the harvest criteria carried in PCR-003 and by the culture duration control that sets them. The surrogate question is managed by continued process verification, which trends post-clarification turbidity against Protein A pressure and resin life over the commercial campaign.
+
+Both deviations recorded during execution were retained and neither affected the conclusions. DEV-004-01 concerned a filter lot flush before use and was resolved by the flush volume, and DEV-004-02 was a turbidity excursion at a loading near the maximum of the characterization range, which is the finding that fixes the operating range of the depth filter load in §7. The full investigations are in §13.
+
+# Conclusions
+
+Harvest and clarification was characterized on a qualified scale-down model of the commercial operation at `{python} f"{V['commercial_scale_l']:,}"` L. The step recovers the antibody at `{python} pct(har_yield)` and forms no quality attribute of A-Mab. Aggregate, charge variants and glycan attributes were unchanged across the step at every setting studied, and no clearance of host cell protein, residual DNA or aggregate is claimed for it.
+
+Proven acceptable ranges were established for both operating parameters. The centrifugal field is supported over `{python} par_str(cf)` `{python} cf.unit` and the depth filter load over `{python} nor_str(dfl)` `{python} dfl.unit`, the latter bounded by post-clarification turbidity rather than by yield. No design space is defined for this step, because it governs no critical quality attribute. `{python} f"{n_kpp:d}"` parameters were classified as key process parameters and `{python} f"{n_gpp:d}"` as a general process parameter, and the step has no critical process parameter.
+
+The three drug substance attributes the step can influence are capable at commercial scale, with the tightest of them, `{python} har_cap_tight_cqa`, at a Cpk of `{python} f"{har_cap_tight_cpk:.2f}"`. That capability is delivered by the purification steps and not by this one. `{python} f"{n_dev:d}"` deviations were recorded and both were retained, and one of them fixed the upper end of the depth filter load range. The ranges, the classifications and the control strategy contributions reported here are proposed for Stage 2 and roll up into PCMR-001.
+
+# Deviations from the plan
+
+`{python} f"{n_dev:d}"` deviations from PCP-004 were recorded during execution of the study. @tbl-dev is the register. Both were investigated to root cause and both were retained, which means the affected data were used in the analysis reported above.
+
+```{python}
+#| output: asis
+print(dev_register(DOC))
+```
+
+: Deviations recorded during execution of PCP-004. {#tbl-dev}
+
+## DEV-004-01, depth filter lot flush turbidity above alert
+
+The pre-use flush of the depth filter lot LOT-DF-4408 produced a flush turbidity of `{python} f"{dev_004_01_flush_turbidity_ntu:g}"` `{python} tb.unit`, above the alert level for a lot released to use under SOP-2006. The reading was obtained during the pre-use filter flush and before any culture had been fed to the train, so no product was at risk at the time of detection.
+
+The investigation compared the flush record against the procedure and against the lot documentation. The lot was within its expiry date of `{python} lot_df_4408_expiry` and its certificate showed no anomaly. The root cause was an insufficient initial flush volume. Depth filter media shed a small quantity of fibre and filter aid on first wetting, and the volume specified for the initial flush had not been fully delivered before the sample was drawn. The flush was extended and repeated, and the turbidity fell to the level the platform expects from a conditioned lot.
+
+The impact assessment turned on when the reading was taken. The excursion was in the flush and not in the process, the filter train was conditioned before the culture was fed to it, and the clarified harvest from the affected run met the post-clarification turbidity range. The deviation was therefore retained and the run was used in the analysis. The corrective action is the verified flush volume carried into the control strategy in §10.
+
+## DEV-004-02, post-clarification turbidity excursion above the normal operating range
+
+On one run executed at a depth filter load near the maximum of the characterization range, the post-clarification turbidity reached `{python} f"{dev_004_02_turbidity_max_ntu:g}"` `{python} tb.unit`, above the upper edge of the normal operating range of `{python} nor_str(tb)` `{python} tb.unit`. The excursion was detected by in-process turbidity monitoring under AMV-3015 during the run and was confirmed on a repeat measurement of the same sample.
+
+The investigation covered the method, the equipment and the loading. The turbidity method was within its performance limits and the repeat measurement agreed with the original, so the reading is a property of the material rather than of the assay. The centrifuge operated at its set-point throughout and the centrate turbidity was within its usual range, which locates the cause in the filtration stage and not in the separation. The root cause was depth filter loading near the maximum. The media had taken up their capacity for fine debris and colloids before the end of the run and began to pass the fine particulate they had been retaining, which is the mechanism described in §5.4.
+
+The impact on the study was assessed against what the run was for. The reading remained inside the characterization range of turbidity, `{python} par_str(tb)` `{python} tb.unit`, so the run is a valid observation of the parameter effect and is the observation that fixes the upper end of the depth filter load range. No product quality attribute was affected, since the step alters none. The deviation was retained on that basis. The consequence for the process is the proven acceptable range in §7, which restricts the depth filter load to `{python} nor_str(dfl)` `{python} dfl.unit` in routine operation, and the in-process turbidity monitoring in §10 which detects the condition on a commercial batch.
+
+# Appendix A. Step yield across the drug substance train
+
+The mass balance of §5.2 is placed in the yield of the whole train below. The table is the source of @fig-yield and gives the step and cumulative yield of every unit operation from the production bioreactor to formulation.
+
+```{python}
+#| output: asis
+show(train_yield)
+```
+
+: Step and cumulative product yield across the drug substance train. {#tbl-trainyield}
+
+# Appendix B. Analytical methods summary
+
+@tbl-methperf summarises the performance of the validated methods used in this study for which a validation summary is available. The precision figures are the basis on which differences across the step were judged in §5.6, and the share of observed variance is the fraction of the total variation in a reported result that the method itself contributes.
+
+```{python}
+#| output: asis
+show(har_meth)
+```
+
+: Performance of the validated analytical methods used in this study. {#tbl-methperf}
+
+Residual DNA by quantitative polymerase chain reaction under AMV-3014 and size variants by size exclusion chromatography under AMV-3011 were used as reported in §5.6, and their performance is documented in their own validation reports rather than summarised here. All four methods are listed with their titles in @tbl-sop.
+
+# References {.unnumbered}
+
+::: {#refs}
+:::

@@ -11,18 +11,16 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **17 of 48 done** · 31 todo
+**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **18 of 48 done** · 30 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
 ## Waiting on the project owner
 
 **This is the only section that is yours.** Each is an argument a person has to settle.
-**One of them blocks a task below**, named in its own row: until it is settled that work cannot start.
+None of them blocks the work below.
 
-| Decision | Waiting on | Blocks |
-|---|---|---|
-| [[D8-do-the-batches-continue|D8 — after each batch, does the sampled document pass, and do the batches continue?]] | project owner | each batch's successor (TASK-014.., [[TASK-020..]], [[TASK-028..]], [[TASK-033..) until its row reads PASS]] |
+*None.*
 
 ## Not finished — the assistant's work, not the owner's
 
@@ -31,7 +29,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-014]] | `todo` | the assistant | document | Author PCR-004 (Harvest and Clarification (Step 4)) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-015]] | `todo` | the assistant | document | Author PCR-003 (Production Bioreactor (Step 3)) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-016]] | `todo` | the assistant | document | Author PCR-005 (Protein A Chromatography (Step 5)) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-017]] | `todo` | the assistant | annex | Promote batch B2 (PCR-004, PCR-003, PCR-005): render, re-cut spans, re-anchor, re-ground |
@@ -80,6 +77,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-011]] | `done` | — | annex | Promote batch B1 (PCR-006, PCR-008, PCR-009, PCR-010): render, re-cut spans, re-anchor, re-ground |
 | [[TASK-012]] | `done` | — | measurement | Sampled blind reading of one document from batch B1 — HALT for the owner (D8) |
 | [[TASK-013]] | `done` | — | measurement | Rebuild-and-reground proof after batch B1 |
+| [[TASK-014]] | `done` | — | document | Author PCR-004 (Harvest and Clarification (Step 4)) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-042]] | `done` | — | document | Re-author PCR-008 (attempt 2) in one pass under the same regime, with one content-review cycle |
 | [[TASK-043]] | `done` | — | measurement | Blind reading: round-zero PCR-008 vs attempt 2 — HALT for the owner (D8) |
 | [[TASK-044]] | `done` | — | annex | Dispose of PCR-008 per the reading: promote attempt 2, or revert to round-zero by name; re-ground either way |

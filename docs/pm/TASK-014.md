@@ -21,7 +21,7 @@ about: ["PCR-004", "PCR-008"]
 
 ## Why it exists
 
-76 annex quotes, 36 rhetorical spans to re-anchor later in this batch's annex task. Non-DoE report (report_nondoe): no screening/RSM, no mechanistic subsection; do not fabricate a DoE. BLOCKED by D8 B1 = FAIL (2026-08-20): the owner preferred the old PCR-008 in the sampled reading; the batches do not continue until D8 settles.
+76 annex quotes, 36 rhetorical spans to re-anchor later in this batch's annex task. Non-DoE report (report_nondoe): no screening/RSM, no mechanistic subsection; do not fabricate a DoE. BLOCKED: B2's release is undecided (the owner decided only the PCR-008 re-author on 2026-08-20). Unblock when the owner says so, or when TASK-043 settles and the owner is asked again.
 
 ## Acceptance criteria
 

@@ -61,3 +61,10 @@ for preferring the new `PCR-009`; `PCR-008` is the outlier, an old text the owne
 What remains to decide is `PCR-008` itself — re-author under the same regime and re-read blind
 (recommended), revert it by name, or accept the promoted text — and whether B2 releases now on the
 `PCR-009` PASS (recommended) or waits for the `PCR-008` disposition.
+
+---
+
+**PCR-008 disposition decided 2026-08-20: re-author (attempt 2), owner's decision, in a fresh
+session.** TASK-042 (author + review) → TASK-043 (blind reading, round-zero vs attempt 2) →
+TASK-044 (promote or revert by name). **B2's release remains undecided** and its tasks stay
+blocked until the owner releases them.

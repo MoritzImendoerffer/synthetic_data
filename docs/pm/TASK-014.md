@@ -3,12 +3,12 @@ type: pm-task
 epic: 2026-08-19_02_fifth-round-plan-then-batches
 sprint: 2026-08-19_02_fifth-round-plan-then-batches
 task: TASK-014
-status: blocked
+status: todo
 kind: document
 title: "Author PCR-004 (Harvest and Clarification (Step 4)) in one pass under the rebuilt apparatus, with one content-review cycle"
 generated: true
-waiting_on: another task
-tags: [pm/task, pm/blocked]
+waiting_on: the assistant
+tags: [pm/task, pm/todo]
 about: ["PCR-004", "PCR-008"]
 ---
 
@@ -17,11 +17,11 @@ about: ["PCR-004", "PCR-008"]
 
 # TASK-014 — Author PCR-004 (Harvest and Clarification (Step 4)) in one pass under the rebuilt apparatus, with one content-review cycle
 
-**Epic:** [[epic]] · **Status:** `blocked` · **Waiting on:** another task · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
-76 annex quotes, 36 rhetorical spans to re-anchor later in this batch's annex task. Non-DoE report (report_nondoe): no screening/RSM, no mechanistic subsection; do not fabricate a DoE. BLOCKED: B2's release is undecided (the owner decided only the PCR-008 re-author on 2026-08-20). Unblock when the owner says so, or when TASK-043 settles and the owner is asked again.
+76 annex quotes, 36 rhetorical spans to re-anchor later in this batch's annex task. Non-DoE report (report_nondoe): no screening/RSM, no mechanistic subsection; do not fabricate a DoE. BLOCKED: B2's release is undecided (the owner decided only the PCR-008 re-author on 2026-08-20). Unblock when the owner says so, or when TASK-043 settles and the owner is asked again. Released by the owner on 2026-08-20 (decisions.b2_released_2026_08_20), and authored under the amended rule 4 of WRITING_GUIDE.md.
 
 ## Acceptance criteria
 
@@ -32,7 +32,7 @@ about: ["PCR-004", "PCR-008"]
 - [ ] the content review (§4): run 1 filed as content-review-PCR-004.md; if any question read 'no', ONE return to the same author and a second fresh judge filed as run 2; the outcome states run-1/run-2 counts per question and 'promotable on content' or not — either way the document proceeds to its batch's annex task
 - [ ] outcome records ONLY: model (self-reported), check_render passes, render, glyphs, <<NEEDS>>, sentences, words, pages, audit result, review counts — no style row, no frame count; `git status --short pc_package/` shows only the untracked DRAFT(s) of this batch
 
-**Depends on:** [[TASK-012]]
+**Depends on:** [[TASK-045]]
 
 ## Documents it is about
 

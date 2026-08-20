@@ -27,8 +27,13 @@ evidence for it, the cause behind it, and the point at which the claim stops.
    in its own sentence. Where it does not, stop.
 3. One step of the argument per sentence. A consequence, a contrast or a recommendation opens
    the next sentence ("Therefore, …", "However, …", "For this reason, …").
-4. Name the physical cause when you give one. Which species, which interaction, which
-   property of the resin, the buffer or the culture, and in which direction it acts.
+4. Name the cause in the clause where the causal verb stands. Which species, which interaction,
+   which property of the resin, the buffer or the culture, and in which direction it acts.
+   "Because", "since", "governs", "sets", "acts on" and "acts through" carry that cause in their
+   own clause, not in the sentence after them and not after a colon. Where what does the causing
+   is a convention, a procedure or a design choice rather than a species, say what it holds
+   constant or what follows from it. A list of what was done is not a reason, and a paragraph of
+   Materials and methods needs the reason as much as a paragraph of Results does.
 5. Use the terms of art of the field, and one name per thing. The same attribute, parameter
    and study keep the same name from the first page to the last, and a cross-reference is a
    section number ("see §7"), never a rephrasing.
@@ -117,6 +122,7 @@ paragraph when its point is made.
 ## 8. Before you submit a section
 
 Read it once as the assessor. Ask of each paragraph what it claims and what it shows, of each
-mechanism sentence which cause it names, and of each claim where it stops. Then run
+sentence that gives a reason whether the reason stands in the clause with its verb, and of each
+claim where it stops. Then run
 `authoring/check_render.py`, fix any code error yourself in the same context, and hand the
 document on. What comes after is a reviewer's work, not yours.

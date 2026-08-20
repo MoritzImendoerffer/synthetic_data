@@ -1,9 +1,9 @@
 ---
 type: pm-decision
 sprint: 2026-08-19_02_fifth-round-plan-then-batches
-status: open
+status: decided
 waiting_on: project owner
-blocks: each batch's successor (TASK-014.., TASK-020.., TASK-028.., TASK-033..) until its row reads PASS
+blocks: nothing since 2026-08-20 — B2 released by the owner; readings continue one per batch
 tags: [pm/decision]
 ---
 
@@ -101,3 +101,39 @@ register for this one document, deliberately and on the record.
 2. **Does the scale-down qualification finding change the regime?** The regime is frozen for the
    duration of the unit by the owner's own decision, and a change mid-campaign re-splits the
    corpus. The finding is recorded either way.
+
+---
+
+**Resolved by the project owner, 2026-08-20, after the attempt-2 reading.**
+
+The owner's reading of the outcome is that question 1 of the content review is a good rule badly
+placed: it was given to the reviewer after the fact and never to the author. The round-zero
+paragraph they preferred satisfies it — "This convention holds residence time and mass transport
+constant across scales" names what the convention does, in the clause with the verb — while the
+attempt-2 inventory names nothing. So the rule moves into the author's guide.
+
+Three decisions, all the owner's:
+
+1. **The frozen regime is amended, once and narrowly.** Rule 4 of `authoring/WRITING_GUIDE.md` now
+   says the cause stands in the clause where the causal verb stands, and that where the cause is a
+   convention, a procedure or a design choice rather than a species, the sentence says what it
+   holds constant or what follows from it. No counter and no threshold reaches the author, and
+   `REVIEW_CHECKLIST.md`, `RUNNER.md`, `section_plan.yaml`, `check_style.py` and the launch prompt
+   are untouched (TASK-045).
+2. **B2 releases and the campaign proceeds** under the amended guide. TASK-014, TASK-015 and
+   TASK-016 are unblocked.
+3. **`PCR-008` is re-authored a third time under the rule** rather than reverted or promoted as
+   attempt 2, running alongside B2 so it costs no campaign time (TASK-046 → TASK-047 → TASK-048).
+   The promoted attempt 1 stays in the corpus until that reading disposes of it.
+
+**What this splits, deliberately.** `PCP-005`, `PCR-006`, `PCR-009`, `PCR-010` and `PCR-007` were
+authored before the rule and stand as they are; the owner read `PCR-009` blind and preferred it in
+that register. The corpus will carry two vintages until someone decides otherwise, and that is
+noted at ship rather than repaired now.
+
+**One interaction left open, for the results page.** The reviewer's question 1 still exempts no
+procedural or statistical "because", and run 2 of the attempt-2 review flagged eight correct
+sentences under it ("because every effect is a contrast over all runs"). The author-facing rule now
+covers the convention case, but a review return can still push an author to delete correct prose.
+Watched, not changed, because changing the reviewer's questions mid-campaign would re-split the
+measurement as well as the corpus.

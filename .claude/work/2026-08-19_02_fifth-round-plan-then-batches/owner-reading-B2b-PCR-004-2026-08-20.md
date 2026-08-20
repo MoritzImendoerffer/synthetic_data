@@ -43,3 +43,61 @@ connective tissue between them." The owner, reading blind and without the questi
 same class of sentence out of both texts independently.
 
 The reading is complete. The key is opened next, below this line.
+
+## The key, opened after the reading above was committed
+
+`blind-key-B2b-PCR-004.md`: **new = B**. Verified by first-pages text hash, because the embedded
+dates were normalised at staging:
+
+| file | hash | source |
+|---|---|---|
+| `B2b-PCR-004-A.pdf` | `459ff3b4c14a` | `B2-old-PCR-004.pdf` — the pre-campaign report |
+| `B2b-PCR-004-B.pdf` | `4185f295bbe5` | attempt 2 |
+
+## The rule, applied mechanically
+
+`decisions.pass_rule`: PASS iff the owner judges the NEW document the better text AND quotes fewer
+than five sentences from it.
+
+- New document judged better: **yes** — "B is written in a more rigorous way", and B is attempt 2.
+- Sentences quoted from the new document: **1**. Fewer than five.
+
+**TASK-050 = PASS**, 2026-08-20. The first PASS for `PCR-004` in three readings.
+
+## One named ground was checkable, and it is correct
+
+The owner gave three grounds and one of them can be verified without judgement: "table 8.1 seems
+to be complete compared to A". It is.
+
+| | attributes in Table 8.1 |
+|---|---|
+| pre-campaign | Host Cell Protein, Residual DNA |
+| attempt 2 | Host Cell Protein, Residual DNA, **Aggregates (HMW)** |
+
+Aggregate is the one attribute with a plausible mechanism at this step — shear at the feed zone or
+an air-liquid interface in a foaming transfer — and both documents discuss it in the body. Only
+attempt 2 carries it into the capability table. The owner found a real content gap blind, from a
+table, without the data in front of him.
+
+## The result this reading settles, which is the campaign's sharpest
+
+`PCR-004` has now been authored twice under the same regime and read twice against the same
+pre-campaign text. The review counts and the human reading are **inverted**:
+
+| | run-2 review counts (Q1/Q2/Q3/Q4) | owner's blind reading |
+|---|---|---|
+| attempt 1 | **4 / 0 / 0 / 8** — the best of any document in the campaign | **FAIL** — preferred the pre-campaign text |
+| attempt 2 | 5 / 7 / 6 / ~20 — did not converge | **PASS** — preferred attempt 2 |
+
+Same document, same brief, same frozen regime, two authors. The draft the four questions scored
+best is the one the owner rejected, and the draft they scored worst is the one he prefers. This is
+the third and strongest instance of the pattern first measured on 2026-08-19: a count is not the
+quality. It now holds *within* a single document, which removes the confound that different
+documents are differently hard.
+
+**And the reading says what the counts could not.** The owner picked one sentence from each text,
+and both are the same construction — a `because` clause explaining why the step has no X, resting
+on the step governing or changing nothing. He was reading blind, without the four questions, and
+selected the exact class of sentence run 1's judge had named as this document's characteristic
+failure. What differs between the two attempts is not that class; it is that attempt 2 is, in his
+words, more rigorous, better sourced, and more complete in its tables.

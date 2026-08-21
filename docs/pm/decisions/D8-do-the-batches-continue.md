@@ -25,6 +25,7 @@ human check where it is worth most, at the boundary between batches, at a fifth 
 | B1 | PCR-006, PCR-008, PCR-009, PCR-010 | PCR-008 | **FAIL — the owner preferred the OLD text** ("clearly A wins. I could not find sentences in A which sound machine written"; A was the old document) | 2026-08-20 |
 | B1 (second sample, option D) | — | PCR-009 | **PASS — the owner preferred the NEW text** ("I like A better, it has shorter sentences and explains everything a bit more clearly") | 2026-08-20 |
 | B1 (PCR-008 attempt 2, re-author) | — | PCR-008 | **FAIL — the owner preferred the ROUND-ZERO text** ("I like A better. The reasoning is better to understand and follow"); five sentences quoted from the new text as sounding AI generated | 2026-08-20 |
+| B1 (PCR-008 attempt 3, under amended rule 4) | — | PCR-008 | **PASS — the owner preferred the NEW text**, asked which of the two reads as a paper and answering before the key was opened; nothing quoted against it. *Row added 2026-08-21: the reading happened on 2026-08-20 and TASK-048 promoted attempt 3 on it, but it was never entered here* | 2026-08-20 |
 | B2 | PCR-004, PCR-003, PCR-005 | PCR-003 | **PASS — the owner preferred the NEW text**, quoting a sentence against the old one | 2026-08-20 |
 | B2 (second document read) | — | PCR-004 | **FAIL — the owner preferred the OLD text** ("for PCR-004 i like the old one better"); the batch's only non-DoE report | 2026-08-20 |
 | B2 (PCR-004 attempt 2, re-author) | — | PCR-004 | **PASS — the owner preferred the NEW text**, "B is written in a more rigorous way, cites more sources and e.g. table 8.1 seems to be complete"; one sentence quoted from it | 2026-08-20 |
@@ -180,10 +181,15 @@ said nothing about the next batch. That is the same shape as the first `PCR-008`
 disposition was decided in one message and B2's release in another, so `TASK-028` (`PCP-003`) and
 `TASK-029` (`PCP-007`) are marked blocked rather than assumed released.
 
-**The evidence, counted the way TASK-026 counts it** — this unit's own readings only, so the 2026-08-19 probe and `PCR-007` are outside it and re-authors count as separate readings, which is why this tally is not the "five passed and two failed" of 2026-08-20. Eight readings: 4 PASS
-(`PCP-005`, `PCR-009`, `PCR-003`, `PCR-004` attempt 2) and 4 FAIL (`PCR-008` attempts 1 and 2,
-`PCR-004` attempt 1, `PCP-006`). By genre that is plans 1/1 and reports 3/3 — nothing separates
-them. The B3 FAIL is the narrowest result of the campaign, you called it "close to a tie"
+**The evidence, corrected 2026-08-21.** This unit's own readings only, so the 2026-08-19 probe and
+`PCR-007` are outside it and each re-author counts as its own reading. **Nine readings: 5 PASS**
+(`PCP-005`, `PCR-009`, `PCR-003`, `PCR-004` attempt 2, `PCR-008` attempt 3) **and 4 FAIL**
+(`PCR-008` attempts 1 and 2, `PCR-004` attempt 1, `PCP-006`). By genre, plans 1/1 and reports 4
+PASS / 3 FAIL. TASK-026 and the first version of this section both said eight readings at 4/4,
+because the `PCR-008` attempt-3 PASS was missing from the table above and TASK-047 was still
+marked pending in `state.json` although TASK-048 had promoted the document on that very reading.
+Both are fixed. The corrected record reads better for the pipeline than the one the halt was
+first written against, and it matters here: the last two re-authors both passed. The B3 FAIL is the narrowest result of the campaign, you called it "close to a tie"
 unprompted, and once the key was open you preferred the new text. Read one way that is a pipeline
 performing at parity with the pre-campaign corpus; read another it is a pipeline whose output you
 prefer when you can see what it is.

@@ -65,7 +65,9 @@ set-points**:
 > — PCP-009 (small-virus retentive filtration)
 
 PCP-003 makes the same commitment ("The first holds the other factors at the set-points in
-@tbl-params…"), re-verified against the report re-authored on 2026-08-18.
+@tbl-params…"), re-verified verbatim against the plan re-authored on 2026-08-21. That quote is
+in .qmd form, unlike the three above it, which are rendered — see the note in
+`discrepancies.yaml`.
 The authoring guideline in `section_plan.yaml` says the same thing: *"(1) at set-point (other
 factors held at their set-points)"*.
 

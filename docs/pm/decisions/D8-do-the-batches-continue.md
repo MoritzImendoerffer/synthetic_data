@@ -3,7 +3,7 @@ type: pm-decision
 sprint: 2026-08-19_02_fifth-round-plan-then-batches
 status: decided
 waiting_on: project owner
-blocks: nothing since 2026-08-20 — B2 released by the owner; readings continue one per batch
+blocks: TASK-028, TASK-029 since 2026-08-21 — B3 read FAIL blind and B4's release is undecided
 tags: [pm/decision]
 ---
 
@@ -163,3 +163,45 @@ are in B3 and will say the same thing or not.
 the reviewer's question 1 should gain a scope line so it stops flagging true statements that a step
 governs nothing. Both are recorded findings, neither is acted on.
 
+
+---
+
+**B3 proved on 2026-08-21, and B4 needs your word before it starts.** The rebuild-and-reground
+proof after B3 (TASK-027) is clean: the six promoted documents re-render with no missing glyph on
+any fresh pdf, 2088/2088 quotes ground strict against those fresh renders with zero weak anchors,
+the twelve rendered files were restored by name and everything re-verified against the committed
+ones, 20/20 annexes valid, 95 tests, 24 style blocks OK, `outputs/` untouched. Nothing in the
+corpus is in doubt.
+
+What is undecided is whether the campaign continues. B3's row above reads FAIL blind, and the rule
+this table has followed since B1 is that a FAIL stops the unit until you say otherwise. Your
+amendment of 2026-08-21 settled what happens to the documents already promoted — they stay — and
+said nothing about the next batch. That is the same shape as the first `PCR-008` FAIL, where the
+disposition was decided in one message and B2's release in another, so `TASK-028` (`PCP-003`) and
+`TASK-029` (`PCP-007`) are marked blocked rather than assumed released.
+
+**The evidence, counted the way TASK-026 counts it** — this unit's own readings only, so the 2026-08-19 probe and `PCR-007` are outside it and re-authors count as separate readings, which is why this tally is not the "five passed and two failed" of 2026-08-20. Eight readings: 4 PASS
+(`PCP-005`, `PCR-009`, `PCR-003`, `PCR-004` attempt 2) and 4 FAIL (`PCR-008` attempts 1 and 2,
+`PCR-004` attempt 1, `PCP-006`). By genre that is plans 1/1 and reports 3/3 — nothing separates
+them. The B3 FAIL is the narrowest result of the campaign, you called it "close to a tie"
+unprompted, and once the key was open you preferred the new text. Read one way that is a pipeline
+performing at parity with the pre-campaign corpus; read another it is a pipeline whose output you
+prefer when you can see what it is.
+
+**Three ways to go, and the choice is yours.**
+
+**Option A — release B4 and finish the set.** `PCP-003` and `PCP-007` are the last two plans, then
+B5's four cross-cutting documents. The argument: the blind result was a tie you resolved in the new
+text's favour, and stopping two batches from the end leaves the corpus split across three vintages
+instead of one.
+
+**Option B — stop the campaign here and ship what exists.** Fifteen documents are re-authored and
+promoted; `PCP-003`, `PCP-007`, `PTP-001`, `PCMP-001`, `RA-001` and `PCMR-001` keep their earlier
+register. The argument: four FAILs in eight readings is not a pipeline that reliably beats the text
+it replaces, and the remaining six are the documents whose replacement buys least.
+
+**Option C — change something first.** Two findings are on the record and neither has been acted
+on: a one-cycle content review is not self-correcting on the construction it flags (traced through
+the files on `PCP-006`, second confirmed instance after `PCR-005`), and the reviewer's question 1
+still has no scope line. Acting on either re-splits the corpus a second time, which is why the
+regime has stayed frozen.

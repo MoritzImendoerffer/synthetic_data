@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **35 of 51 done** · 16 todo
+**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **36 of 51 done** · 2 blocked · 13 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -29,9 +29,8 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-027]] | `todo` | the assistant | measurement | Rebuild-and-reground proof after batch B3 |
-| [[TASK-028]] | `todo` | the assistant | document | Author PCP-003 (Production Bioreactor (Step 3)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-029]] | `todo` | the assistant | document | Author PCP-007 (Cation Exchange Chromatography (Step 7)) in one pass under the rebuilt apparatus, with one content-review cycle |
+| [[TASK-028]] | `blocked` | another task | document | Author PCP-003 (Production Bioreactor (Step 3)) in one pass under the rebuilt apparatus, with one content-review cycle |
+| [[TASK-029]] | `blocked` | another task | document | Author PCP-007 (Cation Exchange Chromatography (Step 7)) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-030]] | `todo` | the assistant | annex | Promote batch B4 (PCP-003, PCP-007): render, re-cut spans, re-anchor, re-ground |
 | [[TASK-031]] | `todo` | the assistant | measurement | Sampled blind reading of one document from batch B4 — HALT for the owner (D8) |
 | [[TASK-032]] | `todo` | the assistant | measurement | Rebuild-and-reground proof after batch B4 |
@@ -76,6 +75,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-024]] | `done` | — | document | Author PCP-010 (Ultrafiltration / Diafiltration (Step 10)) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-025]] | `done` | — | annex | Promote batch B3 (PCP-004, PCP-006, PCP-008, PCP-009, PCP-010): render, re-cut spans, re-anchor, re-ground |
 | [[TASK-026]] | `done` | — | measurement | Sampled blind reading of one document from batch B3 — HALT for the owner (D8) |
+| [[TASK-027]] | `done` | — | measurement | Rebuild-and-reground proof after batch B3 |
 | [[TASK-042]] | `done` | — | document | Re-author PCR-008 (attempt 2) in one pass under the same regime, with one content-review cycle |
 | [[TASK-043]] | `done` | — | measurement | Blind reading: round-zero PCR-008 vs attempt 2 — HALT for the owner (D8) |
 | [[TASK-044]] | `done` | — | annex | Dispose of PCR-008 per the reading: promote attempt 2, or revert to round-zero by name; re-ground either way |

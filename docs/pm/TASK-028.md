@@ -3,13 +3,13 @@ type: pm-task
 epic: 2026-08-19_02_fifth-round-plan-then-batches
 sprint: 2026-08-19_02_fifth-round-plan-then-batches
 task: TASK-028
-status: todo
+status: blocked
 kind: document
 title: "Author PCP-003 (Production Bioreactor (Step 3)) in one pass under the rebuilt apparatus, with one content-review cycle"
 generated: true
-waiting_on: the assistant
-tags: [pm/task, pm/todo]
-about: ["PCP-003"]
+waiting_on: another task
+tags: [pm/task, pm/blocked]
+about: ["PCP-003", "PCP-006"]
 ---
 
 > [!warning] Generated from `.claude/work/2026-08-19_02_fifth-round-plan-then-batches/state.json` by `scripts/pm_notes.py`.
@@ -17,11 +17,11 @@ about: ["PCP-003"]
 
 # TASK-028 — Author PCP-003 (Production Bioreactor (Step 3)) in one pass under the rebuilt apparatus, with one content-review cycle
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `blocked` · **Waiting on:** another task · **Board:** [[_Board]]
 
 ## Why it exists
 
-66 annex quotes, 0 rhetorical spans to re-anchor later in this batch's annex task. PCP-003 is at an earlier round (round three / Track D / round two); re-done so the corpus has ONE register.
+66 annex quotes, 0 rhetorical spans to re-anchor later in this batch's annex task. PCP-003 is at an earlier round (round three / Track D / round two); re-done so the corpus has ONE register. BLOCKED by D8 B3 = FAIL blind (2026-08-21): the owner preferred the pre-campaign PCP-006 in the sampled reading, so under D8's rule the batches do not continue until the owner releases B4. The owner's amendment of 2026-08-21 keeps the promoted documents but is a disposition, not a release — B2 needed a separate word after its FAIL and B4 does too.
 
 ## Acceptance criteria
 
@@ -37,6 +37,7 @@ about: ["PCP-003"]
 ## Documents it is about
 
 - **PCP-003** — `pc_package/PCP-003_bioreactor.qmd`
+- **PCP-006** — `pc_package/PCP-006_viral_inactivation.qmd`
 
 ## Files it touched
 

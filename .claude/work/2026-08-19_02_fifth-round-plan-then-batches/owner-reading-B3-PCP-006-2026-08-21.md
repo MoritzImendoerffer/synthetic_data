@@ -102,3 +102,54 @@ three PASS and three FAIL. Nothing here separates the genres.
 What does separate is §7. The owner's stated ground for preferring the old text is that it is "more
 rigorous for section 7", and two of his three quoted sentences are from §7 of the new one. The
 acceptance-criteria section is where this document lost.
+
+---
+
+## Amendment, given after the key was opened — 2026-08-21
+
+The owner sent a second message once the key had been opened and the FAIL recorded:
+
+> I was about to say, I like B better due to it`s better explanations. The provided sentences
+> tripped me off but it is maybe a matter of taste. I would stick with the new documents.
+
+### What this changes, and what it does not
+
+**It does not change the blind measurement.** The reading recorded above was made without knowing
+which document was which, and it chose A — the pre-campaign plan — as "a close win". That is the
+datum, and it stands. This amendment was written after this session had told the owner that B was
+the new text, so it is an **informed** judgement, not a blind one. Read as a blind reading it would
+be circular; read as a disposition it is exactly what the owner is entitled to decide.
+
+The two are recorded separately for that reason. Anyone scoring the campaign should use the blind
+verdict; anyone asking what happens to the documents should use the amendment.
+
+| | verdict | conditions |
+|---|---|---|
+| blind reading | **A**, the pre-campaign plan, "a close win … close to a tie" | key sealed, no knowledge of which was which |
+| informed amendment | **B**, the new plan, "better explanations" | key opened, owner told which was which |
+
+### The rule, restated against both
+
+`decisions.pass_rule` is written for a blind reading, so it is applied to the blind one:
+new judged better = **no**. **TASK-026 remains a FAIL**, and D8's row keeps it.
+
+Had the rule been applied to the amendment it would have passed on both legs — the new text judged
+better and three sentences quoted from it, fewer than five. That is worth stating because it shows
+how narrow this case is, not because it changes the score.
+
+### The disposition
+
+**The new documents stay.** B3 is already promoted and grounded, so no action follows; the
+amendment confirms the corpus as it stands rather than changing it.
+
+### What the owner said about the flagged sentences
+
+"The provided sentences tripped me off but it is maybe a matter of taste."
+
+That is a real qualification and it should temper the finding recorded above, though it does not
+remove it. The traced fact is unchanged and does not depend on taste: run 1 flagged a trailing
+gloss, the author replaced it with a different trailing gloss on the same sentence, and run 2 did
+not flag the replacement. Whether that particular sentence reads badly is a matter of taste;
+**whether a one-cycle review can be satisfied by substituting a neighbouring instance of the fault
+it flagged is not.** The same mechanism was already confirmed on `PCR-005` before this reading
+happened.

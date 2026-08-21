@@ -5396,90 +5396,95 @@ PTP_FILE = "PTP-001_transfer.docx"
 # (gap_id, gap_area, description, impact, mitigation, status,
 #  prose-quote (§8 narrative), table-quote (Table 10 gap label), action-quote (Table 10 action))
 PTP_GAPS = [
+    # Rebuilt 2026-08-21 (TASK-037) against the re-authored transfer plan. The gap register is
+    # not a re-wording of the previous one: the plan now carries SEVEN gaps against the previous
+    # six, drops the "no point in the design space will have been run at commercial scale" and
+    # "Protein A resin has no platform bridging" entries, and adds the harvest/UF-DF design gap
+    # and the buffer preparation gap. Table 9 renders Gap | Impact | Action that closes it |
+    # Owner, so the table quote is the gap label and the action quote is the action cell.
+    # (gap_id, gap_area, description, impact, mitigation, status,
+    #  prose-quote (§8 narrative), table-quote (Table 9 gap label), action-quote (Table 9 action))
     ("GAP-01", "process",
-     "No point in the proposed design space will have been run at commercial scale when the "
-     "characterization package completes: the studies are executed on scale-down models at the "
-     "sending site and the engineering and PPQ batches are run at set-point.",
-     "A scale-dependent effect at the edge of the characterized region (for example pCO2 "
-     "accumulation at commercial working volume, or a longer mixing time in a larger vessel) "
-     "would not appear in the characterization data at all.",
-     "Qualification of every scale-down model under SOP-1001 with statistical comparison of "
-     "performance across scales, followed by engineering runs and PPQ batches at set-point; "
-     "owned by MSAT at both sites, evidenced by the SOP-1001 qualification records and PCMR-001.",
+     "The scale-down models are qualified against the development train only, so every "
+     "characterization conclusion reaches commercial scale through the model rather than "
+     "through a commercial batch.",
+     "Characterization conclusions reach commercial scale only through the model.",
+     "Qualify each model against the receiving-site equipment train and record the comparison "
+     "in the characterization plan for the step; owned by MSAT at the sending site.",
      "open",
-     "No point in the proposed design space will have been run at commercial scale",
-     "Design space not confirmed at commercial scale",
-     "Scale-down qualification, engineering runs, PPQ at set-point"),
+     "The first two gaps set the schedule, because each requires laboratory work at a site that "
+     "has not yet performed it",
+     "Scale-down models are qualified against the development train only",
+     "Qualify each model against the receiving site equipment train, and record the comparison "
+     "in the characterization plan for the step"),
     ("GAP-02", "analytical_method",
-     "None of the validated analytical methods has been executed for A-Mab at the receiving-site "
-     "laboratory.",
-     "In-process and release testing cannot be performed at the receiving site when the plan takes "
-     "effect, and method variance is part of the variance that the capability projections in "
-     "PCMR-001 must account for.",
-     "The method-transfer sequence of §6.2, with comparative precision and accuracy criteria per "
-     "method and an approved transfer report per AMV; Analytical Development owns the protocol and "
-     "receiving-site Quality Control owns the execution. Until each report is approved the affected "
-     "testing stays at the sending site.",
+     "The validated analytical methods are not qualified at the receiving site.",
+     "Comparability results and in-process results cannot be generated or interpreted at the "
+     "receiving site.",
+     "Transfer and requalify every method under a written protocol; owned by Analytical "
+     "Development.",
      "open",
-     "In-process and release testing cannot therefore be performed there when this plan takes effect",
-     "Analytical methods not qualified at the receiving site",
-     "Method transfer protocol and report per method"),
-    ("GAP-03", "control_strategy",
-     "The control strategy that the receiving site must implement does not yet exist: every "
-     "parameter carries a proposed set-point and a proposed normal operating range, but none "
-     "carries a final classification and no proven acceptable range has been established.",
-     "The master batch record cannot be issued in its final form and PPQ cannot start, so the "
-     "transfer cannot be completed on the process description alone.",
-     "The document sequence of Table 2 (RA-001, then the plans PCP-003 to PCP-010, then the reports "
-     "PCR-003 to PCR-010, then PCMR-001), followed by classification under SOP-4001 and revision of "
-     "the batch record; MSAT owns the sequence and Quality Assurance approves its output.",
+     "neither can be closed by a document review",
+     "Analytical methods are not qualified at the receiving site",
+     "Transfer and requalify every method in Table 8 under a written protocol"),
+    ("GAP-03", "process",
+     "Harvest and clarification and the ultrafiltration and diafiltration step carry no "
+     "multivariate design, so their operating ranges rest on univariate work and platform "
+     "experience.",
+     "Operating ranges for these two steps rest on univariate work and platform experience.",
+     "State the limitation in PCP-004 and PCP-010 and support the ranges with univariate data "
+     "and prior knowledge; owned by MSAT at the sending site.",
      "open",
-     "The control strategy that the receiving site must implement does not yet exist",
-     "No parameter classification or control strategy",
-     "followed by classification under SOP-4001 and revision of the batch record"),
-    ("GAP-04", "validation",
-     "Viral clearance cannot be measured in the commercial facility: spiking studies are performed "
-     "only at scale-down and under containment, so the clearance claimed for the low-pH hold, for "
-     "anion exchange and for virus filtration rests entirely on scale-down data.",
-     "The cumulative XMuLV and MVM claims are supported by a modular argument across three steps "
-     "and by the qualification of three scale-down models, and not by any commercial-scale "
-     "measurement.",
-     "The scale-down models for Steps 6, 8 and 9 are qualified to worst-case commercial conditions "
-     "and the modular clearance studies are run to ICH Q5A; the receiving site then demonstrates in "
-     "the engineering runs that it can hold the governing parameters of those steps.",
+     "The gap on harvest and UF/DF will still be open when the campaign ends, because no "
+     "multivariate design is planned for either step at any point in the programme",
+     "Harvest and UF/DF carry no multivariate design",
+     "State the limitation in PCP-004 and PCP-010, and support the ranges with univariate data "
+     "and prior knowledge"),
+    ("GAP-04", "control_strategy",
+     "Parameter classification is not established until PCMR-001 is approved, so the master "
+     "batch record cannot be finalized before then.",
+     "The master batch record cannot be finalized.",
+     "Draft the batch record after PCMR-001 is approved and run engineering batches against the "
+     "process description; owned by MSAT at the receiving site.",
      "open",
-     "Viral clearance cannot be measured in the commercial facility",
-     "Viral clearance measurable only at scale-down",
-     "Modular clearance studies to ICH Q5A; parameter control demonstrated"),
-    ("GAP-05", "materials",
-     "The Protein A capture step cannot inherit its ranges from platform data: RA-004 assessed the "
-     "alternate Protein A resin and concluded that independent characterization is required, with "
-     "no bridging from the platform data that supports the other steps of the train.",
-     "The operating ranges of the capture step, and the leached Protein A attribute that the step "
-     "sets, have no prior-knowledge basis and must be established experimentally before the "
-     "transfer can complete.",
-     "Full characterization of the step in PCP-005 and PCR-005, including the resin life-cycle and "
-     "sanitization conditions governed by SOP-2008; Process Development at the sending site owns "
-     "the action.",
+     "The remaining gaps are closed by sequencing, by training or by a bounded qualification "
+     "study",
+     "Parameter classification is not established until PCMR-001 is approved",
+     "Draft the batch record after PCMR-001 is approved, and run engineering batches against the "
+     "process description"),
+    ("GAP-05", "process",
+     "Buffer preparation moves from per-experiment preparation at the sending site to central "
+     "preparation and hold at the receiving site.",
+     "Buffer hold time and stability are not covered by development data.",
+     "Qualify buffer hold times at the receiving site before the engineering batches; owned by "
+     "MSAT at the receiving site.",
      "open",
-     "The Protein A capture step cannot inherit its ranges from platform data",
-     "Protein A resin has no platform bridging (RA-004)",
-     "Independent characterization of the capture step"),
-    ("GAP-06", "facility",
-     "The receiving site has no execution history for this process: no operator there has run an "
-     "A-Mab batch, no buffer has been prepared at commercial scale to the A-Mab formulations, and "
-     "the buffer hold times that the chromatography steps depend on have not been verified at that "
-     "scale.",
-     "The impact is concentrated in the first batches, where an execution error or an "
-     "out-of-specification buffer lot would move the conductivity and pH of the chromatography "
-     "loads, which are the governing parameters of the polishing and viral steps.",
-     "Training against the transferred procedures, buffer preparation and expiry verification under "
-     "SOP-2103, at least one engineering run per unit operation, and a readiness review before PPQ; "
-     "receiving-site Manufacturing owns the action with MSAT support.",
+     "none of them requires a change to the process itself",
+     "Buffer preparation moves from per experiment preparation to central preparation and hold",
+     "Qualify buffer hold times at the receiving site before the engineering batches"),
+    ("GAP-06", "validation",
+     "The viral clearance claims are established at small scale only and cannot be verified at "
+     "commercial scale.",
+     "The claims cannot be verified at commercial scale.",
+     "Retain the modular small-scale claims and control the load conditions they depend on "
+     "through the batch record; owned by MSAT at the sending site.",
      "open",
-     "The receiving site has no execution history for this process",
-     "No execution history at the receiving site",
-     "Training, buffer verification under SOP-2103, engineering runs"),
+     "A gap must be closed before the qualification campaign starts, or its residual risk must "
+     "be assessed and accepted under the quality system",
+     "Viral clearance claims are established at small scale only",
+     "Retain the modular small scale claims, and control the load conditions they depend on "
+     "through the batch record"),
+    ("GAP-07", "quality_system",
+     "Operators at the receiving site have not run this process.",
+     "An execution error during qualification would invalidate a batch.",
+     "Train operators on the master batch record and run engineering batches before "
+     "qualification; owned by Manufacturing at the receiving site.",
+     "open",
+     "Gaps were identified by comparing what the receiving site holds today against what the "
+     "qualification campaign requires",
+     "Operators at the receiving site have not run this process",
+     "Train operators on the master batch record and run engineering batches before "
+     "qualification"),
 ]
 PTP_GAP_TABLE = ("Transfer gaps, closing actions, owners and the evidence that closes each",
                  "PTP-001_tab_gaps")
@@ -5624,10 +5629,13 @@ def ptp_assertions():
             table_title=tab_title, table_id=tab_id)
     # a couple of preserved-CQA acceptance-criterion links. The cumulative viral-clearance
     # limits carry their own sentence in §2; HCP is anchored on the Table 4 lead-in.
+    # Re-anchored 2026-08-21 onto the re-authored §2 lead-in to Table 4, which is the span that
+    # names the attributes together with the criterion and the criticality each one carries.
     acc_quote = {
-        "lrv_mvm": "the acceptance criteria given for them are the limits the transferred process "
-                   "must meet at commercial scale",
-        "hcp": "The attributes, their acceptance criteria and their criticality are given in Table",
+        "lrv_mvm": "The drug substance from those batches will be compared against the acceptance "
+                   "criteria in Table 4",
+        "hcp": "Table 4 lists the 10 quality attributes that the transfer must preserve, with the "
+               "acceptance criterion and the criticality assigned to each",
     }
     for key in ["lrv_mvm", "hcp"]:
         r = P.cqa_reg[P.cqa_reg.key == key].iloc[0].to_dict()
@@ -5653,35 +5661,55 @@ def ptp_report_sections():
               "PCMP-001, the per-step plans and reports and PCMR-001 all derive from it.",
            "Purpose and scope",
            "This plan is the parent document of the A-Mab process characterization package"),
-        st(3, "The plan is strictly prospective: it records no characterization result and makes no "
-              "claim about the outcome of any study it commissions.",
-           "Purpose and scope", "It records no characterization result"),
-        st(4, "The transfer covers the eight drug-substance unit operations (Steps 3 to 10), from "
-              "the production bioreactor to the final ultrafiltration and diafiltration step.",
+        # Rewritten 2026-08-21: the re-authored plan does not state its prospectivity as a claim
+        # about itself. What it does say is what the package is for, which is the supportable form.
+        st(3, "Each plan in the package commits a study and each report records what that study "
+              "found, and the set exists to justify the operating ranges and the control strategy "
+              "the receiving site will run.",
            "Purpose and scope",
-           "from the production bioreactor through the final ultrafiltration and diafiltration step"),
-        st(5, "Technology transfer under ICH Q10 is the transfer of product and process knowledge, "
-              "so that the receiving site can realise the product.",
+           "each report records what that study found, and the set as a whole exists to justify "
+           "the operating ranges and the control strategy that the receiving site will run"),
+        st(4, "The transfer covers the manufacturing process, the analytical methods that test "
+              "the intermediates and the drug substance, and the control strategy that connects "
+              "the two.",
            "Purpose and scope",
-           "the transfer of product and process knowledge between development and manufacturing"),
-        st(6, "The characterization scope that supports the transfer assigns 22 of the 37 process "
-              "parameters to multivariate study and 15 to univariate study, on the basis set out in RA-001.",
+           "The transfer covers the manufacturing process, the analytical methods that test the "
+           "intermediates and the drug substance, and the control strategy that connects the two"),
+        # Rewritten 2026-08-21: the re-authored plan does not gloss the ICH Q10 definition of
+        # technology transfer. It states what this plan governs, which is the same relation
+        # between the two sites without the definitional frame.
+        st(5, "The plan governs the transfer of the A-Mab drug substance manufacturing process "
+              "from the development site to the commercial manufacturing site.",
+           "Purpose and scope",
+           "This plan governs the transfer of the A-Mab drug substance manufacturing process from "
+           "the development site to the commercial manufacturing site"),
+        st(6, "The characterization scope table gives, per unit operation, how many parameters "
+              "enter the campaign and how the study type splits between multivariate and "
+              "univariate work.",
            "Scale-down model and comparability strategy",
-           "22 are assigned to multivariate study and 15 to univariate study"),
-        st(7, "The process description delivered at transfer carries set-points and proposed normal "
-              "operating ranges only: no proven acceptable range and no parameter classification "
-              "exists when the plan takes effect.",
-           "Transfer of the process, methods and control strategy",
-           "It does not carry proven acceptable ranges (PARs), and it does not carry parameter "
-           "classifications"),
-        st(8, "Six gaps separate what the receiving site holds today from what it needs in order to "
-              "manufacture A-Mab under an approved control strategy, and none is closed by this plan.",
-           "Gap analysis", "None of the six is closed by this plan"),
-        st(9, "Commercial-scale confirmation is a Stage 2 PPQ campaign that confirms, and does not "
-              "establish, the process design recorded in the Stage 1 characterization package.",
+           "how many parameters enter the campaign, how the study type splits between "
+           "multivariate and univariate work"),
+        # Rewritten 2026-08-21: the re-authored plan makes the same point through the gap
+        # register rather than through a claim about the process description, so the statement
+        # follows the register.
+        st(7, "Parameter classification is not established until PCMR-001 is approved, so the "
+              "master batch record cannot be finalized before then.",
+           "Gap analysis",
+           "Parameter classification is not established until PCMR-001 is approved"),
+        # Rewritten 2026-08-21: the register now carries SEVEN gaps, not six, and the plan no
+        # longer says none is closed by it. It says a gap must be closed before qualification
+        # starts or its residual risk assessed and accepted.
+        st(8, "Gaps were identified by comparing what the receiving site holds today against what "
+              "the qualification campaign requires, and a gap must be closed before the campaign "
+              "starts or its residual risk assessed and accepted under the quality system.",
+           "Gap analysis",
+           "A gap must be closed before the qualification campaign starts, or its residual risk "
+           "must be assessed and accepted under the quality system"),
+        st(9, "Characterization is the Stage 1 process design work of the validation lifecycle "
+              "and process performance qualification is Stage 2, which follows this transfer.",
            "Process performance qualification strategy",
-           "PPQ is Stage 2 of the process validation lifecycle, and it confirms at scale the "
-           "process design established in Stage 1"),
+           "Characterization is the Stage 1 process design work of that lifecycle, and process "
+           "performance qualification is Stage 2"),
     ])]
 
 
@@ -5723,14 +5751,22 @@ RA_ATTR_NAME = {r["key"]: r["cqa"] for _, r in P.cqa_reg.iterrows()}
 # §4 subsection; those sentences anchor the performance-only (non-impact) assertions.
 # Header of the leading columns each RA-001 partial row covers. A partial row needs a
 # partial header: the two must have the same number of cells or the header mislabels them.
-RA_RANK_HEADER = _join_cells(["Parameter", "Potential failure mode", "Attribute(s) at risk"])
+# Re-cut 2026-08-21 (TASK-037): the re-authored RA-001 renders ra_content.ra_detail_df() per
+# step with the Step column dropped, so the row carries the EFFECT between the failure mode
+# and the attributes, and the last column is named "CQA(s) at risk".
+RA_RANK_HEADER = _join_cells(["Parameter", "Potential failure mode", "Potential effect",
+                              "CQA(s) at risk"])
 RA_ASSIGN_HEADER = _join_cells(["Unit operation", "Parameter"])
 RA_CQA_HEADER_3 = _join_cells(["Quality attribute", "Category", "Acceptance"])
 
+# Re-anchored 2026-08-21 (TASK-037). The re-authored RA-001 does not assert the absence in the
+# abstract for either step. It states the mechanism that makes each failure a performance failure
+# and not a quality one, so the anchor is that mechanism sentence.
 RA_PERF_STEP_QUOTE = {
-    "harvest": "No parameter of the harvest step can change a product quality attribute",
-    "ufdf": "No parameter of the ultrafiltration and diafiltration step forms or clears a "
-            "quality attribute",
+    "harvest": "A depth filter loaded beyond its rated area passes particulate instead of "
+               "retaining it, and the turbidity of the clarified harvest rises",
+    "ufdf": "a transmembrane pressure outside its range changes the processing time rather than "
+            "the material",
 }
 
 
@@ -5781,7 +5817,7 @@ def ra_param_entities(rows):
                 # failure mode and the attribute(s) that failure mode could reach
                 ref("RA-001", RA_FILE, "RA-001_sec_rank",
                     "Parameter risk ranking by unit operation",
-                    _join_cells([r["param"], r["fm"], r["cqa_label"]]),
+                    _join_cells([r["param"], r["fm"], r["eff"], r["cqa_label"]]),
                     table_title=f"Pre-characterization risk ranking, {r['unit_op']}",
                     table_id=f"RA-001_tab_rank_{r['key']}", table_header=RA_RANK_HEADER),
                 # the parameter's row of the campaign-wide assignment table
@@ -5836,7 +5872,7 @@ def ra_assertions(quality_rows, perf_rows):
         (``_join_cells``); the trailing severity and RPN cells are outside the relation this
         reference attests."""
         return rref("RA-001_sec_rank", "Parameter risk ranking by unit operation",
-                    _join_cells([r["param"], r["fm"], r["cqa_label"]]),
+                    _join_cells([r["param"], r["fm"], r["eff"], r["cqa_label"]]),
                     table_title=f"Pre-characterization risk ranking, {r['unit_op']}",
                     table_id=f"RA-001_tab_rank_{r['key']}", table_header=RA_RANK_HEADER)
 
@@ -5890,78 +5926,79 @@ def ra_report_sections():
         return ReportStatement(statement_id=f"RA-001-S{i:02d}", statement_text=text,
                                confidence="high", review_status="accepted",
                                source_references=[ref("RA-001", RA_FILE, "RA-001_sec", sec, quote)])
+    # Re-anchored and rewritten 2026-08-21 (TASK-037) against the re-authored risk assessment.
+    # Every statement was read back against the new text. The document no longer states its own
+    # prospectivity, no longer names the "justified univariate" class in its campaign totals
+    # (it folds that parameter into the univariate count, giving 22 and 15 against the previous
+    # 22, 14 and 1), and no longer carries a sentence about amending the assignment. Statements
+    # that asserted those things are replaced by what the document does say.
     return [ReportSection(section_id="RA-001-summary", title="Risk assessment summary", statements=[
-        st(1, "RA-001 decides which A-Mab process parameters are characterized and by what kind of "
-              "study; its output is the characterization scope, not a result.",
+        st(1, "RA-001 records the risk assessment made on the A-Mab drug substance process before "
+              "any characterization study was executed.",
            "Purpose and scope",
-           "decides which A-Mab process parameters are characterized, and by what kind of study"),
-        st(2, "The assessment is executed before any characterization study, and the Process "
-              "Characterization Plans carry out the scope it defines.",
-           "Purpose and scope",
-           "the assessment is performed before any characterization study is executed"),
-        st(3, "The assessment classifies no parameter: the CPP, WC-CPP, KPP and GPP designations "
-              "are outputs of the characterization studies and are assigned in PCR-003 to PCR-010 "
-              "and consolidated in PCMR-001.",
-           "Purpose and scope", "No parameter is classified in this assessment"),
-        st(4, "The assessment calculates no residual risk, because the control strategy that would "
-              "reduce the risk is not yet defined; what is recorded is the risk as it stands with "
-              "the controls that exist today.",
-           "Purpose and scope", "No residual risk is calculated for those parameters either"),
-        st(5, "37 process parameters of the drug-substance train (Steps 3 to 10) are in scope.",
-           "Purpose and scope",
-           "process parameters of the drug-substance train leaves this document with an "
-           "assigned study type"),
-        st(6, "The severity of a parameter is inherited from the most critical attribute it can "
-              "affect, so criticality never depends on how well a facility controls a parameter.",
+           "This document records the risk assessment made on the A-Mab drug substance process "
+           "before any characterization study was executed"),
+        st(2, "Its consumers are the characterization plans, one per unit operation, which take "
+              "the study type assigned here and set out how that study will be run.",
+           "Outputs and downstream use",
+           "Its consumers are the characterization plans, one for each unit operation, which take "
+           "the study type assigned here and set out how that study will be run"),
+        st(3, "No parameter is assigned a study type on the risk priority number alone.",
            "Risk assessment methodology",
-           "a parameter inherits the severity of the most critical attribute within reach"),
-        st(7, "Occurrence and detection are scored as they stand before characterization, so the "
-              "initial risk priority number is a ranking device on an ordinal scale.",
-           "Risk assessment methodology",
-           "Occurrence and detection are scored as they stand before characterization"),
-        st(8, "Parameters that can reach a viral-clearance attribute take the lowest detection band, "
-              "because clearance is demonstrated in small-scale spiking studies and is never "
-              "measured on the batch.",
-           "Risk assessment methodology",
-           "clearance is demonstrated in small-scale spiking studies and is never measured on the batch"),
-        st(9, "21 of the 37 parameters can affect at least one quality attribute; the remaining 16 "
-              "act on process performance only.",
+           "No parameter is assigned a study type on the number alone"),
+        st(4, "The scores in the register are initial scores and no residual risk is reported.",
            "Parameter risk ranking by unit operation",
-           "act on process performance only (titre, yield, filter capacity and buffer "
-           "exchange)"),
-        st(10, "The highest initial risk number in the assessment is 700, and every parameter that "
-               "reaches it belongs to one of the three steps credited with viral clearance.",
+           "Scores are initial scores and no residual risk is reported"),
+        st(5, "Where a parameter could affect more than one attribute, the severity of the most "
+              "severe of them is used.",
+           "Risk assessment methodology",
+           "Where a parameter could affect more than one attribute, the severity of the most "
+           "severe of them is used"),
+        st(6, "Occurrence and detection are assigned before any effect has been measured, and by "
+              "class rather than parameter by parameter.",
+           "Risk assessment methodology",
+           "Occurrence and detection are assigned before any effect has been measured, and they "
+           "are assigned by class rather than parameter by parameter"),
+        st(7, "The initial risk priority number is the product of the three scores.",
+           "Risk assessment methodology",
+           "The initial risk priority number is the product of the three scores"),
+        st(8, "A viral clearance claim is made from a spiking study on a qualified small scale "
+              "model, because neither an in-process control nor a release test on the drug "
+              "substance measures the log reduction the hold achieves.",
+           "Risk assessment methodology",
+           "the claim is made instead from a spiking study on a qualified small scale model"),
+        st(9, "Of the 37 parameters, 21 are scored against at least one quality attribute and 16 "
+              "against process performance alone.",
+           "Parameter risk ranking by unit operation",
+           "Of the 37 parameters, 21 are scored against at least one quality attribute and 16 "
+           "against process performance alone"),
+        st(10, "The highest initial risk priority number in the assessment is reached by three of "
+               "the four parameters of one step.",
             "Parameter risk ranking by unit operation",
-            "The highest initial risk number in the assessment"),
-        st(11, "The campaign scope is 22 parameters in a multivariate design, 14 in univariate "
-               "assessment and 1 in a justified univariate assessment; no parameter is excluded "
-               "from study.",
+            "3 reach the top of the register at 700, which is the highest initial risk priority "
+            "number in the assessment"),
+        st(11, "The campaign scope is 22 parameters in a multivariate design and 15 in univariate "
+               "assessment; no parameter is excluded from study.",
             "Characterization study assignment",
-            "22 parameters are assigned to a multivariate design, 14 to univariate assessment and "
-            "1 to a justified univariate assessment"),
-        # The re-authored RA-001 no longer claims the assignment "predicts no design space" --
-        # the phrase "design space" does not occur in the document at all. The statement is cut
-        # back to the half the document does make: the assignment is prospective and each plan may
-        # amend it. A statement is never left asserting more than its document says.
-        st(12, "The assignment is prospective: each Process Characterization Plan may amend it "
-               "before execution, and the report that follows may place a parameter differently.",
-            "Characterization study assignment",
-            "the assignment is prospective, since each Process Characterization Plan may amend it "
-            "before execution"),
-        # Replaced 2026-08-18. The previous statement said one attribute (leached Protein A) has
-        # no parameter ranked against it. The re-authored document never says that -- it does not
-        # contain the phrase, and mentions leached Protein A only as an attribute that enters at
-        # the capture step. The quote would have been re-anchorable nowhere without inventing the
-        # claim, so the statement is replaced by a limitation the document does state.
-        st(13, "The initial risk priority number is ordinal, so a ratio between two of the numbers "
-               "carries no meaning and only the rank order is used in the study assignment.",
+            "Of the 37 parameters, 22 are assigned to a multivariate design and 15 to univariate "
+            "assessment"),
+        st(12, "Across the register the risk priority number runs from 96 to 700 and takes five "
+               "distinct values, because occurrence and detection are assigned by class.",
+            "Risk assessment methodology",
+            "Across the register it runs from 96 to 700 and takes 5 distinct values, because "
+            "occurrence and detection are assigned by class"),
+        st(13, "An effect that depends on a second parameter cannot be found by moving one "
+               "parameter at a time, and that is what sets the study type.",
+            "Risk assessment methodology",
+            "The second sets the study type, because an effect that depends on a second parameter "
+            "cannot be found by moving one parameter at a time"),
+        st(14, "The capture study measures leached Protein A in the pool across the designed "
+               "experiment, so the ranges this assessment scopes are bounded against it even "
+               "though no parameter is ranked on it.",
             "Assumptions and limitations",
-            "The risk priority number is ordinal, which means that a ratio between two of the "
-            "numbers carries no meaning"),
-        st(14, "Each step's assignment is handed to exactly one characterization plan.",
-            "Outputs and downstream use",
-            "Each of those plans takes the parameters of one unit operation, with the study type "
-            "assigned here"),
+            "The capture study measures leached Protein A in the pool across the designed "
+            "experiment, so the ranges this assessment scopes are bounded against it even though "
+            "no parameter is ranked on it"),
     ])]
 
 
@@ -6064,13 +6101,16 @@ def _corpus_cqas(doc, file, sec_id, sec_title, table_title, table_id, rows=None)
 
 
 def _master_plan_cqa_rows():
-    """PCMP-001's @tbl-cqa: the register with the setting step inserted as column 2.
+    """PCMP-001's @tbl-cqa: the register with the setting step APPENDED as the last column.
 
     The master plan is the only document that renders the register this way, so its rows
     differ from every other document's and have to be rebuilt from its own expression.
+    Re-cut 2026-08-21: the re-authored plan builds this table itself and names the column
+    "Formed or set at" at the END of the row, where the previous revision inserted "Set by"
+    as column 2. Same data, different rendered order, so every row quote had to follow it.
     """
     df = P.cqas_by_keys(list(P.cqa_reg["key"]))
-    df.insert(1, "Set by", [P.UNIT_OP_TITLES[s] for s in P.cqa_reg["set_by"]])
+    df["Formed or set at"] = [P.UNIT_OP_TITLES[s] for s in P.cqa_reg["set_by"]]
     return row_quotes(df, P.cqa_reg["key"])
 
 
@@ -6130,79 +6170,85 @@ def build_master_plan():
     # step is judged against"). `predicate` is a closed literal in the contract, so this is an
     # attribute_has_acceptance_criterion assertion and not an invented relation. The quote is
     # rebuilt from the same values the document renders, so it survives a change of meta.seed.
-    IPC_SEC = "Which criterion a step is judged against"
-    import doe_report as _D
-    _pa_ipc = _D.effective_acceptance("protein_a", "pool_hcp_ng_mg")[1]
-    add("attr:hcp", "attribute_has_acceptance_criterion", "lit:hcp_ipc_protein_a",
-        f"Host cell protein at the capture step is judged against an in-process limit of "
-        f"{_pa_ipc:,.0f} ng/mg, carried back from the drug substance specification through "
-        f"the cation exchange and anion exchange clearance and divided by an assurance "
-        f"margin, and not against the drug substance specification itself.",
-        IPC_SEC,
-        f"gives the in-process limit of {_pa_ipc:,.0f} ng/mg that PCP-005 and PCR-005 apply")
+    # REMOVED 2026-08-21 (TASK-037): an attribute_has_acceptance_criterion assertion that put the
+    # Protein A in-process limit for host cell protein into PCMP-001 with its value. The
+    # re-authored master plan states the RULE by which an in-process limit is set and leaves every
+    # value to the step's own plan and report, so the document no longer carries the number and
+    # the assertion had nothing to attest. Its wording also still said "assurance margin", which
+    # this batch removed from the corpus in favour of "safety factor". PCP-005 and PCR-005 carry
+    # the same limit in their own annexes, so nothing is lost from the ground truth.
+    IPC_SEC = "Acceptance criteria framework"
 
     def stx(i, text, sec, quote):
         return ReportStatement(statement_id=f"{doc}-S{i:02d}", statement_text=text,
                                confidence="high", review_status="accepted",
                                source_references=[ref(doc, f, f"{doc}_sec", sec, quote)])
+    # Re-anchored and rewritten 2026-08-21 (TASK-037) against the re-authored master plan.
+    # Every statement was read back against the new text, not just its quote. The revision cut
+    # three concepts this section used to carry: the "intermediate pool is not the drug substance"
+    # framing, the three-procedure taxonomy for setting in-process limits, and the assurance
+    # margin / break-even point contrast (the batch replaced "assurance factor" with "safety
+    # factor" and dropped the metaphor). Their statements are replaced by what the plan now says.
     report_sections = [ReportSection(section_id=f"{doc}-summary", title="Master plan summary", statements=[
-        stx(1, "PCMP-001 defines the scope, the strategy and the common methods of the Stage 1 "
-               "process characterization campaign for A-Mab drug substance.",
+        stx(1, "PCMP-001 states once the quality attribute framework, the risk basis, the "
+               "scale-down approach, the statistical methods and the acceptance framework that "
+               "are common to every per-unit-operation plan of the campaign.",
             "Purpose and scope",
-            "defines the scope, the strategy and the common methods of the Stage 1 process "
-            "characterization campaign"),
-        stx(2, f"The campaign covers {n_params} process parameters across the {n_steps} unit "
-               f"operations, of which {n_multi} are studied in multivariate designed experiments "
-               f"and {n_uni} univariately.",
-            "Stage 1 characterization strategy",
-            f"The campaign covers {n_params} process parameters across the {n_steps} unit "
-            f"operations. {n_multi} of them are studied in multivariate designed experiments "
-            f"and {n_uni} are studied univariately"),
-        stx(3, "The Pre-Characterization Process Risk Assessment (RA-001) decides how each "
-               "parameter is studied and hands the study scope to the per-unit-operation plans.",
-            "Risk-based prioritization", "The risk assessment decides how each parameter is studied"),
-        stx(4, "Screening identifies which parameters have a measurable effect; the response-surface "
-               "design is the predictive model from which an operating region or design space is derived.",
+            "are common to all of them, and this plan states them once"),
+        stx(2, "RA-001 ranks every parameter on its potential impact on a quality attribute and "
+               "on its potential to interact, and assigns it a study type.",
+            "Risk-based prioritization",
+            "RA-001 ranks every parameter carried into the assessment on its potential impact on "
+            "a quality attribute and on its potential to interact with other parameters, and "
+            "assigns it a study type"),
+        stx(3, "Parameters that can affect an attribute and can interact are studied together in "
+               "a multivariate design; those that act independently are studied one at a time.",
+            "Risk-based prioritization",
+            "Parameters that can affect an attribute and can interact are studied together in a "
+            "multivariate design"),
+        stx(4, "Screening identifies which factors act and where the interactions are, and the "
+               "response surface model is the predictive model from which the operating region, "
+               "the proven acceptable ranges and the capability estimate are all derived.",
             "Common statistical approach",
-            "The screening design identifies which parameters have a measurable effect on each "
-            "response. The response surface design is the predictive model"),
-        stx(5, "The master plan deliberately sets no single minimum capability index for the "
-               "campaign; each per-unit-operation plan states the minimum index for its own step.",
+            "The response surface model is the predictive model, and the operating region, the "
+            "proven acceptable ranges and the capability estimate of the step are all derived "
+            "from it"),
+        stx(5, "The master plan sets no single capability index as an acceptance criterion for "
+               "the campaign.",
             "Acceptance criteria framework",
-            "This plan does not set one minimum capability index for the whole campaign"),
-        stx(8, "Each step is judged against an in-process limit rather than the drug substance "
-               "specification, because an intermediate pool is not the drug substance and the "
-               "comparison is wrong in both directions.",
+            "No single capability index is set as an acceptance criterion for this campaign"),
+        stx(8, "A response is judged against the in-process limit of its step where one has been "
+               "established, and against the drug substance acceptance criterion where none has.",
             IPC_SEC,
-            "An intermediate pool is not the drug substance, and judging one against those "
-            "specifications gives an answer that is wrong in both directions"),
-        stx(9, "The campaign sets every in-process limit by one of three procedures, and which "
-               "procedure applies is decided by what the downstream train does to the attribute.",
+            "The criterion a response is judged against is the in-process limit of the step where "
+            "one has been established, and the drug substance acceptance criterion where none has"),
+        stx(9, "An in-process limit is generally the tighter of the two because it carries margin "
+               "against the clearance the downstream steps must still deliver, so an operating "
+               "region judged against it is smaller than one judged against the drug substance "
+               "criterion.",
             IPC_SEC,
-            "Which procedure applies depends on what the downstream train does to the "
-            "attribute, not on the preference of the author"),
-        stx(10, "The assurance margin applied after the backward calculation is what makes the "
-                "limit a control; a limit set at the undivided ceiling would be a break-even "
-                "point dependent on every downstream step delivering its nominal clearance.",
-            IPC_SEC,
-            "which is a break-even point and not a control"),
-        stx(11, "No in-process limit is a typed number; each is a rule evaluated against the "
-                "seeded process model, so a change to the process or to a clearance factor "
-                "moves the limits with it.",
-            IPC_SEC, "Each is a rule evaluated against the seeded process model"),
-        stx(12, "Because an in-process limit is tighter than the specification it derives from, "
-                "the design space for a step is generally smaller than its characterized region.",
-            IPC_SEC,
-            "It follows that the design space for a step is generally smaller than its "
-            "characterized region"),
-        stx(6, "Every per-unit-operation characterization protocol follows the structure and the "
-               "methods defined in this master plan and adds only what is specific to its step.",
+            "it is set with margin against the clearance the downstream steps must still deliver"),
+        stx(10, "A scale-down model is qualified for an attribute when the difference between "
+                "scales is smaller than the variability of the method that measures it.",
+            "Scale-down model strategy",
+            "A model is qualified for an attribute when the difference between scales is smaller "
+            "than the variability of the method that measures it"),
+        stx(11, "Where a step needs a rule different from the campaign default, its own plan "
+                "states the rule and the reason for it.",
+            IPC_SEC, "Where a step needs a different rule, its plan will state the rule and the "
+                     "reason for it"),
+        stx(6, "Each per-unit-operation report classifies the parameters of its step, states the "
+               "ranges it will be operated within, and names the in-process controls and release "
+               "tests that hold the attributes the step forms or clears.",
             "Register of characterization plans",
-            "Every protocol follows the structure and the methods defined in this plan"),
-        stx(7, "Each per-unit-operation report is issued once the studies of its step have been "
-               "analysed, and the Process Characterization Master Report (PCMR-001) is issued after "
-               "the last of them.",
-            "Deliverables and schedule", "the master report is issued after the last of those reports"),
+            "Each report classifies the parameters of its step, states the ranges the step will "
+            "be operated within, and names the in-process controls and the release tests that "
+            "hold the attributes the step forms or clears"),
+        stx(7, "The campaign delivers eight characterization plans, eight characterization "
+               "reports and one master report.",
+            "Deliverables and schedule",
+            "The campaign delivers 8 characterization plans, 8 characterization reports and one "
+            "master report"),
     ])]
     entities = [
         S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_scope",
@@ -6344,43 +6390,43 @@ def _pcmr_registers():
     """The six registers PCMR-001 renders, as {record key -> rendered row text}."""
     train = train_row_quotes()          # the same rows PCMP-001 and PTP-001 anchor on
 
-    out = P.cqa_reg.merge(P.cap[["key", "mean", "sd", "Cpk"]], on="key")
+    # Re-cut 2026-08-21 (TASK-037) against the re-authored master report, which builds both of
+    # these tables itself. The register table is now CQA | Category | Acceptance | Criticality |
+    # Tool #1 with no capability columns, and the capability table is CQA | Crit. | Spec |
+    # Acceptance | Mean ± SD | Cpk with the raw `two_sided` spelling kept and Cpk to ONE decimal.
+    # The previous revision rendered one merged table with "Set by" and Cpk to two decimals.
+    out = P.cqa_reg.copy()
     out["Acceptance"] = out.apply(lambda r: f"{r.acc_low:g}–{r.acc_high:g} {r.unit}", axis=1)
-    out["Set by"] = out.set_by.map(P.UNIT_OP_TITLES)
-    out["Drug substance"] = out.apply(lambda r: f"{r['mean']:.3g} ± {r['sd']:.2g}", axis=1)
-    out["Cpk"] = out.Cpk.map(lambda v: f"{v:.2f}")
-    cqa_df = (out.rename(columns={"cqa": "CQA", "criticality": "Criticality"})
-                 [["CQA", "Criticality", "Acceptance", "Set by", "Drug substance", "Cpk"]])
-    cqa = row_quotes(cqa_df, out.key, ".2f")
+    cqa_df = (out.rename(columns={"cqa": "CQA", "category": "Category",
+                                  "criticality": "Criticality", "tool1_score": "Tool #1"})
+                 [["CQA", "Category", "Acceptance", "Criticality", "Tool #1"]])
+    cqa = row_quotes(cqa_df, out.key)
 
     keys = list(P.cqa_reg["key"])
     cap_tbl = P.cap_for(keys).copy()
-    cap_tbl["Spec"] = cap_tbl["Spec"].str.replace("_", "-", regex=False)
-    cap_tbl["Cpk"] = cap_tbl["Cpk"].map(lambda v: f"{v:.2f}")
-    cap = row_quotes(cap_tbl, P.cap[P.cap.key.isin(keys)].key, ".2f")
+    cap_tbl["Cpk"] = cap_tbl["Cpk"].map(lambda v: f"{v:,.1f}")   # the table groups thousands
+    cap = row_quotes(cap_tbl, P.cap[P.cap.key.isin(keys)].key, ",.1f")
 
     q = P.param_reg[P.param_reg.classification.isin(["CPP", "WC-CPP"])]
     par = row_quotes(P.cpp_params(), zip(q.unit_operation, q.parameter))
 
+    # Re-cut 2026-08-21 (TASK-037). The re-authored @tbl-viral drops the Mechanism and Report
+    # columns (the mechanisms are given in the prose of §6.2 instead) and renders the log values
+    # with %g rather than to two decimals, so 7.10 renders as 7.1 and 0.00 as 0.
     vt = P.csv("viral_clearance.csv").copy()
-    vt["Mechanism"] = vt.step.map(PCMR_VC_MECH)
-    vt["Report"] = vt.step.map(PCMR_VC_REPORT)
-    viral_df = (vt.rename(columns={"step": "Step", "XMuLV": "XMuLV (log₁₀)",
-                                   "MVM": "MVM (log₁₀)"})
-                  [["Step", "Mechanism", "XMuLV (log₁₀)", "MVM (log₁₀)", "Report"]])
-    viral = row_quotes(viral_df, vt.step, ".2f")
+    viral_df = (vt.rename(columns={"step": "Step", "XMuLV": "XMuLV LRF (log10)",
+                                   "MVM": "MVM LRF (log10)"})
+                  [["Step", "XMuLV LRF (log10)", "MVM LRF (log10)"]])
+    viral = row_quotes(viral_df, vt.step, "g")
 
+    # And the deviation register is now Report | Deviation | Summary | Disposition, with the
+    # step and the root cause dropped and the disposition rendered as the raw csv word.
     dv = P.csv("deviations.csv").copy()
-    dv["Deviation"] = dv["dev_id"] + " (" + dv["doc_id"] + ")"
-    dv["Step"] = dv["step"].map(PCMR_DEV_STEP)
-    dv["Root cause"] = (dv["root_cause"].str.replace("_", " ", regex=False)
-                        .str.replace("uv ", "UV ", regex=False))
-    dv["Disposition"] = (dv["disposition"].str.replace("_", " ", regex=False)
-                         .str.replace("re executed", "re-executed", regex=False))
-    dev_df = (dv.rename(columns={"summary": "What happened"})
-                [["Deviation", "Step", "What happened", "Root cause", "Disposition"]])
-    dev = RowQuotes(zip(dv.dev_id, _grid_rows(dev_df, [20, 16, 30, 24, 18])))
-    dev.header = _join_cells(dev_df.columns)
+    dv["Disposition"] = dv["disposition"].str.replace("_", " ", regex=False)
+    dev_df = (dv.rename(columns={"doc_id": "Report", "dev_id": "Deviation",
+                                 "summary": "Summary"})
+                [["Report", "Deviation", "Summary", "Disposition"]])
+    dev = row_quotes(dev_df, dv.dev_id)
     return train, cqa, cap, par, viral, dev
 
 
@@ -6602,88 +6648,99 @@ def build_master_report():
         return ReportStatement(statement_id=f"{doc}-S{i:02d}", statement_text=text,
                                confidence="high", review_status="accepted",
                                source_references=[ref(doc, f, f"{doc}_sec", sec, quote)])
+    # Re-anchored and rewritten 2026-08-21 (TASK-037) against the re-authored master report.
+    # Every statement was read back against the new text. The report now folds the 15 retained
+    # deviations, the classification counts and the yield into different sentences, states the
+    # capability caveats in a section called "The bound on the claims in this report" rather than
+    # "Limitations", and ends on readiness rather than on a reading instruction.
     report_sections = [ReportSection(section_id=f"{doc}-summary", title="Master report summary", statements=[
-        stx(1, "PCMR-001 rolls up the per-unit-operation reports PCR-003 to PCR-010 into one "
-               "argument and does not repeat their analyses.",
+        stx(1, "PCMR-001 consolidates the Stage 1 process characterization of the A-Mab drug "
+               "substance process and states the outcome of the campaign as a whole.",
             "Executive summary",
-            "this document consolidates those reports without repeating their analyses"),
-        stx(2, f"All {n_cqa} drug-substance quality attributes meet their acceptance criteria at "
-               f"commercial scale, on capability estimated by Monte-Carlo simulation of the "
-               f"fitted step models.",
+            "This report consolidates the Stage 1 process characterization of the A-Mab drug "
+            "substance process and states the outcome of the campaign as a whole"),
+        stx(2, f"All {n_cqa} drug substance quality attributes met their acceptance criteria in "
+               f"the commercial scale simulation, and every simulated batch met every criterion "
+               f"at once.",
             "Executive summary",
-            f"All {n_cqa} drug substance quality attributes meet their acceptance criteria at "
-            f"commercial scale"),
-        stx(3, f"The lowest capability index in the process is {float(cap_min.Cpk):.2f}, on the "
-               f"cumulative MVM clearance, and the tightest product quality attribute is high "
-               f"mannose.",
+            "Every one of the 2,000 simulated batches met every criterion at once"),
+        stx(3, "The lowest capability index was 1.51 on cumulative MVM clearance and the next "
+               "lowest 1.53 on cumulative XMuLV clearance, both viral safety attributes judged "
+               "against a one sided requirement.",
             "Executive summary",
-            f"The lowest capability index in the process is {float(cap_min.Cpk):.2f}, for the "
-            f"cumulative MVM clearance"),
-        stx(4, "The report claims no numeric minimum capability index: it states only that "
-               "capability is reported as a one-sided index against the applicable limit, "
-               "following the practice of the process-validation literature.",
+            "The lowest capability index was 1.51 on cumulative MVM clearance, and the next "
+            "lowest was 1.53 on cumulative XMuLV clearance"),
+        stx(4, "The capability index reported per attribute is the one sided index against the "
+               "acceptance limit that applies to that attribute.",
             "Process capability",
-            "Capability is reported as a one-sided index against the acceptance limit that "
-            "applies, following the practice described in the process validation literature "
-            "for judging whether a process can meet a specification"),
-        stx(5, "Cumulative viral clearance exceeds the requirement for both model viruses, as a "
-               "modular claim summed over independent steps.",
+            "the capability index is the one sided index against the acceptance limit that "
+            "applies to that attribute"),
+        stx(5, "Cumulative viral clearance is 18.87 log10 for XMuLV against a requirement of "
+               "16.7 log10, and 10.03 log10 for MVM against a requirement of 8.6 log10.",
             "Viral clearance summary",
-            "Cumulative clearance exceeds the requirement for both model viruses"),
-        stx(6, "The three credited clearance mechanisms are orthogonal, which is what licenses "
-               "adding the increments; no single step carries the cumulative claim.",
-            "Viral clearance summary", "orthogonal, which is what allows the increments to be added"),
-        stx(7, f"All {n_par} process parameters carried into the campaign are classified, and "
-               f"{counts['WC-CPP']} are well-controlled critical, {counts['KPP']} key and "
-               f"{counts['GPP']} general process parameters.",
+            "Cumulative viral clearance is 18.87 log10 for XMuLV against a requirement of 16.7 "
+            "log10, and 10.03 log10 for MVM against a requirement of 8.6 log10"),
+        stx(6, "The cumulative claim is additive only because the crediting steps remove virus by "
+               "mechanisms independent of one another, so a virus resistant to one step is not "
+               "thereby resistant to the next.",
+            "Viral clearance summary",
+            "The claim is only additive if the steps remove virus by mechanisms that are "
+            "independent of one another, so that a virus resistant to one step is not thereby "
+            "resistant to the next"),
+        stx(7, "Of the 37 parameters, 1 was classified as a critical process parameter, 20 as "
+               "well controlled critical, 10 as key and 6 as general process parameters.",
             "Parameter classification summary",
-            f"{counts['WC-CPP']} parameters are well-controlled critical process parameters, "
-            f"{counts['KPP']} are key process parameters and {counts['GPP']} are general "
-            f"process parameters"),
-        stx(8, "Exactly one parameter in the campaign is classified as a critical process "
-               "parameter: the inactivation pH of the low-pH hold.",
+            "1 was classified as a critical process parameter, 20 as well controlled critical "
+            "process parameters, 10 as key process parameters and 6 as general process "
+            "parameters"),
+        stx(8, "The single critical process parameter is the inactivation pH of Step 6.",
             "Parameter classification summary",
-            "The single critical process parameter is the inactivation pH of the low-pH hold"),
-        stx(9, "Host cell protein reaches its drug-substance limit only after the last "
-               "purification step; the Protein A and cation-exchange pool values are in-process "
-               "results, not failed acceptance criteria.",
-            "Host cell protein",
-            "The intermediate values are in-process results and not failed acceptance criteria"),
-        stx(10, f"Product yield across the train is {P.pct(P.V['overall_yield'])}, reported as a "
-                f"process-performance attribute that constrains no design space.",
-            "Process performance",
-            f"Product yield across the train is {P.pct(P.V['overall_yield'])}"),
-        stx(11, f"{n_dev} deviations were recorded across {n_dev_docs} reports; "
-                f"{n_dev_ret} were retained with a documented impact assessment, one invalidated "
-                f"and re-executed a complete designed experiment, and one was corrected by "
-                f"modelling and verification runs.",
-            "The register",
-            f"{n_dev_ret} deviations were retained, which means the affected data were used as "
-            f"executed with a documented impact assessment"),
-        stx(12, "No deviation changed a parameter classification, an operating region or a viral "
-                "clearance claim, but one control-strategy element did change.",
-            "Campaign-level impact",
-            "No deviation changed a parameter classification, an operating region or a viral "
-            "clearance claim"),
-        stx(13, f"The process understanding is multivariate where it needs to be: {n_multi} "
-                f"parameters were studied in designed experiments and {n_uni} univariately.",
-            "What the campaign established",
-            f"{n_multi} parameters were studied in designed experiments and {n_uni} univariately"),
-        stx(14, "The report bounds its own claims: design spaces are not confirmed at commercial "
-                "scale at the edges of their ranges.",
-            "Limitations",
-            "Design spaces are not confirmed at commercial scale at the edges of their ranges"),
-        stx(15, "Capability is estimated from qualified scale-down models with every parameter "
-                "inside its normal operating range, not observed at commercial scale.",
-            "Limitations", "Capability is estimated and not observed"),
-        stx(16, "Viral clearance is measured in small-scale spiking studies, not on production "
-                "material.",
-            "Limitations", "Viral clearance is measured in small-scale spiking studies"),
-        stx(17, "The characterization package supports entry into Stage 2, and the report is "
-                "explicit that it evidences understanding rather than qualification.",
-            "Stage 2 readiness",
-            "This report should be read as the evidence that the process is understood well "
-            "enough to be qualified, and not as evidence that it has been"),
+            "The single critical process parameter is the inactivation pH of Step 6"),
+        stx(9, "An intermediate carries every impurity at the level the steps before it left, and "
+               "the steps that clear the remainder have not yet run, so the drug substance limit "
+               "is the wrong yardstick for it.",
+            "Overall control strategy",
+            "An intermediate carries every impurity at the level the steps before it left, and "
+            "the steps that clear the remainder have not yet run"),
+        stx(10, "A nominal batch delivers 54.6 kg of drug substance at an overall step yield of "
+                "83.2 %.",
+            "Process description and performance",
+            "A nominal batch delivers 54.6 kg of drug substance at an overall step yield of 83.2 %"),
+        stx(11, "Of 17 deviations recorded across the 8 executed studies, 15 were retained with "
+                "the affected data kept and a documented impact assessment, 1 invalidated a study "
+                "and 1 was corrected by modelling and confirmed by verification runs.",
+            "Deviations across the campaign",
+            "15 were retained, which means the affected data were kept and the report carries a "
+            "documented impact assessment for them"),
+        stx(12, "The campaign covered 37 process parameters across 8 unit operations, of which 22 "
+                "were studied multivariately in 236 designed runs.",
+            "Executive summary",
+            "The campaign covered 37 process parameters across 8 unit operations, of which 22 "
+            "were studied multivariately in 236 designed runs"),
+        stx(13, "The edges of the characterized regions have not been run at commercial scale.",
+            "What remains for Stage 2",
+            "The edges of the characterized regions have not been run at commercial scale"),
+        stx(14, "The capability figures are model based predictions from simulated batches, and "
+                "the qualification batches will be the first commercial measurement of the drug "
+                "substance distribution.",
+            "What remains for Stage 2",
+            "The capability figures in §5 are model based predictions from simulated batches, and "
+            "the qualification batches will be the first commercial measurement of the drug "
+            "substance distribution"),
+        stx(15, "The scale-down models have been qualified but not confirmed against commercial "
+                "material for this process.",
+            "What remains for Stage 2",
+            "The scale-down models have been qualified but not confirmed against commercial "
+            "material for this process"),
+        stx(16, "The viral clearance figures are from spiked scale-down runs.",
+            "The bound on the claims in this report",
+            "The viral clearance figures are from spiked scale-down runs"),
+        stx(17, "Where the report states a margin, that margin is the distance between a "
+                "prediction and a limit, and Stage 2 is what turns the prediction into a "
+                "measurement.",
+            "The bound on the claims in this report",
+            "that margin is the distance between a prediction and a limit, and Stage 2 is what "
+            "turns the prediction into a measurement"),
     ])]
     entities = [
         S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_process",

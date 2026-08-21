@@ -39,113 +39,73 @@ import sys, os
 sys.path.insert(0, os.path.abspath("."))
 from _pcpkg import *  # noqa: F401,F403
 import doe_report as D
-import ra_content as RA
+import matplotlib.pyplot as plt
+import scipy.stats as sstat
 
 DOC = "PCMP-001"
+UO = "None"
 UO_TITLE = "A-Mab Drug Substance"
 
-# --- campaign scope (config -> model; nothing typed) --------------------------------
-KEYS = list(CFG.train_order)
-DOE_KEYS = [k for k in KEYS if k in st.DOE_FACTORS]
-n_steps = len(KEYS)
-n_doe_steps = len(DOE_KEYS)
-n_uni_steps = n_steps - n_doe_steps
-first_step = CFG.unit_op(KEYS[0]).step
-last_step = CFG.unit_op(KEYS[-1]).step
-step_harvest = CFG.unit_op("harvest").step
-step_ufdf = CFG.unit_op("ufdf").step
-step_vi = CFG.unit_op("viral_inactivation").step
-step_cex = CFG.unit_op("cex").step
-pcp_span = f"PCP-{first_step:03d} to PCP-{last_step:03d}"
-pcr_span = f"PCR-{first_step:03d} to PCR-{last_step:03d}"
+# --- doc-local derived tables and scalars (pulled from the model; never typed) ---
 
-# --- study scope handed down by the risk assessment (RA-001) ------------------------
-ra = RA.ra_summary()
-n_params = ra["n"]
-n_quality = ra["n_quality"]
-n_multi = ra["n_multivariate"]
-n_uni = ra["n_univariate"]
-n_just_uni = ra["n_just_uni"]
+# Quality-attribute register, with the step at which each attribute is formed or set.
+_set_by = dict(zip(cqa_reg["cqa"], cqa_reg["set_by"]))
+cqa_scope = all_cqas().copy()
+cqa_scope["Formed or set at"] = [UNIT_OP_TITLES.get(_set_by[c], _set_by[c])
+                                 for c in cqa_scope["CQA"]]
+n_cqa = len(cqa_scope)
+n_cqa_crit = int(cqa_reg["criticality"].isin(["H", "VH"]).sum())
+n_cqa_span = int(cqa_reg["criticality"].str.contains("-").sum())
+span_cqas = " and ".join(cqa_reg.loc[cqa_reg["criticality"].str.contains("-"), "cqa"])
+n_cqa_viral = int((cqa_reg["category"] == "viral safety").sum())
 
-# --- quality-attribute register ------------------------------------------------------
-n_cqa = len(cqa_reg)
-n_cqa_cat = int(cqa_reg.category.nunique())
-n_cqa_crit = int(cqa_reg.criticality.isin(["H", "VH"]).sum())
-n_cqa_bioreactor = len(cqas_for("bioreactor"))
+# Characterization scope across the train (RA-001 outcome, per step).
+scope = char_scope_df()
+n_steps = len(scope)
+n_param = int(scope["Parameters"].sum())
+n_param_mv = int(scope["Multivariate"].sum())
+n_param_uv = int(scope["Univariate"].sum())
+n_doe_steps = int((scope["Multivariate"] > 0).sum())
+n_nondoe_steps = n_steps - n_doe_steps
+
+# Planned design structure, per step with a multivariate design.
+doe_keys = [k for k in CFG.train_order if k in st.DOE_FACTORS]
+design_plan = pd.DataFrame(
+    [[CFG.unit_op(k).step, UNIT_OP_TITLES[k], label, len(fs),
+      doe_runs(k, kind), doe_centre_points(k, kind), len(st.DOE_RESPONSES[k])]
+     for k in doe_keys
+     for kind, label, fs in (
+         ("screening", "Two-level screening", st.DOE_FACTORS[k]),
+         ("rsm", "Face-centred central composite", st.RSM_TOP.get(k, st.DOE_FACTORS[k][:4])))],
+    columns=["Step", "Unit operation", "Design", "Factors", "Runs",
+             "Centre points", "Responses"])
 
 
-def cqa_acc(key):
-    """Acceptance criterion of one CQA, formatted as in the register table."""
-    r = cqa_reg[cqa_reg.key == key].iloc[0]
-    return f"{r.acc_low:g}–{r.acc_high:g} {r.unit}"
+def _design_kind(key):
+    """Study types the step's parameters are assigned to (RA-001 scope)."""
+    ps = CFG.unit_op(key).parameters
+    mv = sum(1 for p in ps if p.study == "multivariate")
+    uv = len(ps) - mv
+    if mv and uv:
+        return "Screening, response surface and univariate"
+    if mv:
+        return "Screening and response surface"
+    return "Univariate and qualitative"
 
 
-# --- planned experimental effort ------------------------------------------------------
-n_runs_scr = sum(doe_runs(k, "screening") for k in DOE_KEYS)
-n_runs_rsm = sum(doe_runs(k, "rsm") for k in DOE_KEYS)
-n_runs_total = n_runs_scr + n_runs_rsm
+plan_register = pd.DataFrame(
+    [[f"PCP-{CFG.unit_op(k).step:03d}",
+      DOC_REGISTRY[f"PCP-{CFG.unit_op(k).step:03d}"][1],
+      _design_kind(k),
+      f"PCR-{CFG.unit_op(k).step:03d}"] for k in CFG.train_order],
+    columns=["Plan", "Subject", "Characterization design", "Report"])
+n_plans = len(plan_register)
 
-# --- in-process acceptance criteria: the campaign-wide rules and a worked chain ---------
-# Nothing here is typed. The sigma multiple and the assay allowance come from the config
-# block that the analysis itself reads, and the host cell protein chain is read from the
-# nominal train, so this section cannot drift from the criteria the studies apply.
-_IPC = CFG.ipc_limits
-ipc_sigma = _IPC["capability_alert_sigma"]
-ipc_assay = _IPC["viral_assay_allowance"]
-_PS = csv("process_summary.csv").set_index("step")
-hcp_ds_limit = float(cqa_reg[cqa_reg["key"] == "hcp"].iloc[0]["acc_high"])
-cex_hcp_fold = float(_PS.loc[7, "hcp_clearance_fold"])
-aex_hcp_fold = float(_PS.loc[8, "hcp_clearance_fold"])
-pa_hcp_ceiling = hcp_ds_limit * cex_hcp_fold * aex_hcp_fold
-pa_hcp_margin = (_IPC["steps"]["protein_a"]["pool_hcp_ng_mg"]["from_ds_backcalc"]["margin"])
-pa_hcp_ipc = D.effective_acceptance("protein_a", "pool_hcp_ng_mg")[1]
-pa_hcp_nominal = float(_PS.loc[5, "pool_hcp_ng_mg"])
-n_ipc = sum(len(v) for v in _IPC["steps"].values())
-
-# --- tables ---------------------------------------------------------------------------
-cqa_tbl = cqas_by_keys(list(cqa_reg["key"]))
-cqa_tbl.insert(1, "Set by", [UNIT_OP_TITLES[s] for s in cqa_reg["set_by"]])
-
-scope = RA.ra_scope_df()
-alloc_tbl = pd.DataFrame(
-    [[CFG.unit_op(k).step, UNIT_OP_TITLES[k],
-      len(scope[scope["Step"] == CFG.unit_op(k).step]),
-      int((scope[scope["Step"] == CFG.unit_op(k).step]["CQA(s) at risk"] != "process performance").sum()),
-      int(scope[scope["Step"] == CFG.unit_op(k).step]["Study type"].str.startswith("multivariate").sum()),
-      int(scope[scope["Step"] == CFG.unit_op(k).step]["Study type"].str.startswith("univariate").sum()),
-      int((scope[scope["Step"] == CFG.unit_op(k).step]["Priority"] == "High").sum())]
-     for k in KEYS],
-    columns=["Step", "Unit operation", "Parameters", "Linked to a CQA",
-             "Multivariate", "Univariate", "High priority"])
-
-design_tbl = pd.DataFrame(
-    [[CFG.unit_op(k).step, UNIT_OP_TITLES[k], len(D.screening_factors(k)),
-      doe_runs(k, "screening"), doe_runs(k, "rsm"), len(D.responses(k))] for k in DOE_KEYS],
-    columns=["Step", "Unit operation", "Screening factors", "Screening runs",
-             "Response-surface runs", "Responses measured"])
-
-plan_tbl = pd.DataFrame(
-    [[CFG.unit_op(k).step, UNIT_OP_TITLES[k],
-      f"PCP-{CFG.unit_op(k).step:03d}", f"PCR-{CFG.unit_op(k).step:03d}"] for k in KEYS],
-    columns=["Step", "Unit operation", "Characterization plan", "Paired report"])
-
-deliv_tbl = pd.DataFrame(
-    [[DOC_REGISTRY["PTP-001"][0], "PTP-001", "Approved before this plan"],
-     [DOC_REGISTRY["RA-001"][0], "RA-001", "Approved before this plan"],
-     [DOC_REGISTRY["PCMP-001"][0], "PCMP-001", "This document"],
-     [DOC_REGISTRY[f"PCP-{first_step:03d}"][0] + " (one per unit operation)", pcp_span,
-      "Approved before the first study run of its step"],
-     [DOC_REGISTRY[f"PCR-{first_step:03d}"][0] + " (one per unit operation)", pcr_span,
-      "Issued once the studies of its step have been analysed"],
-     [DOC_REGISTRY["PCMR-001"][0], "PCMR-001", "Issued after the last characterization report"]],
-    columns=["Deliverable", "Document", "Position in the sequence"])
-
-ALL_SOPS = sorted({r for lst in (SOP_REFS, HARVEST_SOP_REFS, PROTEIN_A_SOP_REFS,
-                                 VIRAL_INACT_SOP_REFS, CEX_SOP_REFS, AEX_SOP_REFS,
-                                 VIRUS_FILT_SOP_REFS, UFDF_SOP_REFS) for r in lst})
-ALL_AMVS = sorted({r for lst in (AMV_REFS, HARVEST_AMV_REFS, PROTEIN_A_AMV_REFS,
-                                 VIRAL_INACT_AMV_REFS, CEX_AMV_REFS, AEX_AMV_REFS,
-                                 VIRUS_FILT_AMV_REFS, UFDF_AMV_REFS) for r in lst})
+# Campaign-level constants (config meta; no simulated result appears in this plan).
+n_ppq_batches = int(CFG.meta["n_ppq_batches"])
+n_mc = f"{int(CFG.meta['n_monte_carlo']):,}"
+scale_l = f"{int(CFG.meta['commercial_scale_l']):,}"
+ds_target = f"{CFG.meta['drug_substance_target_g_per_l']:g}"
 ```
 
 ```{python}
@@ -169,591 +129,480 @@ print(SYN_BANNER)
 
 ## Abbreviations {.unnumbered}
 
-2-AB, 2-aminobenzamide; A280, ultraviolet absorbance at 280 nm; AEX, anion exchange
-chromatography; AMV, analytical method validation; BLA, Biologics License Application;
-CEX, cation exchange chromatography; CPP, critical process parameter; Cpk, process
-capability index; CQA, critical quality attribute; DNA, deoxyribonucleic acid; DoE,
-design of experiments; DS, drug substance; ELISA, enzyme-linked immunosorbent assay;
-GPP, general process parameter; HCP, host cell protein; HILIC, hydrophilic interaction
-liquid chromatography; HMW, high molecular weight; icIEF, imaged capillary isoelectric
-focusing; IgG1, immunoglobulin G subclass 1; KPP, key process parameter; MSAT,
-Manufacturing Science and Technology; MVM, minute virus of mice; NOR, normal operating
-range; NTU, nephelometric turbidity unit; PAR, proven acceptable range; PPQ, process
-performance qualification; qPCR, quantitative polymerase chain reaction; RPN, risk
-priority number; RSM, response surface methodology; SEC-HPLC, size exclusion high
-performance liquid chromatography; SOP, standard operating procedure; TCID50, fifty per
-cent tissue culture infectious dose; UF/DF, ultrafiltration and diafiltration; UPLC,
-ultra performance liquid chromatography; UV, ultraviolet; WC-CPP, well-controlled
-critical process parameter; XMuLV, xenotropic murine leukaemia virus.
+ADCC, antibody dependent cell mediated cytotoxicity; AEX, anion exchange chromatography;
+AMV, analytical method validation; BLA, Biologics License Application; CCD, central
+composite design; CEX, cation exchange chromatography; CPP, critical process parameter; CQA,
+critical quality attribute; DoE, design of experiments; DS, drug substance; GPP, general
+process parameter; HCP, host cell protein; HMW, high molecular weight; ICH, International
+Council for Harmonisation; icIEF, imaged capillary isoelectric focusing; KPP, key process
+parameter; LRV, log reduction value; MSAT, Manufacturing Science and Technology; MVM, minute
+virus of mice; NOR, normal operating range; PAR, proven acceptable range; PD, Process
+Development; PPQ, process performance qualification; PRESS, prediction error sum of squares;
+QbD, quality by design; RSM, response surface methodology; SEC, size exclusion
+chromatography; SOP, standard operating procedure; UF/DF, ultrafiltration and diafiltration;
+WC-CPP, well controlled critical process parameter; XMuLV, xenotropic murine leukaemia
+virus.
 
 {{< pagebreak >}}
 
-# Purpose and scope {#sec-purpose}
+# Purpose and scope
 
-This master plan defines the scope, the strategy and the common methods of the Stage 1
-process characterization campaign for A-Mab drug substance. The campaign covers the
-`{python} n_steps` unit operations of the drug substance process, from the production
-bioreactor through to ultrafiltration and diafiltration. Each unit operation is planned in
-its own protocol and reported in its own report (`{python} pcp_span` and
-`{python} pcr_span`), and this plan states what those documents have in common, so that
-each protocol needs to describe only what is specific to its own step.
+This master plan defines how the A-Mab drug substance process will be characterized before
+it is validated at the receiving site. A-Mab is a humanized IgG1 monoclonal antibody
+produced by fed-batch cell culture at a production bioreactor working volume of `{python} scale_l` L and
+purified on the platform train, then concentrated and exchanged into formulation buffer at a
+drug substance target of `{python} ds_target` g/L. Characterization covers Steps 3–10 of that train, listed
+with their role in @tbl-train. Every study is executed on a qualified scale-down model at
+the sending site, and its results are used to justify the ranges the receiving site will
+operate to.
 
-Four elements are common to every study in the campaign and are fixed here. The first is
-the register of quality attributes the process must control, with the acceptance criteria
-against which every result is judged (@sec-cqa), and the second is the risk basis that
-decides both how each parameter is studied and how wide a range it is studied over
-(@sec-risk). The third is the approach to scale-down models and their qualification
-(@sec-sdm). The fourth is the statistical method and the acceptance criteria framework that
-each protocol instantiates (@sec-stats and @sec-acceptance).
+The campaign is carried by `{python} n_plans` characterization plans and `{python} n_plans` characterization reports, one
+pair per step. Much of what those plans would state does not change from one step to the
+next. The quality attribute framework, the risk basis, the approach to scale-down models,
+the statistical methods and the acceptance framework are common to all of them, and this
+plan states them once. Each per-step plan then states what is specific to its step and cites
+this document for the rest. Where a step needs a different rule, its plan will state the
+rule and the reason for it.
 
-The process train and the principal role of each step are shown in @fig-flow and listed in
-@tbl-train. The sequence is the platform purification train used for the sponsor's earlier
-humanized IgG1 products (Protein A capture, low pH hold, two polishing steps, virus
-filtration and formulation), so the mechanism of each step is established before the
-campaign begins and the studies confirm and bound it.
+The package this plan sits in is listed in @tbl-package. PTP-001 is the parent. It sets the
+transfer scope, names the sending and receiving sites and frames the campaign as technology
+transfer under ICH Q10 [@ichq10]. RA-001 was performed before any study was executed, and
+its output is the scope of this campaign (§4). The per-step plans PCP-003 to PCP-010 execute
+the studies, the matching reports PCR-003 to PCR-010 report them, and PCMR-001 consolidates
+the campaign for the Biologics License Application.
 
-```{python}
-#| label: fig-flow
-#| fig-cap: "The A-Mab drug-substance process train, with the principal quality impact of each unit operation."
-from IPython.display import Image
-Image(f"{FIG}/fig_process_flow.png")
-```
+Four things are outside the scope of this plan. Drug product manufacture and formulation
+development are covered elsewhere, and this campaign stops at the drug substance. The seed
+expansion steps that precede Step 3 are not characterized here, because platform experience
+places no drug substance quality attribute under their control [@amab2009]. Validation of
+the analytical methods is performed under the method validation documents in
+@tbl-controlled, and this campaign uses those methods rather than qualifying them. Process
+performance qualification at commercial scale is Stage 2 work, planned under PTP-001 and
+executed at the receiving site.
+
+No study result appears in this plan. Each study reports its own results in the report of
+its step, and PCMR-001 consolidates them.
 
 ```{python}
 #| output: asis
 show(process_steps_df())
-print()
-print(": The A-Mab drug-substance process train and the principal role of each unit operation. {#tbl-train}")
 ```
 
-This plan sits under the process transfer plan (PTP-001), which defines the transfer of the
-drug substance process from the development site to the commercial facility. The
-pre-characterization risk assessment (RA-001) sets the scope of the studies. The individual
-protocols plan them, the individual reports document them, and the master report (PCMR-001)
-consolidates the campaign into one control strategy. The documents of the package are
-listed in @tbl-docs.
+: The A-Mab drug substance process train and the role of each step in the control strategy. {#tbl-train}
 
 ```{python}
 #| output: asis
 print(corpus_docs_md(DOC))
-print()
-print(": The A-Mab drug-substance document package, excluding this plan. {#tbl-docs}")
 ```
 
-Several activities lie outside this campaign. Stage 2 process performance qualification is
-planned separately, and the `{python} V['n_ppq']` qualification batches are not covered
-here. The seed expansion steps upstream of the production bioreactor (vial thaw through the
-N-1 seed bioreactor) are not characterized, because prior knowledge of the platform shows
-that they do not affect product quality [@amab2009]. Formulation and drug product
-operations are reported with the drug product, so ultrafiltration and diafiltration is
-included only for its effect on the delivered concentration and on mass balance. Validation
-of the analytical methods is performed under the method validation documents listed in
-@tbl-sop, and it is not repeated in the characterization reports, which cite the validation
-and report only results obtained with the validated method.
+: The A-Mab characterization document package. {#tbl-package}
 
-The campaign does not on its own establish the viral safety of the process. Three steps
-(low pH inactivation, anion exchange and virus filtration) contribute clearance by
-independent mechanisms, their contributions are quantified in the reports for those steps,
-and the cumulative claim is made once in PCMR-001 [@ichq5a].
+# Stage 1 characterization strategy
 
-# Stage 1 characterization strategy {#sec-strategy}
+The campaign follows the enhanced development approach of ICH Q8 and ICH Q11 [@ichq8;
+@ichq11] and the Stage 1 process design activity of the lifecycle approach to process
+validation [@fda2011]. Under that approach a process is not qualified by showing that fixed
+set-points reproduce. It is characterized until the mechanism of each step is known well
+enough to predict the attribute, so that a study can say how much host cell protein the
+capture pool carries as the protein load on the resin rises and as the elution buffer pH
+falls, and over what range that relationship holds. The control strategy is then built from
+those relationships, and the ranges it fixes are ranges the studies have covered.
 
-Process characterization is the set of studies that link the operating parameters of each
-unit operation to the quality of the drug substance. It is the process design stage of the
-validation lifecycle [@fda2011], and it produces the process understanding on which the
-commercial control strategy rests [@ichq8; @ichq11]. The campaign is run in the enhanced
-approach, in which prior knowledge and a documented risk assessment decide what is studied,
-designed experiments quantify the effects of the parameters selected, and the outcome is a
-control strategy justified by data rather than by convention.
+Prior knowledge is the starting point. A-Mab is produced on a platform that has supported
+three prior humanized IgG1 antibodies, X-Mab, Y-Mab and Z-Mab, and on which the A-Mab
+clinical and engineering batches were made [@amab2009]. The platform fixes the mechanism of
+each purification step, and with it the direction each parameter is expected to act in.
+Protein A binds the antibody through its Fc region while host cell protein and DNA pass in
+the flow through. The low pH hold inactivates enveloped virus faster as the hold pH falls
+and as the hold is extended. On the anion exchange resin the counter-ions of the load
+compete with impurities and virus particles for the quaternary amine ligand, so both host
+cell protein clearance and virus clearance fall as the load conductivity rises.
+Characterization measures the size of each of these effects and the range over which it
+holds, and does not have to establish that the effect exists. Prior knowledge also sets the
+ranges to be studied, because the platform campaigns have already found the conditions at
+which the process fails. The low pH hold is not taken below the pH at which the antibody
+precipitates, and the culture is not extended beyond the point at which falling viability
+releases host cell protein and DNA into the harvest. Between those bounds the ranges are set
+wider than the ranges the commercial process will be operated in, so that the studies say
+something about performance outside routine operation and support later movement within the
+design space.
 
-A-Mab is produced on an established humanized IgG1 platform. The purification sequence, the
-resin chemistries and the operating principles are those used for three earlier licensed
-products of the same class, and the manufacturing experience with that platform shows that
-the sequence is robust and delivers drug substance of consistent quality [@amab2009]. Prior
-knowledge is used in two ways here: it justifies the ranges taken into study, and it
-justifies studying univariately those parameters whose behaviour the platform already
-covers (@sec-risk). It does not replace step-specific data for any parameter linked to a
-critical quality attribute.
+The risk assessment comes second. RA-001 ranks every parameter carried into the assessment
+on its potential impact on a quality attribute and on its potential to interact with other
+parameters, and assigns it a study type. Parameters that can affect an attribute and can
+interact are studied together in a multivariate design. Parameters that can affect an
+attribute but act independently of the others are studied one at a time. §4 gives the
+outcome across the train.
 
-Three regions are distinguished throughout the campaign, and the terms are used the same way
-in every document. The knowledge space is the region over which the process has been
-characterized, and the design space is the subset of that region in which every critical
-quality attribute is known to be acceptable at the same time [@ichq8]. The control space is
-the narrower region in which the process is routinely operated, and it is defined by the
-normal operating ranges (NORs) given in each plan.
+The studies come third. Each step with a multivariate design runs a two-level screening
+design in its screening factors, followed by a response surface design in the factors
+screening carries forward. The screening design identifies which factors act and where the
+interactions are. The response surface model is the predictive model, and the operating
+region, the proven acceptable ranges and the capability estimate of the step are all derived
+from it. Steps without a multivariate design are characterized univariately, with
+verification runs at the edges of the ranges claimed.
 
-The campaign covers `{python} n_params` process parameters across the `{python} n_steps`
-unit operations. `{python} n_multi` of them are studied in multivariate designed
-experiments and `{python} n_uni` are studied univariately (@sec-risk). The designed
-experiments comprise `{python} n_runs_total` scale-down runs in total, of which
-`{python} n_runs_scr` are screening runs and `{python} n_runs_rsm` belong to the response
-surface designs.
+The output is a control strategy. Each report classifies the parameters of its step, states
+the ranges the step will be operated within, and names the in-process controls and the
+release tests that hold the attributes the step forms or clears. PCMR-001 assembles those
+contributions into one control strategy for the drug substance, and states the cumulative
+viral clearance claim across the steps that carry one [@ichq5a].
 
-Every study in the campaign has the same objectives. It qualifies the scale-down model that
-generates its data, quantifies the effect of the step's parameters on the attributes the
-step governs, and defines the ranges over which the step can be operated (and, where the
-data support one, a design space). It also provides the evidence for the classification of
-each parameter and the capability estimate that the Stage 2 programme depends on.
+Criticality is treated as a continuum throughout, for attributes and for parameters
+[@ichq9]. An attribute is placed on a scale of criticality with the score that put it there,
+and a parameter is classified from the size of its demonstrated effect together with the
+risk that it leaves its range in routine operation.
 
-Characterization does not confirm the process at commercial scale. Every study is executed
-at scale-down, its conclusions hold at manufacturing scale only so far as the scale-down
-model is qualified for the attributes concerned (@sec-sdm), and the edges of an operating
-region are never run at commercial scale, so a design space is a modelled region and not a
-demonstrated one [@amab2009]. Confirmation at scale is the purpose of the Stage 2
-qualification batches.
+Stage 1 is executed at small scale. Everything the campaign says about commercial
+performance rests on the qualification of the scale-down models (§5) and on the ranges
+actually studied. Confirmation at commercial scale is Stage 2 work. `{python} n_ppq_batches` process performance
+qualification batches are planned at the receiving site under PTP-001, and they are run
+against the ranges this campaign establishes [@fda2011].
 
-The campaign ends with a control strategy. Each parameter is classified from its study
-result and from the control capability available at the receiving site, each attribute is
-assigned to the steps that govern it, and the ranges that follow are the ones proposed for
-commercial operation [@ichq10; @ichq11]. That consolidation is done once, in PCMR-001,
-because several attributes are governed by more than one step and no single report can
-settle them.
+# Critical quality attribute framework
 
-# Critical quality attribute framework {#sec-cqa}
+@tbl-cqa is the drug substance quality attribute register the campaign works to. It carries
+`{python} n_cqa` attributes with the acceptance criterion for each, the criticality assigned to it, the
+score behind that assignment and the step at which it is formed or set. Every
+characterization plan draws its study responses from this register. No study defines an
+attribute of its own, and the criteria in this table are the drug substance criteria the
+campaign works to. A step may also carry an in-process limit that is tighter than the drug
+substance criterion, and §7 states how the two relate.
 
-The quality attributes in scope for the campaign are listed in @tbl-cqa with their
-acceptance criteria and their assigned criticality. `{python} n_cqa` attributes are in
-scope across `{python} n_cqa_cat` categories, and `{python} n_cqa_crit` of them are of high
-or very high criticality.
+Criticality was assigned with the risk tool of the case study, in which the score is the
+impact of the attribute on safety or efficacy multiplied by the uncertainty in that impact
+[@amab2009]. Attributes scored high or very high are called critical, and `{python} n_cqa_crit` of the `{python} n_cqa`
+attributes are critical on that convention. `{python} n_cqa_span` of them are ranked between two levels rather
+than at one, and those are `{python} span_cqas`. Each is studied at the higher of the two levels it spans, so
+a study of either is designed to the acceptance criterion of a critical attribute [@ichq9].
+
+The register separates what the process forms from what it must remove. The glycan
+attributes, the acidic charge variants and the aggregate level are formed in the production
+bioreactor. The glycosylation attributes are not modified by the purification train, because
+neither affinity capture nor the charge-based separations discriminate between glycoforms at
+platform conditions [@amab2009]. Characterization of those attributes is therefore an
+upstream activity and PCP-003 carries it. Aggregate is formed upstream and reduced at cation
+exchange, and the acidic variants can increase during the low pH hold, so the plans for
+those two steps study the change their step makes rather than the level it forms. The
+process impurities are carried into the purification train by the harvested culture fluid
+and are cleared by the chromatography steps, so each purification plan studies the clearance
+its step provides and the input level it is challenged with.
+
+The `{python} n_cqa_viral` viral safety attributes are cumulative. Their acceptance criteria in @tbl-cqa are
+requirements on the whole process, and no single step is required to meet them alone. The
+low pH hold disrupts the lipid envelope of an enveloped virus, so it inactivates XMuLV and
+carries no claim against the non-enveloped parvovirus MVM. The anion exchange resin binds
+virus particles by their net negative surface charge while the antibody flows past. The
+virus filter retains particles on a membrane whose pore size rating sits below the diameter
+of MVM. Each of those mechanisms acts on a different property of the particle, its envelope,
+its charge and its size, so surviving one does not make a particle more likely to survive
+the next and the log reduction values may be added [@ichq5a]. Each of those three plans
+states the step contribution it must demonstrate, back-calculated from the cumulative
+requirement less the nominal contribution of the other steps (§7). PCMR-001 states the
+cumulative claim, and no per-step report claims the whole of it.
+
+Every attribute in @tbl-cqa is measured by a validated method, and every study is executed
+under a controlled procedure. @tbl-controlled lists the procedures and method validations
+cited across the campaign. Each plan cites the subset that applies to its step and states
+the precision of the methods its responses depend on, because the precision of an assay sets
+the smallest effect a study of that response can resolve.
 
 ```{python}
 #| output: asis
-show(cqa_tbl)
-print()
-print(": Quality attributes in scope for the characterization campaign, with the step at "
-      "which each is set, its acceptance criterion, its criticality level and its Tool #1 "
-      "criticality score. {#tbl-cqa}")
+show(cqa_scope)
 ```
 
-Criticality is treated as a continuum and not as a binary label [@ichq9]. Each attribute
-carries a Tool #1 score, which is the product of its impact on safety or efficacy and the
-uncertainty in that impact, together with a severity score from the second assessment tool
-[@amab2009]. Attributes of high and very high criticality are treated as critical for the
-purposes of this campaign. The assessment itself is not repeated here: it is taken from the
-risk assessment (RA-001), and it fixes both which attributes each study is required to
-measure and which of them can constrain an operating range.
-
-Three entries in the register drive the design of the campaign. High Mannose carries the
-highest criticality score of the register, is formed in the production bioreactor and has
-an acceptance range of `{python} cqa_acc('high_mannose')`. The two viral clearance
-attributes are cumulative over the whole train and are expressed as lower limits, at
-`{python} cqa_acc('lrv_xmulv')` for the enveloped model virus (XMuLV) and
-`{python} cqa_acc('lrv_mvm')` for the parvovirus (MVM). Aggregates are formed upstream,
-raised by the low pH hold (Step `{python} step_vi`) and reduced principally at cation
-exchange (Step `{python} step_cex`), so their limit is met by a sequence of steps and not
-by any one of them.
-
-`{python} n_cqa_bioreactor` of the `{python} n_cqa` attributes are set in the production
-bioreactor, which is why that step carries the largest study of the campaign. Leached
-Protein A arises at capture and is cleared by the polishing steps that follow it. Host cell
-protein and residual DNA are generated upstream and are cleared by three chromatography
-steps in sequence. No single plan can therefore fix the acceptable range of a parameter
-that acts on host cell protein, because the acceptable output of one step depends on the
-operating conditions of the steps after it [@amab2009], so each report gives its own step's
-contribution and names the reports that cover the others.
-
-The acceptance criteria in @tbl-cqa are drug substance limits and they are inputs to every
-study in the campaign. Several are set from clinical and manufacturing experience with the
-earlier products of the platform (the acceptance range for aggregates is one of them), and
-none of them is derived from the characterization data. Where a study needs an in-process
-limit for an intermediate pool, that limit is stated in the plan for the step and is
-justified against the drug substance limit it protects.
-
-The register covers attributes of the drug substance. Attributes controlled by the drug
-product process are outside the campaign, and the studies that support them are reported
-with the drug product.
-
-# Risk-based prioritization {#sec-risk}
-
-The risk assessment decides how each parameter is studied, and its outcome across the train
-is summarized in @tbl-alloc. RA-001 assesses every parameter of every step against the
-quality attributes it can affect. Of the `{python} n_params` parameters in the campaign,
-`{python} n_quality` are linked to at least one quality attribute,
-`{python} n_multi` are carried into a multivariate designed experiment and
-`{python} n_uni` are studied univariately.
+: The A-Mab drug substance quality attribute register, with the step at which each attribute is formed or set. {#tbl-cqa}
 
 ```{python}
 #| output: asis
-show(alloc_tbl)
-print()
-print(": Study scope handed to the characterization plans by RA-001, by unit operation. "
-      "A parameter is counted as linked to a CQA where the risk assessment identifies at "
-      "least one quality attribute at risk from it. {#tbl-alloc}")
+print(all_sop_table())
 ```
 
-The ranking method is described in RA-001 and is not repeated here. Each parameter carries a
-severity score taken from the most severe attribute it can affect, an occurrence score for
-an excursion outside its normal operating range, and a detection score for the chance that
-such an excursion escapes routine monitoring, and the product of the three is the initial
-risk priority number (RPN) assigned before any characterization data exist. Detection is
-scored worst for the parameters that act on viral clearance, because clearance cannot be
-verified on the batch itself and is assured instead by control of the process [@ichq5a].
-Where no data or rationale is available for an assessment, the parameter is ranked at the
-highest level, so an absence of knowledge sends a parameter into study instead of excusing
-it from one.
+: Controlled procedures and analytical method validations cited across the campaign. {#tbl-controlled}
 
-The study type follows from that ranking. A parameter carried into the designed experiment
-of its step is studied multivariately, because its effect is expected to depend on the
-levels of the other parameters, and a parameter whose effect is expected to be independent
-of them (or whose range is already covered by platform experience) is studied univariately.
-`{python} n_just_uni` quality-linked parameter is studied univariately with a documented
-justification. It is the anion exchange operating flow rate, and the justification is given
-in RA-001 and in the plan for that step.
+# Risk-based prioritization
 
-@tbl-alloc shows where the experimental effort falls. The production bioreactor carries the
-largest number of parameters and the largest number of high priority ones, which follows
-from its forming most of the quality attributes (@sec-cqa). The multivariate set is not the
-same as the set of quality-linked parameters, and more parameters enter the Protein A design
-than are linked to a quality attribute, because a parameter that governs the composition of
-the pool is studied in the same runs whether its effect falls on quality or on yield.
+RA-001 was completed before any characterization study was executed, and its output is the
+scope of this campaign. It is not a classification of parameters. A parameter is classified
+only after the study that measures its effect has reported, under SOP-4001 and in the report
+of its own step (§7).
 
-`{python} n_uni_steps` of the `{python} n_steps` steps carry no multivariate design at all.
-Harvest and clarification (Step `{python} step_harvest`) and ultrafiltration and
-diafiltration (Step `{python} step_ufdf`) neither form nor clear a product quality
-attribute, so their parameters are studied univariately and are assessed against process
-performance and against the consistency of the material they deliver. No designed experiment
-is planned for either step.
+The method is risk ranking and filtering [@amab2009; @ichq9]. Each parameter carried into
+the assessment was ranked twice. One ranking is the potential impact of a deviation in that
+parameter on a quality attribute, weighted by the criticality of the attribute affected. The
+other is the potential for the parameter to interact with other parameters of the same step.
+Where no data or rationale supported an assessment, the parameter was ranked at the highest
+level. The combined score then decides the study type. A high score with interaction
+potential sends the parameter into a multivariate design, a high score without it into a
+univariate study, and a score below the filter into no new study at all.
 
-The ranges taken into study are wider than the ranges the process is controlled to. For
-every parameter in the campaign the characterization range brackets the normal operating
-range, and both are tabulated in the plan for the step. Studying beyond the control range is
-what makes a proven acceptable range (PAR) provable at all, and it also supports later
-movement inside the design space [@amab2009]. The width of each range is justified parameter
-by parameter in the individual plans, against the capability of the equipment and against
-the point at which the step is known or expected to fail.
+@tbl-scope gives the outcome across the train. `{python} n_param` parameters are carried into the campaign,
+of which `{python} n_param_mv` are assigned to a multivariate design and `{python} n_param_uv` to univariate assessment.
+Parameters that fell below the filter are not listed in this plan. They are operated to the
+ranges established from platform manufacture, and RA-001 records them together with the
+reasoning that excluded them.
 
-A parameter that shows no measurable effect is not dropped from the campaign. It is
-classified on the evidence of the study that found no effect, and the range over which no
-effect was found stays in the knowledge space as evidence that the attributes are robust to
-it (which is also what allows a later change within that range to be assessed on paper). The
-same holds for a parameter studied univariately.
+The split is uneven across the train, and it follows what each step does. The production
+bioreactor carries the largest multivariate design because it forms most of the quality
+attributes in @tbl-cqa, and because its parameters reach those attributes through one
+culture environment. Carbon dioxide accumulation acidifies the medium, the base added to
+hold pH at set-point raises osmolality, and pH and osmolality act together on the Golgi
+enzymes that attach galactose and fucose, so a change in gassing arrives at the glycan
+through three routes at once. Culture duration acts on the same enzymes for longer, and
+platform experience is that a longer culture lowers afucosylation [@amab2009]. Parameters
+that reach one attribute by several routes cannot be separated one at a time, which is why
+they are studied together. `{python} n_doe_steps` of the `{python} n_steps` steps have a multivariate design. The `{python} n_nondoe_steps` that do
+not are harvest and clarification, which recovers and clarifies the culture fluid without
+forming a product quality attribute, and the ultrafiltration and diafiltration step, which
+concentrates the pool and exchanges it into formulation buffer. The parameters of those two
+steps are assessed one at a time, and their plans present no designed experiment.
 
-# Scale-down model strategy {#sec-sdm}
-
-Every study in the campaign is executed at scale-down, so qualification of the model is a
-precondition for the study that uses it. The conclusions of these studies are applied
-directly to the commercial process, and that is what makes the qualification necessary
-[@fda2011]. Qualification is performed under SOP-1001, and each plan states the
-qualification specific to its step.
-
-The models are designed on the principle that the variables governing the attribute of
-interest are held equivalent across scales. The scale-down bioreactor is a stirred tank of
-the same design class as the commercial vessel, with equivalent control of pH, dissolved
-oxygen, temperature and nutrient addition. The scale-independent variables (pH, temperature,
-culture duration, seeding density) are operated at the values proposed for commercial
-manufacture. The scale-dependent variables (agitation, gas flow, head pressure, working
-volume) are set so that the small scale reproduces the performance of the full scale
-[@amab2009].
-
-The chromatography models use the same resin and the same bed height as the commercial
-columns, with linear velocity, load in grams per litre of resin, and all wash and elution
-volumes normalized to column volumes; column efficiency is verified by plate count and peak
-asymmetry before use. The filtration models use the same membrane and the same
-area-normalized load, so that flux decay and the retention mechanism are the ones the
-commercial filter will see. The hold steps use the same vessel geometry class and the same
-mixing and temperature control.
-
-A model is qualified by running it at the target condition and comparing its performance and
-product quality with data from pilot and commercial batches. The comparison is statistical,
-and the attributes compared are the ones the model is required to predict. A model is
-qualified when no statistically significant difference is found for those attributes, or
-when a difference is found, explained by a known scale effect and shown to be conservative
-for the attribute at risk, in which case the limitation is recorded with the qualification.
-Each plan names the attributes compared, the number of replicate runs and the criterion
-applied.
-
-No scale-down model reproduces every aspect of the commercial process. Gas transfer, carbon
-dioxide accumulation and mixing time are scale dependent in the bioreactor, and they are
-matched on performance and not on geometry. Where a variable cannot be matched, the plan
-states how the study is bounded and the report states what the study does not cover. The
-qualification data are held in the qualification records under SOP-1001 and are summarized
-in the materials and methods section of each report (they are not reproduced here, and no
-conclusion in this plan depends on them).
-
-A change to a qualified model during the campaign requires re-qualification before further
-runs, together with an assessment of the studies already executed on the earlier
-configuration. Where re-qualification shows that the earlier configuration was not
-representative, the affected study is invalidated for the definition of an operating region
-and is re-executed in full (@sec-acceptance).
-
-## Analytical methods
-
-Every response measured in the campaign is measured by a validated method. The methods and
-the controlled documents that govern them are listed in @tbl-sop. Sampling points and
-sample handling are fixed in the plan for the step before execution.
+The assignment is prospective, and it may be wrong. If a study shows an effect where the
+assessment expected none, or a parameter proves to interact where it was assumed
+independent, the affected plan will be amended before execution continues and the change
+recorded in the report of that step. RA-001 is revisited once the campaign has reported, so
+that the risk basis carried into Stage 2 reflects what the studies measured.
 
 ```{python}
 #| output: asis
-print(sop_table(ALL_SOPS, ALL_AMVS))
-print()
-print(": Controlled procedures and validated analytical methods used across the "
-      "characterization campaign. Numbers are placeholders for this synthetic package. "
-      "{#tbl-sop}")
+show(scope)
 ```
 
-Assay variability is part of the variability these studies observe, and each report
-separates the two where the method validation supports the separation. Where an effect is
-statistically significant but small compared with the precision of the assay that measured
-it, the report says so and does not treat the effect as practically meaningful. Where an
-assay is not sensitive enough to quantify clearance across a step, clearance is determined
-by a spiking study on the qualified scale-down model, and the plan for that step says so
-[@amab2009].
+: Characterization scope per step, and the plan and report that cover it. {#tbl-scope}
 
-# Common statistical approach {#sec-stats}
+# Scale-down model strategy
 
-The multivariate studies are executed in two stages, and the two stages carry different
-claims. The screening design identifies which parameters have a measurable effect on each
-response. The response surface design is the predictive model, and it is the model from
-which an operating region or a design space is derived. A screening design in this campaign
-is near saturated and cannot resolve all the interactions between parameters, so no
-operating region is claimed from one [@amab2009]. This division holds for every multivariate
-study in the campaign, and the individual plans apply it without restating it.
+Every characterization study in this campaign is executed at small scale. What the studies
+show applies to the commercial process only if the model used is representative of it, so
+qualification of the scale-down model is the first thing each plan specifies and the first
+thing each report defends. Qualification is performed under SOP-1001.
 
-The planned structure of those studies is given in @tbl-design. Each screening design is a
-two-level factorial or fractional factorial in the screening factors of the step, augmented
-with centre points at the target condition, and each response surface design is a
-face-centred central composite in the factors that screening carries forward, again with
-centre points. Run order is randomized. The design family, its resolution and its full run
-list are given in the plan for the step (the planned matrices are tabulated in its
-appendices, in coded and in natural units).
+The principle is the same at every step. Parameters that do not depend on scale are operated
+at the commercial set-point in the model. Parameters that do depend on scale are set so that
+the model matches the commercial equipment on the property through which scale reaches the
+product, which is volumetric mass transfer and mixing time in a bioreactor, linear velocity
+and residence time on a column, and flux and transmembrane pressure across a membrane. The
+model is then run at set-point conditions and its input and output attributes are compared
+with data from the at-scale process. A model is qualified for an attribute when the
+difference between scales is smaller than the variability of the method that measures it
+(§7).
+
+What has to be matched differs by step, and each plan states the basis it uses. For the
+production bioreactor, pH, temperature, osmolality and culture duration are operated at the
+commercial set-points, while agitation and gas flow rates are set so that mass transfer and
+the carbon dioxide accumulation of the small vessel reproduce those of the commercial
+vessel. For the chromatography steps, bed height, linear velocity, residence time, protein
+load per litre of resin and the buffer volumes expressed in column volumes are held equal to
+commercial values, and column efficiency is confirmed by plate count and peak asymmetry
+before a study is executed. For the low pH hold, the model must reproduce the mixing and the
+time taken to reach the hold pH, because inactivation depends on the pH the material sees
+and on how long it sees it. For virus filtration, the volumetric load per membrane area, the
+flux and the pressure are matched, and the same filter type is used. For ultrafiltration and
+diafiltration, the membrane chemistry, the channel path length, the flux, the transmembrane
+pressure and the number of diavolumes are matched.
+
+The three steps that carry a viral clearance claim are qualified twice over. Their models
+must be representative of the process step, and they must also be suitable for a spiking
+study under the conditions of ICH Q5A [@ichq5a]. A virus spike changes the load, so the
+spiked model is compared with the unspiked model for the attributes the step controls, and
+the spike volume is kept small enough that the conductivity and pH of the load stay inside
+the range studied. Where the spiked and unspiked models differ, the difference is reported
+and the clearance claim is bounded by it.
+
+Every designed study includes replicated centre points at the set-point condition, and those
+replicates do two jobs. They provide the pure error term that the lack of fit test needs
+(§6), and they monitor the model across the execution of the design. A drift in the centre
+point response between the start and the end of a design is treated as evidence about the
+model or the material and is investigated before the design is analysed.
+
+A model that cannot be qualified for an attribute is not used to make a claim about that
+attribute. Where this occurs, the plan of the step will state what is claimed instead, which
+may be control of the attribute by release testing, by an in-process limit, or by data from
+the at-scale process. The instrumented systems used for the studies are maintained under
+calibration and change control, and each plan records the systems its study uses.
+
+# Common statistical approach
+
+The studies are designed and analysed in coded factors. The set-point of a parameter is
+coded zero and the edges of its characterization range are coded −1 / +1. Coding puts every
+parameter on the same footing, so an effect is expressed as the change in the response over
+half the characterization range and effects on different parameters can be compared
+directly. Every design is randomized in execution order, and the analysis is performed under
+SOP-1002.
+
+Each step with a multivariate design begins with a two-level design in all of its screening
+factors, augmented with replicated centre points. A full factorial is used where the number
+of factors allows it, and a resolution V half fraction where it does not, so that main
+effects and two-factor interactions remain estimable. The model fitted to a screening design
+carries the main effects and the two-factor interactions. An effect is twice the coded
+coefficient and is reported with its p-value at a significance level of α = 0.05.
+
+The factors that screening carries forward go into a face-centred central composite design
+with replicated centre points, and a full quadratic model is fitted to it. A two-level
+screening design holds each factor at two settings, so it cannot resolve curvature and the
+magnitudes it returns are refined by the quadratic model before they are used. The design
+space, the proven acceptable ranges and the capability estimate are predicted from the
+response surface model, and each report names the model each number came from.
+
+@tbl-design gives the planned design structure for the `{python} n_doe_steps` steps with a multivariate design.
+The run counts include the centre point replicates. The response count is the number of
+measured responses fitted per design, and each response is modelled separately.
+
+Model adequacy is judged on four things. The first is the significance of the model terms.
+The second is the coefficient of determination together with its adjusted form, which
+penalises terms that buy no explanation. The third is the predicted coefficient of
+determination computed from the prediction error sum of squares, which says how the model
+behaves on data it was not fitted to. The fourth is the lack of fit test, in which the
+residual variation left by the model is compared with the pure error of the centre point
+replicates. A model whose predicted coefficient falls well below its adjusted coefficient is
+over-fitted and is reduced before it is used. A model with significant lack of fit does not
+describe the data, and the response is then reported without a predictive model and its
+range set by the observations. Residuals are examined against the predicted values and
+against run order, and normality is checked on a quantile plot.
+
+A proven acceptable range is computed for each parameter and each attribute the step forms
+or clears, in two analyses. The first holds the other parameters at the centre of the
+characterization range and finds the range of the parameter over which the predicted
+response meets its criterion. The second propagates the variation of the other parameters
+within their normal operating ranges by Monte-Carlo simulation, and finds the range over
+which the predictive bound still meets the criterion. The second analysis is the one carried
+into the control strategy, because the routine process varies every parameter at once. Each
+report presents both, so that the cost of the surrounding variation can be read directly.
+
+Capability at commercial scale is estimated by simulation. `{python} n_mc` batches are simulated with
+every parameter drawn about its set-point inside its normal operating range, and the drug
+substance attributes of each simulated batch are predicted from the characterized process.
+Capability is then computed one-sided against the criterion that applies. For an impurity
+the index is computed against the ceiling, for a viral clearance attribute against the
+floor, and for an attribute with a target range as the smaller of the two. The estimate is
+conditioned on the fitted models and on the normal operating ranges used to generate it, so
+narrowing a normal operating range raises the index and widening one lowers it.
 
 ```{python}
 #| output: asis
-show(design_tbl)
-print()
-print(": Planned structure of the multivariate characterization studies. Run counts "
-      "include the centre points of each design. {#tbl-design}")
+show(design_plan)
 ```
 
-The run counts in @tbl-design are planned counts. The factor set of a response surface
-design is fixed only once the screening study of that step has been analysed, so a screening
-result that carries more factors forward than expected requires more runs, and the plan for
-the step is revised before the response surface study is executed.
+: Planned design structure for the steps with a multivariate design. {#tbl-design}
 
-Centre points serve two purposes in every study. They estimate pure error independently of
-the fitted model, which is what makes a lack-of-fit test possible, and they measure the
-reproducibility of the step at its target condition, which is the first result reported from
-any of these studies.
+# Acceptance criteria framework
 
-Effects are estimated on coded factors, where the low and high edges of the characterization
-range are −1 and +1 and the set-point is 0. Coding puts every parameter on the same scale,
-so an effect is the change in a response over half the characterization range and effects
-are comparable between parameters measured in different units. Terms are retained at
-p < 0.05. The response surface model is a full quadratic in the factors carried forward
-(main effects, two-factor interactions and quadratic terms), and it is reported with its
-coefficients, their standard errors and their p-values.
+This section states what each per-step plan must decide and on what basis it decides. A
+numeric threshold is stated here only where it is fixed for the whole campaign. Where a
+threshold depends on the step, on the attribute or on the precision of the method, the
+criterion is defined in the plan of that step and the reason is given there.
 
-Model adequacy is assessed before a model is used for anything else. Each fitted response
-surface is tested for lack of fit against the pure error of the centre points, and its
-residuals are examined against the predicted values and on a normal quantile plot. The
-coefficient of determination is reported, and it is read together with the lack-of-fit test
-and not on its own. A model that fails any of these checks is not used to define an
-operating region: the effects that screening established are still reported, and the step is
-then bounded by univariate work and by prior knowledge.
+A scale-down model is qualified when the attributes it produces at the set-point condition
+agree with data from the at-scale process, and when the difference between scales is smaller
+than the variability of the method that measures the attribute. Each plan lists the
+attributes compared, the source of the at-scale data and the number of model runs used.
+Where at-scale data do not exist for an attribute, qualification rests on engineering
+equivalence and the plan states that this is the basis.
 
-Two ranges are derived from each adequate response surface model, and they answer different
-questions. The first is the range of a parameter over which the attribute stays inside its
-acceptance criterion with the other parameters of the step held at their set-points. The
-second is the range that survives when the other parameters vary within their normal
-operating ranges at the same time, which is the range the step can be operated over while
-the rest of the step varies as it normally does, and it is the one carried into the control
-strategy.
+A response surface model is accepted as predictive when its terms are significant at α =
+0.05, when the lack of fit is not significant against pure error, and when the predicted
+coefficient of determination is consistent with the adjusted coefficient. The thresholds
+applied to the coefficients of determination are stated per study, because what counts as an
+adequate fit depends on the precision of the assay that measures the response. A study whose
+response is measured by a low precision method may be adequate at a lower coefficient than
+one measured by a precise method, and the plan says which case it is in.
 
-A design space is claimed for a step only where the response surface models of that step
-define a region in which every attribute the step governs stays inside its acceptance
-criterion simultaneously [@ichq8]. The region is bounded by the characterization ranges that
-produced it, and the worst-case corner of the region (the combination of factor levels at
-which the governing attribute is closest to its limit) is identified and shown to satisfy
-the criteria. A response surface predicts mean levels, so a region defined on the mean gives
-roughly even odds at its own edge [@amab2009]. That is why the control strategy is built on
-the capability estimate and not on the region alone.
+An operating region is acceptable when every attribute the step forms or clears meets its
+criterion across the whole region while the other parameters vary within their normal
+operating ranges. The criterion a response is judged against is the in-process limit of the
+step where one has been established, and the drug substance acceptance criterion where none
+has. An in-process limit is generally the tighter of the two, because it is set with margin
+against the clearance the downstream steps must still deliver, so an operating region judged
+against it is smaller than one judged against the drug substance criterion. For a viral
+clearance response the criterion is the step contribution back-calculated from the
+cumulative requirement less the nominal contribution of the other clearing steps.
 
-Capability is estimated at the level of the drug substance and not step by step. The linked
-process model is run for `{python} f"{V['n_monte_carlo']:,}"` simulated commercial batches,
-with every parameter of every step drawn independently around its set-point at a spread set
-by the width of its normal operating range and truncated at the characterization range, and
-the simulated distribution of each attribute is then compared with its acceptance criterion.
-The comparison is one-sided for the impurities and for the viral clearance attributes,
-because only one limit is meaningful for them, and two-sided for the attributes that carry a
-target range.
+Three ranges are used throughout the campaign. The normal operating range is the range the
+commercial process is operated within, and it is set by the control capability of the
+equipment. The characterization range is wider, and it is the knowledge space the studies
+cover. The proven acceptable range is the range over which an attribute has been shown to
+meet its criterion. A proven acceptable range is not extrapolated past the edge of the
+characterization range, and where the acceptable region runs to that edge the report states
+that the range is bounded by the study and not by the process. The design space is the
+multivariate region inside the knowledge space over which the attributes the step forms or
+clears meet their criteria, and the normal operating range sits inside it.
 
-The capability estimate inherits the bounds of the models it is built from. It assumes that
-the response surfaces hold over the ranges simulated, that the scale-down models represent
-the commercial process, and that the parameters vary independently of one another. It is
-reported per attribute in PCMR-001 and is confirmed at scale by the Stage 2 qualification
-batches.
+A parameter is classified under SOP-4001 after the study that measured its effect has
+reported. A parameter whose variation affects a critical quality attribute is a critical
+process parameter. Where the risk that it leaves its acceptable range in routine operation
+is low, because it is readily controlled and the acceptable range is wide against the
+control capability, it is classified as a well controlled critical process parameter
+[@amab2009]. A parameter that affects process performance or consistency without affecting a
+quality attribute is a key process parameter, and a parameter that affects neither is a
+general process parameter. No classification appears in a plan, and every classification in
+a report carries the effect and the control capability that produced it.
 
-# Acceptance criteria framework {#sec-acceptance}
+No single capability index is set as an acceptance criterion for this campaign. Capability
+is estimated per attribute and reported with the margin between the simulated distribution
+and the criterion, and it is read together with the proven acceptable ranges. The acceptance
+decision for a step rests on the ranges the study demonstrated, and the capability estimate
+says how much room the process has inside them.
 
-Four decisions are made in every characterization study, and this section defines what each
-of them requires. They are whether the scale-down model is qualified, whether a fitted model
-is adequate, whether an operating region is acceptable, and how each parameter is
-classified. The numeric limits belong to the individual plan, because they depend on the
-attributes the step governs and on the precision of the assays that measure them.
+Any departure from an approved plan is a deviation and is recorded. The report of the
+affected step states what happened, the magnitude of the departure, the investigation, the
+impact assessment and the disposition. Where an investigation shows that a dataset was not
+representative of the process, the affected design is re-executed on requalified material
+and the operating region is derived from the re-executed data. The superseded dataset is
+retained and may be referenced to confirm the root cause, and it is not used to define a
+range.
 
-## Which criterion a step is judged against {#sec-ipc}
+# Register of characterization plans
 
-Before any of those four decisions can be made, the criterion itself has to be fixed, and for
-most steps it is not the drug substance specification. The specifications in @tbl-cqa apply to
-the drug substance. An intermediate pool is not the drug substance, and judging one against
-those specifications gives an answer that is wrong in both directions. The capture pool
-carries about `{python} f"{pa_hcp_nominal:,.0f}"` ng/mg host cell protein against a drug
-substance limit of `{python} f"{hcp_ds_limit:g}"` ng/mg, so the comparison condemns a step
-that is performing normally. At the last step the same comparison is too generous, because it
-leaves no margin for the variation of a batch that has nowhere left to be cleaned.
+@tbl-plans lists the `{python} n_plans` plans this document parents, with the step each covers, the study
+types its parameters are assigned to and the report that will deliver its result. Each plan
+is approved before its study is executed, and each is written against the framework in §3 to
+§7.
 
-Each step is therefore given an in-process limit, and the campaign uses one of three
-procedures to set it. Which procedure applies depends on what the downstream train does to
-the attribute, not on the preference of the author.
-
-The first procedure is backward calculation from the drug substance specification. It is the
-default, and it applies to every attribute that a later step still clears. The specification is carried back
-through the clearance that the downstream steps deliver in the nominal train, which gives the
-concentration at this step from which the rest of the process can still reach the
-specification. That concentration is then divided by an assurance margin. The margin is not
-decoration. A limit set at the undivided ceiling would leave the drug substance dependent on
-every downstream step delivering its nominal clearance exactly, which is a break-even point
-and not a control.
-
-Host cell protein at the capture step is the worked example. The drug substance limit is
-`{python} f"{hcp_ds_limit:g}"` ng/mg. Cation exchange clears a factor of
-`{python} f"{cex_hcp_fold:.1f}"` and anion exchange a further
-`{python} f"{aex_hcp_fold:.1f}"`, so a capture pool at
-`{python} f"{pa_hcp_ceiling:,.0f}"` ng/mg would still reach the specification if both
-downstream steps performed exactly as they do in the nominal train. Dividing by an assurance
-margin of `{python} f"{pa_hcp_margin:g}"` gives the in-process limit of
-`{python} f"{pa_hcp_ipc:,.0f}"` ng/mg that PCP-005 and PCR-005 apply. The margin is chosen so
-that the limit also sits above the nominal pool and above the design centre of the study,
-because a limit below either would put the process outside its own limit while running at its
-set-point.
-
-The second procedure is a capability alert limit. Where no later step modifies the attribute,
-there is no clearance
-to calculate back through. The drug substance specification already applies at the step that
-forms the attribute, and for the glycans and the charge variants it is far wider than the
-spread the process itself shows, so it would not bound the step at all. The limit is then set
-from demonstrated capability, at the mean plus `{python} f"{ipc_sigma:g}"` standard
-deviations of the commercial-scale simulation. This is an alert limit and not a
-specification. A batch beyond it is investigated, not rejected.
-
-The third procedure is the modular clearance claim. A viral clearance step is judged on the
-log reduction claimed
-for it, less an allowance of `{python} f"{ipc_assay:g}"` log~10~ for the variability of the
-spiked clearance assay. Where the claim itself is credited from this process's own studies
-rather than from platform data, the step-level requirement is instead the cumulative
-requirement less the clearance credited to the other orthogonal steps, which is the modular
-calculation described in @sec-stats.
-
-`{python} f"{n_ipc}"` in-process limits are set across the campaign by these three
-procedures. None of them is a typed number. Each is a rule evaluated against the seeded
-process model, so a change to the process or to a clearance factor moves the limits with it,
-and the plans and reports for the individual steps state the value each rule produces
-together with the procedure that produced it. Two consequences follow and are stated here
-because they surprise readers who expect the drug substance specification everywhere. An
-in-process limit is tighter than the specification it derives from, so a proven acceptable
-range measured against it can be narrower than the range that was characterized. It follows
-that the design space for a step is generally smaller than its characterized region, because
-a parameter with a narrowed range is a parameter some of whose characterized settings are
-not acceptable.
-
-A scale-down model is qualified when the performance and quality attributes it is required
-to predict are statistically indistinguishable from the commercial-scale data at the target
-condition. A difference does not by itself disqualify a model: where it is explained by a
-known scale effect and is conservative for the attribute at risk, the model is qualified
-with that limitation recorded, and the report states which conclusions the limitation
-touches. A model that is not qualified cannot support an operating range, and the study that
-used it is repeated.
-
-A fitted model is adequate when it has significant terms at p < 0.05, no significant lack of
-fit against pure error, and residuals consistent with the assumptions of the fit. All three
-are required, and the criteria for each (the significance level, the lack-of-fit p-value and
-the residual checks) are stated in the plan for the step. A response with no significant
-terms is reported as such, because a null result bounds how much of the observed variation
-the parameters studied can account for.
-
-An operating region is acceptable when three conditions hold together. Every attribute the
-step governs is predicted to stay inside the in-process limit set for it under @sec-ipc
-across the region, that prediction holds with the other parameters of the step varying within
-their normal operating ranges, and the worst-case corner of the region (identified from the
-signs of the model coefficients) also satisfies those limits. Where the worst corner does not,
-the region is the part of the characterized space that does, and the report states how much
-of the characterized space that is. A region defined this way is claimed only inside the
-characterization ranges that produced it, and it remains a statement about mean levels until
-the capability analysis converts it into a statement about batches.
-
-Capability is estimated as described in @sec-stats. This plan does not set one minimum
-capability index for the whole campaign. An acceptable value depends on the criticality of
-the attribute and on how much of the observed variation belongs to its assay, so each plan
-states the minimum index its step's attributes must meet together with the reason for the
-value chosen. Where an attribute is governed by more than one step, the criterion is applied
-to the cumulative position at the drug substance and not to the individual steps, and it is
-assessed in PCMR-001.
-
-Parameter classification is performed under SOP-4001 and uses the same four classes
-throughout the campaign. A parameter whose variation affects a critical quality attribute is
-critical; where such a parameter is easy to control and the risk of leaving the design space
-is low it is classified as a well-controlled critical process parameter (WC-CPP), and where
-that risk is not low it is classified as a critical process parameter (CPP). A parameter
-that affects process performance or consistency but not product quality is a key process
-parameter (KPP), and a parameter with no demonstrated effect on either is a general process
-parameter (GPP). The class depends on the control capability of the receiving site as well
-as on the study result, so it is assigned after the study and recorded in the report for the
-step.
-
-A parameter that shows no effect is still classified, and its classification is supported by
-the range over which no effect was seen. Nothing is left unclassified at the end of the
-campaign.
-
-A study is valid when it is executed within its approved protocol. Excursions are recorded
-as deviations, assessed for their effect on the conclusions and described in the report for
-the step, whether or not they changed the outcome. Where a deviation makes the material or
-the execution unrepresentative of the commercial process, the affected design is invalidated
-for the definition of an operating region and is re-executed in full on representative
-material. The invalidated data are retained and are referenced in the report as evidence of
-the root cause. They are not used to define ranges and are not analysed as if they were
-valid.
-
-# Register of characterization plans {#sec-register}
-
-Each unit operation is planned in its own protocol, and each protocol is approved before the
-first study run of its step. The protocols are listed in @tbl-plans with the unit operation
-each covers and the report it pairs with. Every protocol follows the structure and the
-methods defined in this plan and adds the design, the ranges and the acceptance criteria of
-its own step.
+A change to an approved plan is made by amendment, with the reason recorded. A change that
+alters the scope RA-001 set, or any of the common elements stated in this document, amends
+this plan as well.
 
 ```{python}
 #| output: asis
-show(plan_tbl)
-print()
-print(": Register of the per-unit-operation characterization plans and their paired "
-      "reports. {#tbl-plans}")
+show(plan_register)
 ```
 
-# Deliverables and schedule {#sec-schedule}
+: Register of the per-step characterization plans and their reports. {#tbl-plans}
 
-The deliverables of the campaign are listed in @tbl-deliv. The sequence is fixed by
-dependency and not by date. A characterization plan is approved before the studies it plans
-are executed, a characterization report is issued once the studies of its step have been
-analysed, and the master report is issued after the last of those reports. Dates for each
-deliverable are controlled in the project schedule and are outside this plan.
+# Deliverables and schedule
 
-```{python}
-#| output: asis
-show(deliv_tbl)
-print()
-print(": Deliverables of the characterization campaign and their position in the "
-      "sequence. {#tbl-deliv}")
-```
+The campaign delivers `{python} n_plans` characterization plans, `{python} n_plans` characterization reports and one
+master report. PCMR-001 consolidates the reports, states the consolidated quality attribute
+outcomes, the parameter classification across the train and the cumulative viral clearance
+claim, and provides the control strategy that PTP-001 carries into Stage 2.
 
-The campaign is complete when PCMR-001 is approved. That report is the input to the Stage 2
-qualification protocol and to the process sections of the licence application.
+The sequence is fixed by dependency and not by date. RA-001 must be approved before a plan
+is written, because the factors of a design come from its ranking, and a factor added after
+the design has been executed changes the runs and forces the study to be repeated. A plan
+must be approved before its study is executed. Studies are executed in train order where
+material dependency requires it, because the load for a downstream step is produced by the
+step above it, and a characterization study of cation exchange needs a representative
+Protein A pool. Steps whose feed can be prepared independently of the campaign may be
+executed in parallel. Each report is issued when its study is complete and its data have
+been reviewed, and PCMR-001 is written last.
 
-# Approvals {#sec-approvals}
+Process performance qualification follows the campaign at the receiving site and is planned
+under PTP-001. `{python} n_ppq_batches` qualification batches are planned. The ranges in the batch records for
+those batches come from the design spaces and proven acceptable ranges this campaign
+establishes, so no qualification batch may be executed until the report of every step that
+constrains its parameters has issued.
 
-This plan is approved by the functions listed in @tbl-appr. A change to the framework
-defined here is made by revising this plan, and the individual plans that depend on the
-changed element are revised with it. Changes are assessed under the pharmaceutical quality
-system [@ichq10].
+This plan carries no dates. The programme schedule is maintained under PTP-001, and the
+order of execution follows the material dependencies stated above.
+
+# Approvals
+
+The approval record for this plan is @tbl-appr. Approval by each function named there
+confirms that the strategy, the risk basis, the scale-down model approach, the statistical
+approach and the acceptance framework are acceptable for the campaign, and that the per-step
+plans may be written against them. An amendment to this plan is approved by the same
+functions.
 
 # References {.unnumbered}
 

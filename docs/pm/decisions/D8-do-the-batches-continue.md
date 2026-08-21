@@ -28,7 +28,7 @@ human check where it is worth most, at the boundary between batches, at a fifth 
 | B2 | PCR-004, PCR-003, PCR-005 | PCR-003 | **PASS — the owner preferred the NEW text**, quoting a sentence against the old one | 2026-08-20 |
 | B2 (second document read) | — | PCR-004 | **FAIL — the owner preferred the OLD text** ("for PCR-004 i like the old one better"); the batch's only non-DoE report | 2026-08-20 |
 | B2 (PCR-004 attempt 2, re-author) | — | PCR-004 | **PASS — the owner preferred the NEW text**, "B is written in a more rigorous way, cites more sources and e.g. table 8.1 seems to be complete"; one sentence quoted from it | 2026-08-20 |
-| B3 | PCP-004, PCP-006, PCP-008, PCP-009, PCP-010 | — | — | — |
+| B3 | PCP-004, PCP-006, PCP-008, PCP-009, PCP-010 | PCP-006 | **FAIL — the owner preferred the PRE-CAMPAIGN text**, "a close win for A. But it is close to a tie"; 3 sentences quoted from the new text, two of them from §7, and the new text credited with more accurate mechanistic descriptions | 2026-08-21 |
 | B4 | PCP-003, PCP-007 | — | — | — |
 | B5 | PTP-001, PCMP-001, RA-001, PCMR-001 | — | — | — |
 

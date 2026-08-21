@@ -30,7 +30,7 @@ human check where it is worth most, at the boundary between batches, at a fifth 
 | B2 (second document read) | — | PCR-004 | **FAIL — the owner preferred the OLD text** ("for PCR-004 i like the old one better"); the batch's only non-DoE report | 2026-08-20 |
 | B2 (PCR-004 attempt 2, re-author) | — | PCR-004 | **PASS — the owner preferred the NEW text**, "B is written in a more rigorous way, cites more sources and e.g. table 8.1 seems to be complete"; one sentence quoted from it | 2026-08-20 |
 | B3 | PCP-004, PCP-006, PCP-008, PCP-009, PCP-010 | PCP-006 | **FAIL blind — the owner preferred the PRE-CAMPAIGN text**, "a close win for A. But it is close to a tie"; 3 sentences quoted from the new text, two of them from §7. **Amended after the key was opened**: the owner prefers the new text on its explanations and elects to keep the new documents. The blind verdict stands as the measurement; the amendment is the disposition | 2026-08-21 |
-| B4 | PCP-003, PCP-007 | — | — | — |
+| B4 | PCP-003, PCP-007 | **not read** | — *the owner declined the sample on 2026-08-21 ("just proceed with the rest of the documents"), so no key was drawn and nothing was staged. Both pre-campaign pdfs are kept, so the reading stays available* | 2026-08-21 |
 | B5 | PTP-001, PCMP-001, RA-001, PCMR-001 | — | — | — |
 
 **What the plan assumes meanwhile.** Each batch's document tasks start only after the previous

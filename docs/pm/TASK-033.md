@@ -32,8 +32,6 @@ about: ["PTP-001"]
 - [ ] the content review (§4): run 1 filed as content-review-PTP-001.md; if any question read 'no', ONE return to the same author and a second fresh judge filed as run 2; the outcome states run-1/run-2 counts per question and 'promotable on content' or not — either way the document proceeds to its batch's annex task
 - [ ] outcome records ONLY: model (self-reported), check_render passes, render, glyphs, <<NEEDS>>, sentences, words, pages, audit result, review counts — no style row, no frame count; `git status --short pc_package/` shows only the untracked DRAFT(s) of this batch
 
-**Depends on:** [[TASK-031]]
-
 ## Documents it is about
 
 - **PTP-001** — `pc_package/PTP-001_transfer.qmd`

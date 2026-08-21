@@ -108,12 +108,16 @@ differ only in their `UO` key and unit-specific narrative:
   responsibilities · Deliverables & schedule · Risks & assumptions · Approvals ·
   References · Appendices (planned design matrices).
 - **Depth follows the design, not a page target.** As built, re-measured from the rendered PDFs on
-  2026-08-18: reports with a DoE run 41–56 pp, reports without one 26–28 pp, plans 23–31 pp.
-  (`PCR-003` is the top of that band at 56 pp, on flat prose and ten figures — table and appendix
-  layout, not filler. It was 59 pp before its third re-author, and the band moved with it because
-  no other report reached 59.) Achieve depth with grounded tables, analysis
-  and full appendices — never with filler, and never by inventing a DoE for a step that has
-  none.
+  **2026-08-21**, after every one of the 20 documents had been re-authored: reports with a DoE run
+  **34–55 pp**, reports without one **30–33 pp**, plans **25–31 pp**, and the four corpus-level
+  documents (`PTP-001`, `PCMP-001`, `RA-001`, `PCMR-001`) **24–38 pp**. Every band moved, and the
+  fourth row is new — the previous revision gave no band for a corpus-level document at all, so
+  `PCMR-001` at 38 pp appeared to sit outside every band when in fact none described it.
+  (`PCR-003` is still the top of the DoE band, now at 55 pp; `PCR-009` at 34 pp is the floor and is
+  short because its design is small, not because it was cut. `PCMR-001` is the longest document in
+  the corpus on 16 tables and 5 figures against 5.4k words of prose.) Achieve depth with grounded
+  tables, analysis and full appendices — never with filler, and never by inventing a DoE for a step
+  that has none.
 - **Voice (gated on the tics only):** a process scientist writing material to support a BLA:
   precise, complete, mechanistically reasoned, traceable — and written in **plain technical
   English at about C1 level**, modelled on the published human sources in `refs/text/`

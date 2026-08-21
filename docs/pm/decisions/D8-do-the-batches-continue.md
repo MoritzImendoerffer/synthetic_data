@@ -1,13 +1,25 @@
 ---
 type: pm-decision
 sprint: 2026-08-19_02_fifth-round-plan-then-batches
-status: decided
-waiting_on: project owner
-blocks: nothing since 2026-08-21 — the owner released B4 and B5 in advance; the two remaining readings measure and do not gate
+status: settled 2026-08-21 — every batch ran; B4 and B5 declined
+decided_by: project owner
+blocks: nothing
 tags: [pm/decision]
 ---
 
 # D8 — after each batch, does the sampled document pass, and do the batches continue?
+
+> **SETTLED 2026-08-21.** All five batches were authored, promoted and re-grounded, and the corpus
+> is at one register. Nine readings ran in total, **5 PASS / 4 FAIL**, every one of them on a
+> document from B1 to B3. The owner declined the B4 sample ("just proceed with the rest of the
+> documents") and the B5 sample ("skip the reading and finish the batch"), so no key was drawn for
+> either and neither reading was begun. **Eleven of the twenty documents were therefore promoted on
+> the content review and the gates alone**, and the plan-side evidence rests on the single B3
+> reading of `PCP-006`, which failed blind by the narrowest margin of the campaign and which the
+> owner reversed once the key was open. The pre-campaign pdfs for all nine unread documents are
+> committed in the work unit, so the readings remain available. Whether the content review is a
+> sufficient substitute for a reading is carried forward as open question 3 in
+> [`docs/next/register-from-four-sources.md`](../../next/register-from-four-sources.md).
 
 **What is being asked, once per batch.** After a batch is promoted and the corpus re-grounded, you
 name one document of the batch. Its old pdf (saved before promotion) and its promoted pdf are

@@ -11,7 +11,9 @@ concurrently lose each other's writes, so no annex task overlaps another, or any
 
 ```bash
 cd pc_package
-for f in <DOC>_<uokey> …; do git mv "$f.DRAFT.qmd" "$f.qmd" -f; rm -f "$f.DRAFT.docx" "$f.DRAFT.pdf"; done
+# plain `mv -f`, not `git mv`: the DRAFT is untracked, and git mv refuses an untracked source.
+# It overwrites the tracked .qmd in place, which is what promotion means here.
+for f in <DOC>_<uokey> …; do mv -f "$f.DRAFT.qmd" "$f.qmd"; rm -f "$f.DRAFT.docx" "$f.DRAFT.pdf"; done
 cd ..
 grep -n DRAFT pc_package/<each>.qmd       # nothing
 ```

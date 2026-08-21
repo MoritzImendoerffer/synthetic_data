@@ -636,6 +636,17 @@ def build(doc_id: str, review: bool = False) -> str:
     w("\n".join(_helper_lines(P, "_pcpkg")) + "\n\n")
     w("### `doe_report` (import as `D`)\n\n")
     w("\n".join(_helper_lines(D, "doe_report", prefix="D.")) + "\n\n")
+    # RA-001's failure-mode, effect and study-type content lives in pc_package/ra_content.py,
+    # which section_plan.yaml names as the content source for this document class but which the
+    # inventory never listed. RA-001's author had to find it unaided on 2026-08-21; added so the
+    # next one does not have to.
+    if doc_id == "RA-001":
+        import ra_content as RC
+        w("### `ra_content` (import as `RC`) — the curated risk content for this document\n\n")
+        w("> `authoring/section_plan.yaml` names this module as the content source for the "
+          "pre-characterization risk assessment. The failure modes, effects and attributes at "
+          "risk are curated here and joined to the seeded registers; they are not in the CSVs.\n\n")
+        w("\n".join(_helper_lines(RC, "ra_content", prefix="RC.")) + "\n\n")
     w("### Constants & globals\n\n")
     w("- `SYN_BANNER`, `PRODUCT`, `COMPANY`, `EFFECTIVE_DATE`, `VERSION` — front-matter.\n")
     w("- `V` — `outputs/report_values.json` dict (e.g. `` `{python} f\"{V['n_monte_carlo']:,}\"` ``).\n")

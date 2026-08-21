@@ -1,11 +1,26 @@
 ---
 type: pm-epic
 sprint: 2026-08-19_02_fifth-round-plan-then-batches
-status: planned
+status: delivered 2026-08-21
 started: 2026-08-19
 proposal: docs/next/register-from-four-sources.md
 tags: [pm/epic]
 ---
+
+> **DELIVERED 2026-08-21.** Every one of the 20 corpus documents is now written under the rebuilt
+> apparatus, in one pass by one fresh-context agent, each with one content-review cycle and a
+> transcript audit. The register split this epic existed to close is closed. Final state:
+> **2089/2089 quotes grounded across 20 annexes**, 20/20 valid, 0 weak anchors, and the corpus
+> reproduces from `make clean && make data figures corpus` with `outputs/` byte-identical.
+>
+> **What did not ship.** The last two sampled blind readings were declined by the owner, so eleven
+> of the twenty documents were promoted on the content review and the gates alone. Two machinery
+> defects are recorded and deliberately unfixed (the `show()`/tabulate float trap, and the split
+> convention for `registered_sentence`), and the round introduced a tic of its own — `rather than`
+> rose from 0.0 to 1.8 per 1k words corpus-wide and is not repaired.
+>
+> Measurements: [`docs/results/2026-08-21-fifth-round-batches.md`](../results/2026-08-21-fifth-round-batches.md).
+> What remains is [Track C](../next/register-from-four-sources.md).
 
 # Epic — the fifth round: one plan first, then the batches
 

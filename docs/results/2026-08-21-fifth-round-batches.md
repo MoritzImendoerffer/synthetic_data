@@ -79,8 +79,8 @@ question passes when its count reaches zero, except question 4, which passes whe
 | `PCP-010` | 25 | 10/0/4/12 | 3/0/0/2 | clean | B3; Q2 passed on the **first** run |
 | `PCP-003` | 31 | 21/8/9/15 | 1/0/0/3 | clean | B4; Q2 **and** Q3 converged |
 | `PCP-007` | 29 | 13/4/4/8 | 12/0/0/3 | **draft 1 set aside** | B4; see the leak below |
-| `PTP-001` | 26 | 5/0/2/6 | 4/0/0/**0** | clean | B5; **question 4 passes — the only document in the campaign** |
-| `PCMP-001` | 23 | 9/**0**/**0**/7 | 6/0/1/2 | clean | B5; Q2 and Q3 passed on the **first** run |
+| `PTP-001` | 27 | 5/0/2/6 | 4/0/0/**0** | clean | B5; **question 4 passes — the only document in the campaign** |
+| `PCMP-001` | 24 | 9/**0**/**0**/7 | 6/0/1/2 | clean | B5; Q2 and Q3 passed on the **first** run |
 | `RA-001` | 27 | 19/5/4/7 | 10/0/8/6 | departure recorded | B5; Q2 converged from 5 coinages to 0, Q3 got **worse** |
 | `PCMR-001` | 38 | 12/9/7/14 | — | departure recorded | B5; one cycle, revision addressed all four |
 
@@ -140,9 +140,9 @@ have split each document from its own table.
 
 Against that: `assurance factor` was called invented by **two independent judges**, in `PCP-007`
 and `PCMR-001`. Both changed it to `safety factor`, and the source text confirms it — 8 occurrences
-of "safety factor" in `refs/text/amab.txt`, **zero** of "assurance factor" anywhere in `refs/`. The
-corpus vocabulary now diverges from the comment on `ipc_limits.margin` in `config/parameters.yaml`,
-which still calls it the assurance factor. **A one-word config comment edit closes it.**
+of "safety factor" in `refs/text/amab.txt`, **zero** of "assurance factor" anywhere in `refs/`.
+The comment on `ipc_limits.margin` in `config/parameters.yaml` was updated to match at ship, so the
+config and the corpus now use one word for the quantity.
 
 ## The readings, and what the campaign does not know
 
@@ -166,12 +166,12 @@ be credited on its own.
 
 | defect | effect | why not fixed here |
 |---|---|---|
-| `all_sop_table()` unions only globals ending `_SOP_REFS`/`_AMV_REFS`, skipping the base `SOP_REFS`/`AMV_REFS` | its "every controlled document cited anywhere in the corpus" omits 10 SOPs and all 5 AMVs; found independently **three times** | a mechanism change that moves three documents' rendered tables |
+| ~~`all_sop_table()` skipped the base `SOP_REFS`/`AMV_REFS`~~ **FIXED 2026-08-21** | it omitted **7 SOPs and 1 AMV** from a register its docstring calls complete, so `PTP-001` and `PCMP-001` showed an operation SOP for Steps 4–10 and none for Step 3; found independently **three times** | fixed at ship: `endswith("SOP_REFS")` rather than `"_SOP_REFS"`. Two documents re-rendered, grounding unchanged at 2089/2089 |
 | `ANNEX-A-BATCH` §5 tests `registered_sentence` against the `.docx`, but `PCP-003`'s is stored in `.qmd` form | the check can never pass for that carrier, so a session running it mechanically reads a surviving D-001 as reconciled away | the comment now says so and points the check at the `.qmd`; unifying would bake a seeded value in or rewrite three entries |
-| the template subtitle doubles for corpus-level documents | all four B5 drafts read "A-Mab Drug Substance — A-Mab Drug Substance — `<DOC>`" | fixed in the four drafts before promotion; the template is a mechanism change |
-| `build_brief.py` does not surface `pc_package/ra_content.py` | `section_plan.yaml` names it as `RA-001`'s content source; that author had to find it | one line in the brief builder |
+| ~~the template subtitle doubles for corpus-level documents~~ **FIXED 2026-08-21** | all four B5 drafts read "A-Mab Drug Substance — A-Mab Drug Substance — `<DOC>`" | fixed in the four drafts before promotion, and the template is now parameterised so it cannot recur |
+| ~~`build_brief.py` does not surface `pc_package/ra_content.py`~~ **FIXED 2026-08-21** | `section_plan.yaml` names it as `RA-001`'s content source; that author had to find it unaided | the brief now lists the module for `RA-001` |
 | `show()` re-parses numeric strings via `to_markdown` | a mixed-magnitude set-point column renders `9e+03` unless `floatfmt="g"` is passed | affects any future corpus-wide parameter table |
-| `git mv -f` in `ANNEX-A-BATCH` §1 assumes a tracked draft | it refuses an untracked one; plain `mv -f` is the promotion | procedure wording |
+| ~~`git mv -f` in `ANNEX-A-BATCH` §1 assumes a tracked draft~~ **FIXED 2026-08-21** | it refuses an untracked one | the procedure now says `mv -f`, with the reason |
 
 Two plan defects were corrected in `state.json` during execution rather than worked around: the
 B5 promotion targets (`<DOC>_None.qmd`, which would have shipped four unreferenced documents and

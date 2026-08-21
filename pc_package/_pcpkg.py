@@ -472,9 +472,15 @@ def all_sop_table():
     each was building the union in its own SETUP chunk. This is that union."""
     sops, amvs = {}, {}
     for name, val in list(globals().items()):
-        if name.endswith("_SOP_REFS") and isinstance(val, list):
+        # `endswith("SOP_REFS")`, not `"_SOP_REFS"`: the base SOP_REFS / AMV_REFS lists do not
+        # carry a step prefix, and requiring one silently excluded them. That dropped the
+        # bioreactor operation procedures, every shared analytical SOP and one method validation
+        # from a register whose docstring promises every controlled document in the corpus, so
+        # PTP-001 and PCMP-001 rendered an operation SOP for Steps 4-10 and none for Step 3.
+        # Found independently by three authors in the 2026-08-21 batch; fixed 2026-08-21.
+        if name.endswith("SOP_REFS") and isinstance(val, list):
             sops.update(dict(val))
-        elif name.endswith("_AMV_REFS") and isinstance(val, list):
+        elif name.endswith("AMV_REFS") and isinstance(val, list):
             amvs.update(dict(val))
     return sop_table(sorted(sops.items()), sorted(amvs.items()))
 

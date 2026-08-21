@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **50 of 51 done** · 1 todo
+**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **51 of 51 done**
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -27,9 +27,7 @@ None of them blocks the work below.
 Nothing in this table needs the project owner. It is what the coding assistant has still to do,
 and it is here so the state is visible, not so anyone else acts on it.
 
-| Task | Status | Waiting on | Kind | What it is |
-|---|---|---|---|---|
-| [[TASK-041]] | `todo` | the assistant | documentation | Move the findings into docs, update the roadmap, retire or reduce the proposal, and ship |
+*None.*
 
 ## Done
 
@@ -75,6 +73,7 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-038]] | `done` | — | measurement | Sampled blind reading of one document from batch B5 — measurement, not a gate (D8) |
 | [[TASK-039]] | `done` | — | measurement | Rebuild-and-reground proof after batch B5 |
 | [[TASK-040]] | `done` | — | measurement | Write the batches' results page |
+| [[TASK-041]] | `done` | — | documentation | Move the findings into docs, update the roadmap, retire or reduce the proposal, and ship |
 | [[TASK-042]] | `done` | — | document | Re-author PCR-008 (attempt 2) in one pass under the same regime, with one content-review cycle |
 | [[TASK-043]] | `done` | — | measurement | Blind reading: round-zero PCR-008 vs attempt 2 — HALT for the owner (D8) |
 | [[TASK-044]] | `done` | — | annex | Dispose of PCR-008 per the reading: promote attempt 2, or revert to round-zero by name; re-ground either way |

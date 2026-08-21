@@ -3,13 +3,13 @@ type: pm-task
 epic: 2026-08-19_02_fifth-round-plan-then-batches
 sprint: 2026-08-19_02_fifth-round-plan-then-batches
 task: TASK-029
-status: blocked
+status: todo
 kind: document
 title: "Author PCP-007 (Cation Exchange Chromatography (Step 7)) in one pass under the rebuilt apparatus, with one content-review cycle"
 generated: true
-waiting_on: another task
-tags: [pm/task, pm/blocked]
-about: ["PCP-006", "PCP-007"]
+waiting_on: the assistant
+tags: [pm/task, pm/todo]
+about: ["PCP-007"]
 ---
 
 > [!warning] Generated from `.claude/work/2026-08-19_02_fifth-round-plan-then-batches/state.json` by `scripts/pm_notes.py`.
@@ -17,11 +17,11 @@ about: ["PCP-006", "PCP-007"]
 
 # TASK-029 — Author PCP-007 (Cation Exchange Chromatography (Step 7)) in one pass under the rebuilt apparatus, with one content-review cycle
 
-**Epic:** [[epic]] · **Status:** `blocked` · **Waiting on:** another task · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
-49 annex quotes, 0 rhetorical spans to re-anchor later in this batch's annex task. PCP-007 is at an earlier round (round three / Track D / round two); re-done so the corpus has ONE register. BLOCKED by D8 B3 = FAIL blind (2026-08-21): the owner preferred the pre-campaign PCP-006 in the sampled reading, so under D8's rule the batches do not continue until the owner releases B4. The owner's amendment of 2026-08-21 keeps the promoted documents but is a disposition, not a release — B2 needed a separate word after its FAIL and B4 does too.
+49 annex quotes, 0 rhetorical spans to re-anchor later in this batch's annex task. PCP-007 is at an earlier round (round three / Track D / round two); re-done so the corpus has ONE register. Blocked on 2026-08-21 by D8's FAIL rule and RELEASED the same day by the owner, together with B5.
 
 ## Acceptance criteria
 
@@ -36,7 +36,6 @@ about: ["PCP-006", "PCP-007"]
 
 ## Documents it is about
 
-- **PCP-006** — `pc_package/PCP-006_viral_inactivation.qmd`
 - **PCP-007** — `pc_package/PCP-007_cex.qmd`
 
 ## Files it touched

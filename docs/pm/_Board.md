@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **37 of 51 done** · 2 blocked · 12 todo
+**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **37 of 51 done** · 14 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -29,17 +29,17 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-028]] | `blocked` | another task | document | Author PCP-003 (Production Bioreactor (Step 3)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-029]] | `blocked` | another task | document | Author PCP-007 (Cation Exchange Chromatography (Step 7)) in one pass under the rebuilt apparatus, with one content-review cycle |
+| [[TASK-028]] | `todo` | the assistant | document | Author PCP-003 (Production Bioreactor (Step 3)) in one pass under the rebuilt apparatus, with one content-review cycle |
+| [[TASK-029]] | `todo` | the assistant | document | Author PCP-007 (Cation Exchange Chromatography (Step 7)) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-030]] | `todo` | the assistant | annex | Promote batch B4 (PCP-003, PCP-007): render, re-cut spans, re-anchor, re-ground |
-| [[TASK-031]] | `todo` | the assistant | measurement | Sampled blind reading of one document from batch B4 — HALT for the owner (D8) |
+| [[TASK-031]] | `todo` | the assistant | measurement | Sampled blind reading of one document from batch B4 — measurement, not a gate (D8) |
 | [[TASK-032]] | `todo` | the assistant | measurement | Rebuild-and-reground proof after batch B4 |
 | [[TASK-033]] | `todo` | the assistant | document | Author PTP-001 (A-Mab Drug Substance) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-034]] | `todo` | the assistant | document | Author PCMP-001 (A-Mab Drug Substance) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-035]] | `todo` | the assistant | document | Author RA-001 (A-Mab Drug Substance) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-036]] | `todo` | the assistant | document | Author PCMR-001 (A-Mab Drug Substance) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-037]] | `todo` | the assistant | annex | Promote batch B5 (PTP-001, PCMP-001, RA-001, PCMR-001): render, re-cut spans, re-anchor, re-ground |
-| [[TASK-038]] | `todo` | the assistant | measurement | Sampled blind reading of one document from batch B5 — HALT for the owner (D8) |
+| [[TASK-038]] | `todo` | the assistant | measurement | Sampled blind reading of one document from batch B5 — measurement, not a gate (D8) |
 | [[TASK-039]] | `todo` | the assistant | measurement | Rebuild-and-reground proof after batch B5 |
 | [[TASK-040]] | `todo` | the assistant | measurement | Write the batches' results page |
 | [[TASK-041]] | `todo` | the assistant | documentation | Move the findings into docs, update the roadmap, retire or reduce the proposal, and ship |

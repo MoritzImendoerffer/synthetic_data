@@ -3,7 +3,7 @@ type: pm-decision
 sprint: 2026-08-19_02_fifth-round-plan-then-batches
 status: decided
 waiting_on: project owner
-blocks: TASK-028, TASK-029 since 2026-08-21 — B3 read FAIL blind and B4's release is undecided
+blocks: nothing since 2026-08-21 — the owner released B4 and B5 in advance; the two remaining readings measure and do not gate
 tags: [pm/decision]
 ---
 
@@ -211,3 +211,33 @@ on: a one-cycle content review is not self-correcting on the construction it fla
 the files on `PCP-006`, second confirmed instance after `PCR-005`), and the reviewer's question 1
 still has no scope line. Acting on either re-splits the corpus a second time, which is why the
 regime has stayed frozen.
+
+---
+
+**Resolved by the project owner, 2026-08-21, the same day the halt was raised.**
+
+> "I am happy with the current state of the documents and would finish the rest and ship them."
+
+**Both remaining batches are released in advance.** B4 (`PCP-003`, `PCP-007`) and B5 (`PTP-001`,
+`PCMP-001`, `RA-001`, `PCMR-001`) run without a further release decision. `TASK-028` and `TASK-029`
+are unblocked, six documents remain, and the corpus goes from 14 of 20 in the rebuilt register to
+20 of 20.
+
+**The two sampled readings are demoted from gates to measurements.** They still run exactly as
+`READING.md` specifies — the owner names the document, the key is drawn and sealed before staging,
+the answer is recorded verbatim and committed before the key is opened, the rule is applied
+mechanically — because a reading that cannot fail measures nothing. What changed is only the
+consequence: a verdict now feeds the results page instead of the schedule.
+
+**Why that follows rather than being a loosening.** The disposition was already settled earlier the
+same day: every promoted document stays. Once that is true, the "a FAIL stops the unit" rule can
+only buy a halt that changes nothing about what ships. It cost one this week. The regime itself is
+untouched and still frozen — same prompt, same guide, same one review cycle, same gates.
+
+**The record at the release**, corrected above: nine readings, 5 PASS / 4 FAIL; plans 1/1, reports
+4 PASS / 3 FAIL; the last two re-authors, `PCR-004` attempt 2 and `PCR-008` attempt 3, both passed.
+
+**What stays open regardless**, and neither is acted on: a one-cycle content review is not
+self-correcting on the construction it flags (traced through the files on `PCP-006`, second
+confirmed instance after `PCR-005`), and the reviewer's question 1 still has no scope line. Both
+are findings for the results page and for whoever runs the next campaign.

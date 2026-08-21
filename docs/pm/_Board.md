@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **42 of 51 done** · 9 todo
+**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **44 of 51 done** · 7 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -29,8 +29,6 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-033]] | `todo` | the assistant | document | Author PTP-001 (A-Mab Drug Substance) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-034]] | `todo` | the assistant | document | Author PCMP-001 (A-Mab Drug Substance) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-035]] | `todo` | the assistant | document | Author RA-001 (A-Mab Drug Substance) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-036]] | `todo` | the assistant | document | Author PCMR-001 (A-Mab Drug Substance) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-037]] | `todo` | the assistant | annex | Promote batch B5 (PTP-001, PCMP-001, RA-001, PCMR-001): render, re-cut spans, re-anchor, re-ground |
@@ -75,6 +73,8 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-030]] | `done` | — | annex | Promote batch B4 (PCP-003, PCP-007): render, re-cut spans, re-anchor, re-ground |
 | [[TASK-031]] | `done` | — | measurement | Sampled blind reading of one document from batch B4 — measurement, not a gate (D8) |
 | [[TASK-032]] | `done` | — | measurement | Rebuild-and-reground proof after batch B4 |
+| [[TASK-033]] | `done` | — | document | Author PTP-001 (A-Mab Drug Substance) in one pass under the rebuilt apparatus, with one content-review cycle |
+| [[TASK-034]] | `done` | — | document | Author PCMP-001 (A-Mab Drug Substance) in one pass under the rebuilt apparatus, with one content-review cycle |
 | [[TASK-042]] | `done` | — | document | Re-author PCR-008 (attempt 2) in one pass under the same regime, with one content-review cycle |
 | [[TASK-043]] | `done` | — | measurement | Blind reading: round-zero PCR-008 vs attempt 2 — HALT for the owner (D8) |
 | [[TASK-044]] | `done` | — | annex | Dispose of PCR-008 per the reading: promote attempt 2, or revert to round-zero by name; re-ground either way |

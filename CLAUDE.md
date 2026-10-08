@@ -22,8 +22,10 @@ the corpus; recoverable from git history if needed.) Full workflow:
 
 **Version 2.0 is in progress** (work unit `2026-10-08_01_rev2-campaign`, proposal
 [`docs/next/rev2-campaign.md`](docs/next/rev2-campaign.md)). Version 1.0 (20 documents, tag
-`corpus-rev1.0`) is frozen, still grounding, in `pc_package/superseded/rev1/`. Version 2.0 is 21
-documents: the 20 reissued after investigation `INV-001`, plus `INV-001` itself. Until a document is
+`corpus-rev1.0`) is frozen, still grounding, in `pc_package/superseded/rev1/`. Version 2.0 is 22
+documents: the 20 reissued after investigation `INV-001`, plus `INV-001` itself and `INV-002` (the
+response-surface models below the model-adequacy criteria of PCMP-001 §7.2: augmentation runs and
+refits, `amab_process/adequacy.py`). Until a document is
 re-authored its Version 1.0 `.docx` and annex stay in place (`build_ground_truth.REV2_READY`).
 To change one, add a unit operation, or re-run the set, start at
 **[`pc_package/TASKS.md`](pc_package/TASKS.md)** — it covers what to touch, what to rebuild
@@ -85,7 +87,7 @@ differ only in their `UO` key and unit-specific narrative:
 ## Consistency conventions (apply to every unit operation)
 
 - **IDs (fixed scheme):** `PTP-001`, `RA-001`, `PCMP-001`, `PCP-00N` / `PCR-00N`
-  (per unit op, `N` = process step 3–10), `PCMR-001`, and the QA investigation `INV-001`. Filenames:
+  (per unit op, `N` = process step 3–10), `PCMR-001`, and the QA investigations `INV-001` and `INV-002`. Filenames:
   `PCP-00N_<uokey>.qmd`, `PCR-00N_<uokey>.qmd`; annex `ground_truth/<ID>.json`.
 - **Front matter (identical across documents):** `format:` docx (`reference-doc:
   reference.docx`) + pdf (`documentclass: scrreprt`); `bibliography:
@@ -162,6 +164,10 @@ differ only in their `UO` key and unit-specific narrative:
 - **Complex tables come from `pc_package/tables.py`** (merged cells, two-level headers,
   footnotes, n.t.), rendered by `ctable.CTable` as an HTML twin for DOCX and a raw-LaTeX twin for
   PDF. Annex rows come from the same builder call (`T.<builder>(...).rows()`), never retyped.
+- **Model adequacy (PCMP-001 §7.2, INV-002):** `D.fit(UO, "rsm", resp)` returns the model a response
+  ends up with: the full quadratic on all runs (planned plus any augmentation block) when it is
+  adequate, else the hierarchical refit, else none (`status` "none": judged on measured results, no
+  range). Never set a range from a failing model. `D.planned_full_models()` gives Version 1.0's models.
 - **Framing rule:** the screening model identifies effects; the **response-surface
   model is the predictive/design-space model**. State this; don't over-claim the
   near-saturated screening fit.

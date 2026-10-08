@@ -426,10 +426,12 @@ def worst_case_verification(steps: Optional[List[str]] = None, label="tbl-iac-ve
     used = {m for row in body for c in row for m in re.findall(r"\^([a-d]\))\^", str(getattr(c, "text", c)))}
     rounding = [("", "Computed from unrounded values. A criterion recomputed from the rounded values shown can differ in its last digit.")]
     return CTable(
-        header=[[C("Step", rs=2), C("Attribute", rs=2), C("Worst case", rs=2), C("Platform", rs=2),
-                 C("This campaign", cs=3), C("Outcome", rs=2)],
-                ["At the\nedges", "Within\nthe NOR", "95 %\nbound"]],
-        body=body, align=["P{2.2cm}", "P{2.4cm}", "P{2.6cm}", "r", "r", "r", "r", "P{2.7cm}"],
+        header=[[C("Step", rs=2), C("Attribute", rs=2), C("Worst case", rs=2), C("Platform", rs=2, align="c"),
+                 C("This campaign", cs=3, align="c"), C("Outcome", rs=2)],
+                # centred in fixed-width columns: right-aligned two-line labels in narrow columns ran
+                # into each other (INV-001 and PCR-005 reviews, 2026-10-08)
+                [C("At the\nedges", align="c"), C("Within\nthe NOR", align="c"), C("95 %\nbound", align="c")]],
+        body=body, align=["P{2.2cm}", "P{2.4cm}", "P{2.6cm}", "R{1.5cm}", "R{1.5cm}", "R{1.5cm}", "R{1.5cm}", "P{2.7cm}"],
         size="footnotesize",
         notes=[n for n in notes if n[0] in used] + rounding,
         notes_per_row=True,
@@ -446,6 +448,11 @@ RESP_LABEL = {
     "pool_hcp_ng_mg": "HCP (ng/mg)", "hcp_out_ng_mg": "HCP (ng/mg)", "step_yield": "Yield (%)",
     "leached_protein_a_ppm": "Leached PrA (ppm)", "xmulv_lrf": "XMuLV LRF", "mvm_lrf": "MVM LRF",
 }
+
+
+# one-word response labels for the DoE tables, defined in a note of each table that uses them
+RESP_SHORT = {"leached_protein_a_ppm": "LPA"}
+RESP_SHORT_LEGEND = {"leached_protein_a_ppm": "leached Protein A"}
 
 
 def _deviation_runs(step: str, kind: str) -> Dict[int, str]:
@@ -468,6 +475,7 @@ def _deviation_runs(step: str, kind: str) -> Dict[int, str]:
 def doe_results(step: str, kind: str, label: Optional[str] = None, superseded: bool = False) -> CTable:
     from amab_process import studies as st
     cfg = _cfg()
+    # kind "aug": the INV-002 augmentation runs of the step (block 2)
     name = f"doe_{step}_{kind}{'_superseded' if superseded else ''}.csv"
     d = _csv(name)
     factors = [c[len("coded_"):] for c in d.columns if c.startswith("coded_")]
@@ -477,23 +485,34 @@ def doe_results(step: str, kind: str, label: Optional[str] = None, superseded: b
     untested = [c for c in resps + lmw if d[c].isna().all()]
     resps = [r for r in resps if r not in untested]
     lmw = [c for c in lmw if c not in untested]
-    devs = {} if superseded else _deviation_runs(step, kind)
+    devs = {} if (superseded or kind == "aug") else _deviation_runs(step, kind)
     # factors as letter codes with their units; the note gives the names (owner, 2026-10-08)
     codes = [chr(ord("A") + i) for i in range(len(factors))]
-    fl, fnote = [], []
+    fl, fu, fnote = [], [], []
     for k, f in zip(codes, factors):
         p = cfg.unit_op(step).param(f)
         unit = re.sub(r"\s*\(.*\)$", "", p.unit)       # "AU (OD280, descending)" -> "AU"
-        fl.append(f"{k}\n({unit})")
+        fl.append(k)
+        fu.append(unit)
         name = p.name[0].lower() + p.name[1:] if p.name[1:2].islower() else p.name
         fnote.append(f"{k}, {name}" + (f" ({p.unit.replace(' (', ', ').rstrip(')')})" if unit != p.unit else ""))
     factor_note = ". ".join(fnote) + "."
-    head1 = [C("Run", rs=2), C("Type", rs=2), C("Factor settings", cs=len(factors)),
+    # three header rows, one line each: the group, the factor code or response, and its unit
+    # (PCR-005 review, 2026-10-08: units wrapped under the labels into four- and five-line headers)
+    rl_, ru_ = [], []
+    for r_ in resps:
+        m_ = re.fullmatch(r"(.*?) \((.*)\)", RESP_LABEL.get(r_, r_))
+        lab_, u_ = (m_.group(1), m_.group(2)) if m_ else (RESP_LABEL.get(r_, r_), "")
+        rl_.append(RESP_SHORT.get(r_, lab_))
+        ru_.append(u_ or ("log10" if r_.endswith("_lrf") else ""))
+    head1 = [C("Run", rs=3), C("Type", rs=3), C("Factor settings", cs=len(factors)),
              C("Responses", cs=len(resps))]
-    head2 = fl + [RESP_LABEL.get(r, r) for r in resps]
+    head2 = fl + rl_
+    head3 = fu + ru_
     if lmw:
-        head1.append(C("Fragments, LMW (%)", cs=len(lmw)))
+        head1.append(C("Fragments, LMW", cs=len(lmw)))
         head2 += ["SEC" if c == "lmw_sec_pct" else "nrCE-SDS" for c in lmw]
+        head3 += ["%"] * len(lmw)
     body, marks = [], {}
     for _, r in d.iterrows():
         run = int(r["run"])
@@ -509,9 +528,23 @@ def doe_results(step: str, kind: str, label: Optional[str] = None, superseded: b
             row.append(num(100 * v, 1) if resp == "step_yield" else num(v))
         row += [num(r[c]) for c in lmw]
         body.append(row)
+    # run types in blocks: one merged cell per run of consecutive identical types
+    i = 0
+    while i < len(body):
+        j = i
+        while j + 1 < len(body) and body[j + 1][1] == body[i][1]:
+            j += 1
+        if j > i:
+            body[i][1] = C(body[i][1], rs=j - i + 1)
+            for k_ in range(i + 1, j + 1):
+                body[k_].pop(1)
+        i = j + 1
     dev = _csv("deviations.csv").set_index("dev_id")
     notes = [(mk, f"{did}: {dev.loc[did, 'summary']}. Run retained.") for did, mk in marks.items()]
     notes.append(("", f"Factors: {factor_note}"))
+    short = [f"{RESP_SHORT[r_]}, {RESP_SHORT_LEGEND[r_]}" for r_ in resps if r_ in RESP_SHORT]
+    if short:
+        notes.append(("", ". ".join(short) + "."))
     if lmw and step in ("protein_a", "viral_inactivation") and "lmw_sec_pct" in lmw:
         notes.append(("", "LMW by SEC is biased in this matrix and is not used for evaluation (AMD-001)."))
     if any(d[c].isna().any() for c in resps + lmw):
@@ -519,9 +552,9 @@ def doe_results(step: str, kind: str, label: Optional[str] = None, superseded: b
     if untested:
         lab = lambda c: {"lmw_sec_pct": "LMW by SEC", "lmw_cesds_pct": "LMW by nrCE-SDS"}.get(c, RESP_LABEL.get(c, c))
         notes.append(("", f"Not tested in this design: {', '.join(lab(c) for c in untested)}."))
-    title = {"screening": "screening", "rsm": "response-surface"}[kind]
+    title = {"screening": "screening", "rsm": "response-surface", "aug": "augmentation"}[kind]
     return CTable(
-        header=[head1, head2], body=body, align=["l", "l"] + ["R{1.35cm}"] * len(head2),
+        header=[head1, head2, head3], body=body, align=["l", "l"] + ["R{1.35cm}"] * len(head2),
         notes=notes, notes_per_row=True, size="footnotesize", resize=True,
         # more columns than a portrait page holds at the font floor: a landscape page of its own
         landscape=len(head2) + 2 >= 12,
@@ -700,6 +733,9 @@ def sdm_offsets(steps: Optional[List[str]] = None, studies: Optional[List[str]] 
     yn = lambda v: "Yes" if v else "No"
     body = []
     for sk, g in t.groupby("step_key", sort=False):
+        # run counts are usually the same for every output of a step: one merged cell, not a
+        # column repeating one number (PCR-005 review, 2026-10-08)
+        same_n = g["n_sd"].nunique() == 1 and g["n_m"].nunique() == 1
         for i, (_, r) in enumerate(g.iterrows()):
             name, unit, nd = SDM_OUTPUT[r["output"]]
             f = lambda v: f"{v:,.{nd}f}"
@@ -710,21 +746,29 @@ def sdm_offsets(steps: Optional[List[str]] = None, studies: Optional[List[str]] 
             else:
                 concl = ["no criterion^a)^"]
                 q = "n.a.^a)^"
-            body.append(lead + [name + (f" ({unit})" if unit else ""), str(r["n_sd"]), str(r["n_m"]),
+            if not same_n:
+                runs = [str(r["n_sd"]), str(r["n_m"])]
+            elif i == 0:
+                runs = [C(str(r["n_sd"]), rs=len(g)), C(str(r["n_m"]), rs=len(g))]
+            else:
+                runs = []
+            body.append(lead + [name + (f" ({unit})" if unit else ""), *runs,
                                 f(r["mean_sd"]), f(r["mean_m"]), f(r["offset"]),
                                 f"{f(r['lo'])} to {f(r['hi'])}", *concl, q])
     notes = [("a)", "The output has no acceptance criterion at this step, so no conclusion depends "
                     "on its offset and qualification does not apply. The offset is recorded.")]
     used = any(not j for j in t["judged"])
+    from amab_process.config import _NOR_MODE
+    which = "the NOR as characterized" if _NOR_MODE["mode"] == "characterized" else "the NOR in force"
     legend = [("", "SDM, scale-down model. Mfg, manufacturing scale. Offset, scale-down mean minus "
                    "manufacturing mean. Met over NOR: the criterion is met at every combination of NOR "
-                   "low, set-point and NOR high, with the offset at the low end of its interval, at its "
-                   "estimate (est.) and at the high end.")]
+                   f"low, set-point and NOR high ({which}), with the offset at the low end of its "
+                   "interval, at its estimate (est.) and at the high end.")]
     header = [[C("Step", rs=2), C("Output", rs=2), C("Runs", cs=2),
                  C("Mean", cs=2), C("Offset", cs=2),
                  C("Met over NOR\n(low/est./high)", rs=2), C("Qualified", rs=2)],
                 ["SDM", "Mfg", "SDM", "Mfg", "Estimate", f"{ci} % CI"]]
-    align = ["P{2.0cm}", "P{2.6cm}", "c", "c", "r", "r", "r", "P{1.6cm}", "P{2.4cm}", "c"]
+    align = ["P{2.0cm}", "P{2.6cm}", "c", "c", "r", "r", "r", "r", "P{2.4cm}", "c"]   # the CI on one line
     one = t["step_key"].nunique() == 1
     if one:
         header, body = _drop_step_column(header, body)
@@ -955,7 +999,7 @@ def model_effects_overview(steps: Optional[List[str]] = None, label: str = "tbl-
         block = []
         for resp in resps:
             fr = D.fit(step, "rsm", resp)
-            pv = fr["model"].pvalues.drop("const")
+            pv = fr["model"].pvalues.drop(["const", "block"], errors="ignore")   # a block is not an effect
             sig = [t for t in pv.index if pv[t] < a]
             main = [names[t] for t in sig if ":" not in t and "^" not in t]
             inter = [" × ".join(names[x] for x in t.split(":")) for t in sig if ":" in t]
@@ -1046,3 +1090,221 @@ def sop_references(sops=None, amvs=None, label: str = "tbl-sops") -> CTable:
                      columns=["Type", "Reference", "Title"])
     return frame(d, "Procedures and method validations referenced in this document.", label,
                  merge=["Type"], align=["P{3.0cm}", "l", "P{9.5cm}"])
+
+
+# --------------------------------------------------------------------------------------
+# 14. Model adequacy and the INV-002 augmentations (PCMP-001 §7.2)
+# --------------------------------------------------------------------------------------
+REMEDY_TEXT = {"augment": "Augmentation", "refit": "Refit", "none": "–"}
+REASON_TEXT = {
+    "attribute of the drug substance specification with an effect":
+        "Attribute of the drug substance specification, with an effect",
+    "not a drug substance test": "Viral clearance, not a drug substance test",
+    "no effect to resolve": "No effect to resolve",
+    "assurance not reached within the size of the planned design":
+        "Assurance not reached within the size of the planned design",
+}
+
+
+def _attr_label(resp: str, step: str) -> str:
+    cqa = _resp_cqa(resp, step)
+    return ATTR_NAME.get(cqa, resp) if cqa else resp
+
+
+def _term_name(term: str, step: str) -> str:
+    """A model term in words: "pH", "pH × culture duration", "culture duration²"."""
+    names = {p.key: p.name for p in _cfg().unit_op(step).parameters}
+    nm = lambda k: (lambda n: n[0].lower() + n[1:] if n[1:2].islower() else n)(names.get(k, k))
+    if ":" in term:
+        a, b = term.split(":")
+        return f"{nm(a)} × {nm(b)}"
+    if term.endswith("^2"):
+        return nm(term[:-2]) + "²"
+    return nm(term)
+
+
+def _terms_text(terms, step: str) -> str:
+    """Model terms in words, joined, the first capitalised."""
+    t = ", ".join(_term_name(x, step) for x in terms)
+    return t[:1].upper() + t[1:]
+
+
+def model_adequacy(steps: Optional[List[str]] = None, failing_only: bool = True,
+                   label: str = "tbl-model-adequacy") -> CTable:
+    """The full quadratic models of the planned response-surface runs against PCMP-001 §7.2, one
+    block per step: runs, terms, R², predicted R², their difference, and the two p-values."""
+    t = _csv("model_adequacy.csv")
+    th = _cfg().raw()["campaign"]["thresholds"]
+    if steps:
+        t = t[t["step_key"].isin(steps)]
+    if failing_only:
+        t = t[~t["adequate"].astype(bool)]
+    body = []
+    for sk, g in t.groupby("step_key", sort=False):
+        for i, (_, r) in enumerate(g.iterrows()):
+            body.append(([C(STEP_NAME[sk], rs=len(g))] if i == 0 else []) + [
+                _attr_label(r["response"], sk), str(int(r["n"])), str(int(r["k"])),
+                f"{r['R2']:.2f}", f"{r['predR2']:.2f}", f"{r['gap']:.2f}",
+                f"{r['p_lof']:.3f}", "<0.001" if r["p_model"] < 0.001 else f"{r['p_model']:.3f}"])
+    return CTable(
+        header=[[C("Step", rs=2), C("Attribute", rs=2), C("Runs", rs=2), C("Terms", rs=2),
+                 C("R²", rs=2), C("Predicted\nR²", rs=2), C("R² minus\npredicted R²", rs=2),
+                 C("p-value", cs=2)], ["Lack of fit", "Model"]],
+        body=body, align=["P{2.4cm}", "P{3.6cm}", "r", "r", "r", "r", "r", "r", "r"],
+        notes=[("", f"Full quadratic model on the planned runs. Terms include the intercept. "
+                    f"PCMP-001 §7.2 requires R² minus predicted R² of at most "
+                    f"{float(th['max_r2_minus_pred_r2']):.2f} and no significant lack of fit "
+                    f"(α = {float(th['lof_alpha']):g}).")],
+        notes_per_row=True, size="footnotesize",
+        caption="Response-surface models that do not meet the model-adequacy criteria of PCMP-001."
+                if failing_only else "Model adequacy of the response-surface models.",
+        label=label, resize=True)
+
+
+def adequacy_remedy(steps: Optional[List[str]] = None, label: str = "tbl-remedy") -> CTable:
+    """For each failing model: the effects the refit on the planned runs keeps, the runs an
+    augmentation would need for the assurance target, and the remedy the rule of INV-002 gives."""
+    t = _csv("model_adequacy.csv")
+    t = t[~t["adequate"].astype(bool)]
+    ma = _cfg().raw()["campaign"]["model_adequacy"]
+    if steps:
+        t = t[t["step_key"].isin(steps)]
+    body = []
+    for sk, g in t.groupby("step_key", sort=False):
+        for i, (_, r) in enumerate(g.iterrows()):
+            eff = str(r["effects"]) if isinstance(r["effects"], str) and r["effects"] else ""
+            eff_t = _terms_text(eff.split(), sk) if eff else "None"
+            m_req = "–" if pd.isna(r["m_required"]) else str(int(r["m_required"]))
+            rem = REMEDY_TEXT[r["remedy"]]
+            if r["remedy"] == "augment":
+                rem = "Augmentation^a)^"
+            body.append(([C(STEP_NAME[sk], rs=len(g))] if i == 0 else []) + [
+                _attr_label(r["response"], sk), eff_t, m_req, rem,
+                REASON_TEXT.get(r["reason"], r["reason"])])
+    return CTable(
+        header=[["Step", "Attribute", "Effects in the refit\n(planned runs)", "Runs\nneeded",
+                 "Remedy", "Reason"]],
+        body=body, align=["P{2.2cm}", "P{3.0cm}", "P{4.2cm}", "r", "P{2.2cm}", "P{4.2cm}"],
+        notes=[("a)", "The step's augmentation has the largest number of runs any of its models "
+                      "needs."),
+               ("", f"Runs needed: the smallest augmentation that gives an assurance of at least "
+                    f"{float(ma['assurance']):.2f} that the planned model meets PCMP-001 §7.2 "
+                    "(–: not reached within the size of the planned design, or not computed when "
+                    "the refit keeps no effect).")],
+        notes_per_row=True, size="footnotesize", landscape=True,
+        caption="Remedy of each model that does not meet the model-adequacy criteria.", label=label)
+
+
+def sample_size(steps: Optional[List[str]] = None, label: str = "tbl-sample-size") -> CTable:
+    """The assurance curve of each failing model with an effect: the assurance with the planned
+    runs alone and with 4, 8, … further runs, the size reached, and the power at that size."""
+    g = _csv("augmentation_sample_size.csv")
+    ma = _cfg().raw()["campaign"]["model_adequacy"]
+    target = float(ma["assurance"])
+    if steps:
+        g = g[g["step_key"].isin(steps)]
+    show = [0, 4, 8, 12, 16, 20, 24, 28]
+    body = []
+    for sk, gg in g.groupby("step_key", sort=False):
+        resps = list(dict.fromkeys(gg["response"]))
+        for i, resp in enumerate(resps):
+            x = gg[gg["response"] == resp].set_index("m")
+            cells = [f"{x.loc[m, 'assurance']:.2f}" if m in x.index else "–" for m in show]
+            hit = x[(x.index > 0) & (x["assurance"] >= target)]
+            m_req = int(hit.index[0]) if len(hit) else None
+            pw = "–" if m_req is None else (f"{x.loc[m_req, 'min_power']:.2f}"
+                                            if not pd.isna(x.loc[m_req, "min_power"]) else "–")
+            body.append(([C(STEP_NAME[sk], rs=len(resps))] if i == 0 else []) + [
+                _attr_label(resp, sk), *cells, "–" if m_req is None else str(m_req), pw])
+    return CTable(
+        header=[[C("Step", rs=2), C("Attribute", rs=2), C("Assurance with further runs", cs=len(show)),
+                 C("Runs\nneeded", rs=2), C("Lowest\npower", rs=2)],
+                [str(m) for m in show]],
+        body=body, align=["P{2.2cm}", "P{3.2cm}"] + ["r"] * (len(show) + 2),
+        notes=[("", f"Assurance: the share of {int(ma['reps']):,} simulated data sets in which the "
+                    "planned model (full quadratic with a block term) meets PCMP-001 §7.2. The data "
+                    "are simulated from the refit of the planned runs and its residual standard "
+                    "deviation. Further runs: a D-optimal augmentation of that size. Sizes in steps "
+                    f"of {int(ma['step'])} were computed; the table shows every fourth. Runs "
+                    f"needed: the smallest size with an assurance of at least {target:.2f} (–: not "
+                    "reached within the size of the planned design). Lowest power: the power, at "
+                    "that size and α = 0.05, of the weakest effect the refit found.")],
+        notes_per_row=True, size="footnotesize", landscape=True,
+        caption="Assurance that the planned model meets the model-adequacy criteria, by the number "
+                "of further runs.", label=label)
+
+
+def augmentation_design(step: str, label: Optional[str] = None) -> CTable:
+    """The D-optimal augmentation of one step as INV-002 approved it: the coded points and their
+    settings, in the order of the design (the execution order was randomized)."""
+    a = _csv(f"doe_{step}_aug.csv")
+    cfg = _cfg()
+    factors = [c[len("coded_"):] for c in a.columns if c.startswith("coded_")]
+    codes = [chr(ord("A") + i) for i in range(len(factors))]
+    body = []
+    for _, r in a.iterrows():
+        body.append([str(int(r["run"]))] + [f"{int(round(r['coded_' + f])):+d}".replace("+0", "0")
+                                            for f in factors]
+                    + [pval(r[f]) for f in factors])
+    units = [re.sub(r"\s*\(.*\)$", "", cfg.unit_op(step).param(f).unit) for f in factors]
+    note = ". ".join(f"{k}, {cfg.unit_op(step).param(f).name}" for k, f in zip(codes, factors)) + "."
+    return CTable(
+        header=[[C("Run", rs=2), C("Coded level", cs=len(factors)), C("Setting", cs=len(factors))],
+                codes + [f"{k} ({u})" for k, u in zip(codes, units)]],
+        body=body, align=["r"] + ["c"] * len(factors) + ["r"] * len(factors),
+        notes=[("", "Factors: " + note), ("", "Block 2. Runs are numbered on from the planned "
+                                              "design.")],
+        notes_per_row=True, size="footnotesize",
+        caption=f"D-optimal augmentation of the {STEP_NAME[step].lower() if step != 'protein_a' else 'Protein A'} "
+                "response-surface design.",
+        label=label or f"tbl-aug-design-{step.replace('_', '-')}")
+
+
+def model_reevaluation(step: str, label: Optional[str] = None) -> CTable:
+    """Each output of a step with a criterion: its full quadratic model on the planned runs, the
+    same model with a block term on all runs where the step was augmented, and the model the
+    output ends up with (PCMP-001 §7.2)."""
+    import doe_report as D
+    th = _cfg().raw()["campaign"]["thresholds"]
+    crit = _cfg().raw()["iac"]["responses"].get(step, [])
+    aug = D.has_augmentation(step)
+    body = []
+    for resp in [r for r in crit if r in D.rsm_data(step, "planned").columns]:
+        p = D.fit(step, "rsm", resp, runs="planned", form="full")
+        row = [_attr_label(resp, step), str(p["n"]), f"{p['R2']:.2f}", f"{p['predR2']:.2f}",
+               f"{p['gap']:.2f}"]
+        if aug:
+            a = D.fit(step, "rsm", resp, runs="all", form="full")
+            if a["block"]:
+                pb = float(a["model"].pvalues.get("block"))
+                row += [str(a["n"]), f"{a['R2']:.2f}", f"{a['predR2']:.2f}", f"{a['gap']:.2f}",
+                        f"{a['p_lof']:.3f}", f"{pb:.3f}"]
+            else:
+                row += [C("not measured in the augmentation^a)^", cs=6)]
+        u = D.fit(step, "rsm", resp)
+        if u["status"] == "refit":
+            nm_ = [_term_name(t, step) for t in u["names"]]
+            used = ("Refit, no effect" if not nm_ else
+                    "Refit: " + ", ".join(nm_) if len(nm_) <= 3 else f"Refit, {len(nm_)} terms")
+        else:
+            used = {"full": "Full quadratic", "none": "None^b)^"}[u["status"]]
+        row.append(used)
+        body.append(row)
+    head1 = [C("Attribute", rs=2), C("Planned runs, full quadratic", cs=4)]
+    head2 = ["Runs", "R²", "Pred. R²", "Gap"]
+    if aug:
+        head1.append(C("All runs, full quadratic with block", cs=6))
+        head2 += ["Runs", "R²", "Pred. R²", "Gap", "Lack of\nfit p", "Block p"]
+    head1.append(C("Model used", rs=2))
+    return CTable(
+        header=[head1, head2], body=body,
+        align=["P{3.2cm}"] + ["r"] * (len(head2)) + ["P{2.4cm}"],
+        notes=[("a)", "Viral clearance was not measured in the augmentation runs (INV-002)."),
+               ("b)", "No adequate model. The output is judged on its measured results."),
+               ("", f"Gap: R² minus predicted R², at most {float(th['max_r2_minus_pred_r2']):.2f} "
+                    "under PCMP-001 §7.2. Refit: hierarchical backward elimination at α = "
+                    f"{float(th['effect_alpha']):g}; a block term is kept.")],
+        notes_per_row=True, size="footnotesize", landscape=aug,
+        caption="Re-evaluation of the response-surface models"
+                + (" with the augmentation runs" if aug else "") + ".",
+        label=label or f"tbl-reeval-{step.replace('_', '-')}")

@@ -314,6 +314,34 @@ were planned against. `T.parameters_by_step` footnotes each narrowed NOR.
 Monte Carlo and PPQ sample the NOR in force. INV-001 closed before either report was issued, so it
 says only that the reports narrow the NOR, from its own computed finding.
 
+**INV-002: response-surface models below the model-adequacy criteria (owner's instruction
+2026-10-08).** The Version 2.0 re-analysis applied PCMP-001 §7.2 to every response-surface model that
+carries a criterion. Several full quadratic models failed the limit on overfitting (R² minus predicted
+R²); none failed lack of fit. QA opened INV-002 during INV-001 (config `campaign.investigation_2`).
+- **The rule** (config `campaign.model_adequacy`, decided before any new run): a failing model of an
+  attribute of the drug substance specification, on which the refit of the planned runs keeps an
+  effect, is resolved by further runs; every other failing model is refitted. Viral clearance is not a
+  drug substance test (it is a process requirement shown by spiking studies), so its models are
+  refitted and no augmentation spikes virus. No augmentation is larger than the planned design.
+- **Sample size** (INV-002 carries it in full): the smallest D-optimal augmentation of the face-centred
+  design, as a second block, that gives an assurance of at least 0.90 that the planned model (full
+  quadratic plus a block term) meets §7.2, simulated from the refit of the planned runs and its residual
+  standard deviation. A step's augmentation is the largest size any of its models needs.
+- **The refit:** hierarchical backward elimination at α = 0.05; a block term is kept. A response with no
+  adequate model, full or refitted, is judged on its measured results and sets no range.
+- **The reports** carry only their own additional runs (`T.doe_results(UO, "aug")`), the explanation, the
+  re-evaluation on all runs with a block term (`T.model_reevaluation(UO)`), and the discrepancy from the
+  plan the augmentation is (computed PD id, `discrepancy_register(DOC)`). They cite INV-002 for the
+  sample size and never recompute it. A report states the result as found: an augmentation sized for
+  0.90 assurance can still leave the full model failing, and then the refit decides.
+- **No criterion changes.** The criteria were fixed at INV-001 closure (2026-09-18) from the planned
+  designs. An augmentation that ends later and would support a different verification says so, for
+  the next revision.
+- **INV-001** compares ranges on the models Version 1.0 fitted (`D.planned_full_models()`), so that its
+  comparison shows what the change of criteria moved; it names INV-002 once.
+- Which steps are augmented is computed (`augmentation_plan.csv`). At the current seed: the production
+  bioreactor (high mannose, acidic variants) and anion exchange (host cell protein).
+
 **Harvest and UF/DF univariate studies (owner's decision 2026-10-08, option A).** Version 1.0 had
 no parameter data for the two steps without a design. Version 2.0 reports S-HAR-UNI and
 S-UFDF-UNI (`univariate_studies.csv`; config `analytics.univariate_nodoe`): each parameter at five

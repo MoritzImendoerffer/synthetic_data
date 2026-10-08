@@ -220,9 +220,11 @@ class CTable:
                 if col in starts:
                     c = starts[col]
                     txt = _latex(c.text)
-                    if r"\newline" in txt and "p{" not in aligns[col]:
-                        # a line break in a column that does not wrap (a header, a short label)
-                        a_ = (c.align or aligns[col] if len(aligns[col]) == 1 else "l")
+                    if r"\newline" in txt and ("p{" not in aligns[col] or c.align):
+                        # a line break in a column that does not wrap (a header, a short label), or
+                        # in a cell with its own alignment, which becomes a non-wrapping
+                        # \multicolumn below
+                        a_ = c.align or (aligns[col] if len(aligns[col]) == 1 else "l")
                         txt = r"\makecell[" + a_ + "]{" + txt.replace(r"\newline ", r"\\") + "}"
                     if c.rs > 1:
                         # in a wrapping column the merged text must wrap to the column width

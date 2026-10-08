@@ -208,15 +208,24 @@ def frag_batches(cfg: Config, ops: pd.DataFrame, stream: int) -> np.ndarray:
 # --------------------------------------------------------------------------------------
 # Chronology, method plan, hold studies, comparability
 # --------------------------------------------------------------------------------------
-def chronology(cfg: Config) -> pd.DataFrame:
-    return pd.DataFrame(cfg.raw()["campaign"]["studies"])
+def augmentation_studies(cfg: Config, steps) -> list:
+    """The augmentation studies of INV-002 that the model-adequacy rule gave a step, as campaign
+    study records. Which steps are augmented is computed (``adequacy.plan``), so the studies are
+    added here and not listed in ``campaign.studies``: another seed can augment other steps."""
+    aug = cfg.raw()["campaign"]["model_adequacy"]["studies"]
+    return [{"id": aug[k]["id"], "step": k, "kind": "augmentation", "start": aug[k]["start"],
+             "end": aug[k]["end"]} for k in steps]
 
 
-def method_plan(cfg: Config) -> pd.DataFrame:
+def chronology(cfg: Config, extra: Optional[list] = None) -> pd.DataFrame:
+    return pd.DataFrame(list(cfg.raw()["campaign"]["studies"]) + list(extra or []))
+
+
+def method_plan(cfg: Config, extra: Optional[list] = None) -> pd.DataFrame:
     """One row per study: which method measured fragments, and which measured HMW."""
     a = _a(cfg)
     rows = []
-    for s in cfg.raw()["campaign"]["studies"]:
+    for s in list(cfg.raw()["campaign"]["studies"]) + list(extra or []):
         p = a["plan"].get(s["id"])
         rows.append({"study": s["id"], "step": s["step"], "kind": s["kind"],
                      "start": s["start"], "end": s["end"],
@@ -428,6 +437,44 @@ def univariate_nodoe(cfg: Config, proc, feeds) -> pd.DataFrame:
                         row[r] = v
                     rows.append(row)
     return pd.DataFrame(rows)
+
+
+def augmentation_runs(cfg: Config, proc, feeds, step: str, coded: np.ndarray, study: str,
+                      n_planned: int, si: int) -> pd.DataFrame:
+    """The runs of one INV-002 augmentation: the D-optimal points of ``coded`` run in the
+    scale-down model as a second block (``block`` 2; the planned runs are block 1), numbered on
+    from the planned design, in a randomized order. Every draw comes from this study's own stream
+    (key 13), so no planned run moves. Viral clearance is not measured (``not_specification``: the
+    augmentation sizes no viral model, and no virus is spiked). Fragments are measured by the
+    methods the analytical plan lists for the study."""
+    from .doe import decode
+    from .studies import DOE_FACTORS, DOE_RESPONSES, RSM_TOP, _response_value, _unit
+    factors = list(RSM_TOP.get(step, DOE_FACTORS[step][:4]))
+    design = pd.DataFrame(np.asarray(coded, dtype=float), columns=factors)
+    uo = _unit(proc, step)
+    natural = decode(design, {f: uo.uo.param(f).prange for f in factors})
+    skip = set(cfg.raw()["campaign"]["model_adequacy"]["not_specification"])
+    rng = _rng(cfg, 13, si, 0)
+    rows = []
+    for i in range(len(design)):
+        ov = {f: float(natural.iloc[i][f]) for f in factors}
+        feed = feeds.get(step)
+        res = uo.run(None if feed is None else feed.copy(), rng, setpoints=ov)
+        row = {"run": n_planned + i + 1, "run_type": "augmentation", **ov,
+               **{f"coded_{f}": float(design.iloc[i][f]) for f in factors}}
+        for r in DOE_RESPONSES[step]:
+            row[r] = np.nan if r in skip else _response_value(res, r)
+        rows.append(row)
+    out = pd.DataFrame(rows)
+    true = _doe_true(cfg, step, out)
+    if true is not None:
+        plan = _a(cfg)["plan"].get(study, [])
+        out[LMW_SEC] = np.nan
+        out[LMW_CE] = measure(cfg, "cesds", true, _rng(cfg, 13, si, 1)) if "cesds" in plan else np.nan
+    out["block"] = 2
+    out["study"] = study
+    out["run_order"] = _rng(cfg, 13, si, 2).permutation(len(out)) + 1
+    return out
 
 
 def run_order(cfg: Config, df: pd.DataFrame, study_index: int) -> np.ndarray:

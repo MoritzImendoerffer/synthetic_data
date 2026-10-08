@@ -27,6 +27,7 @@ from amab_process import studies as st                  # noqa: E402
 from amab_process import deviations as dv               # noqa: E402
 from amab_process import analytics as an                # noqa: E402
 from amab_process import iac as ia                      # noqa: E402
+from amab_process import adequacy as ad                 # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "outputs", "data")
@@ -179,8 +180,25 @@ def main() -> None:
     values["n_deviations"] = int(len(devbuild["tables"]["deviations.csv"]))
 
     # -- 11. Rev 2.0 analytical layer: chronology, method plan, holds, comparability ------
-    save(an.chronology(cfg), "study_chronology.csv")
-    save(an.method_plan(cfg), "method_plan.csv")
+    # INV-002: PCMP-001 §7.2 applied to every response-surface model with a criterion, on the
+    # planned runs; the remedy of each failing model; the sample sizes; and the augmentation runs
+    # of the steps the rule names. The planned DoE files are not touched.
+    rsm_planned = {k: pd.read_csv(os.path.join(DATA, f"doe_{k}_rsm.csv")) for k in st.DOE_FACTORS}
+    adq = ad.plan(cfg, rsm_planned, lambda si, ri: an._rng(cfg, 14, si, ri))
+    save(adq["models"], "model_adequacy.csv")
+    save(adq["grid"], "augmentation_sample_size.csv")
+    save(adq["steps"], "augmentation_plan.csv")
+    aug_studies = an.augmentation_studies(cfg, list(adq["steps"]["step_key"]))
+    aug_id = {s_["step"]: s_["id"] for s_ in aug_studies}
+    for si, key in enumerate(st.DOE_FACTORS):
+        path = os.path.join(DATA, f"doe_{key}_aug.csv")
+        if key in adq["designs"]:
+            save(an.augmentation_runs(cfg, proc, feeds, key, adq["designs"][key], aug_id[key],
+                                      len(rsm_planned[key]), si), f"doe_{key}_aug.csv")
+        elif os.path.exists(path):
+            os.remove(path)            # another seed augmented this step; this one does not
+    save(an.chronology(cfg, aug_studies), "study_chronology.csv")
+    save(an.method_plan(cfg, aug_studies), "method_plan.csv")
     for pool in cfg.raw()["analytics"]["holds"]:
         save(an.hold_study(cfg, pool, ps).round(4), f"hold_{pool}.csv")
     save(an.comparability(cfg, ps).round(4), "cex_fraction_comparability.csv")

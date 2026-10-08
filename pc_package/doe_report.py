@@ -20,6 +20,7 @@ import pandas as pd
 import statsmodels.api as sm
 
 from _pcpkg import CFG, cqa_reg, csv, st
+from amab_process import adequacy as ad
 from amab_process.config import characterized_nor  # noqa: F401  (D.characterized_nor())
 
 RESP_LABEL = {
@@ -80,6 +81,8 @@ def factor_legend_df(key):
 def _term_label(name, lmap):
     if name == "const":
         return "Intercept"
+    if name == ad.BLOCK:
+        return "Block"
     if name.endswith("^2"):
         return lmap[name[:-2]] + "²"
     if ":" in name:
@@ -110,13 +113,96 @@ def has_superseded(key, kind="screening"):
     return os.path.exists(os.path.join(DATA, f"doe_{key}_{kind}_superseded.csv"))
 
 
-def fit(key, kind, resp, superseded=False):
-    """Fit the coded model (2FI for screening, full quadratic for RSM) + diagnostics.
+# Which runs and which model a response-surface fit uses (INV-002). By default every run of the
+# step, planned and augmentation, with a block term, and the model PCMP-001 §7.2 allows: the full
+# quadratic when it is adequate, else the hierarchical refit. ``planned_full_models`` restores the
+# full quadratic on the planned runs, which is what Version 1.0 fitted and what INV-001 compared.
+_MODELS = {"runs": "all", "form": "auto"}
+_FIT_CACHE: dict = {}
+TH = {k: float(v) for k, v in CFG.raw()["campaign"]["thresholds"].items()}
+
+
+class planned_full_models:
+    """Context manager: every response-surface fit inside it is the full quadratic model on the
+    planned runs, with no augmentation and no refit."""
+    def __enter__(self):
+        self._old = dict(_MODELS)
+        _MODELS.update(runs="planned", form="full")
+        return self
+
+    def __exit__(self, *a):
+        _MODELS.clear()
+        _MODELS.update(self._old)
+        return False
+
+
+def rsm_data(key, runs="all"):
+    """The response-surface runs of a step: the planned design (block 1) and, with ``runs="all"``,
+    the INV-002 augmentation (block 2) where the step has one."""
+    import os
+    from _pcpkg import DATA
+    df = csv(f"doe_{key}_rsm.csv").copy()
+    df[ad.BLOCK] = 1
+    path = os.path.join(DATA, f"doe_{key}_aug.csv")
+    if runs == "all" and os.path.exists(path):
+        aug = csv(f"doe_{key}_aug.csv").copy()
+        df = pd.concat([df, aug[[c for c in aug.columns if c in df.columns]]], ignore_index=True)
+    return df
+
+
+def has_augmentation(key):
+    import os
+    from _pcpkg import DATA
+    return os.path.exists(os.path.join(DATA, f"doe_{key}_aug.csv"))
+
+
+def _rsm_fit(key, resp, runs, form):
+    """The response-surface fit of INV-002 and PCMP-001 §7.2. ``status`` is "full" (the full
+    quadratic is adequate), "refit" (the hierarchical refit is), or "none" (no adequate model: the
+    response is judged on its measured results). ``full`` carries the full model's statistics."""
+    factors = rsm_factors(key)
+    df = rsm_data(key, runs)
+    d = df[df[resp].notna()].reset_index(drop=True)
+    full = ad.adequacy(d, resp, factors, ad.full_terms(factors), TH)
+    if form == "full" or full["adequate"]:
+        chosen, frm = full, "full"
+    else:
+        rt = ad.reduce(d, resp, factors, ad.full_terms(factors), TH["effect_alpha"])
+        chosen, frm = ad.adequacy(d, resp, factors, rt, TH), "refit"
+    # a caller that asks for the full model (Version 1.0, which applied no adequacy test, and
+    # INV-001's comparison on Version 1.0's models) gets it with no gate
+    status = "full" if form == "full" else (frm if chosen["adequate"] else "none")
+    m = chosen["model"]
+    return dict(model=m, df=d, factors=factors, names=list(chosen["terms"]), quad=True,
+                block=bool(chosen["block"]), n=chosen["n"], R2=chosen["R2"], adjR2=chosen["adjR2"],
+                predR2=chosen["predR2"], gap=chosen["gap"], F=chosen["F"], p=chosen["p"],
+                rmse=chosen["rmse"], ss_pe=chosen["ss_pe"], df_pe=chosen["df_pe"],
+                ss_lof=chosen["ss_lof"], df_lof=chosen["df_lof"], F_lof=chosen["F_lof"],
+                p_lof=chosen["p_lof"], sse=chosen["sse"], form=frm, status=status,
+                adequate=bool(chosen["adequate"]), full=full, runs=runs)
+
+
+def fit(key, kind, resp, superseded=False, runs=None, form=None):
+    """Fit the coded model (2FI for screening; for RSM see below) + diagnostics.
+
+    A response-surface fit (``kind="rsm"``) uses every run of the step, planned and INV-002
+    augmentation (with a block term), and the model PCMP-001 §7.2 allows (``_rsm_fit``), unless
+    ``runs="planned"`` or ``form="full"`` asks otherwise. Inside ``rev1_criteria_in_force`` or
+    ``planned_full_models`` it is the full quadratic on the planned runs.
 
     ``superseded=True`` fits the invalidated first-execution dataset
     (``doe_<key>_<kind>_superseded.csv``) instead of the reported one — used to show that
     an anomalous interaction present in the superseded data is absent from the requalified
     data (Deviation root-cause confirmation)."""
+    if kind == "rsm" and not superseded:
+        runs = runs or _MODELS["runs"]
+        form = form or _MODELS["form"]
+        if _CRITERIA["rev"] == "1.0":
+            runs, form = "planned", "full"
+        ck = (key, resp, runs, form)
+        if ck not in _FIT_CACHE:
+            _FIT_CACHE[ck] = _rsm_fit(key, resp, runs, form)
+        return _FIT_CACHE[ck]
     suffix = "_superseded" if superseded else ""
     df = csv(f"doe_{key}_{kind}{suffix}.csv")
     factors = rsm_factors(key) if kind == "rsm" else screening_factors(key)
@@ -165,11 +251,13 @@ def screening_effects_df(key, resp, top=None, superseded=False):
     return d.head(top) if top else d
 
 
-def rsm_coeff_df(key, resp):
-    """Full quadratic-model coefficient table in model order (Intercept, main, 2FI, quad)."""
-    r = fit(key, "rsm", resp)
+def rsm_coeff_df(key, resp, runs=None, form=None):
+    """Response-surface coefficient table in model order (Intercept, main, 2FI, quad, block):
+    the model the response ends up with by default; ``form="full"`` / ``runs="planned"`` give
+    the full quadratic model or the planned runs only."""
+    r = fit(key, "rsm", resp, runs=runs, form=form)
     m, lmap = r["model"], factor_letters(key)
-    order = ["const"] + r["names"]
+    order = ["const"] + r["names"] + ([ad.BLOCK] if r["block"] else [])
     rows = [[_term_label(n, lmap), m.params[n], m.bse[n], m.tvalues[n], m.pvalues[n], _sig(m.pvalues[n])]
             for n in order]
     return pd.DataFrame(rows, columns=["Term", "Coef.", "Std. err.", "t", "p-value", "Sig."])
@@ -268,15 +356,7 @@ def _predict_grid(r, xf, yf, n=40):
     data = {}
     for f in r["factors"]:
         data[f] = (XX if f == xf else YY if f == yf else np.zeros_like(XX)).ravel()
-    X = pd.DataFrame({"const": np.ones(XX.size)})
-    for f in r["factors"]:
-        X[f] = data[f]
-    for a, b in itertools.combinations(r["factors"], 2):
-        X[f"{a}:{b}"] = data[a] * data[b]
-    if r["quad"]:
-        for f in r["factors"]:
-            X[f"{f}^2"] = data[f] ** 2
-    Z = m.predict(X[["const"] + r["names"]]).values.reshape(XX.shape)
+    Z = _predict_points(r, pd.DataFrame(data)).reshape(XX.shape)
     return XX, YY, Z
 
 
@@ -551,10 +631,45 @@ class offset_at:
         return False
 
 
+def measured_values(key, resp):
+    """Every measured result of the response in the designs of the step (screening, response
+    surface and any INV-002 augmentation), at the scale of the scale-down model."""
+    vals = []
+    frames = [csv(f"doe_{key}_{k}.csv") for k in ("screening", "rsm")]
+    if has_augmentation(key):
+        frames.append(csv(f"doe_{key}_aug.csv"))
+    for df in frames:
+        if resp in df.columns:
+            vals.append(df[resp].dropna().to_numpy(float))
+    return np.concatenate(vals) if vals else np.array([])
+
+
+def measured_met(key, resp):
+    """Does every measured result of the designs meet the criterion at manufacturing scale? The
+    judgement of an output with no adequate model (PCMP-001 §7.2: such a model sets no range).
+    The designs span the range studied, so this also covers the NOR. None when the output has no
+    criterion or no result."""
+    acc = _judging(key, resp)
+    v = measured_values(key, resp)
+    if acc is None or not len(v):
+        return None
+    lo, hi, stype = acc
+    return bool(np.all(_in_spec(v, lo, hi, stype)))
+
+
+def model_status(key, resp):
+    """"full", "refit" or "none" (no adequate model) for a response-surface output (INV-002)."""
+    try:
+        return fit(key, "rsm", resp)["status"]
+    except Exception:
+        return None
+
+
 def nor_met(key, resp):
     """Does the output meet its criterion across the NOR, at manufacturing scale? Judged at every
     combination of NOR low, set-point and NOR high of the response-surface factors: for a quality
-    attribute the 95 % prediction interval of a single run, for viral clearance the mean.
+    attribute the 95 % prediction interval of a single run, for viral clearance the mean. An
+    output with no adequate model is judged on its measured results (``measured_met``).
     None when the output has no criterion or no response-surface model."""
     acc = _judging(key, resp)
     if acc is None:
@@ -563,6 +678,8 @@ def nor_met(key, resp):
         r = fit(key, "rsm", resp)
     except Exception:
         return None
+    if r["status"] == "none":
+        return measured_met(key, resp)
     uo = CFG.unit_op(key)
     grid = list(itertools.product(*[[uo.param(f).nor[0], uo.param(f).setpoint, uo.param(f).nor[1]]
                                     for f in r["factors"]]))
@@ -584,6 +701,8 @@ def nor_prediction_limit(key, resp, side="upper"):
         r = fit(key, "rsm", resp)
     except Exception:
         return None
+    if r["status"] == "none":
+        return None                     # no adequate model sets an expected level (INV-002)
     uo = CFG.unit_op(key)
     grid = list(itertools.product(*[[uo.param(f).nor[0], uo.param(f).setpoint, uo.param(f).nor[1]]
                                     for f in r["factors"]]))
@@ -747,16 +866,9 @@ def _to_coded(natural, key, f):
 
 
 def _predict_points(r, coded):
-    """Predict the fitted model at coded factor settings (DataFrame of factor columns)."""
-    X = pd.DataFrame({"const": np.ones(len(coded))}, index=coded.index)
-    for f in r["factors"]:
-        X[f] = np.asarray(coded[f], dtype=float)
-    for a, b in itertools.combinations(r["factors"], 2):
-        X[f"{a}:{b}"] = X[a].values * X[b].values
-    if r["quad"]:
-        for f in r["factors"]:
-            X[f"{f}^2"] = X[f].values ** 2
-    return np.asarray(r["model"].predict(X[["const"] + r["names"]]))
+    """Predict the fitted model at coded factor settings (DataFrame of factor columns). A block
+    term is set to 0, the average of the two blocks."""
+    return _design_matrix(r, coded) @ np.asarray(r["model"].params)
 
 
 def _in_spec(y, lo, hi, stype):
@@ -870,7 +982,8 @@ def _mc_predictive(r, key, factor, x_coded, others, rng, n_mc, residual=True):
 
 
 def _design_matrix(r, coded):
-    """The model matrix of a fitted RSM at coded settings, columns in the model's own order."""
+    """The model matrix of a fitted RSM at coded settings, columns in the model's own order; a
+    block term at 0, the average of the two blocks."""
     X = pd.DataFrame({"const": np.ones(len(coded))}, index=coded.index)
     for f in r["factors"]:
         X[f] = np.asarray(coded[f], dtype=float)
@@ -879,7 +992,11 @@ def _design_matrix(r, coded):
     if r["quad"]:
         for f in r["factors"]:
             X[f"{f}^2"] = X[f].values ** 2
-    return X[["const"] + r["names"]].to_numpy()
+    cols = ["const"] + r["names"]
+    if r.get("block"):
+        X[ad.BLOCK] = 0.0
+        cols = cols + [ad.BLOCK]
+    return X[cols].to_numpy()
 
 
 def prediction_interval(key, resp, natural, alpha=0.05):
@@ -982,19 +1099,24 @@ def design_space_grid(key, n=11):
     grids = np.meshgrid(*[np.linspace(-1, 1, n)] * len(fs), indexing="ij")
     coded = pd.DataFrame({f: g.ravel() for f, g in zip(fs, grids)})
     ok = np.ones(len(coded), dtype=bool)
-    per = {}
+    per, measured = {}, {}
     for resp in responses(key):
         acc = _judging(key, resp)
         if acc is None:
             continue
         lo, hi, stype = acc
-        y = _predict_points(fit(key, "rsm", resp), coded)
-        good = _in_spec(y, lo, hi, stype)
+        r = fit(key, "rsm", resp)
+        if r["status"] == "none":
+            # no adequate model draws a boundary (PCMP-001 §7.2); the output constrains nothing
+            # when every measured result meets its criterion, and is reported in ``measured``
+            measured[resp] = measured_met(key, resp)
+            continue
+        good = _in_spec(_predict_points(r, coded), lo, hi, stype)
         per[resp] = float(1.0 - good.mean())
         ok &= good
     binding = max(per, key=per.get) if per else None
     return {"fraction": float(ok.mean()), "per_response": per, "binding": binding,
-            "n_points": int(len(coded))}
+            "n_points": int(len(coded)), "measured": measured}
 
 
 def governing_factor(key, resp):
@@ -1056,15 +1178,23 @@ def par_table(key):
         # not ≤ 1.6e+04, which the PCR-005 Version 2.0 pdf showed)
         crit = (f"≥ {_fmt_crit(lo)}" if stype == "lower" else f"≤ {_fmt_crit(hi)}" if stype == "upper"
                 else f"{_fmt_crit(lo)}–{_fmt_crit(hi)}")
+        status = fit(key, "rsm", resp)["status"]
+        basis = {"full": "model", "refit": "refitted model", "none": "measured results"}[status]
         for factor in rsm_factors(key):
             p = CFG.unit_op(key).param(factor)
-            ps = par_at_design_centre(key, resp, factor)
-            pn = par_nor_propagated(key, resp, factor)
-            rows.append([RESP_LABEL.get(resp, resp), names.get(factor, factor),
-                         f"{p.prange[0]:g}–{p.prange[1]:g}", units.get(factor, ""),
-                         crit, _par_str(ps["par_nat"]), _par_str(pn["par_nat"])])
+            rng_ = f"{p.prange[0]:g}–{p.prange[1]:g}"
+            if status == "none":
+                # PCMP-001 §7.2: no adequate model sets a range. The designs span the range
+                # studied, so the range holds on the measured results when every one meets the
+                # criterion, and is not established otherwise.
+                par_s = par_n = rng_ if measured_met(key, resp) else "not established"
+            else:
+                par_s = _par_str(par_at_design_centre(key, resp, factor)["par_nat"])
+                par_n = _par_str(par_nor_propagated(key, resp, factor)["par_nat"])
+            rows.append([RESP_LABEL.get(resp, resp), names.get(factor, factor), rng_,
+                         units.get(factor, ""), crit, par_s, par_n, basis])
     return pd.DataFrame(rows, columns=["CQA", "Parameter", "Char. range", "Unit",
-                                       "Criterion", "PAR (set-point)", "PAR (NOR)"])
+                                       "Criterion", "PAR (set-point)", "PAR (NOR)", "Basis"])
 
 
 def fig_par(key, resp, factor):

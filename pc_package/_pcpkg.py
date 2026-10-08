@@ -46,6 +46,8 @@ CAMPAIGN = CFG.raw()["campaign"]
 REVISIONS = CAMPAIGN["revisions"]                       # [{rev, effective, reason}, ...]
 REV1, REV2 = REVISIONS[0], REVISIONS[-1]
 INV = CAMPAIGN["investigation"]
+INV2 = CAMPAIGN["investigation_2"]                     # model adequacy of the RSM designs
+INVESTIGATIONS = {INV["id"]: INV, INV2["id"]: INV2}
 AMD = CAMPAIGN["method_decision"]
 EFFECTIVE_DATE = REV2["effective"]
 VERSION = REV2["rev"]
@@ -53,8 +55,9 @@ VERSION = REV2["rev"]
 
 PLAN_APPROVAL = CAMPAIGN.get("plan_approval", {})
 CAPA = pd.DataFrame(CAMPAIGN.get("capa", []))
-PLAN_DISCREPANCIES = CAMPAIGN.get("plan_discrepancies", {})   # {report: [{id, plan, planned, done, ...}]}
+CAPA2 = pd.DataFrame(INV2.get("capa", []))
 EFFECTIVENESS = CAMPAIGN.get("effectiveness_check", {})
+EFFECTIVENESS2 = INV2.get("effectiveness_check", {})
 THRESHOLDS = CAMPAIGN.get("thresholds", {})
 CPK_TARGET = THRESHOLDS.get("cpk_target")
 CPK_MIN = THRESHOLDS.get("cpk_minimum")
@@ -67,8 +70,8 @@ def rev1_date(doc_id):
 
 def doc_version(doc_id):
     """(version, effective date) of a document at its current revision."""
-    if doc_id == INV["id"]:
-        return "1.0", INV["closed"]
+    if doc_id in INVESTIGATIONS:
+        return "1.0", INVESTIGATIONS[doc_id]["closed"]
     return VERSION, EFFECTIVE_DATE
 COMPANY = "Novacyte Biologics"          # fictional sponsor
 SENDING_SITE = "Novacyte Biologics — Cambridge, MA (Development)"
@@ -109,6 +112,7 @@ DOC_REGISTRY = {
     "PCMR-001": ("Process Characterization Master Report", "A-Mab Drug Substance", None),
     **_uo_docs(),
     "INV-001": ("Investigation Report", CAMPAIGN["investigation"]["title"], None),
+    "INV-002": ("Investigation Report", CAMPAIGN["investigation_2"]["title"], None),
 }
 
 # Placeholder controlled-document numbers referenced across the set. Prefixes
@@ -452,6 +456,52 @@ def dev_register(doc_id):
                     [16, 38, 30, 16])
 
 
+# Response keys of the attributes an INV-002 augmentation can serve, in words
+_AUG_ATTR = {"afucosylation": "afucosylation", "galactosylation": "galactosylation",
+             "high_mannose": "high mannose", "acidic_variants": "acidic variants",
+             "aggregates_hmw": "aggregate", "aggregate_out_pct": "aggregate",
+             "pool_hcp_ng_mg": "pool host cell protein", "hcp_out_ng_mg": "host cell protein",
+             "leached_protein_a_ppm": "leached Protein A", "lmw_cesds_pct": "fragments"}
+
+
+def _augmentation_discrepancies():
+    """The discrepancy from the plan that each INV-002 augmentation is (computed: which steps
+    are augmented, and by how many runs, follows from the data and the rule). Numbered on from the
+    report's configured discrepancies."""
+    import os
+    from amab_process.analytics import STUDY_ID
+    if not os.path.exists(os.path.join(DATA, "augmentation_plan.csv")):
+        return {}
+    out = {}
+    aug = CAMPAIGN["model_adequacy"]["studies"]
+    for _, r in csv("augmentation_plan.csv").iterrows():
+        step = r["step_key"]
+        n = CFG.unit_op(step).step
+        doc = f"PCR-{n:03d}"
+        k = len(CAMPAIGN.get("plan_discrepancies", {}).get(doc, [])) + len(out.get(doc, [])) + 1
+        attrs = [_AUG_ATTR.get(x, x) for x in str(r["responses"]).split()]
+        what = attrs[0] if len(attrs) == 1 else ", ".join(attrs[:-1]) + " and " + attrs[-1]
+        out.setdefault(doc, []).append({
+            "id": f"PD-{n:03d}-{k:02d}", "step": step, "plan": f"PCP-{n:03d}",
+            "subject": "Augmentation of the response-surface design",
+            "planned": f"the face-centred central composite design of {int(r['n_planned'])} runs "
+                       f"in study {STUDY_ID[(step, 'rsm')]}",
+            "done": f"{int(r['m'])} further runs in a D-optimal augmentation, study "
+                    f"{aug[step]['id']}, as a second block",
+            "reason": f"the full quadratic model{'s' if len(attrs) > 1 else ''} of {what} did not "
+                      f"meet the limit on overfitting of PCMP-001 §7.2, and {INV2['id']} calculated "
+                      "the number of runs",
+            "studies": [aug[step]["id"]]})
+    return out
+
+
+# Discrepancies from the plan (config ``campaign.plan_discrepancies``, plus the INV-002
+# augmentations, which are computed): {report: [{id, plan, planned, done, reason, ...}]}
+PLAN_DISCREPANCIES = {k: list(v) for k, v in CAMPAIGN.get("plan_discrepancies", {}).items()}
+for _doc, _ds in _augmentation_discrepancies().items():
+    PLAN_DISCREPANCIES.setdefault(_doc, []).extend(_ds)
+
+
 def discrepancy_register(doc_id):
     """Markdown register of a report's discrepancies from its plan: what the plan foresaw, what
     was done, and why. A discrepancy is not a deviation (config ``campaign.plan_discrepancies``).
@@ -491,9 +541,9 @@ def title_block(doc_id, unit_op=None):
         ("Product", PRODUCT),
         ("Version", ver),
         ("Effective date", eff),
-        ("Supersedes", "—" if doc_id == INV["id"] else f"{doc_id} Version {REV1['rev']} ({rev1_date(doc_id)})"),
+        ("Supersedes", "—" if doc_id in INVESTIGATIONS else f"{doc_id} Version {REV1['rev']} ({rev1_date(doc_id)})"),
         ("Status", "Approved (synthetic)"),
-        ("Document owner", "Quality Assurance (QA)" if doc_id == INV["id"]
+        ("Document owner", "Quality Assurance (QA)" if doc_id in INVESTIGATIONS
          else "Manufacturing Science & Technology (MSAT)"),
         ("Sponsor / sites", f"{COMPANY}; {SENDING_SITE} → {RECEIVING_SITE}"),
     ]
@@ -515,6 +565,16 @@ def md_table(header, rows, widths):
     return "\n".join(out)
 
 
+def appendix_numbering(letter):
+    """Print, under ``#| output: asis``, just before an appendix heading. In the PDF the tables
+    and figures of that appendix are then numbered A.1, A.2, … instead of continuing the last
+    numbered chapter (Tables 13.4–13.10 for Appendices A–D, PCR-005 review 2026-10-08). The
+    DOCX numbers its captions on its own and ignores the block."""
+    n = ord(letter.upper()) - ord("A") + 1
+    return ("\n```{=latex}\n\\setcounter{chapter}{%d}\\renewcommand{\\thechapter}{\\Alph{chapter}}"
+            "\\setcounter{table}{0}\\setcounter{figure}{0}\n```\n" % n)
+
+
 def abbreviations_table(pairs):
     """The Abbreviations section as a two-column table, sorted case-insensitively.
 
@@ -525,8 +585,8 @@ def abbreviations_table(pairs):
 
 def revision_history(doc_id):
     """The revision-history table: every revision of the document, oldest first."""
-    if doc_id == INV["id"]:
-        rows = [["1.0", INV["closed"], "Initial issue"]]
+    if doc_id in INVESTIGATIONS:
+        rows = [["1.0", INVESTIGATIONS[doc_id]["closed"], "Initial issue"]]
     else:
         rows = [[r["rev"], rev1_date(doc_id) if r is REV1 else r["effective"],
                  r["reason"] + (f" (see {INV['id']})" if r is not REV1 else "")] for r in REVISIONS]
@@ -544,6 +604,12 @@ def related_docs_md(doc_id):
         order.append(sib)
     order.append("PCMR-001")
     order.append(INV["id"])
+    # INV-002 changed the response-surface models: the reports of the steps with a design, the
+    # master plan (whose model-adequacy rule it applies) and the master report
+    doe_report = (doc_id.startswith("PCR-") and step is not None
+                  and any(CFG.unit_op(k).step == step for k in st.DOE_FACTORS))
+    if doe_report or doc_id in ("PCMP-001", "PCMR-001"):
+        order.append(INV2["id"])
     rows = []
     for rid in order:
         if rid == doc_id:
@@ -554,6 +620,7 @@ def related_docs_md(doc_id):
                "PCMP-001": "Parent — master plan",
                "PCMR-001": "Rolls up into",
                INV["id"]: "Reason for this revision",
+               INV2["id"]: "Model adequacy of the response-surface designs",
                }.get(rid, "Sibling — paired document")
         rows.append([rid, f"{cls} ({subject})", rel])
     return md_table(["Document ID", "Title", "Relationship"], rows, [16, 54, 30])
@@ -641,7 +708,9 @@ def corpus_docs_md(doc_id=None):
         step = CFG.unit_op(key).step
         order += [f"PCP-{step:03d}", f"PCR-{step:03d}"]
     order.append("PCMR-001")
-    order.append(INV["id"])
+    # an investigation lists the package it investigates, not the investigations
+    if doc_id not in INVESTIGATIONS:
+        order += [INV["id"], INV2["id"]]
     rows = []
     for rid in order:
         if rid == doc_id or rid not in DOC_REGISTRY:

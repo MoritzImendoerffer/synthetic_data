@@ -433,6 +433,96 @@ def _helper_lines(module, mod_name, prefix=""):
     return lines
 
 
+def _model_adequacy_section(doc_id, key, is_report) -> str:
+    """PCMP-001 §7.2 and INV-002 for one step: the status of each model, and for a report the
+    augmentation and the re-evaluation it must carry."""
+    import pandas as _pd
+    b = io.StringIO()
+    w = b.write
+    m = P.csv("model_adequacy.csv")
+    m = m[m["step_key"] == key]
+    w("### Model adequacy (PCMP-001 §7.2) and INV-002 — `csv(\"model_adequacy.csv\")`\n\n")
+    w("Full quadratic models of the PLANNED runs against §7.2, and the remedy INV-002 gave each "
+      "failing model:\n\n")
+    cols = ["response", "n", "k", "R2", "predR2", "gap", "p_lof", "adequate", "effects", "m_required",
+            "remedy", "reason"]
+    w(m[cols].round(3).to_markdown(index=False) + "\n\n")
+    if not is_report:
+        w("A plan is prospective: it states the full quadratic model and the §7.2 criteria. It does "
+          "not describe INV-002, the augmentation or a refit, which came after the plan.\n\n")
+        return b.getvalue()
+    rows = []
+    for resp in [r for r in m["response"]]:
+        r = D.fit(key, "rsm", resp)
+        rows.append({"response": resp, "status": r["status"], "runs": r["n"], "block": r["block"],
+                     "terms": " ".join(r["names"]) or "(none)", "R2": round(r["R2"], 3),
+                     "predR2": round(r["predR2"], 3), "gap": round(r["gap"], 3),
+                     "nor_met": D.nor_met(key, resp)})
+    w("The model each output ENDS UP WITH (`D.fit(UO, \"rsm\", resp)`; `D.model_status`): "
+      "\"full\" = the full quadratic is adequate; \"refit\" = the hierarchical refit is; "
+      "\"none\" = no adequate model, the output is judged on its measured results "
+      "(`D.measured_met`). Every prediction, PAR and NOR judgement in the report uses this "
+      "model:\n\n" + _pd.DataFrame(rows).to_markdown(index=False) + "\n\n")
+    if D.has_augmentation(key):
+        pds = [d for d in P.PLAN_DISCREPANCIES.get(doc_id, []) if "Augmentation" in d["subject"]]
+        a = P.csv(f"doe_{key}_aug.csv")
+        w(f"**Augmentation ({pds[0]['id'] if pds else 'discrepancy'}).** {len(a)} runs, study "
+          f"{a['study'].iloc[0]}, block 2, runs {int(a['run'].min())}–{int(a['run'].max())}. The report "
+          "carries: the additional runs as an appendix (`T.doe_results(UO, \"aug\")`), an "
+          "explanation (why: the planned model failed §7.2; the number of runs from INV-002, cited, "
+          "not recalculated), the re-evaluation of every model on all runs with a block term "
+          "(`T.model_reevaluation(UO)`), and the discrepancy from the plan. Fit on the planned runs "
+          "only with `D.fit(UO, \"rsm\", resp, runs=\"planned\", form=\"full\")`.\n\n")
+    else:
+        w("This step was not augmented. Where a model is refitted, the report says that PCMP-001 "
+          "§7.2 provides the refit, names the terms kept and cites INV-002 for the rule "
+          "(`T.model_reevaluation(UO)`).\n\n")
+    return b.getvalue()
+
+
+def _inv2_section() -> str:
+    """The facts of INV-002: the failing models, the rule, the sample sizes, the augmentations, and
+    the consequences the reports draw."""
+    b = io.StringIO()
+    w = b.write
+    ma = P.CFG.raw()["campaign"]["model_adequacy"]
+    w("### INV-002 facts\n\n")
+    w(f"- **Rule** (config `campaign.model_adequacy`, decided {ma['decided']}): augmentation for an "
+      "attribute of the drug substance specification on which the refit of the planned runs keeps "
+      f"an effect; a refit for every other failing model; target assurance {ma['assurance']}; "
+      f"{ma['reps']} simulated data sets per size; sizes in steps of {ma['step']}; no augmentation "
+      "larger than the planned design; viral clearance is not a drug substance test "
+      f"({', '.join(ma['not_specification'])}), so its models are refitted and no virus is spiked.\n")
+    w(f"- **Criteria:** fixed at the closure of {P.INV['id']} ({P.INV['closed']}) from the planned "
+      "designs; no criterion changes.\n")
+    w("- **Owner's instruction (2026-10-08):** \"calculate the required sample size to resolve these "
+      "effects by additional runs for DoEs on unit operations which affect the drug substance "
+      "specification, for the others, reduce the model.\"\n\n")
+    w("Failing models and their remedy — `csv(\"model_adequacy.csv\")`:\n\n")
+    m = P.csv("model_adequacy.csv")
+    w(m[~m["adequate"].astype(bool)].round(3).to_markdown(index=False) + "\n\n")
+    w("Per-step augmentation — `csv(\"augmentation_plan.csv\")`:\n\n")
+    w(P.csv("augmentation_plan.csv").to_markdown(index=False) + "\n\n")
+    w("Augmentation studies (chronology):\n\n")
+    ch = P.csv("study_chronology.csv")
+    w(ch[ch["kind"] == "augmentation"].to_markdown(index=False) + "\n\n")
+    w("Model status after the remedies (`D.model_status(step, resp)`), and the NOR judgement:\n\n")
+    rows = []
+    for _, r in m.iterrows():
+        f = D.fit(r["step_key"], "rsm", r["response"])
+        rows.append({"step": r["step_key"], "response": r["response"], "status": f["status"],
+                     "runs": f["n"], "terms": len(f["names"]), "gap": round(f["gap"], 3),
+                     "nor_met": D.nor_met(r["step_key"], r["response"])})
+    import pandas as _pd
+    w(_pd.DataFrame(rows).to_markdown(index=False) + "\n\n")
+    w("Discrepancies from the plan that the augmentations are: "
+      + "; ".join(f"{d['id']} ({doc}): {d['done']}" for doc, ds in P.PLAN_DISCREPANCIES.items()
+                  for d in ds if "Augmentation" in d["subject"]) + ".\n\n")
+    w(f"CAPA (`CAPA2`):\n\n{P.CAPA2.to_markdown(index=False)}\n\nEffectiveness check: "
+      f"{P.EFFECTIVENESS2}\n\n")
+    return b.getvalue()
+
+
 def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
     """Version 2.0: the revision, the investigation, the criteria old and new, the methods, the
     chronology and the complex tables this document should carry. Facts only, all pulled."""
@@ -442,12 +532,17 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
     ver, eff = P.doc_version(doc_id)
     w("## 4c. Version 2.0 — revision facts\n\n")
     w(f"- **This document:** Version {ver}, effective {eff} (`doc_version(DOC)`). "
-      + ("New document." if doc_id == P.INV["id"] else
+      + ("New document." if doc_id in P.INVESTIGATIONS else
          f"Supersedes Version {P.REV1['rev']} of {P.rev1_date(doc_id)}, frozen in "
          "`pc_package/superseded/rev1/`.") + "\n")
     w(f"- **Investigation:** {P.INV['id']}, {P.INV['title']}; opened {P.INV['opened']}, closed "
       f"{P.INV['closed']}; trigger: {P.INV['trigger']}; classification {P.INV['classification']} "
       "(`INV`).\n")
+    w(f"- **Second investigation:** {P.INV2['id']}, {P.INV2['title']}; opened {P.INV2['opened']}, "
+      f"closed {P.INV2['closed']}; trigger: {P.INV2['trigger']}; classification "
+      f"{P.INV2['classification']} (`INV2`, `CAPA2`, `EFFECTIVENESS2`). It applied the model-adequacy "
+      "criteria of PCMP-001 §7.2 to every response-surface model with a criterion, augmented the "
+      "designs its rule names and refitted every other failing model. It changed no criterion.\n")
     w(f"- **Method decision:** {P.AMD['id']}, {P.AMD['date']}: {P.AMD['title']} (`AMD`).\n")
     w("- **Revision history:** `revision_history(DOC)` under an unnumbered heading after the "
       "approvals. The story is STORY_BIBLE §9b; the findings are numbered there.\n")
@@ -493,6 +588,8 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
         if not v.empty:
             w("### Platform worst cases this step verifies — `D.iac_verification(UO)`\n\n")
             w(v.to_markdown(index=False) + "\n\n")
+        if key in D.st.DOE_FACTORS and (is_report or is_plan):
+            w(_model_adequacy_section(doc_id, key, is_report))
         if key in ("harvest", "ufdf"):
             uni = P.csv("univariate_studies.csv")
             uni = uni[uni["step"] == key].dropna(axis=1, how="all")
@@ -535,6 +632,8 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
             w(c.groupby("sample", sort=False)[["lmw_sec_pct", "lmw_cesds_pct", "difference"]]
               .mean().round(3).to_markdown() + "\n\n")
     else:
+        if doc_id == P.INV2["id"]:
+            w(_inv2_section())
         w("### Corpus-level tables\n\n")
         for name in ("iac.csv", "criteria_rev1.csv", "iac_verification.csv", "iac_viral_cumulative.csv", "p_oos.csv"):
             w(f"`csv(\"{name}\")`:\n\n" + P.csv(name).round(4).to_markdown(index=False) + "\n\n")
@@ -571,6 +670,10 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
         if key == "aex" and is_report:
             calls.append('T.doe_results("aex", "rsm", superseded=True)')
         has_sdm = key in set(P.csv("sdm_qualification.csv")["step"])
+        if is_report and key in D.st.DOE_FACTORS:
+            calls.append(f'T.model_reevaluation("{key}")')
+            if D.has_augmentation(key):
+                calls.append(f'T.doe_results("{key}", "aug")')
         if is_report and has_sdm:
             calls.append(f'T.sdm_offsets(["{key}"])')
             for d in P.PLAN_DISCREPANCIES.get(doc_id, []):
@@ -580,6 +683,8 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
     else:
         calls += {"INV-001": ["T.criteria_change()", "T.method_comparability()", "T.methods_by_study()",
                               "T.iac_derivation()", "T.worst_case_verification()", "T.calibration_windows()"],
+                  "INV-002": ["T.model_adequacy()", "T.adequacy_remedy()", "T.sample_size()"]
+                             + [f'T.augmentation_design("{k}")' for k in D.st.DOE_FACTORS if D.has_augmentation(k)],
                   "PCMR-001": ["T.iac_derivation()", "T.worst_case_verification()", "T.methods_by_study()",
                                "T.parameters_by_step()", "T.criteria_change()", "T.studies_overview()",
                                'T.pp_cqa_matrix("studied")', 'T.pp_cqa_matrix("affected")',

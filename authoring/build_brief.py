@@ -443,7 +443,7 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
     w("## 4c. Version 2.0 — revision facts\n\n")
     w(f"- **This document:** Version {ver}, effective {eff} (`doc_version(DOC)`). "
       + ("New document." if doc_id == P.INV["id"] else
-         f"Supersedes Version {P.REV1['rev']} of {P.REV1['effective']}, frozen in "
+         f"Supersedes Version {P.REV1['rev']} of {P.rev1_date(doc_id)}, frozen in "
          "`pc_package/superseded/rev1/`.") + "\n")
     w(f"- **Investigation:** {P.INV['id']}, {P.INV['title']}; opened {P.INV['opened']}, closed "
       f"{P.INV['closed']}; trigger: {P.INV['trigger']}; classification {P.INV['classification']} "
@@ -516,7 +516,9 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
     # the complex tables for this document
     w("### Complex tables this document should carry (pc_package/tables.py, `import tables as T`)\n\n")
     w("Print each in its own chunk with `#| output: asis` as `T.<builder>(...).show()`. Use the "
-      "exact call below: the annex builder calls the same one to anchor its rows.\n\n")
+      "exact call below: the annex builder calls the same one to anchor its rows. A table of your "
+      "own whose first column repeats is `T.frame(df, caption, label, merge=[...])`, never a pipe "
+      "table (WRITING_GUIDE §6).\n\n")
     calls = []
     if key is not None:
         calls.append(f'T.methods_by_study(["{key}"])')

@@ -109,7 +109,13 @@ def dry_run(qmd: str):
                         inline_errs.append((ln, code, e))
     finally:
         os.chdir(prev_cwd)
+    _LAST_NS[os.path.abspath(qmd)] = ns
     return segments, chunk_errs, inline_errs
+
+
+# the namespace of the last dry run per document, so the table-fit check can evaluate a builder
+# call that uses the document's own variables (T.frame(design_tab, ...))
+_LAST_NS: dict = {}
 
 
 def run_lint(qmd: str) -> int:
@@ -198,8 +204,9 @@ def check_tables_fit(qmd: str) -> int:
     text = re.sub(r"\s+", " ", " ".join(page.get_text() for page in doc))
     doc.close()
     bad = []
-    # the document's own identity variables, which builder calls commonly use (T.x([UO]))
-    ns = {"T": T}
+    # the document's namespace from the dry run where there was one, else its identity variables
+    ns = dict(_LAST_NS.get(os.path.abspath(qmd), {}))
+    ns["T"] = T
     for m in re.finditer(r'^(DOC|UO|UO_TITLE)\s*=\s*(.+)$', open(qmd, encoding="utf-8").read(), re.M):
         try:
             ns[m.group(1)] = eval(m.group(2), {})
@@ -228,6 +235,103 @@ def check_tables_fit(qmd: str) -> int:
             print(f"      {b}")
         return 1
     print(f"OK    {len(calls)} complex table(s) complete in the PDF")
+    return 0
+
+
+# The smallest text a table may print, in points. Owner's comment 2026-10-08: "an acceptable level of
+# font reduction is used in Table 5.6 [of PCR-005] but it should not be more than that". That table
+# prints at 8.1 pt against 10.9 pt body text, which is \scriptsize with no further shrink.
+FONT_FLOOR_PT = 7.9
+
+
+def check_font_floor(qmd: str) -> int:
+    """Fail if any text in the PDF is set below FONT_FLOOR_PT: a table shrunk to fit its page.
+
+    A table wider than the text block is shrunk by adjustbox, and its text with it. Below the floor
+    the table needs abbreviated headers (defined in its note and in the Abbreviations table), line
+    breaks in its headers, fewer or narrower columns, or a landscape page of its own
+    (``CTable(landscape=True)``). Superscripts (footnote markers) are exempt."""
+    pdf = os.path.splitext(os.path.abspath(qmd))[0] + ".pdf"
+    if not os.path.exists(pdf) or os.path.getmtime(pdf) < os.path.getmtime(qmd):
+        return 0
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        return 0
+    doc = fitz.open(pdf)
+    bad = {}
+    for pno, page in enumerate(doc):
+        for b in page.get_text("dict")["blocks"]:
+            for ln in b.get("lines", []):
+                for sp in ln["spans"]:
+                    # a superscript (footnote marker) is meant to be small: flag bit 0
+                    tx = sp["text"].strip()
+                    if (len(tx) > 2 and not sp["flags"] & 1 and not re.fullmatch(r"[A-Za-z]{1,2}\d?\)", tx)
+                            and sp["size"] < FONT_FLOOR_PT):
+                        bad.setdefault(pno + 1, (sp["size"], sp["text"].strip()[:40]))
+    doc.close()
+    if bad:
+        print(f"FAIL  text below {FONT_FLOOR_PT} pt on {len(bad)} page(s) (a table shrunk too far: "
+              "abbreviate or break its headers, or set it landscape):")
+        for pg, (sz, tx) in sorted(bad.items()):
+            print(f"      p.{pg}: {sz:.1f} pt, {tx!r}")
+        return 1
+    print(f"OK    no text below {FONT_FLOOR_PT} pt")
+    return 0
+
+
+# tables whose first column legitimately repeats: the approval record (one signature per row)
+_MERGE_EXEMPT_HEADERS = ("Role",)
+
+
+def docx_tables(docx: str):
+    """[(caption-less header cells, [[cell text, ...], ...]), ...] for every table in a DOCX. A
+    vertically merged continuation cell reads as the empty string."""
+    import html as _html
+    import zipfile
+    xml = zipfile.ZipFile(docx).read("word/document.xml").decode("utf-8")
+    out = []
+    for tbl in re.findall(r"<w:tbl>.*?</w:tbl>", xml, re.S):
+        rows = []
+        for tr in re.findall(r"<w:tr[ >].*?</w:tr>", tbl, re.S):
+            cells = [re.sub(r"\s+", " ", _html.unescape(re.sub(r"<[^>]+>", " ", tc))).strip()
+                     for tc in re.findall(r"<w:tc>.*?</w:tc>", tr, re.S)]
+            rows.append(cells)
+        # a pipe table's caption is written into the table as its first row
+        if rows and len(rows[0]) == 1 and re.match(r"Table \d+", rows[0][0]):
+            rows = rows[1:]
+        if rows:
+            out.append((rows[0], rows[1:]))
+    return out
+
+
+def check_table_merges(qmd: str) -> int:
+    """Fail if a table repeats its index cell down consecutive rows instead of merging it.
+
+    Owner's comment 2026-10-08: index cells that repeat across rows are merged, as a report sets
+    them. A pipe table (``df.to_markdown()``, ``md()``) cannot merge, so a table whose first column
+    repeats is built with ``T.frame(df, merge=[...])`` or a builder in tables.py. Reads the DOCX,
+    where a merged continuation cell is empty."""
+    docx = os.path.splitext(os.path.abspath(qmd))[0] + ".docx"
+    if not os.path.exists(docx) or os.path.getmtime(docx) < os.path.getmtime(qmd):
+        return 0
+    bad = []
+    for head, rows in docx_tables(docx):
+        # a captioned pipe table carries its caption in front of the first header cell
+        first = re.sub(r"^Table \d+:.*?\.\s+", "", head[0]) if head else ""
+        if not head or first in _MERGE_EXEMPT_HEADERS or len(rows) < 2:
+            continue
+        reps = [r[0] for a, r in zip(rows, rows[1:]) if r and a and r[0] and r[0] == a[0]
+                and len(r) > 1]
+        if reps:
+            bad.append(f"table headed {' | '.join(head)[:60]!r}: first cell {reps[0]!r} repeats")
+    if bad:
+        print(f"FAIL  {len(bad)} table(s) repeat an index cell instead of merging it "
+              "(use T.frame(df, merge=[...])):")
+        for b in bad:
+            print(f"      {b}")
+        return 1
+    print("OK    no table repeats an index cell down its rows")
     return 0
 
 
@@ -293,6 +397,10 @@ def check(qmd: str, do_render: bool, strict_numerals: bool, lax_style: bool) -> 
         render_rc = check_pdf_glyphs(qmd)
     if render_rc == 0:
         render_rc = check_tables_fit(qmd)
+    if render_rc == 0:
+        render_rc = check_table_merges(qmd)
+    if render_rc == 0:
+        render_rc = check_font_floor(qmd)
 
     hard_ok = (ok and render_rc == 0
                and (lint_rc == 0 or not strict_numerals)

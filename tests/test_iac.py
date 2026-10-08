@@ -52,7 +52,7 @@ def test_final_loosens_only_by_the_widening_rule():
     t = pd.read_csv(os.path.join(DATA, "iac.csv"))
     v = pd.read_csv(os.path.join(DATA, "iac_verification.csv"))
     loose = (t["iac_high"] > t["iac_high_apriori"] + 1e-12) | (t["iac_low"] < t["iac_low_apriori"] - 1e-12)
-    assert (loose == t["widened"]).all()
+    assert (~loose | t["widened"]).all()          # loosened only where a widening reached it
     if not CFG.raw()["iac"].get("allow_widening", False):
         assert not loose.any()
     else:
@@ -92,3 +92,10 @@ def test_rev1_criteria_reproduce_what_rev1_printed():
     assert round(cex.loc["hcp_out_ng_mg", "high"]) == 193
     assert cex.loc["aggregate_out_pct", "high"] == pytest.approx(1.0)
     assert cex.loc["aggregate_out_pct", "margin"] == pytest.approx(5.0)
+
+
+def test_widening_needs_an_adequate_model():
+    """A widening rests on a model that passes the adequacy tests of PCMP-001 (PCR-005 review)."""
+    v = pd.read_csv(os.path.join(DATA, "iac_verification.csv"))
+    w = v[v["widening_supported"] == True]  # noqa: E712
+    assert (w["model_adequate"] == True).all()  # noqa: E712

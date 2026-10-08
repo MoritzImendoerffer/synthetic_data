@@ -151,7 +151,9 @@ def main() -> None:
                           "parameter": p.name, "unit": p.unit, "setpoint": p.setpoint,
                           "nor_low": p.nor[0], "nor_high": p.nor[1],
                           "par_low": p.par[0], "par_high": p.par[1],
-                          "classification": p.classification, "study": p.study})
+                          "classification": p.classification, "study": p.study,
+                          # the NOR as characterized, where a Version 2.0 report narrowed it
+                          "nor_char_low": p.nor_characterized[0], "nor_char_high": p.nor_characterized[1]})
     preg = pd.DataFrame(prows)
     save(preg, "parameter_classification.csv")
     cls_counts = preg["classification"].value_counts().to_dict()

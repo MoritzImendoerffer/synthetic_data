@@ -17,6 +17,25 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _DEFAULT_CFG = os.path.normpath(os.path.join(_HERE, "..", "config", "parameters.yaml"))
 
 
+# Which NOR ``Parameter.nor`` returns. "final": the NOR in force, which a Version 2.0 report may
+# have narrowed (config ``nor_v2``, owner's decisions 2026-10-08). "characterized": the NOR the
+# studies were planned against, which a report needs to show why a NOR was narrowed.
+_NOR_MODE = {"mode": "final"}
+
+
+class characterized_nor:
+    """Context manager: inside it, ``Parameter.nor`` is the NOR as characterized (``nor``), not the
+    Version 2.0 NOR in force (``nor_v2``)."""
+    def __enter__(self):
+        self._old = _NOR_MODE["mode"]
+        _NOR_MODE["mode"] = "characterized"
+        return self
+
+    def __exit__(self, *a):
+        _NOR_MODE["mode"] = self._old
+        return False
+
+
 @dataclass
 class Parameter:
     key: str
@@ -26,7 +45,8 @@ class Parameter:
     classification: str
     study: str
     prange: List[float]              # characterization / DoE edges [lo, hi]
-    nor: List[float]                 # normal operating range [lo, hi]
+    nor: List[float]                 # normal operating range in force [lo, hi] (Version 2.0)
+    nor_characterized: List[float] = None   # the NOR the studies were planned and judged against
 
     @property
     def par(self) -> List[float]:
@@ -104,7 +124,9 @@ class Config:
                 key=p["key"], name=p["name"], unit=p.get("unit", ""),
                 setpoint=p.get("setpoint", 0.0), classification=p.get("classification", ""),
                 study=p.get("study", ""), prange=list(p.get("range", [0, 0])),
-                nor=list(p.get("nor", p.get("range", [0, 0]))),
+                nor=list(p.get("nor_v2", p.get("nor", p.get("range", [0, 0]))) if _NOR_MODE["mode"] == "final"
+                         else p.get("nor", p.get("range", [0, 0]))),
+                nor_characterized=list(p.get("nor", p.get("range", [0, 0]))),
             )
             for p in raw.get("parameters", [])
         ]

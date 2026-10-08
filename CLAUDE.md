@@ -96,7 +96,7 @@ differ only in their `UO` key and unit-specific narrative:
 - **Every document** opens with `title_block(DOC, UO_TITLE)` + `SYN_BANNER`, an
   Approvals table, a Revision history (`revision_history(DOC)`) and Abbreviations, carries a
   "Changes in this revision" subsection in its Introduction (or Purpose and scope), and closes with `# References {.unnumbered}` +
-  `::: {#refs} :::`. Use `related_docs_md(DOC)` and `sop_table(...)` for cross-refs.
+  `::: {#refs} :::`. Use `related_docs_md(DOC)` and `T.sop_references(...)` (merged by type) for cross-refs.
 - **Canonical section order — Report (`PCR-00N`):** Executive summary · Introduction
   (product/UO, objectives, regulatory basis) · Prior knowledge & quality risk basis
   (CQAs in scope, risk-based prioritization from RA-001) · Materials & methods
@@ -153,8 +153,9 @@ differ only in their `UO` key and unit-specific narrative:
   every downstream step, with no margin. `iac.derive()` reads the config only
   (`tests/test_iac.py`). Verification against this campaign's data tightens a criterion where a
   step does worse than the platform worst case, and widens it only by the rule stated in advance:
-  the 95 % confidence bound of the A-Mab worst case beats the platform value
-  (`iac.allow_widening`, owner's decision 2026-10-08), and the report argues it. Version 1.0
+  the one-sided 95 % confidence bound of the A-Mab worst case beats the platform value
+  and the downstream model passes the PCMP-001 adequacy tests (`iac.allow_widening`, owner's
+  decision 2026-10-08), and the report argues it. Tightening also uses the bound. Version 1.0
   fitted its criteria to the data instead and that is `INV-001`; its criteria are data in
   `criteria_rev1.csv`, never a yardstick. Quality attributes are judged per batch, viral clearance
   on the mean LRF at the least favourable NOR combination of the other parameters (`doe_report.decision_statistic`).

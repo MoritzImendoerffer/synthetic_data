@@ -137,10 +137,36 @@ def _nor_worst(cfg: Config, step: str, df: pd.DataFrame, col: str, feed: float, 
     # the same worst case at 95 % confidence: the upper confidence limit of the output where a
     # high output is bad (a fold computed from it is a lower bound on the clearance), or the
     # upper limit of the increase
-    ci = model.get_prediction(X).summary_frame(alpha=0.05)
+    # one-sided 95 %: the upper limit of the two-sided 90 % interval
+    ci = model.get_prediction(X).summary_frame(alpha=0.10)
     up = ci["mean_ci_upper"].to_numpy()
     bound = float((feed / up).min()) if mode == "fold" else float((up - feed).max())
-    return worst, bound
+    return worst, bound, _adequacy(cfg, model, df, col)
+
+
+def _adequacy(cfg: Config, model, df: pd.DataFrame, col: str) -> Dict[str, float]:
+    """The model-adequacy tests of PCMP-001 (campaign thresholds): R² minus predicted R² (PRESS)
+    within ``max_r2_minus_pred_r2``, and no significant lack of fit against the centre-point pure
+    error at ``lof_alpha``. A widening must rest on a model that passes both."""
+    from scipy import stats as sst
+    th = cfg.raw()["campaign"]["thresholds"]
+    y = df[col].to_numpy(float)
+    h = model.get_influence().hat_matrix_diag
+    press = float(np.sum((model.resid.to_numpy() / (1 - h)) ** 2))
+    sst_ = float(np.sum((y - y.mean()) ** 2))
+    pred_r2 = 1 - press / sst_ if sst_ > 0 else float("nan")
+    gap = float(model.rsquared - pred_r2)
+    p_lof = float("nan")
+    if "run_type" in df:
+        cen = df.loc[df["run_type"] == "center", col].to_numpy(float)
+        df_pe = len(cen) - 1
+        ss_pe = float(((cen - cen.mean()) ** 2).sum()) if len(cen) else 0.0
+        df_lof = int(model.df_resid) - df_pe
+        ss_lof = max(float((model.resid ** 2).sum()) - ss_pe, 0.0)
+        if df_pe > 0 and df_lof > 0 and ss_pe > 0:
+            p_lof = float(sst.f.sf((ss_lof / df_lof) / (ss_pe / df_pe), df_lof, df_pe))
+    ok = gap <= float(th["max_r2_minus_pred_r2"]) and not (p_lof < float(th["lof_alpha"]))
+    return {"r2_gap": gap, "p_lof": p_lof, "adequate": bool(ok)}
 
 
 def verification(cfg: Config, data: Dict[str, pd.DataFrame], ps: pd.DataFrame,
@@ -170,49 +196,63 @@ def verification(cfg: Config, data: Dict[str, pd.DataFrame], ps: pd.DataFrame,
             kind = "fold_min" if "fold_min" in p else "add_max"
             assumed = float(p[kind])
             edge = nor = nor_bound = None
+            adq = {"r2_gap": None, "p_lof": None, "adequate": None}
             if (step, cqa) in feeds and step in data:
                 feed, col, mode = feeds[(step, cqa)]
                 df = data[step]
                 if col in df and df[col].notna().all():
                     edge = float((feed / df[col]).min()) if mode == "fold" else float((df[col] - feed).max())
-                    nor, nor_bound = _nor_worst(cfg, step, df, col, feed, mode)
+                    nor, nor_bound, adq = _nor_worst(cfg, step, df, col, feed, mode)
             met = None if nor is None else (nor >= assumed if kind == "fold_min" else nor <= assumed)
             # widening (owner's decision 2026-10-08): allowed only where the A-Mab worst case beats
             # the platform value even at its 95 % confidence bound
-            better = None if nor is None else (nor_bound > assumed if kind == "fold_min" else nor_bound < assumed)
+            # ... and only on a model that passes the adequacy tests of PCMP-001: a widening needs
+            # good arguments, and a model that fails them is not one (PCR-005 review, 2026-10-08).
+            # Tightening needs no such test: a worse prediction is a warning even from a weak model.
+            better = None if nor is None else (
+                (nor_bound > assumed if kind == "fold_min" else nor_bound < assumed) and bool(adq["adequate"]))
             rows.append({"step": cfg.unit_op(step).step, "step_key": step, "cqa": cqa,
                          "assumption": kind, "assumed": assumed, "observed_edge": edge,
                          "predicted_nor": nor, "predicted_nor_bound95": nor_bound if nor is not None else None,
-                         "met": met, "widening_supported": better, "source": p.get("source", "")})
+                         "met": met, "widening_supported": better, "model_adequate": adq["adequate"],
+                         "r2_minus_pred_r2": adq["r2_gap"], "p_lack_of_fit": adq["p_lof"],
+                         "source": p.get("source", "")})
     return pd.DataFrame(rows)
 
 
 def final(cfg: Config, ver: pd.DataFrame) -> pd.DataFrame:
     """The criteria in force: the a-priori table, tightened wherever verification showed a step
     doing worse within its NOR than the platform worst case assumed, and widened only where the 95 %
-    confidence bound of the A-Mab worst case beats the platform value and ``allow_widening`` is on."""
-    tighten = {}
+    confidence bound of the A-Mab worst case beats the platform value and ``allow_widening`` is on.
+
+    Both directions use the 95 % confidence bound, never the point prediction: a step that does
+    worse is replaced by the bound, which is worse still, and a step that does better is credited
+    only with its bound. A criterion upstream of two changed steps can be both tightened by one and
+    widened by the other; ``tightened`` and ``widened`` say which changes reached it, and the value
+    is the net of both."""
+    tight, wide = {}, {}
     for _, r in ver[ver["met"] == False].iterrows():  # noqa: E712  (None stays unverified)
-        tighten[(r["step_key"], r["cqa"])] = {r["assumption"]: float(r["predicted_nor"])}
-    # Widening uses the 95 % confidence bound, never the point prediction, and only where the
-    # bound beats the platform worst case (owner's decision 2026-10-08: "if the data supports it,
-    # a criterion could be widened, but it needs good arguments"). The report argues each one.
+        tight[(r["step_key"], r["cqa"])] = {r["assumption"]: float(r["predicted_nor_bound95"])}
+    # Widening (owner's decision 2026-10-08: "if the data supports it, a criterion could be
+    # widened, but it needs good arguments"). The report argues each one.
     if "widening_supported" in ver.columns and cfg.raw()["iac"].get("allow_widening", False):
         for _, r in ver[ver["widening_supported"] == True].iterrows():  # noqa: E712
-            tighten[(r["step_key"], r["cqa"])] = {r["assumption"]: float(r["predicted_nor_bound95"])}
+            wide[(r["step_key"], r["cqa"])] = {r["assumption"]: float(r["predicted_nor_bound95"])}
     a = derive(cfg)
-    f = derive(cfg, tighten)
+    f = derive(cfg, {**tight, **wide})
+    ft, fw = derive(cfg, tight), derive(cfg, wide)
     a["iac_low_apriori"], a["iac_high_apriori"] = a["iac_low"], a["iac_high"]
     a["iac_low"], a["iac_high"] = f["iac_low"], f["iac_high"]
-    a["tightened"] = (a["iac_high"] < a["iac_high_apriori"]) | (a["iac_low"] > a["iac_low_apriori"])
-    a["widened"] = (f["iac_high"] > a["iac_high_apriori"]) | (f["iac_low"] < a["iac_low_apriori"])
-    # the derivation columns of a tightened row show the value that replaced the platform worst
-    # case, so the criterion can be recomputed from its own row
+    a["tightened"] = (ft["iac_high"] < a["iac_high_apriori"]) | (ft["iac_low"] > a["iac_low_apriori"])
+    a["widened"] = (fw["iac_high"] > a["iac_high_apriori"]) | (fw["iac_low"] < a["iac_low_apriori"])
+    # the derivation columns of a changed row show the values that replaced the platform worst
+    # cases, so the criterion can be recomputed from its own row
     ch = a["tightened"] | a["widened"]
     a.loc[ch, "downstream_fold"] = f.loc[ch, "downstream_fold"]
     a.loc[ch, "downstream_added"] = f.loc[ch, "downstream_added"]
-    a.loc[a["tightened"], "basis"] = "back-calculated, tightened on verification"
-    a.loc[a["widened"], "basis"] = "back-calculated, widened on verification"
+    a.loc[a["tightened"] & ~a["widened"], "basis"] = "back-calculated, tightened on verification"
+    a.loc[a["widened"] & ~a["tightened"], "basis"] = "back-calculated, widened on verification"
+    a.loc[a["widened"] & a["tightened"], "basis"] = "back-calculated, tightened and widened on verification"
     return a
 
 
@@ -238,7 +278,9 @@ def rev1_criteria(cfg: Config, ps: pd.DataFrame, cap: pd.DataFrame, vc: pd.DataF
                 row = capk.loc[ent["from_capability"]]
                 val = float(row["mean"]) + float(r1["capability_alert_sigma"]) * float(row["sd"])
                 rule, margin = f"mean + {r1['capability_alert_sigma']} sd of capability", np.nan
-                lo, hi = lo_ds, val
+                # Version 1.0 judged acidic variants against the ceiling only (INV-001 finding
+                # 4); the glycans kept their drug-substance floor
+                lo, hi = (0.0 if cqa == "acidic_variants" else lo_ds), val
             elif "from_ds_backcalc" in ent:
                 spec = ent["from_ds_backcalc"]
                 down = pss[pss.index > uo.step]

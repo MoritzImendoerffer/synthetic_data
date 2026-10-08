@@ -108,11 +108,42 @@ class CTable:
     def __post_init__(self):
         self.header = [[_c(x) for x in r] for r in self.header]
         self.body = [[_c(x) for x in r] for r in self.body]
+        self._relabel_notes()
         self.ncols = sum(c.cs for c in self.header[0])
         if not self.label.startswith("tbl-"):
             raise ValueError("label must start with 'tbl-'")
         self._grid(self.header)
         self._grid(self.body)
+
+    def _relabel_notes(self):
+        """Letter footnotes a), b), c) … in the order the table first uses them, and drop a lettered
+        note the table never uses. A builder may keep a fixed lettering in its code; the reader
+        never sees "e)" without a "d)". Markers that are not a single letter (R1, c1) and notes with
+        no marker are left as they are."""
+        cells = [c for r in self.header + self.body for c in r]
+        order = []
+        for c in cells:
+            for m in _MARK.findall(_s(c.text)):
+                if re.fullmatch(r"[a-z]\)", m) and m not in order:
+                    order.append(m)
+        if not order:
+            return
+        new = {m: f"{chr(ord('a') + i)})" for i, m in enumerate(order)}
+        rep = lambda t: _MARK.sub(lambda mm: "^" + new.get(mm.group(1), mm.group(1)) + "^", _s(t))
+        for c in cells:
+            c.text = rep(c.text)
+        notes = [(new[m], t) for m, t in self.notes if m in new]
+        notes.sort(key=lambda n: n[0])
+        keep = [(m, t) for m, t in self.notes if not re.fullmatch(r"[a-z]\)", m or "")]
+        self.notes = notes + keep
+
+    def marker_for(self, text: str) -> str:
+        """The marker of the note whose text contains ``text`` ("a)"), so prose can cite a note
+        without typing a letter that relabelling may change."""
+        for m, t in self.notes:
+            if text in t:
+                return m
+        raise KeyError(f"{self.label}: no note contains {text!r}")
 
     # -- occupancy: which (row, col) a span covers ----------------------------------------
     def _grid(self, rows):
@@ -182,6 +213,10 @@ class CTable:
                 if col in starts:
                     c = starts[col]
                     txt = _latex(c.text)
+                    if r"\newline" in txt and "p{" not in aligns[col]:
+                        # a line break in a column that does not wrap (a header, a short label)
+                        a_ = (c.align or aligns[col] if len(aligns[col]) == 1 else "l")
+                        txt = r"\makecell[" + a_ + "]{" + txt.replace(r"\newline ", r"\\") + "}"
                     if c.rs > 1:
                         # in a wrapping column the merged text must wrap to the column width
                         w = "=" if "p{" in aligns[col] and c.cs == 1 else "*"

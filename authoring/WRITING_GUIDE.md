@@ -142,6 +142,18 @@ merged group cells, two-level headers, "n.t." for a test that was not run, and f
 where a value came from. Use them where the brief lists them, and let the footnote carry a caveat
 that belongs to one cell. The prose then says what the table shows, not what each footnote says.
 
+Set every table the way a report sets it (owner's comment 2026-10-08). Where an index column
+repeats down the rows (a step, an attribute, a study), merge its cells: build the table with
+`T.frame(df, caption, label, merge=["Step", ...])` instead of a pipe table, and the render gate
+fails a table that repeats an index cell instead. Keep headers narrow. Break a long header over two
+lines (`header={"col": "Drug-substance\ncriterion"}`), or use an abbreviation that the table's
+note and the Abbreviations table both define. A table may be set smaller than the text, but no
+smaller than 8 pt (the owner's limit, 2026-10-08), and the render gate fails any text below it. A
+table that does not fit at 8 pt gets abbreviated or broken headers, narrower columns, or a landscape
+page of its own (`CTable(..., landscape=True)`). A table letters its notes in the order it first
+uses them, so prose that cites a note computes the letter (`T.<builder>(...).marker_for("text of
+the note")`) and never types it.
+
 ## 7. Conventions of a controlled report
 
 These are what make a document read as a controlled record rather than an essay.

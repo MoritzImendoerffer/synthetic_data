@@ -319,11 +319,13 @@ def _rng_str(lo, hi):
 
 
 def plan_params(key):
-    """Parameters to be studied (no post-hoc classification) — for a Plan."""
+    """Parameters to be studied (no post-hoc classification) — for a Plan. The NOR is the one the
+    studies were planned against (``nor_char_*``), never a NOR a Version 2.0 report narrowed."""
     uo = CFG.unit_op(key)
     d = param_reg[param_reg.unit_operation == uo.name].copy()
     d["Range studied"] = d.apply(lambda r: _rng_str(r.par_low, r.par_high), axis=1)
-    d["NOR"] = d.apply(lambda r: _rng_str(r.nor_low, r.nor_high), axis=1)
+    lo_, hi_ = ("nor_char_low", "nor_char_high") if "nor_char_low" in d else ("nor_low", "nor_high")
+    d["NOR"] = d.apply(lambda r: _rng_str(r[lo_], r[hi_]), axis=1)
     d = d.rename(columns={"parameter": "Parameter", "unit": "Unit", "setpoint": "Set-point",
                           "study": "Study type"})
     return d[["Parameter", "Unit", "Set-point", "Range studied", "NOR", "Study type"]]
@@ -552,8 +554,7 @@ def related_docs_md(doc_id):
                INV["id"]: "Reason for this revision",
                }.get(rid, "Sibling — paired document")
         rows.append([rid, f"{cls} ({subject})", rel])
-    df = pd.DataFrame(rows, columns=["Document ID", "Title", "Relationship"])
-    return df.to_markdown(index=False)
+    return md_table(["Document ID", "Title", "Relationship"], rows, [16, 54, 30])
 
 
 def sop_table(sops=None, amvs=None):
@@ -561,8 +562,7 @@ def sop_table(sops=None, amvs=None):
     amvs = AMV_REFS if amvs is None else amvs
     rows = [[sid, title, "SOP"] for sid, title in sops]
     rows += [[aid, title, "Method validation"] for aid, title in amvs]
-    df = pd.DataFrame(rows, columns=["Reference", "Title", "Type"])
-    return df.to_markdown(index=False)
+    return md_table(["Reference", "Title", "Type"], rows, [16, 62, 22])
 
 
 # --------------------------------------------------------------------------- #
@@ -646,7 +646,7 @@ def corpus_docs_md(doc_id=None):
             continue
         cls, subject, _ = DOC_REGISTRY[rid]
         rows.append([rid, cls, subject])
-    return pd.DataFrame(rows, columns=["Document ID", "Document class", "Subject"]).to_markdown(index=False)
+    return md_table(["Document ID", "Document class", "Subject"], rows, [16, 40, 44])
 
 
 # Editorial one-line role of each unit operation in the control strategy. Narrative

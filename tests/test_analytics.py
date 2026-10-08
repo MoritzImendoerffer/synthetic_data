@@ -28,7 +28,9 @@ SHARED = ["doe_bioreactor_screening", "doe_bioreactor_rsm", "doe_protein_a_scree
           "doe_cex_screening", "doe_cex_rsm", "doe_aex_screening", "doe_aex_rsm",
           "doe_aex_screening_superseded", "doe_aex_rsm_superseded",
           "doe_virus_filtration_screening", "doe_virus_filtration_rsm",
-          "monte_carlo", "ppq_batches", "process_summary", "viral_clearance"]
+          "process_summary", "viral_clearance"]
+# monte_carlo and ppq_batches left this list on 2026-10-08: they sample each parameter within the
+# NOR in force, and Version 2.0 narrowed three NORs (config nor_v2, PCR-005 and PCR-006).
 
 
 def _at_tag(name):

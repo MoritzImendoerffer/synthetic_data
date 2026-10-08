@@ -20,6 +20,7 @@ import pandas as pd
 import statsmodels.api as sm
 
 from _pcpkg import CFG, cqa_reg, csv, st
+from amab_process.config import characterized_nor  # noqa: F401  (D.characterized_nor())
 
 RESP_LABEL = {
     "afucosylation": "Afucosylation", "galactosylation": "Galactosylation",
@@ -571,6 +572,25 @@ def nor_met(key, resp):
         _, plo, phi = prediction_interval(key, resp, nat)
         return bool(np.all(_in_spec(plo, lo, hi, stype)) and np.all(_in_spec(phi, lo, hi, stype)))
     return bool(np.all(_in_spec(np.asarray(predict(key, resp, natural=nat)), lo, hi, stype)))
+
+
+def nor_prediction_limit(key, resp, side="upper"):
+    """The most extreme single-run value the response-surface model predicts within the NOR, at
+    manufacturing scale: the upper (or lower) 95 % prediction limit at the worst combination of NOR
+    low, set-point and NOR high of the factors, minus the scale-down offset. This is the highest
+    (lowest) level a pool is expected to carry in routine manufacture, which a hold-time criterion
+    adds the hold increase to (PCP-005 Version 2.0). None when the step has no model for it."""
+    try:
+        r = fit(key, "rsm", resp)
+    except Exception:
+        return None
+    uo = CFG.unit_op(key)
+    grid = list(itertools.product(*[[uo.param(f).nor[0], uo.param(f).setpoint, uo.param(f).nor[1]]
+                                    for f in r["factors"]]))
+    nat = {f: [g[i] for g in grid] for i, f in enumerate(r["factors"])}
+    _, lo, hi = prediction_interval(key, resp, nat)
+    d = _offset_value(key, resp)
+    return float(np.max(hi) - d) if side == "upper" else float(np.min(lo) - d)
 
 
 def offset_qualification(key, resp, studies=None):

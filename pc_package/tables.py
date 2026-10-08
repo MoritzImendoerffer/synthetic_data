@@ -13,7 +13,7 @@ from __future__ import annotations
 import math
 import os
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -119,7 +119,16 @@ def methods_by_study(steps: Optional[List[str]] = None, label="tbl-methods-by-st
             body.append(["Fragments, LMW", C("no DoE^e)^", cs=2)])
             continue
         fs, fr = frag(step, "screening"), frag(step, "rsm")
-        body.append([C(STEP_NAME[step], rs=2), "Aggregates, HMW", C("SEC", cs=2)])
+        # aggregate by SEC wherever the designs carry an aggregate result on their runs (a modelled
+        # response, or SEC's own HMW result recorded beside the fragment window at Protein A)
+        hmw = False
+        for kind_ in ("screening", "rsm"):
+            f_ = os.path.join(DATA, f"doe_{step}_{kind_}.csv")
+            if os.path.exists(f_):
+                cols_ = set(pd.read_csv(f_, nrows=0).columns)
+                hmw = hmw or bool({"aggregates_hmw", "aggregate_out_pct", "hmw_sec_pct"} & cols_)
+        body.append([C(STEP_NAME[step], rs=2), "Aggregates, HMW",
+                     C("SEC" if hmw else "not measured^g)^", cs=2)])
         if fs is None and fr is None:
             body.append(["Fragments, LMW", C("not in scope^f)^", cs=2)])
         else:
@@ -131,19 +140,31 @@ def methods_by_study(steps: Optional[List[str]] = None, label="tbl-methods-by-st
         ("a)", "In this matrix part of the host cell protein elutes in the SEC low molecular weight "
                f"window. Reported for information only ({amd['id']})."),
         ("b)", f"Retained response-surface samples, tested {ret['start']} to {ret['end']}."),
-        ("c)", "Both methods on the same samples, the comparability study S-CEX-FRC."),
+        ("c)", "Both methods on the same samples of this design."),
         ("d)", "Re-executed design (DEV-008-01). The invalidated first execution measured "
                "fragments by SEC."),
         ("e)", "Univariate characterization only."),
         ("f)", "Fragments were not an attribute of this study."),
+        ("g)", "Aggregate was not measured in the designs at this step."),
     ]
-    used = {m for row in body for c in row for m in re.findall(r"\^([a-f]\))\^", str(getattr(c, "text", c)))}
+    used = {m for row in body for c in row for m in re.findall(r"\^([a-g]\))\^", str(getattr(c, "text", c)))}
     notes = [n for n in notes if n[0] in used]
-    return CTable(
-        header=[[C("Step", rs=2), C("Attribute", rs=2), C("Method used in study", cs=2)],
-                ["Screening", "Response surface"]],
-        body=body, align="llll", notes=notes, notes_per_row=True,
-        caption="Methods used for size variants, by step and study.", label=label)
+    header = [[C("Step", rs=2), C("Attribute", rs=2), C("Method used in study", cs=2)],
+              ["Screening", "Response surface"]]
+    align, cap = "llll", "Methods used for size variants in the designed studies, by step."
+    if len(steps) == 1:
+        header, body = _drop_step_column(header, body)
+        align, cap = "lll", f"Methods used for size variants in the designed studies, {STEP_NAME[steps[0]]}."
+    return CTable(header=header, body=body, align=align, notes=notes, notes_per_row=True,
+                  caption=cap, label=label)
+
+
+def _drop_step_column(header, body):
+    """Remove a leading step column that spans the whole table (one step shown): the caption
+    names the step instead. The step cell is the first cell of the first body row only."""
+    header = [list(header[0][1:])] + [list(r) for r in header[1:]]
+    body = [list(body[0][1:])] + [list(r) for r in body[1:]]
+    return header, body
 
 
 # --------------------------------------------------------------------------------------
@@ -156,6 +177,7 @@ def iac_derivation(steps: Optional[List[str]] = None, label="tbl-iac") -> CTable
     order = ["hcp", "aggregates_hmw", "fragments_lmw", "leached_protein_a", "acidic_variants",
              "afucosylation", "galactosylation", "high_mannose", "lrv_xmulv", "lrv_mvm"]
     body, marks = [], set()
+    one_step = t["step_key"].nunique() == 1        # a constant step column carries nothing
     for cqa in [c for c in order if c in set(t["cqa"])]:
         g = t[t["cqa"] == cqa].sort_values("step")
         first = True
@@ -168,12 +190,15 @@ def iac_derivation(steps: Optional[List[str]] = None, label="tbl-iac") -> CTable
                 deriv = [num(r["downstream_fold"]), num(r["downstream_added"])]
                 if r["basis"] == "drug substance":
                     basis, m = "Drug substance^a)^", "a)"
+                elif "tightened and widened" in r["basis"]:
+                    basis, m = "Carried back, tightened^b)^ and widened^e)^", None
+                    marks.update({"b)", "e)"})
                 elif "tightened" in r["basis"]:
-                    basis, m = "Back-calculated, tightened^b)^", "b)"
+                    basis, m = "Carried back, tightened^b)^", "b)"
                 elif "widened" in r["basis"]:
-                    basis, m = "Back-calculated, widened^e)^", "e)"
+                    basis, m = "Carried back, widened^e)^", "e)"
                 else:
-                    basis, m = "Back-calculated", None
+                    basis, m = "Carried back", None
                 if m:
                     marks.add(m)
             row = []
@@ -184,27 +209,31 @@ def iac_derivation(steps: Optional[List[str]] = None, label="tbl-iac") -> CTable
                 if r["basis"] == "platform claim":
                     marks.add("d)")
                 first = False
-            row += [STEP_NAME[r["step_key"]], *deriv,
+            row += ([] if one_step else [STEP_NAME[r["step_key"]]]) + [*deriv,
                     crit(r["iac_low"], r["iac_high"], r["spec_type"]), basis]
             body.append(row)
     notes = [
         ("a)", "No downstream step changes the attribute, so the drug-substance criterion applies."),
         ("b)", "The response-surface model of a downstream step predicted, within its NOR, a worse "
-               "value than the platform worst case. The A-Mab value replaced it."),
+               "value than the platform worst case. The 95 % confidence bound of that prediction "
+               "replaced it."),
         ("c)", "Log reduction claimed for this step in the modular viral clearance claim."),
         ("d)", "Cumulative requirement across the steps that clear the virus."),
         ("e)", "The 95 % confidence bound of a downstream step's A-Mab worst case within its NOR "
                "was better than the platform worst case. The bound replaced it."),
     ]
+    step_h = [] if one_step else [C("Step output", rs=2)]
+    step_a = [] if one_step else ["P{2.2cm}"]
     return CTable(
-        header=[[C("Attribute", rs=2), C("Drug-substance criterion", rs=2), C("Step output", rs=2),
-                 C("Downstream worst case", cs=2), C("Intermediate acceptance criterion", rs=2),
+        header=[[C("Attribute", rs=2), C("Drug-substance\ncriterion", rs=2), *step_h,
+                 C("Downstream worst case", cs=2), C("Intermediate\nacceptance\ncriterion", rs=2),
                  C("Basis", rs=2)],
                 ["Clearance fold", "Increase"]],
-        body=body, align=["P{2.6cm}", "l", "P{2.6cm}", "r", "r", "l", "P{3.2cm}"],
-        notes=[n for n in notes if n[0] in marks], notes_per_row=True,
+        body=body, align=["P{2.4cm}", "l", *step_a, "r", "r", "l", "P{2.6cm}"], size="footnotesize",
+        notes=[n for n in notes if n[0] in marks] + [("", "Computed from unrounded values. A criterion recomputed from the rounded values shown can differ in its last digit.")], notes_per_row=True,
         caption="Intermediate acceptance criteria and their derivation from the drug-substance "
-                "criteria.", label=label, resize=True)
+                "criteria" + (f", {STEP_NAME[t['step_key'].iloc[0]]} output" if one_step else "") + ".",
+        label=label, resize=True)
 
 
 # --------------------------------------------------------------------------------------
@@ -239,13 +268,21 @@ def criteria_change(steps: Optional[List[str]] = None, label="tbl-criteria-chang
                 orow = o.iloc[0]
                 code = _rule_code(orow["rule"])
                 marks.add(code)
-                rule = f"^{code}^" + ("" if pd.isna(orow["margin"]) else f" margin {num(orow['margin'], 1)}")
+                rule = code + ("" if pd.isna(orow["margin"]) else f", margin {num(orow['margin'], 1)}")
                 ocells = [crit(orow["low"], orow["high"], st), rule]
             if n.empty:
                 ncells = [C("none", cs=2)]
             else:
                 nrow = n.iloc[0]
-                ncells = [crit(nrow["iac_low"], nrow["iac_high"], nrow["spec_type"]), nrow["basis"]]
+                b_ = str(nrow["basis"])
+                short = {"drug substance": "Drug substance", "platform claim": "Platform claim",
+                         "back-calculated": "Carried back"}.get(b_)
+                if short is None:
+                    t_, w_ = "tightened" in b_, "widened" in b_
+                    short = "Carried back, " + " and ".join(
+                        [x for x, f in (("tightened^d)^", t_), ("widened^e)^", w_)) if f])
+                    marks.update({"d)"} if t_ else set()); marks.update({"e)"} if w_ else set())
+                ncells = [crit(nrow["iac_low"], nrow["iac_high"], nrow["spec_type"]), short]
             row = ([C(STEP_NAME[sk], rs=len(resps))] if i == 0 else []) + [ATTR_NAME[cqa], *ocells, *ncells]
             body.append(row)
     marks.add("b)")
@@ -253,15 +290,25 @@ def criteria_change(steps: Optional[List[str]] = None, label="tbl-criteria-chang
                     "drug-substance criterion."),
              ("b)", "Applied in the Version 1.0 reports at analysis. No approved Version 1.0 plan "
                     "contained these criteria (INV-001 finding 1)."),
-             ("c)", "Version 1.0 did not report fragments. The attribute was added at Version 2.0.")]
+             ("c)", "Version 1.0 did not report fragments. The attribute was added at Version 2.0."),
+             ("d)", "Tightened on verification: a downstream step did worse within its NOR than the "
+                    "platform worst case."),
+             ("e)", "Widened on verification: a downstream step did better than the platform worst "
+                    "case at its 95 % confidence bound, on an adequate model.")]
     old_rules = {_rule_code(r): r for r in old["rule"].unique()}
     notes += [(c, f"Version 1.0 rule: {old_rules[c]}.") for c in sorted(old_rules)]
+    header = [[C("Step", rs=2), C("Attribute", rs=2), C("Version 1.0^b)^", cs=2), C("Version 2.0", cs=2)],
+              ["Criterion", "Rule", "Criterion", "Basis"]]
+    align = ["P{2.3cm}", "P{3.1cm}", "l", "P{1.9cm}", "l", "P{3.3cm}"]
+    if len(by_step) == 1:
+        header, body = _drop_step_column(header, body)
+        align = align[1:]
     return CTable(
-        header=[[C("Step", rs=2), C("Attribute", rs=2), C("Version 1.0^b)^", cs=2), C("Version 2.0", cs=2)],
-                ["Criterion", "Rule", "Criterion", "Basis"]],
-        body=body, align=["P{2.4cm}", "P{3.4cm}", "l", "l", "l", "P{3.6cm}"],
+        header=header,
+        body=body, align=align,
         notes=[x for x in notes if x[0] in marks], notes_per_row=True, size="footnotesize",
-        caption="Acceptance criteria for the step outputs in Version 1.0 and Version 2.0.",
+        caption="Acceptance criteria for the step outputs in Version 1.0 and Version 2.0"
+                + (f", {STEP_NAME[next(iter(by_step))]}." if len(by_step) == 1 else "."),
         label=label, resize=True)
 
 
@@ -319,7 +366,7 @@ def method_comparability(label="tbl-sec-cesds") -> CTable:
                 f"{r['difference']:+.2f}"]
             body.append(row)
     return CTable(
-        header=[[C("Sample", rs=2), C("Replicate", rs=2), C("Fragments, LMW (%)", cs=2), C("SEC minus nrCE-SDS", rs=2)],
+        header=[[C("Sample", rs=2), C("Replicate", rs=2), C("Fragments, LMW (%)", cs=2), C("SEC minus\nnrCE-SDS", rs=2)],
                 ["SEC", "nrCE-SDS"]],
         body=body, align="lrrrr",
         notes=[("", "nrCE-SDS reports the sum of clipped species. The partial molecules seen under "
@@ -340,32 +387,47 @@ def worst_case_verification(steps: Optional[List[str]] = None, label="tbl-iac-ve
     body = []
     for sk, g in v.groupby("step_key", sort=False):
         for i, (_, r) in enumerate(g.iterrows()):
-            kind = "Clearance fold, lowest" if r["assumption"] == "fold_min" else "Increase, largest"
+            kind = ("Clearance fold, lowest" if r["assumption"] == "fold_min" else
+                    "Increase, largest" + (" (points)" if ATTR_NAME[r["cqa"]].endswith("(%)") else ""))
             if pd.isna(r["met"]):
                 out = "n.t.^a)^"
             elif not bool(r["met"]):
                 out = "Not confirmed, tightened^b)^"
             elif widen and bool(r.get("widening_supported")):
                 out = "Better, widened^c)^"
+            elif (r["predicted_nor_bound95"] > r["assumed"] if r["assumption"] == "fold_min"
+                  else r["predicted_nor_bound95"] < r["assumed"]) and r.get("model_adequate") is False:
+                out = "Confirmed, not widened^d)^"
             else:
                 out = "Confirmed"
             nt = lambda x: num(x) if not pd.isna(x) else "n.t.^a)^"
+            kinds = list(g["assumption"])
+            kcell = []
+            if i == 0 or kinds[i] != kinds[i - 1]:
+                n = 1
+                while i + n < len(kinds) and kinds[i + n] == kinds[i]:
+                    n += 1
+                kcell = [C(kind, rs=n) if n > 1 else kind]
             row = ([C(STEP_NAME[sk], rs=len(g))] if i == 0 else []) + [
-                ATTR_NAME[r["cqa"]], kind, num(r["assumed"]), nt(r["observed_edge"]),
+                ATTR_NAME[r["cqa"]].split(" (")[0], *kcell, num(r["assumed"]), nt(r["observed_edge"]),
                 nt(r["predicted_nor"]), nt(r["predicted_nor_bound95"]), out]
             body.append(row)
     notes = [("a)", "Not a response of the response-surface study at this step."),
-             ("b)", "The criteria upstream of this step were recalculated with the value predicted "
-                    "within the NOR."),
+             ("b)", "The criteria upstream of this step were recalculated with the 95 % confidence "
+                    "bound of the value predicted within the NOR."),
              ("c)", "The 95 % confidence bound is better than the platform worst case. The criteria "
-                    "upstream of this step were recalculated with the bound.")]
-    used = {m for row in body for c in row for m in re.findall(r"\^([a-c]\))\^", str(getattr(c, "text", c)))}
+                    "upstream of this step were recalculated with the bound."),
+             ("d)", "The 95 % confidence bound is better than the platform worst case, but the model "
+                    "fails an adequacy test of PCMP-001, so the platform value stands.")]
+    used = {m for row in body for c in row for m in re.findall(r"\^([a-d]\))\^", str(getattr(c, "text", c)))}
+    rounding = [("", "Computed from unrounded values. A criterion recomputed from the rounded values shown can differ in its last digit.")]
     return CTable(
         header=[[C("Step", rs=2), C("Attribute", rs=2), C("Worst case", rs=2), C("Platform", rs=2),
                  C("This campaign", cs=3), C("Outcome", rs=2)],
-                ["At the edges", "Within the NOR", "95 % bound"]],
-        body=body, align="lllrrrrl",
-        notes=[n for n in notes if n[0] in used],
+                ["At the\nedges", "Within\nthe NOR", "95 %\nbound"]],
+        body=body, align=["P{2.2cm}", "P{2.4cm}", "P{2.6cm}", "r", "r", "r", "r", "P{2.7cm}"],
+        size="footnotesize",
+        notes=[n for n in notes if n[0] in used] + rounding,
         notes_per_row=True,
         caption="Platform worst cases assumed by the intermediate acceptance criteria, against this "
                 "campaign's results.", label=label, resize=True)
@@ -443,6 +505,8 @@ def doe_results(step: str, kind: str, label: Optional[str] = None, superseded: b
     return CTable(
         header=[head1, head2], body=body, align=["l", "l"] + ["R{1.35cm}"] * len(head2),
         notes=notes, notes_per_row=True, size="footnotesize", resize=True,
+        # more columns than a portrait page holds at the font floor: a landscape page of its own
+        landscape=len(head2) + 2 >= 12,
         caption=(f"{'Invalidated first execution: ' if superseded else ''}{STEP_NAME[step]} "
                  f"{title} design, settings and results."),
         label=label or f"tbl-doe-{step.replace('_', '-')}-{kind}{'-sup' if superseded else ''}")
@@ -479,7 +543,7 @@ def criteria_results(step: str, label: Optional[str] = None) -> CTable:
         body.append([ATTR_NAME[r["cqa"]], crit(r["iac_low"], r["iac_high"], r["spec_type"]),
                      num(sp), f"{num(lo)} to {num(hi)}", "Yes" if ok else "No"])
     return CTable(
-        header=[[C("Attribute", rs=2), C("Criterion", rs=2), C("Mean predicted by the response-surface model" + ("^b)^" if any_off else ""), cs=2), C("Met across the NOR^a)^", rs=2)],
+        header=[[C("Attribute", rs=2), C("Criterion", rs=2), C("Mean predicted by the response-surface model" + ("^b)^" if any_off else ""), cs=2), C("Met across\nthe NOR^a)^", rs=2)],
                 ["At the set-point", "Range over the NOR"]],
         body=body, align="llrrl",
         notes=[("a)", "Judged at every combination of NOR low, set-point and NOR high. Quality "
@@ -498,30 +562,36 @@ def parameters_by_step(steps: Optional[List[str]] = None, label="tbl-parameters-
     p = _csv("parameter_classification.csv")
     cfg = _cfg()
     keys = steps or list(cfg.train_order)
-    body, used = [], set()
+    body, used, narrowed = [], set(), []
     for k in keys:
         uo = cfg.unit_op(k)
         g = p[p["step"] == uo.step]
         for i, (_, r) in enumerate(g.iterrows()):
             par = cfg.unit_op(k).param(next(q.key for q in uo.parameters if q.name == r["parameter"]))
             same = (par.nor[0], par.nor[1]) == (par.prange[0], par.prange[1])
-            nor = [C("as characterized^a)^", cs=2)] if same else [pval(r["nor_low"]), pval(r["nor_high"])]
+            nor = ["as characterized^a)^"] if same else [f"{pval(r['nor_low'])}–{pval(r['nor_high'])}"]
             if same:
                 used.add("a)")
+            if list(par.nor) != list(par.nor_characterized):
+                # a Version 2.0 report narrowed this NOR; the note gives the NOR the studies used
+                m = f"c{len([u for u in used if u.startswith('c')]) + 1})"
+                nor[-1] = f"{nor[-1]}^{m}^"
+                used.add(m)
+                narrowed.append((m, f"Narrowed at Version 2.0 from {pval(par.nor_characterized[0])}–"
+                                    f"{pval(par.nor_characterized[1])} {par.unit}, the NOR as characterized "
+                                    f"(PCR-{uo.step:03d})."))
             study = "multivariate" if r["study"] == "multivariate" else "univariate^b)^"
             if r["study"] != "multivariate":
                 used.add("b)")
             row = ([C(STEP_NAME[k], rs=len(g))] if i == 0 else []) + [
                 r["parameter"], r["unit"], pval(r["setpoint"]), *nor,
-                pval(par.prange[0]), pval(par.prange[1]), study, r["classification"]]
+                f"{pval(par.prange[0])}–{pval(par.prange[1])}", study, r["classification"]]
             body.append(row)
     notes = [("a)", "The normal operating range equals the characterized range."),
-             ("b)", "Studied one factor at a time.")]
+             ("b)", "Studied one factor at a time.")] + narrowed
     return CTable(
-        header=[[C("Step", rs=2), C("Parameter", rs=2), C("Unit", rs=2), C("Set-point", rs=2),
-                 C("NOR", cs=2), C("Characterized range", cs=2), C("Study", rs=2), C("Class", rs=2)],
-                ["Low", "High", "Low", "High"]],
-        body=body, align=["P{2.2cm}", "P{3.4cm}", "l", "r", "r", "r", "r", "r", "l", "l"],
+        header=[["Step", "Parameter", "Unit", "Set-point", "NOR", "Characterized\nrange", "Study", "Class"]],
+        body=body, align=["P{2.0cm}", "P{3.4cm}", "P{2.0cm}", "r", "P{1.9cm}", "l", "l", "l"],
         notes=[n for n in notes if n[0] in used], notes_per_row=True,
         size="footnotesize", resize=True,
         caption="Process parameters by step: set-point, ranges and classification.", label=label)
@@ -557,8 +627,8 @@ def calibration_windows(label="tbl-calibration") -> CTable:
             body.append(lead + [r["Study"], r["Execution start"], r["Execution end"]]
                         + ([C(r["Date in Version 1.0 title block"], rs=n)] if i == 0 else []))
     return CTable(
-        header=[[C("Equipment", rs=2), C("Description", rs=2), C("Next calibration due", rs=2),
-                 C("Study executed on the system", cs=3), C("Date in Version 1.0 title block", rs=2)],
+        header=[[C("Equipment", rs=2), C("Description", rs=2), C("Next\ncalibration due", rs=2),
+                 C("Study executed on the system", cs=3), C("Date in\nVersion 1.0\ntitle block", rs=2)],
                 ["Study", "Start", "End"]],
         body=body, align=["l", "P{3.4cm}", "P{2.2cm}", "l", "l", "l", "P{2.2cm}"],
         caption="Execution windows of the studies that used instrumented systems, against the "
@@ -615,24 +685,29 @@ def sdm_offsets(steps: Optional[List[str]] = None, studies: Optional[List[str]] 
             f = lambda v: f"{v:,.{nd}f}"
             lead = [C(STEP_NAME[sk], rs=len(g))] if i == 0 else []
             if r["judged"]:
-                concl = [yn(r["met_lo"]), yn(r["met_point"]), yn(r["met_hi"])]
+                concl = [f"{yn(r['met_lo'])} / {yn(r['met_point'])} / {yn(r['met_hi'])}"]
                 q = yn(r["qualified"])
             else:
-                concl = [C("no criterion at this step^a)^", cs=3)]
+                concl = ["no criterion^a)^"]
                 q = "Yes^a)^"
-            body.append(lead + [name + (f" ({unit})" if unit else ""), f"{r['n_sd']} / {r['n_m']}",
+            body.append(lead + [name + (f" ({unit})" if unit else ""), str(r["n_sd"]), str(r["n_m"]),
                                 f(r["mean_sd"]), f(r["mean_m"]), f(r["offset"]),
                                 f"{f(r['lo'])} to {f(r['hi'])}", *concl, q])
     notes = [("a)", "The output has no acceptance criterion at this step, so no conclusion depends "
                     "on its offset. The offset is recorded.")]
     used = any(not j for j in t["judged"])
+    legend = [("", "SD, scale-down model. Mfg, manufacturing scale. Offset, scale-down mean minus "
+                   "manufacturing mean. Met over NOR: the criterion is met at every combination of NOR "
+                   "low, set-point and NOR high, with the offset at the low end of its interval, at its "
+                   "estimate (est.) and at the high end.")]
     return CTable(
-        header=[[C("Step", rs=2), C("Output", rs=2), C("Runs, scale-down / manufacturing", rs=2),
+        header=[[C("Step", rs=2), C("Output", rs=2), C("Runs", cs=2),
                  C("Mean", cs=2), C("Offset", cs=2),
-                 C("Criterion met across the NOR, with the offset at", cs=3), C("Qualified", rs=2)],
-                ["Scale-down", "Manufacturing", "Estimate", f"{ci} % CI", "Low end", "Estimate", "High end"]],
-        body=body, align=["P{2.4cm}", "P{3.0cm}", "P{2.2cm}", "r", "r", "r", "r", "c", "c", "c", "c"],
-        notes=notes if used else [], notes_per_row=True,
+                 C("Met over NOR\n(low/est./high)", rs=2), C("Qualified", rs=2)],
+                ["SD", "Mfg", "SD", "Mfg", "Estimate", f"{ci} % CI"]],
+        body=body, align=["P{2.0cm}", "P{2.6cm}", "c", "c", "r", "r", "r", "P{1.6cm}", "P{2.4cm}", "c"],
+        size="footnotesize",
+        notes=(notes if used else []) + legend, notes_per_row=True,
         caption=caption or ("Offsets of the scale-down models (scale-down minus manufacturing scale) "
                             "and the qualification of each model for each output."),
         label=label, resize=True)
@@ -790,7 +865,7 @@ def pp_cqa_matrix(kind: str = "studied", label: Optional[str] = None) -> CTable:
                           "of the attribute against its setting."))
     return CTable(
         header=[[C("Unit operation", rs=2), C("Process parameters", cs=len(classes))], classes],
-        body=body, align=["P{1.9cm}"] + ["P{3.3cm}" if c == "Other" else "P{1.75cm}" for c in classes],
+        body=body, align=["P{1.9cm}"] + ["P{3.3cm}" if c == "Other" else "P{1.6cm}" for c in classes],
         notes=notes, notes_per_row=True, style="grid", size="scriptsize", landscape=True,
         caption=cap, label=label or f"tbl-pp-{kind}")
 
@@ -826,13 +901,13 @@ def studies_overview(label: str = "tbl-studies-overview") -> CTable:
             body.append(row)
     return CTable(
         header=[[C("Unit operation", rs=2), C("Process parameter", rs=2), C("Class", rs=2),
-                 C("Runs, multivariate", cs=2), C("Runs, univariate", rs=2),
-                 C("Attributes measured", rs=2), C("Studies", rs=2)],
+                 C("Runs, multivariate", cs=2), C("Runs,\nunivariate", rs=2),
+                 C("Attributes\nmeasured", rs=2), C("Studies", rs=2)],
                 ["Screening", "Response surface"]],
         body=body, align=["P{2.2cm}", "P{3.4cm}", "l", "c", "c", "c", "P{3.2cm}", "P{3.0cm}"],
         notes=[("a)", "The campaign data set holds no attribute result for a study of this "
                       "parameter."), ("", ATTR_LEGEND)],
-        notes_per_row=True, size="scriptsize",
+        notes_per_row=True, size="footnotesize", landscape=True,
         caption="Studies of the characterization campaign by unit operation and process parameter.",
         label=label)
 
@@ -877,3 +952,68 @@ def model_effects_overview(steps: Optional[List[str]] = None, label: str = "tbl-
                 + ("" if steps is None else " (" + ", ".join(STEP_NAME[s_].lower() if s_ != "protein_a" else "Protein A"
                                                           for s_ in steps) + ")") + ".",
         label=label)
+
+
+
+# --------------------------------------------------------------------------------------
+# 13. Any DataFrame as a complex table, with its index columns merged down the rows
+# --------------------------------------------------------------------------------------
+def frame(df: pd.DataFrame, caption: str, label: str, merge: Sequence[str] = (),
+          header: Optional[Dict[str, str]] = None, align=None, notes=(), **kw) -> CTable:
+    """A DataFrame as a :class:`CTable`, the way a report sets a table: each column in ``merge``
+    (the index columns, left to right) has consecutive identical values merged into one cell
+    down the rows, and a column is merged only within the merged cell of the column to its left.
+    ``header`` renames columns; write "\\n" in a header to break a long one ("Drug-substance\\n
+    criterion"). Use it instead of a pipe table whenever a first column repeats (owner,
+    2026-10-08)."""
+    dd = df.reset_index(drop=True)
+    d = dd.astype(object).where(dd.notna(), "n.t.")
+    cols = list(d.columns)
+    merge = [c for c in cols if c in merge]
+    spans: Dict[tuple, int] = {}
+    covered = set()
+    groups = [(0, len(d))]
+    for c in merge:
+        j = cols.index(c)
+        new_groups = []
+        for g0, g1 in groups:
+            i = g0
+            while i < g1:
+                k = i
+                while k + 1 < g1 and str(d.iloc[k + 1, j]) == str(d.iloc[i, j]):
+                    k += 1
+                spans[(i, j)] = k - i + 1
+                covered.update((r, j) for r in range(i + 1, k + 1))
+                new_groups.append((i, k + 1))
+                i = k + 1
+        groups = new_groups
+    body = []
+    for i in range(len(d)):
+        row = []
+        for j in range(len(cols)):
+            if (i, j) in covered:
+                continue
+            v = str(d.iloc[i, j])
+            row.append(C(v, rs=spans[(i, j)]) if spans.get((i, j), 1) > 1 else v)
+        body.append(row)
+    names = [(header or {}).get(c, str(c)) for c in cols]
+    return CTable(header=[names], body=body, caption=caption, label=label, align=align,
+                  notes=notes, **kw)
+
+
+
+# --------------------------------------------------------------------------------------
+# 14. Procedures and method validations a document cites, grouped by type
+# --------------------------------------------------------------------------------------
+def sop_references(sops=None, amvs=None, label: str = "tbl-sops") -> CTable:
+    """The SOP and method-validation references (``_pcpkg.SOP_REFS`` / ``AMV_REFS`` by default),
+    with the type as a merged first column, as a report groups them. The merged form of
+    ``sop_table()``."""
+    import _pcpkg as P
+    sops = P.SOP_REFS if sops is None else sops
+    amvs = P.AMV_REFS if amvs is None else amvs
+    d = pd.DataFrame([["Standard operating procedure", i, t] for i, t in sops]
+                     + [["Analytical method validation", i, t] for i, t in amvs],
+                     columns=["Type", "Reference", "Title"])
+    return frame(d, "Procedures and method validations referenced in this document.", label,
+                 merge=["Type"], align=["P{3.0cm}", "l", "P{9.5cm}"])

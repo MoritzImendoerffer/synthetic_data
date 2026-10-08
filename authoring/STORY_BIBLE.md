@@ -244,7 +244,10 @@ priori:
   criteria upstream tighten. Where the A-Mab data show, at the 95 % confidence bound, that a step
   does better than the platform worst case, that bound replaces the platform value and the
   criteria upstream widen (owner's decision 2026-10-08: "if the data supports it, a criterion
-  could be widened, but it needs good arguments"). The point prediction is never used to widen.
+  could be widened, but it needs good arguments"). A widening also needs a downstream model that
+  passes the adequacy tests of PCMP-001 (R² minus predicted R², lack of fit): a model that fails
+  them is not a good argument. Tightening needs no such test. Both directions use the one-sided
+  95 % confidence bound, never the point prediction (`iac_verification.csv`: `model_adequate`).
   Each report that relies on a widened criterion gives the argument: the bound, the runs behind
   it, and why the downstream step's performance at A-Mab is known well enough. Which criteria
   tightened and which widened is a result read from `iac.csv` (`tightened`, `widened`), never
@@ -287,14 +290,29 @@ may differ in mean from manufacturing scale, provided the difference is known pr
 
 **PD-005-01 (a discrepancy from the plan, not a deviation).** PCP-005 planned three scale-down
 set-point runs (S-PA-SDM). During the Version 2.0 re-analysis six further set-point runs were made
-(S-PA-SDM2) to narrow the offset interval of pool host cell protein, the output that sets the ranges
-of the step. The plan did not foresee them, so PCR-005 records them as a discrepancy from the plan
-(`discrepancy_register(DOC)`, config `campaign.plan_discrepancies`). It is not a deviation: no
-procedure or GMP requirement was departed from, and in the GMP sense a deviation is exactly that.
-The report shows that the qualification conclusion is the same on the three planned runs alone
-(`T.sdm_offsets(["protein_a"], studies=["S-PA-SDM"])`), so the extra runs narrowed an interval and
-changed no conclusion. Earlier drafts called this DEV-005-03 and framed it as an equivalence margin
-that three runs could never meet. That framing is retired with the equivalence test.
+(S-PA-SDM2) to narrow the offset interval of pool host cell protein, whose conclusion over the NOR
+lies close to its criterion. The plan did not foresee them, so PCR-005 records them as a
+discrepancy from the plan (`discrepancy_register(DOC)`, config `campaign.plan_discrepancies`). It
+is not a deviation: no procedure or GMP requirement was departed from. What the extra runs changed
+is a computed result, and the report states it openly: on the three planned runs alone the
+interval is wide enough that the conclusion fails at its unfavourable end, so the model would not
+have been qualified for pool host cell protein; on all nine runs it is
+(`T.sdm_offsets(["protein_a"], studies=["S-PA-SDM"])` against `T.sdm_offsets(["protein_a"])`). The
+qualification rule and the criterion were not changed after the three-run result was seen. Only
+the number of replicates grew, and the report says that the decision to add runs was taken after
+that result.
+
+**Version 2.0 NOR narrowings (owner's decisions 2026-10-08).** Two reports narrow a NOR, because
+the conclusion over the NOR as characterized did not hold. Config `nor_v2`; `Parameter.nor` is the
+NOR in force, `Parameter.nor_characterized` and `D.characterized_nor()` give the NOR the studies
+were planned against. `T.parameters_by_step` footnotes each narrowed NOR.
+- PCR-006: low-pH inactivation. At the worst corner of the characterized NOR the predicted XMuLV
+  clearance is below the 6.6 claim. Hold time 60–120 → 90–120 min, temperature 19–23 → 20–23 °C.
+- PCR-005: Protein A. At the characterized NOR the scale-down model is not qualified for pool host
+  cell protein (the conclusion fails at the unfavourable end of the offset interval). Protein load
+  20–40 → 20–38 g/L resin.
+Monte Carlo and PPQ sample the NOR in force. INV-001 closed before either report was issued, so it
+says only that the reports narrow the NOR, from its own computed finding.
 
 **Hold-study fragment results.** The hold studies ran before AMD-001. Their first and last time
 points were retained and tested by nrCE-SDS together with the retained response-surface samples,

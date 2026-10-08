@@ -149,8 +149,15 @@ def specificity_report(annex, text) -> list[str]:
     return out
 
 
-def main() -> int:
-    annexes = sorted(glob.glob(os.path.join(GT, "*.json")))
+def main(argv=None) -> int:
+    # ``--dir <folder>`` grounds a set held elsewhere, with its annexes in <folder>/ground_truth
+    # and its .docx files in <folder>. The frozen Rev 1.0 set (superseded/rev1) is checked this
+    # way, so a superseded document keeps proving that its annex still matches it.
+    argv = sys.argv[1:] if argv is None else argv
+    base = HERE
+    if "--dir" in argv:
+        base = os.path.join(HERE, argv[argv.index("--dir") + 1])
+    annexes = sorted(glob.glob(os.path.join(base, "ground_truth", "*.json")))
     if not annexes:
         print("no annexes found in ground_truth/ — run build_ground_truth.py first")
         return 1
@@ -164,7 +171,7 @@ def main() -> int:
         annex = json.load(open(path))
         doc_id = annex["document_id"]
         fname = annex.get("inventory", {}).get("file_name")
-        docx = os.path.join(HERE, fname) if fname else None
+        docx = os.path.join(base, fname) if fname else None
         if not docx or not os.path.exists(docx):
             print(f"MISS {doc_id}: rendered document '{fname}' not found (render the corpus first)")
             total_miss += 1

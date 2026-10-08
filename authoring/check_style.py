@@ -325,9 +325,12 @@ def measure(text: str) -> tuple[dict, list, Counter, list]:
     def per1k(pattern: str) -> float:
         return 1000.0 * len(re.findall(pattern, scan, re.I)) / words
 
+    # An identifier (S-PA-SCR, a study; any token whose every segment starts with a capital) is
+    # not a coined compound. Until 2026-10-08 the scan lowercased first and counted study IDs,
+    # and an author removed a correct identifier from PCP-005 to get under the gate.
     compounds = Counter(
-        w for w in re.findall(r"\b[a-z]+(?:-[a-z]+){2,}\b", scan.lower())
-        if w not in HYPHEN_ALLOW
+        w.lower() for w in re.findall(r"\b[A-Za-z]+(?:-[A-Za-z]+){2,}\b", scan)
+        if w.lower() not in HYPHEN_ALLOW and not all(seg[:1].isupper() for seg in w.split("-"))
     )
     n_so = sum(1 for s in sents if SO_MID.search(s))
     n_init = sum(1 for s in sents if INITIAL_CONNECTIVE.match(s))

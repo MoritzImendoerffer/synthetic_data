@@ -1,17 +1,17 @@
 ---
 type: pm-board
-epic: 2026-08-19_02_fifth-round-plan-then-batches
-sprint: 2026-08-19_02_fifth-round-plan-then-batches
+epic: 2026-10-08_01_rev2-campaign
+sprint: 2026-10-08_01_rev2-campaign
 generated: true
 tags: [pm/board]
 ---
 
-> [!warning] Generated from `.claude/work/2026-08-19_02_fifth-round-plan-then-batches/state.json` by `scripts/pm_notes.py`.
+> [!warning] Generated from `.claude/work/2026-10-08_01_rev2-campaign/state.json` by `scripts/pm_notes.py`.
 > Anything written here by hand is lost on the next run.
 
 # Board — the active epic
 
-**[[epic|2026-08-19_02_fifth-round-plan-then-batches]]** · **51 of 51 done**
+**[[epic|2026-10-08_01_rev2-campaign]]** · **15 of 35 done** · 1 doing · 19 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -27,63 +27,48 @@ None of them blocks the work below.
 Nothing in this table needs the project owner. It is what the coding assistant has still to do,
 and it is here so the state is visible, not so anyone else acts on it.
 
-*None.*
+| Task | Status | Waiting on | Kind | What it is |
+|---|---|---|---|---|
+| [[TASK-015]] | `doing` | the assistant | measurement | HALT: owner reads the pilot |
+| [[TASK-017]] | `todo` | the assistant | document | Author PCP-003 Rev 2.0 and re-anchor its annex |
+| [[TASK-018]] | `todo` | the assistant | document | Author PCR-003 Rev 2.0 and re-anchor its annex |
+| [[TASK-019]] | `todo` | the assistant | document | Author PCP-004 Rev 2.0 and re-anchor its annex |
+| [[TASK-020]] | `todo` | the assistant | document | Author PCR-004 Rev 2.0 and re-anchor its annex |
+| [[TASK-021]] | `todo` | the assistant | document | Author PCP-006 Rev 2.0 and re-anchor its annex |
+| [[TASK-022]] | `todo` | the assistant | document | Author PCR-006 Rev 2.0 and re-anchor its annex |
+| [[TASK-023]] | `todo` | the assistant | document | Author PCP-007 Rev 2.0 and re-anchor its annex |
+| [[TASK-024]] | `todo` | the assistant | document | Author PCR-007 Rev 2.0 and re-anchor its annex |
+| [[TASK-025]] | `todo` | the assistant | document | Author PCP-008 Rev 2.0 and re-anchor its annex |
+| [[TASK-026]] | `todo` | the assistant | document | Author PCR-008 Rev 2.0 and re-anchor its annex |
+| [[TASK-027]] | `todo` | the assistant | document | Author PCP-009 Rev 2.0 and re-anchor its annex |
+| [[TASK-028]] | `todo` | the assistant | document | Author PCR-009 Rev 2.0 and re-anchor its annex |
+| [[TASK-029]] | `todo` | the assistant | document | Author PCP-010 Rev 2.0 and re-anchor its annex |
+| [[TASK-030]] | `todo` | the assistant | document | Author PCR-010 Rev 2.0 and re-anchor its annex |
+| [[TASK-031]] | `todo` | the assistant | document | Author PTP-001 Rev 2.0 and re-anchor its annex |
+| [[TASK-032]] | `todo` | the assistant | document | Author RA-001 Rev 2.0 and re-anchor its annex |
+| [[TASK-033]] | `todo` | the assistant | document | Author PCMR-001 Rev 2.0 and re-anchor its annex |
+| [[TASK-034]] | `todo` | the assistant | measurement | Full rebuild from clean; 21 annexes valid and grounded; Rev 1.0 set still grounds |
+| [[TASK-035]] | `todo` | the assistant | documentation | Ship: results page, HANDOFF/TASKS/CLAUDE.md, ROADMAP row, delete both proposals |
 
 ## Done
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-001]] | `done` | — | mechanism | Fix the pilot's inputs before the agent exists: PCP-005 brief, scaffold, blind key, reading protocol |
-| [[TASK-002]] | `done` | — | document | Author PCP-005 (Protein A Chromatography (Step 5)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-003]] | `done` | — | measurement | The blind reading of shipped vs new PCP-005, recorded verbatim, then the rule applied — HALT for the owner (D7) |
-| [[TASK-004]] | `done` | — | measurement | Count the pilot and write its results page |
-| [[TASK-005]] | `done` | — | annex | Promote the new PCP-005: render, re-anchor its annex, re-ground the corpus |
-| [[TASK-006]] | `done` | — | measurement | Rebuild-and-reground proof after the pilot's promotion |
-| [[TASK-007]] | `done` | — | document | Author PCR-006 (Low-pH Viral Inactivation (Step 6)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-008]] | `done` | — | document | Author PCR-008 (Anion Exchange Chromatography (Step 8)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-009]] | `done` | — | document | Author PCR-009 (Small-Virus Retentive Filtration (Step 9)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-010]] | `done` | — | document | Author PCR-010 (Ultrafiltration / Diafiltration (Step 10)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-011]] | `done` | — | annex | Promote batch B1 (PCR-006, PCR-008, PCR-009, PCR-010): render, re-cut spans, re-anchor, re-ground |
-| [[TASK-012]] | `done` | — | measurement | Sampled blind reading of one document from batch B1 — HALT for the owner (D8) |
-| [[TASK-013]] | `done` | — | measurement | Rebuild-and-reground proof after batch B1 |
-| [[TASK-014]] | `done` | — | document | Author PCR-004 (Harvest and Clarification (Step 4)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-015]] | `done` | — | document | Author PCR-003 (Production Bioreactor (Step 3)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-016]] | `done` | — | document | Author PCR-005 (Protein A Chromatography (Step 5)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-017]] | `done` | — | annex | Promote batch B2 (PCR-004, PCR-003, PCR-005): render, re-cut spans, re-anchor, re-ground |
-| [[TASK-018]] | `done` | — | measurement | Sampled blind reading of one document from batch B2 — HALT for the owner (D8) |
-| [[TASK-019]] | `done` | — | measurement | Rebuild-and-reground proof after batch B2 |
-| [[TASK-020]] | `done` | — | document | Author PCP-004 (Harvest and Clarification (Step 4)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-021]] | `done` | — | document | Author PCP-006 (Low-pH Viral Inactivation (Step 6)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-022]] | `done` | — | document | Author PCP-008 (Anion Exchange Chromatography (Step 8)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-023]] | `done` | — | document | Author PCP-009 (Small-Virus Retentive Filtration (Step 9)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-024]] | `done` | — | document | Author PCP-010 (Ultrafiltration / Diafiltration (Step 10)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-025]] | `done` | — | annex | Promote batch B3 (PCP-004, PCP-006, PCP-008, PCP-009, PCP-010): render, re-cut spans, re-anchor, re-ground |
-| [[TASK-026]] | `done` | — | measurement | Sampled blind reading of one document from batch B3 — HALT for the owner (D8) |
-| [[TASK-027]] | `done` | — | measurement | Rebuild-and-reground proof after batch B3 |
-| [[TASK-028]] | `done` | — | document | Author PCP-003 (Production Bioreactor (Step 3)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-029]] | `done` | — | document | Author PCP-007 (Cation Exchange Chromatography (Step 7)) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-030]] | `done` | — | annex | Promote batch B4 (PCP-003, PCP-007): render, re-cut spans, re-anchor, re-ground |
-| [[TASK-031]] | `done` | — | measurement | Sampled blind reading of one document from batch B4 — measurement, not a gate (D8) |
-| [[TASK-032]] | `done` | — | measurement | Rebuild-and-reground proof after batch B4 |
-| [[TASK-033]] | `done` | — | document | Author PTP-001 (A-Mab Drug Substance) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-034]] | `done` | — | document | Author PCMP-001 (A-Mab Drug Substance) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-035]] | `done` | — | document | Author RA-001 (A-Mab Drug Substance) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-036]] | `done` | — | document | Author PCMR-001 (A-Mab Drug Substance) in one pass under the rebuilt apparatus, with one content-review cycle |
-| [[TASK-037]] | `done` | — | annex | Promote batch B5 (PTP-001, PCMP-001, RA-001, PCMR-001): render, re-cut spans, re-anchor, re-ground |
-| [[TASK-038]] | `done` | — | measurement | Sampled blind reading of one document from batch B5 — measurement, not a gate (D8) |
-| [[TASK-039]] | `done` | — | measurement | Rebuild-and-reground proof after batch B5 |
-| [[TASK-040]] | `done` | — | measurement | Write the batches' results page |
-| [[TASK-041]] | `done` | — | documentation | Move the findings into docs, update the roadmap, retire or reduce the proposal, and ship |
-| [[TASK-042]] | `done` | — | document | Re-author PCR-008 (attempt 2) in one pass under the same regime, with one content-review cycle |
-| [[TASK-043]] | `done` | — | measurement | Blind reading: round-zero PCR-008 vs attempt 2 — HALT for the owner (D8) |
-| [[TASK-044]] | `done` | — | annex | Dispose of PCR-008 per the reading: promote attempt 2, or revert to round-zero by name; re-ground either way |
-| [[TASK-045]] | `done` | — | mechanism | Put the causal-clause rule into the author-facing guide |
-| [[TASK-046]] | `done` | — | document | Re-author PCR-008 (attempt 3) in one pass under the amended guide, with one content-review cycle |
-| [[TASK-047]] | `done` | — | measurement | Blind reading: round-zero PCR-008 vs attempt 3 — HALT for the owner (D8) |
-| [[TASK-048]] | `done` | — | annex | Dispose of PCR-008 per the reading: promote attempt 3, or revert to round zero by name; re-ground either way |
-| [[TASK-049]] | `done` | — | document | Re-author PCR-004 (attempt 2) in one pass under the same regime, with one content-review cycle |
-| [[TASK-050]] | `done` | — | measurement | Blind reading: pre-campaign PCR-004 vs attempt 2 — HALT for the owner (D8) |
-| [[TASK-051]] | `done` | — | annex | Dispose of PCR-004 per the reading: promote attempt 2, or revert to the pre-campaign text by name; re-ground either way |
+| [[TASK-001]] | `done` | — | mechanism | Freeze Rev 1.0: tag corpus-rev1.0, copy the 20 DOCX/PDF and annexes to pc_package/superseded/rev1/ |
+| [[TASK-002]] | `done` | — | model | Record execution chronology and resolve the calibration-date tension |
+| [[TASK-003]] | `done` | — | model | Analytical model: fragments (LMW), per-study method assignment, SEC matrix bias, all on independent RNG streams |
+| [[TASK-004]] | `done` | — | model | Hold-time stability and CEX fraction comparability datasets |
+| [[TASK-005]] | `done` | — | model | Two-sided capability for acidic variants |
+| [[TASK-006]] | `done` | — | model | Specification-driven IACs replace ipc_limits; Rev 1.0 criteria kept as data; integrated-model P(OOS) |
+| [[TASK-007]] | `done` | — | mechanism | ctable(): one spec -> HTML table (DOCX merged cells) + raw LaTeX twin (PDF), crossref, footnotes; grounding reads it |
+| [[TASK-008]] | `done` | — | mechanism | Registry: INV-001, revision metadata, revision_history(), superseded references, Makefile, schema_ext |
+| [[TASK-009]] | `done` | — | mechanism | Authoring artifacts per the owner's rule decisions; brief carries the new facts and table menu |
+| [[TASK-010]] | `done` | — | measurement | Rebuild data and figures; old documents still ground |
+| [[TASK-011]] | `done` | — | document | Author INV-001 (investigation report) |
+| [[TASK-012]] | `done` | — | document | Author PCP-005 Rev 2.0 |
+| [[TASK-013]] | `done` | — | document | Author PCR-005 Rev 2.0 |
+| [[TASK-014]] | `done` | — | annex | Annex the pilot: INV-001, PCMP-001, PCP-005, PCR-005 |
+| [[TASK-016]] | `done` | — | document | Author PCMP-001 Rev 2.0 and re-anchor its annex |
 
 ---
 

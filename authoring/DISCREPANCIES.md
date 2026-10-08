@@ -123,6 +123,28 @@ All three come from one decision — coded 0 was treated as the set-point — so
 finds one has a thread to pull. The figure is the easiest to overlook, because its title is
 drawn into the image rather than written in the prose.
 
+### Version 2.0 and INV-001 do not touch it
+
+Version 2.0 (2026-10-08) changed the CRITERION each PAR is judged against, not the way the other
+factors are held. `INV-001`'s scope is the acceptance criteria, the fragment method, the capability
+side and the execution records. The PAR computation is outside it (`section_plan.yaml`
+`investigation_report.note`). So D-001 survives the revision unchanged, and is in a sense sharper:
+a QA investigation of the PAR analysis looked at it and still did not catch it. From 2026-10-08
+the report author can read its own plan (`RUNNER.md`), so the brief's §5c must keep directing
+the report to present `par_table` as it comes, under its own heading. That is the one place the
+new rule could erase this item.
+
+### A neighbouring bug that was fixed, and why that is not a fix of D-001
+
+`par_nor_propagated` used to anchor its contiguous range at coded 0 as well, and reported
+"none (set-point breaches)" when the DESIGN CENTRE failed. It was fixed on 2026-10-08 to anchor at
+the set-point, because under the Version 2.0 criteria it would have reported, falsely, that the
+low-pH inactivation set-point breaches the XMuLV claim. No Version 1.0 document printed the false
+label (checked over all seven reports and PCMR-001 in `superseded/rev1/`). The fix touches none of
+D-001's three surfaces: the "PAR (set-point)" column still comes from `par_at_design_centre`, the
+plans still say "set-point", and the contour figure title is unchanged. So D-001 stands, and a
+reader can now find the two analyses in one table anchored at different points.
+
 ### Do not fix silently
 
 `doe_report.par_at_design_centre` is named for what it computes and `_predict_grid` says in

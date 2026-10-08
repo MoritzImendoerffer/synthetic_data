@@ -1,45 +1,44 @@
 ---
 type: pm-task
-epic: 2026-08-19_02_fifth-round-plan-then-batches
-sprint: 2026-08-19_02_fifth-round-plan-then-batches
+epic: 2026-10-08_01_rev2-campaign
+sprint: 2026-10-08_01_rev2-campaign
 task: TASK-013
 status: done
-kind: measurement
-title: "Rebuild-and-reground proof after batch B1"
+kind: document
+title: "Author PCR-005 Rev 2.0"
 generated: true
 waiting_on: —
 tags: [pm/task, pm/done]
-about: ["PCR-006", "PCR-008", "PCR-009", "PCR-010"]
+about: ["PCMP-001", "PCP-005", "PCR-005"]
 ---
 
-> [!warning] Generated from `.claude/work/2026-08-19_02_fifth-round-plan-then-batches/state.json` by `scripts/pm_notes.py`.
+> [!warning] Generated from `.claude/work/2026-10-08_01_rev2-campaign/state.json` by `scripts/pm_notes.py`.
 > Anything written here by hand is lost on the next run.
 
-# TASK-013 — Rebuild-and-reground proof after batch B1
+# TASK-013 — Author PCR-005 Rev 2.0
 
 **Epic:** [[epic]] · **Status:** `done` · **Waiting on:** — · **Board:** [[_Board]]
 
 ## Why it exists
 
-No make data figures.
+Pilot. May read PCP-005 and PCMP-001 for content.
 
 ## Acceptance criteria
 
-- [x] `check_render.py --render` clean on every promoted document of the batch (glyphs on fresh pdfs; docx restored by name afterwards); 20/20 valid; N/N grounded strict, exit 0; `git diff --stat outputs/` empty; make test; make style 24 OK; page counts against CLAUDE.md's bands, re-measured at ship if moved
+- [x] check_render hard gates pass; review checklist run by a fresh reviewer
 
-**Depends on:** [[TASK-011]]
+**Depends on:** [[TASK-012]]
 
 ## What was built
 
-check_render.py --render on each promoted B1 document: all chunks exec, no <<NEEDS>>, tic gate OK, docx renders, no missing glyph on the fresh pdf (PCR-006, PCR-008, PCR-009, PCR-010); each re-rendered docx restored by name afterwards; strict grounding 2088/2088 against the committed docx, exit 0; `git diff --stat outputs/` empty; make test 95; make style 24 OK; tree clean. Page counts 45 / 54 / 34 / 30 — reports with a DoE inside CLAUDE.md's 41–56 band except PCR-009 at 34 (the smallest DoE in the corpus: 2 factors, 19 runs — depth follows the design; the band sentence is re-measured at ship), the non-DoE PCR-010 at 30 against the 26–28 band (also re-measured at ship).
+PCR-005 v2.0: one Opus 5.5 author, audit clean. First draft left 5 NEEDS for data the plan promised but the model lacked -> generated (univariate studies, column efficiency, run order, per-pool HMW, centre-point DNA) for all steps. Found the PCP-005 equivalence test could never pass with n=3 -> DEV-005-03, 6 supplementary runs (S-PA-SDM2), margin unchanged: HCP equivalent, yield misses by 1.4 % of margin. Run-1 review -> 6 source fixes (inward PAR rounding, decision statistic, DEV-005-01/-02 consistency, leaching mechanism, tokens); run-2 -> prediction interval now includes coefficient uncertainty (engine), par_table number format, shrink-to-fit tables; final factual pass. Shipped 55 pp, 625 sentences / 11,661 words, 0 NEEDS.
 
 ## Documents it is about
 
-- **PCR-006** — `pc_package/PCR-006_viral_inactivation.qmd`
-- **PCR-008** — `pc_package/PCR-008_aex.qmd`
-- **PCR-009** — `pc_package/PCR-009_virus_filtration.qmd`
-- **PCR-010** — `pc_package/PCR-010_ufdf.qmd`
+- **PCMP-001** — `pc_package/PCMP-001_master_plan.qmd`
+- **PCP-005** — `pc_package/PCP-005_protein_a.qmd`
+- **PCR-005** — `pc_package/PCR-005_protein_a.qmd`
 
 ## Files it touched
 
-- not recorded
+- `pc_package/PCR-005_protein_a.qmd`

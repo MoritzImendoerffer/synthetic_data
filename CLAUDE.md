@@ -20,7 +20,11 @@ the corpus; recoverable from git history if needed.) Full workflow:
 [`pc_package/README.md`](pc_package/README.md); DoE engine:
 [`pc_package/DOE_ENGINE.md`](pc_package/DOE_ENGINE.md).
 
-**The corpus is complete**: 20 documents, all one-pass authored, all annexed and grounded.
+**Version 2.0 is in progress** (work unit `2026-10-08_01_rev2-campaign`, proposal
+[`docs/next/rev2-campaign.md`](docs/next/rev2-campaign.md)). Version 1.0 (20 documents, tag
+`corpus-rev1.0`) is frozen, still grounding, in `pc_package/superseded/rev1/`. Version 2.0 is 21
+documents: the 20 reissued after investigation `INV-001`, plus `INV-001` itself. Until a document is
+re-authored its Version 1.0 `.docx` and annex stay in place (`build_ground_truth.REV2_READY`).
 To change one, add a unit operation, or re-run the set, start at
 **[`pc_package/TASKS.md`](pc_package/TASKS.md)** — it covers what to touch, what to rebuild
 afterwards, and the traps. The bioreactor pair `PCP-003` / `PCR-003` is the reference for
@@ -81,15 +85,17 @@ differ only in their `UO` key and unit-specific narrative:
 ## Consistency conventions (apply to every unit operation)
 
 - **IDs (fixed scheme):** `PTP-001`, `RA-001`, `PCMP-001`, `PCP-00N` / `PCR-00N`
-  (per unit op, `N` = process step 3–10), `PCMR-001`. Filenames:
+  (per unit op, `N` = process step 3–10), `PCMR-001`, and the QA investigation `INV-001`. Filenames:
   `PCP-00N_<uokey>.qmd`, `PCR-00N_<uokey>.qmd`; annex `ground_truth/<ID>.json`.
 - **Front matter (identical across documents):** `format:` docx (`reference-doc:
   reference.docx`) + pdf (`documentclass: scrreprt`); `bibliography:
   references.bib`; `toc-depth: 3`; `number-sections: true`;
-  `execute: echo:false, warning:false, cache:false`; `jupyter: python3`. First code
-  chunk: `sys.path.insert(0, os.path.abspath(".")); from _pcpkg import *`.
+  `execute: echo:false, warning:false, cache:false`; `jupyter: python3`; pdf
+  `include-in-header: _tables.tex`. First code chunk:
+  `sys.path.insert(0, os.path.abspath(".")); from _pcpkg import *`, plus `import tables as T`.
 - **Every document** opens with `title_block(DOC, UO_TITLE)` + `SYN_BANNER`, an
-  Approvals table and Abbreviations, and closes with `# References {.unnumbered}` +
+  Approvals table, a Revision history (`revision_history(DOC)`) and Abbreviations, carries a
+  "Changes in this revision" subsection in its Introduction (or Purpose and scope), and closes with `# References {.unnumbered}` +
   `::: {#refs} :::`. Use `related_docs_md(DOC)` and `sop_table(...)` for cross-refs.
 - **Canonical section order — Report (`PCR-00N`):** Executive summary · Introduction
   (product/UO, objectives, regulatory basis) · Prior knowledge & quality risk basis
@@ -119,7 +125,9 @@ differ only in their `UO` key and unit-specific narrative:
   tables, analysis and full appendices — never with filler, and never by inventing a DoE for a step
   that has none.
 - **Voice (gated on the tics only):** a process scientist writing material to support a BLA:
-  precise, complete, mechanistically reasoned, traceable — and written in **plain technical
+  precise, complete, traceable — a controlled report that states results against criteria and
+  gives mechanism where a conclusion depends on it (mechanistic interpretation, Discussion),
+  not in every sentence (owner's decision 2026-10-08) — and written in **plain technical
   English at about C1 level**, modelled on the published human sources in `refs/text/`
   (PDA TR 60; the A-Mab case study; the two 2023 ISPE Good Practice Guides), *never* on an
   existing document in `pc_package/`. Short sentences, almost no em-dashes or semicolons, no
@@ -139,6 +147,17 @@ differ only in their `UO` key and unit-specific narrative:
   A band a good paragraph fails is a broken band, and a measure printed back to the author is a
   target, not a signal. **Do not print counters to an author.** Give the author the facts, the
   reader and the role; give the reviewer the table.
+- **Acceptance criteria are set before the data, never fitted to them.** A step is judged
+  against its intermediate acceptance criterion (`config` `iac:` → `amab_process/iac.py` →
+  `iac.csv`): the drug-substance criterion carried backward through the platform worst case of
+  every downstream step, with no margin. `iac.derive()` reads the config only
+  (`tests/test_iac.py`). Verification against this campaign's data may TIGHTEN a criterion and
+  never loosen it. Version 1.0 did the opposite and that is `INV-001`; its criteria are data in
+  `criteria_rev1.csv`, never a yardstick. Quality attributes are judged per batch, viral clearance
+  on the mean LRF (`doe_report.decision_statistic`).
+- **Complex tables come from `pc_package/tables.py`** (merged cells, two-level headers,
+  footnotes, n.t.), rendered by `ctable.CTable` as an HTML twin for DOCX and a raw-LaTeX twin for
+  PDF. Annex rows come from the same builder call (`T.<builder>(...).rows()`), never retyped.
 - **Framing rule:** the screening model identifies effects; the **response-surface
   model is the predictive/design-space model**. State this; don't over-claim the
   near-saturated screening fit.
@@ -200,7 +219,8 @@ from the result. All 20 documents had to be re-authored to break the loop.
 2. Instantiate `authoring/template.qmd`; set `DOC`, `UO`, `UO_TITLE`.
 3. **One agent authors the whole document in one pass**, in `section_plan.yaml` order, from
    `WRITING_GUIDE.md`, `REGISTER_EXEMPLAR.md`, `STORY_BIBLE.md` and the brief — never from a
-   sibling `.qmd`. Structure comes from `section_plan.yaml`; voice comes from
+   sibling `.qmd`. A report's author also reads the RENDERED text of its own plan and of
+   `PCMP-001`, for content only (owner's decision 2026-10-08, `authoring/RUNNER.md`). Structure comes from `section_plan.yaml`; voice comes from
    `REGISTER_EXEMPLAR.md`, which is built only from the published human sources.
 4. Add the pair's entities and assertions to `build_ground_truth.py`, anchoring each record
    on its rendered table row via `row_quotes()` rather than on a caption.

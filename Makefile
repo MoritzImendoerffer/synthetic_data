@@ -66,7 +66,7 @@ discourse:
 # annexes. All content derives from outputs/, so this stays consistent with the model.
 corpus: figures
 	@for f in $(PKG_DIR)/PTP-*.qmd $(PKG_DIR)/RA-*.qmd $(PKG_DIR)/PCMP-*.qmd \
-	          $(PKG_DIR)/PCP-*.qmd $(PKG_DIR)/PCR-*.qmd $(PKG_DIR)/PCMR-*.qmd; do \
+	          $(PKG_DIR)/PCP-*.qmd $(PKG_DIR)/PCR-*.qmd $(PKG_DIR)/INV-*.qmd $(PKG_DIR)/PCMR-*.qmd; do \
 		[ -e "$$f" ] || continue; \
 		b=$$(basename $$f); \
 		echo "rendering $$b"; \

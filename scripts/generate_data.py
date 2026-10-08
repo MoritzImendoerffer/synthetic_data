@@ -25,6 +25,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from amab_process import Process, load_config          # noqa: E402
 from amab_process import studies as st                  # noqa: E402
 from amab_process import deviations as dv               # noqa: E402
+from amab_process import analytics as an                # noqa: E402
+from amab_process import iac as ia                      # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "outputs", "data")
@@ -64,7 +66,8 @@ def main() -> None:
                      "step_yield": round(sres.step_yield, 3),
                      "product_mass_g": round(sres.out.product_mass_g, 0),
                      **{k: round(v, 4) for k, v in sres.metrics.items()}})
-    save(pd.DataFrame(rows).sort_values("step"), "process_summary.csv")
+    ps = pd.DataFrame(rows).sort_values("step")
+    save(ps, "process_summary.csv")
 
     # -- 3. yield waterfall ----------------------------------------------------
     wf = pd.DataFrame([{"step": cfg.unit_op(k).step, "unit_operation": cfg.unit_op(k).name,
@@ -80,13 +83,24 @@ def main() -> None:
         rng = proc.rng(100 + 10 * i)
         factors = st.DOE_FACTORS[key]
         scr = st.screening_doe(proc, key, feeds[key], rng)
-        save(scr, f"doe_{key}_screening.csv")
         top = st.RSM_TOP.get(key, factors[:4])
         rsm = st.rsm_doe(proc, key, feeds[key], rng, top_factors=top)
+        # Rev 2.0 analytical layer: fragment columns per the method plan, drawn from their own
+        # streams AFTER both designs ran, so the shared DoE stream above is untouched.
+        scr = an.annotate_doe(cfg, key, "screening", scr, ps)
+        rsm = an.annotate_doe(cfg, key, "rsm", rsm, ps)
+        scr["run_order"] = an.run_order(cfg, scr, 2 * i)
+        rsm["run_order"] = an.run_order(cfg, rsm, 2 * i + 1)
+        if key == "protein_a":
+            bio_hmw = float(feeds["protein_a"].cqas.get("aggregates_hmw", 1.5))
+            scr = an.protein_a_extras(cfg, scr, "screening", bio_hmw)
+            rsm = an.protein_a_extras(cfg, rsm, "rsm", bio_hmw)
+        save(scr, f"doe_{key}_screening.csv")
         save(rsm, f"doe_{key}_rsm.csv")
         # fit effects for every response (screening for main effects)
         eff_rows = []
-        for resp in st.DOE_RESPONSES[key]:
+        extra = [c for c in (an.LMW_SEC, an.LMW_CE) if c in scr.columns and scr[c].notna().all()]
+        for resp in list(st.DOE_RESPONSES[key]) + extra:
             if scr[resp].std() < 1e-9:
                 continue
             fx = st.fit_effects(scr, resp, factors)
@@ -100,12 +114,14 @@ def main() -> None:
 
     # -- 5. PPQ campaign -------------------------------------------------------
     ppq = st.ppq_batches(proc)
+    ppq["fragments_lmw"] = an.frag_batches(cfg, ppq, stream=0)
     save(ppq.round(5), "ppq_batches.csv")
     values["n_ppq"] = len(ppq)
 
     # -- 6. Monte-Carlo commercial batches + capability -----------------------
     n_mc = int(cfg.meta["n_monte_carlo"])
     mc = st.monte_carlo(proc, n=n_mc)
+    mc["fragments_lmw"] = an.frag_batches(cfg, mc, stream=1)
     save(mc.round(6), "monte_carlo.csv")
     cap = st.capability(mc, cfg)
     save(cap.round(4), "capability.csv")
@@ -159,6 +175,29 @@ def main() -> None:
         save(df, name)
     values["dev_scalars"] = devbuild["scalars"]
     values["n_deviations"] = int(len(devbuild["tables"]["deviations.csv"]))
+
+    # -- 11. Rev 2.0 analytical layer: chronology, method plan, holds, comparability ------
+    save(an.chronology(cfg), "study_chronology.csv")
+    save(an.method_plan(cfg), "method_plan.csv")
+    for pool in cfg.raw()["analytics"]["holds"]:
+        save(an.hold_study(cfg, pool, ps).round(4), f"hold_{pool}.csv")
+    save(an.comparability(cfg, ps).round(4), "cex_fraction_comparability.csv")
+    save(an.sdm_qualification(cfg, proc, feeds), "sdm_qualification.csv")
+    save(an.univariate_studies(cfg, proc, feeds), "univariate_studies.csv")
+    values["fragments_nominal"] = {k: round(v, 3) for k, v in an.nominal_train(cfg).items()}
+
+    # -- 12. Rev 2.0 intermediate acceptance criteria (config only), Rev 1.0 criteria (data),
+    #        verification of the platform worst cases, integrated-model P(OOS) --------------
+    save(ia.derive(cfg), "iac_apriori.csv")
+    save(ia.cumulative_claims(cfg), "iac_viral_cumulative.csv")
+    save(ia.rev1_criteria(cfg, ps, cap, vc.reset_index(drop=True)).round(4), "criteria_rev1.csv")
+    rsm_data = {k: pd.read_csv(os.path.join(ROOT, "outputs", "data", f"doe_{k}_rsm.csv"))
+                for k in st.DOE_FACTORS}
+    ver = ia.verification(cfg, rsm_data, ps, an.nominal_train(cfg),
+                          vi_feed_acidic=feeds["viral_inactivation"].cqas["acidic_variants"])
+    save(ver.round(4), "iac_verification.csv")
+    save(ia.final(cfg, ver), "iac.csv")
+    save(ia.p_oos(cfg, mc), "p_oos.csv")
 
     # -- write headline values -------------------------------------------------
     with open(os.path.join(ROOT, "outputs", "report_values.json"), "w") as fh:

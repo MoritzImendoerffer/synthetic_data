@@ -1,0 +1,80 @@
+# Rev 1.0 — superseded
+
+These are the 20 corpus documents as approved at Rev 1.0 (effective 2026-07-24), frozen on
+2026-10-08 when the Rev 2.0 campaign began (`docs/next/rev2-campaign.md`). They are superseded by
+Rev 2.0 under investigation `INV-001`. They are kept on purpose: a corpus that holds a document
+and its successor is a test of whether a reader can tell which one governs.
+
+- Source: git tag `corpus-rev1.0` (commit `b3b9952`). To rebuild, check out the tag in a
+  worktree and run the build there. This set is a frozen record and is **not** rebuildable from
+  `main`, because Rev 2.0 changed the helpers that its `.qmd` files call.
+- Each document's annex is in `ground_truth/`, and it still grounds:
+  `GROUNDING_STRICT_ANCHORS=1 uv run python check_grounding.py --dir superseded/rev1`
+  (2089/2089 on 2026-10-08).
+- The banners and title blocks say Version 1.0 and do not say "superseded". That is how a
+  superseded controlled document looks once it has been printed.
+
+## Manifest (sha256)
+
+```
+3ab7d118ed2bd8290339bb3cb54c6400e4124c9d0f4e3cb32d0eda5f99d65320  PCMP-001_master_plan.docx
+0a95af0a696e5d6272684c0386cf53e4a51809b4b101de4116597e25247c046a  PCMR-001_master_report.docx
+d5355a4884e527587079c7b329622944785bdb3c69640809703b4431e45f52d0  PCP-003_bioreactor.docx
+e36a53a635ea24dad275c4c433030598c044068a274c802484f3f2b5b1eafbff  PCP-004_harvest.docx
+270f6dfbe2d458c88a3882bf5a6e005bea53e5d9cebb2ce8b290a3f4a463ec86  PCP-005_protein_a.docx
+540dc37512b76dc05d4ae4897d63466b61fdcfc7ad3b7c4a99e8c4db78ce66cd  PCP-006_viral_inactivation.docx
+ffaa1a66ce2f23c9d4051bce4a3cc49bc687322c8457b6e9aeec9f2ed18c1bff  PCP-007_cex.docx
+9b4db4ddb400c1c7149c1a87b4d328e7d1bd92aee90dc69841d4c62324d6c976  PCP-008_aex.docx
+dad4d4b64612c74006c8d8d4f4acb919f8d48d48a23891a41c6c147f1253f6f4  PCP-009_virus_filtration.docx
+9c94c4f0da2b63f107907ac7a04864448e935fd47751e07090ea310ac5090d56  PCP-010_ufdf.docx
+d3071bff760c2bd58e0d1f43a8016d31f25788945062189f9985f28fb90de469  PCR-003_bioreactor.docx
+37846f17e63d36fd2f8653765c9564c02b86c62951762f9272c52fc80b8f0eea  PCR-004_harvest.docx
+f311090d7675b83845d554fab4d102d1b5fc1afa895a877f588769dd420c87f4  PCR-005_protein_a.docx
+dc2f5648662a309c1fc18f84d351c52738d7e18aea8e11e3f2b7b5527bfff6f0  PCR-006_viral_inactivation.docx
+00d460907c42607c0f8f60cf515c456db539761e8c4e5387b4c0bd45b5f0e543  PCR-007_cex.docx
+2011460a9098a4530ef176f1179bb9eebac182a0b714952e354098609512ff89  PCR-008_aex.docx
+bd4b6ff88c0d8a30ffdc2a27f793c5480bdd9852252bca91d2025a1b58698f34  PCR-009_virus_filtration.docx
+68035064d701d61f05c62274324248ba90970bdebb22c7178167bc198090b577  PCR-010_ufdf.docx
+27126c537a83a88c4bab048d6ee217c265cb054ae1b7120dcacb870040b504a0  PTP-001_transfer.docx
+6fd137e933fb70d3f7ef0660b6923ca36c684050d511bd9d65230d182e87cbb6  RA-001_risk_assessment.docx
+ae9c48a826294fc4160cea2e77fcff535a0c29d295aeec581766cdd7c59e1c71  PCMP-001_master_plan.pdf
+f8fca09ed0ad04e8e0055978520a1f01eff1ccf06fa6715a4327f69b0dbe7213  PCMR-001_master_report.pdf
+c25bc349dfaaa6e66ff64c2dd4cfae31b604512b10bd4d50a9a4888e20a94872  PCP-003_bioreactor.pdf
+35f155e4e5d1e522ac9cc4680d61d6ea1e51a21f69dd25fe77b0cb2f75922eff  PCP-004_harvest.pdf
+27b6db399a6a241cd8b0accd18a86d21b001e059024d37e0ab251747131fb35f  PCP-005_protein_a.pdf
+3e3fadf28a6dde65f1a11b4ab4b6060616a60e9c4b5b4aafe11c0199e1462554  PCP-006_viral_inactivation.pdf
+b408145d2bc2f6961009cd4631cb7cf5a78827515fd7f823b49128e8f00ca842  PCP-007_cex.pdf
+1594199b7e96ea666eb75c9bff698feac83767c428f42fa47c0c981840ab964d  PCP-008_aex.pdf
+580e02f449a410f1768459752413840e0ac5f5129335997f7b5d378f887b32bf  PCP-009_virus_filtration.pdf
+be7ca58597e50d51b7450b51604f0c9533025d4b284d782d884f14050e0b9406  PCP-010_ufdf.pdf
+d8039b726a3be9fed8906da06958d298546afc33baaa0c70f70a6abac58361ec  PCR-003_bioreactor.pdf
+22d5847fb67d8f1cd297d67451df730dd8ae924e7e5138f0c87683157d582000  PCR-004_harvest.pdf
+f729357c7a9dfd08feb4057e28179fc64748478b55dd230eecb996f9596cbba3  PCR-005_protein_a.pdf
+d3c7101160f3950b2eaae1a70b7e499628bfb2d37c45f71b96504df2b37b17ce  PCR-006_viral_inactivation.pdf
+62f49836f866fce97306dcd824045e65312799ba82938cc3717f8665a5b2e0b8  PCR-007_cex.pdf
+4f34473c12a3d270243cd53680c2431ca4139e93a56209afe7dacd0eb9d11de3  PCR-008_aex.pdf
+42ee6332de7935c8903090bb03fad541c1e5f35753351e849a7a0a2306fb289c  PCR-009_virus_filtration.pdf
+ea21236e32f33a5510292a9809b3fa7baa11f425b9c8e0aba2431062ae54f5c6  PCR-010_ufdf.pdf
+b85cd798fa0ae8e81a0391ef3d0e9a527ba46922e9cac1d2e79936add2b00d7b  PTP-001_transfer.pdf
+49184b794985a0977b5a1af1ca29821cd78a7290c1e6a76fb181885212157d5c  RA-001_risk_assessment.pdf
+2b055b0565c0449fca842f99512a409ba228ec44d1541b247edd33880e4b324e  ground_truth/PCMP-001.json
+546dd569ea326c2c9ef45ce51acd2745ae332ba5b837dbdd85d356278c3cc83c  ground_truth/PCMR-001.json
+003328aeef33c0f35d8a50d3db0c11105589a0dad0b20002020fd1ca18768458  ground_truth/PCP-003.json
+eee6a20511f872a0e53d933d7b21e6d69aaa335b715b130b40163409208f9f24  ground_truth/PCP-004.json
+08117e08a3c99ceb01c8cbc1a3b3b5a68822fddcd742e2c87597ff38e2a98792  ground_truth/PCP-005.json
+89877f48b854f49d2d3620fc21f67ec975599210bdc542cf2670155f128e5c2c  ground_truth/PCP-006.json
+28dcbcc34b636277c97ae0abc4cbd94d1be289eb1cc91f61002b2cf78156f1b9  ground_truth/PCP-007.json
+b7269f1aaf7784bb3aea046fb7b70db315756979d853b493d7fbac9902050a1c  ground_truth/PCP-008.json
+1d4701dd88de3ac0a72d4ecf9bccff9e5355aa8caeb7fd7f38df1cbc4365e841  ground_truth/PCP-009.json
+5612df1619cb2af3a678f7527fe28e4f1da8053dfb5aee58d9e89f0136e0a6a4  ground_truth/PCP-010.json
+03a53a532d7d31f8255bd1f03c2c60812df887493608407d79cafdc654a66efa  ground_truth/PCR-003.json
+d6b49c3dc6180f8b43fe17970392f70a96d267926d2f570dd8add9679e116563  ground_truth/PCR-004.json
+b10520160e10f5eeb3c4be4791ee30835b660e0bf2831afc3f3cb959b679e6ab  ground_truth/PCR-005.json
+3560a922e61245bedd54d2cece29e307d1586b1ed3a4fde7596025534d8b10f9  ground_truth/PCR-006.json
+b30ba32ef8d67735cc596dde4f7f47d0c9e7279c5607d5af3174922512fc570d  ground_truth/PCR-007.json
+d0f0bcea022a3c65c3010f5b66cb1e8cfc048b1bd765399a0c38a8d4b4fe5f74  ground_truth/PCR-008.json
+fa93259fd23cac3ad65d14b168e01fb4e36bfeb78c58b17d014546a7cde8857f  ground_truth/PCR-009.json
+44cc79174502a6d65f9c9ca80675e9706339c8757bd75f47047f9e8878089f03  ground_truth/PCR-010.json
+297d71a555044e9f2a940a46c01a7e5d8ccc0f3565009b0d1462d2e66bff8e32  ground_truth/PTP-001.json
+5e9192549354cdfc5076116511650f5224a2721320e614f331475e7e50c66725  ground_truth/RA-001.json
+```

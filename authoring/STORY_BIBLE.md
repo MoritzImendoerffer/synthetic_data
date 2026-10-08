@@ -118,6 +118,7 @@ cross-reference tables from `related_docs_md(DOC)` and `corpus_docs_md(...)`):
 | `PCP-00N` | Process Characterization Plan (protocol) | Per step N (3–10); prospective |
 | `PCR-00N` | Process Characterization Report | Per step N; the executed study, paired with its PCP |
 | `PCMR-001` | Process Characterization Master Report | Every PCR rolls up into it |
+| `INV-001` | Investigation Report (QA) | Why every other document is at Version 2.0 (§9b) |
 
 `N` = process step (3–10). Filenames: `PCP-00N_<uokey>.qmd`, `PCR-00N_<uokey>.qmd`;
 annex `ground_truth/<ID>.json`. Each PCR names its risk basis (RA-001), its paired plan
@@ -135,7 +136,8 @@ registry is `SOP_REFS` / `AMV_REFS`; each step draws a subset via a named list
 - Every DoE step cites `SOP-1001` (SDM qualification), `SOP-1002` (DoE design/analysis),
   its own operation SOP, and `SOP-4001` (parameter classification).
 - Each analytical response has one AMV (e.g. HCP → `AMV-3012`, SEC → `AMV-3011`, N-glycan
-  → `AMV-3010`, MVM → `AMV-3018`). Pull the step's subset from its `_AMV_REFS` list.
+  → `AMV-3010`, MVM → `AMV-3018`, fragments by non-reduced CE-SDS → `AMV-3020` under
+  `SOP-3015`). Pull the step's subset from its `_AMV_REFS` list.
 - SOP/AMV numbers are **identifiers, not measurements** — write them plainly; the numeral
   lint exempts them (WRITING_GUIDE §3). Never invent a new number; use the registry.
 
@@ -186,6 +188,111 @@ adverse-before-mitigation story (WRITING_GUIDE §2, rule 8), grounded entirely i
 scalars and the two datasets — never in invented numbers. Milder deviations (probe drift,
 feed under-delivery) are simply **retained** with a bounded-impact argument.
 
+## 9b. Version 2.0: the investigation, the method decision, and the criteria (canon)
+
+Every document except `INV-001` exists at **Version 2.0**. Version 1.0 was approved first and
+is kept, frozen, in `pc_package/superseded/rev1/`. The story of the change is fixed canon:
+
+**The trigger.** QA reviewed `PCMR-001` Version 1.0 for BLA readiness and found that the
+acceptance criteria used to judge each step in the proven-acceptable-range analysis were not in
+any approved protocol. They had been introduced at analysis time, after the `PCR-005` analysis
+showed that a Protein A pool cannot meaningfully be judged against a drug-substance limit. QA
+opened `INV-001` (classification, dates and title: `INV`, from `config` `campaign:`).
+
+**The findings** (INV-001 numbers them; every other document refers to them by number):
+1. The step criteria were defined after the data were seen and outside the approved protocols.
+2. Each step's criterion was the drug-substance limit carried back through the NOMINAL downstream
+   clearance of this campaign, then divided by a "safety factor" that differed by step. The
+   factors were chosen so that every step passed at its own set-point.
+3. The glycan and acidic-variant limits at the bioreactor were the mean plus 2.5 standard
+   deviations of the capability data they were then used to judge.
+4. Acidic variants were printed with a two-sided range and assessed for capability against its
+   upper end alone.
+5. The records gave no execution dates, so the equipment tables appeared to cite expired
+   calibrations.
+6. A separate finding from the method side. In the CEX fraction study (`S-CEX-FRC`), SEC and
+   non-reduced CE-SDS were run on the same samples. SEC read fragments high wherever the matrix
+   still carried host cell protein, part of which elutes in its low molecular weight window (the
+   excess is a few tenths of a percent and can never exceed the host cell protein present), and
+   agreed with CE-SDS from the CEX pool onward.
+
+**The method decision** `AMD` (id, date and title in `config` `campaign.method_decision`). From
+its date, fragments are measured by nrCE-SDS in every study, at every step, so that one method
+spans the train. Response-surface samples of Protein A and viral inactivation that had been
+retained were re-tested by CE-SDS. Screening samples were not retained, so those SEC results are
+kept but marked as not used. The re-executed anion exchange DoE (DEV-008-01) ran after the
+decision and measured fragments by CE-SDS. Its invalidated first execution had used SEC.
+Fragments were not in scope of the bioreactor DoE. Which method ran in which study is
+`method_plan.csv`, and the table is `T.methods_by_study()`.
+
+**Thresholds.** PCMP-001 Version 2.0 states the campaign thresholds (`THRESHOLDS`, `CPK_TARGET`,
+`CPK_MIN`): the capability target and minimum, and the model-adequacy limits.
+
+**The criteria (CAPA).** `PCMP-001` Version 2.0 defines intermediate acceptance criteria a
+priori:
+- **The rule.** Each drug-substance criterion is carried backward through the train, using the
+  worst case each downstream step showed on the platform (X-Mab, Y-Mab and Z-Mab). That is the
+  lowest clearance fold and the largest increase. No margin is applied.
+- **Attributes no step changes.** The glycans keep their drug-substance criterion.
+- **Viral clearance.** Each step is held to its platform claim. The claims sum to the
+  cumulative requirement.
+- **Why applying them retrospectively is acceptable.** The derivation uses no data from the
+  studies it judges.
+- **Verification.** Each report checks the worst cases that the criteria upstream of its step
+  rely on. Data may tighten a criterion and never loosen it. One assumption was not confirmed:
+  within its NOR, cation exchange cleared aggregate less than the platform worst case. That
+  tightened the aggregate criteria upstream of cation exchange. Whether any proven acceptable
+  range moved because of it is a result. Each affected report states it from its own PAR table,
+  and nothing here asserts it.
+- **The flow of the derivation.** Rule: `config` `iac:`. Derivation: `amab_process/iac.py`.
+  Table: `iac.csv`, with `T.iac_derivation()`. Verification: `iac_verification.csv`, with
+  `T.worst_case_verification()`. The Version 1.0 criteria: `criteria_rev1.csv`, with
+  `T.criteria_change()`.
+
+**Wider than Version 1.0 is not a loosening (say so where it applies).** Several Version 2.0
+criteria are wider than the limits Version 1.0 applied. The Protein A host cell protein criterion
+is the clearest case. That is not data loosening an approved criterion, which the rule forbids:
+- The Version 1.0 limits were never approved criteria. They were applied at analysis and appear in
+  no approved plan (finding 1).
+- Version 2.0 replaces them with criteria derived a priori. The tighten-only rule applies to the
+  a-priori criteria from here on.
+
+A document that shows a criterion wider than its Version 1.0 value states this once, plainly. It
+does not leave the reader to infer it.
+
+**DEV-005-03 (Protein A scale-down qualification).** PCP-005 Version 2.0 sets an equivalence margin
+for the scale-down model and plans three set-point runs. With three runs, the confidence interval
+alone is wider than the margin, so equivalence could not be demonstrated whatever the means were.
+Six supplementary set-point runs (S-PA-SDM2) were made during the investigation. The margin was
+not changed: changing a criterion after seeing the data is what INV-001 is about. Whether each
+output is then equivalent is a result the report computes. Leached Protein A differs by a recorded
+scale effect: the manufacturing load is held longer before capture, so host cell proteases in it
+cleave more ligand (leaching by itself is highest on new resin, so cycle history is not the cause).
+
+**Hold-study fragment results.** The hold studies ran before AMD-001. Their first and last time
+points were retained and tested by nrCE-SDS together with the retained response-surface samples,
+and the intermediate time points have SEC only. A hold criterion for fragments is judged on the
+nrCE-SDS time points.
+
+**What moved because of it.**
+- Several Version 1.0 findings were artefacts of the tuned limits. The best example is the
+  CEX pool aggregate limit of 1 % HMW (5 % ÷ 5), which made the upper load NOR look unsupported.
+- The headline minimum Cpk is now acidic variants against its 18 % floor.
+- The integrated Monte-Carlo model gives the probability of an out-of-specification drug
+  substance per attribute (`p_oos.csv`).
+
+Every report says what moved for its own step, in "Changes in this revision".
+
+**Chronology.** Each plan was approved before its studies began (`PLAN_APPROVAL`,
+`rev1_date(DOC)`); the Version 1.0 title blocks carried the package compilation date instead,
+which is part of INV-001 finding 5. Every study has an execution window (`study_chronology.csv`). Every window closes
+before the calibration due date of the equipment it used, and before Version 1.0 was approved.
+
+**Hold studies.** The clarified harvest, the Protein A eluate (held at elution pH, before the
+inactivation step) and the neutralized viral inactivation pool were each held at two temperatures for seven days (`hold_<pool>.csv`,
+`T.hold_stability(pool)`). The design of the viral-inactivation pool study follows A-Mab
+Table 4.17.
+
 ## 10. Grounding map — pull, never type
 
 Every value below is a number or a controlled datum. Read it through the named source;
@@ -208,6 +315,17 @@ expression for the specific step — the "helper inventory".)
 | Monte-Carlo batch count, product targets, scale | `V['n_monte_carlo']`, `CFG` (`meta.*`) |
 | Deviation register + facts + scalars | `dev_register(DOC)`, `dev_facts(DOC)`, `dev_*` module globals |
 | Whole-train control-strategy summaries | `cpp_params(...)`, `class_counts()` |
+| Revision, investigation, method decision, dates | `doc_version(DOC)`, `rev1_date(DOC)`, `revision_history(DOC)`, `REV1`, `REV2`, `INV`, `AMD`, `PLAN_APPROVAL`, `csv("study_chronology.csv")` |
+| CAPA, effectiveness check, thresholds | `CAPA` (DataFrame), `EFFECTIVENESS`, `THRESHOLDS`, `CPK_TARGET`, `CPK_MIN` |
+| Intermediate acceptance criteria | `D.iac_table(key)`, `D.effective_acceptance(key, resp)`, `D.acceptance_basis(key, resp)`, `T.iac_derivation(...)` |
+| Version 1.0 criteria and the change | `D.rev1_criteria(key)`, `T.criteria_change(...)` |
+| Worst-case verification | `D.iac_verification(key)`, `T.worst_case_verification(...)` |
+| P(OOS) of the drug substance | `D.p_oos()` |
+| Fragments, methods, hold, comparability | `csv("method_plan.csv")`, `T.methods_by_study()`, `T.hold_stability(pool)`, `T.method_comparability()`, `V['fragments_nominal']` |
+| Complex DoE tables | `T.doe_results(key, kind)`, `T.criteria_results(key)`, `T.parameters_by_step(...)` |
+| Univariate studies | `csv("univariate_studies.csv")`: each univariate parameter in duplicate at both ends of its characterized range (S-xx-UNI); set-point reference = the qualification runs |
+| Run order, per-pool HMW, residual DNA (Protein A) | `run_order` column in every DoE CSV; `hmw_sec_pct`, `dna_load_pg_mg`, `dna_pool_pg_mg` in the Protein A DoE CSVs (DNA on centre points only) |
+| Scale-down model qualification | `csv("sdm_qualification.csv")` (with `plates_per_m`, `asymmetry` for the chromatography steps; DEV-005-03's supplementary runs are study S-PA-SDM2): set-point runs, scale-down (n=3) against manufacturing (n=5), per step; a recorded scale effect for leached Protein A, protease cleavage of the ligand during the longer load hold at scale (config `analytics.sdm.scale_offset`) |
 
 ## 11. Voice
 

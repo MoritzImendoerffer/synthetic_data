@@ -108,7 +108,7 @@ def _quote_counts(annex):
 ALL_DOCS = ["PCP-003", "PCR-003", "PCP-004", "PCR-004", "PCP-005", "PCR-005",
             "PCP-006", "PCR-006", "PCP-007", "PCR-007", "PCP-008", "PCR-008",
             "PCP-009", "PCR-009", "PCP-010", "PCR-010", "PTP-001", "RA-001",
-            "PCMP-001", "PCMR-001"]
+            "PCMP-001", "PCMR-001", "INV-001"]
 
 
 @pytest.mark.parametrize("doc_id", ALL_DOCS)

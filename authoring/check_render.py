@@ -172,6 +172,65 @@ def check_pdf_glyphs(qmd: str) -> int:
     return 0
 
 
+def check_tables_fit(qmd: str) -> int:
+    """Fail if a complex table is cut off in the rendered PDF.
+
+    A raw-LaTeX table sits in a float, and a float cannot break across pages. A table taller
+    than a page therefore runs off the bottom silently: its last rows and its footnotes are
+    simply not in the PDF. Found 2026-10-08 on INV-001, whose Version 1.0 / Version 2.0 table
+    lost its last two rows and both footnotes. This evaluates every ``T.<builder>(...)`` call
+    the document prints and requires the text of its last body row and of its last footnote
+    to appear in the PDF. The DOCX is unaffected, so only the PDF is checked.
+    """
+    pdf = os.path.splitext(os.path.abspath(qmd))[0] + ".pdf"
+    if not os.path.exists(pdf) or os.path.getmtime(pdf) < os.path.getmtime(qmd):
+        return 0
+    calls = re.findall(r"(T\.\w+\((?:[^()]|\([^()]*\))*\))\.show\(\)", open(qmd, encoding="utf-8").read())
+    if not calls:
+        return 0
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        return 0
+    sys.path.insert(0, os.path.join(ROOT, "pc_package"))
+    import tables as T  # noqa: E402
+    doc = fitz.open(pdf)
+    text = re.sub(r"\s+", " ", " ".join(page.get_text() for page in doc))
+    doc.close()
+    bad = []
+    # the document's own identity variables, which builder calls commonly use (T.x([UO]))
+    ns = {"T": T}
+    for m in re.finditer(r'^(DOC|UO|UO_TITLE)\s*=\s*(.+)$', open(qmd, encoding="utf-8").read(), re.M):
+        try:
+            ns[m.group(1)] = eval(m.group(2), {})
+        except Exception:  # noqa: BLE001
+            pass
+    for c in calls:
+        try:
+            t = eval(c, ns)
+        except Exception as e:  # noqa: BLE001
+            bad.append(f"{c}: cannot evaluate ({e})")
+            continue
+        # the last cell's own text, without footnote markers: a superscript marker runs into
+        # its word in the PDF text layer ("no DoEe)"), so it cannot be part of the probe
+        last = t.body[-1][-1]
+        frags = [f.strip(" ,;") for f in re.split(r"\^[^^]+\^", str(getattr(last, "text", last)))]
+        probes = [max(frags, key=len)]
+        if t.notes:
+            probes.append(t.notes[-1][1][:40])
+        for pr in probes:
+            pr = re.sub(r"\s+", " ", pr).strip()
+            if pr and pr not in text:
+                bad.append(f"{t.label}: {pr[:50]!r} not in the PDF (table taller than a page?)")
+    if bad:
+        print(f"FAIL  {len(bad)} complex table(s) cut off in the PDF:")
+        for b in bad:
+            print(f"      {b}")
+        return 1
+    print(f"OK    {len(calls)} complex table(s) complete in the PDF")
+    return 0
+
+
 def run_quarto(qmd: str) -> int:
     if not shutil.which("quarto"):
         print("WARN  --render requested but quarto not on PATH; skipping real render")
@@ -232,6 +291,8 @@ def check(qmd: str, do_render: bool, strict_numerals: bool, lax_style: bool) -> 
     render_rc = run_quarto(qmd) if do_render else 0
     if render_rc == 0:
         render_rc = check_pdf_glyphs(qmd)
+    if render_rc == 0:
+        render_rc = check_tables_fit(qmd)
 
     hard_ok = (ok and render_rc == 0
                and (lint_rc == 0 or not strict_numerals)

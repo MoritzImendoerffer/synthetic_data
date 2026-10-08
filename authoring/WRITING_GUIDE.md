@@ -7,7 +7,9 @@ for a unit operation, the mechanism in §2b. The section plan holds structure on
 their headings and what each covers. The story bible (`authoring/STORY_BIBLE.md`) is the world
 these documents live in. The exemplar (`authoring/REGISTER_EXEMPLAR.md`) is verbatim passages
 from the published human sources this corpus is modelled on. Nothing else is a model for voice,
-and no existing document in `pc_package/` is one.
+and no existing document in `pc_package/` is one. For content, and only for content, a report's
+author also reads its own approved plan (the paired `PCP-00N`) and the master plan `PCMP-001`,
+as a real author writes a report against the protocol that governed the study.
 
 This guide is short on purpose. It says what to do. The earlier guide, with its worked
 corrections and its history, is kept verbatim at `authoring/history/WRITING_GUIDE-2026-08-18.md`
@@ -21,19 +23,21 @@ evidence for it, the cause behind it, and the point at which the claim stops.
 
 ## 2. Ten rules
 
-1. You are the process scientist who ran this study. Explain the results and what they mean
-   physically, as you would in a paper.
+1. You are the process scientist who ran this study and is writing its controlled report, not a
+   paper. Report what was done, what was found and whether each criterion was met. Give the
+   physical explanation where a conclusion depends on it, which is in the mechanistic
+   interpretation and the Discussion. Elsewhere a result stands on its data and its criterion.
 2. State the finding, then the evidence. Where the evidence needs interpreting, interpret it
    in its own sentence. Where it does not, stop.
 3. One step of the argument per sentence. A consequence, a contrast or a recommendation opens
    the next sentence ("Therefore, …", "However, …", "For this reason, …").
-4. Name the cause in the clause where the causal verb stands. Which species, which interaction,
+4. When you give a cause, name it in the clause where the causal verb stands. Which species, which interaction,
    which property of the resin, the buffer or the culture, and in which direction it acts.
    "Because", "since", "governs", "sets", "acts on" and "acts through" carry that cause in their
    own clause, not in the sentence after them and not after a colon. Where what does the causing
    is a convention, a procedure or a design choice rather than a species, say what it holds
-   constant or what follows from it. A list of what was done is not a reason, and a paragraph of
-   Materials and methods needs the reason as much as a paragraph of Results does.
+   constant or what follows from it. Do not add a cause where the reader does not need one. A
+   method section that says what was done, with the reference that defines how, is complete.
 5. Use the terms of art of the field, and one name per thing. The same attribute, parameter
    and study keep the same name from the first page to the last, and a cross-reference is a
    section number ("see §7"), never a rephrasing.
@@ -65,6 +69,17 @@ Identifiers are not measurements, and are written plainly. Document IDs (`SOP-20
 `AMV-3010`, `RA-001`), guidance names (`ICH Q8`, `FDA 2011`), citation keys,
 cross-reference labels (`@tbl-cqa`, `@fig-contours`) and coded factor levels (−1/0/+1).
 
+A sentence whose truth the data decide (every study closed before X, all outputs met their
+criterion, no range narrowed) is a measurement too. Compute its deciding word in the setup chunk,
+or `assert` the condition there, so a change in the data stops the render instead of leaving a
+false sentence. Found on 2026-10-08: a study added to the chronology after INV-001 was written
+made two of its sentences false while every number around them updated correctly.
+
+Never open a sentence with an inline number ("6 steps have…"). Write the sentence so the number
+falls inside it ("Six steps…" is not available, because the count is an expression, so write
+"The campaign has `{python} n` steps with…"). A sentence that opens on a digit reads as a
+filled template.
+
 If a number you need has no helper, write `<<NEEDS: description>>` inline and continue.
 Never invent, estimate or recall a value. A `<<NEEDS:>>` marker tells the maintainer to
 extend the generator; it is information, not a failure.
@@ -79,7 +94,7 @@ nothing else.
 |---|---|---|
 | an em-dash | at most one or two per thousand words, most often none | a full stop, or a pair of parentheses |
 | a semicolon | at most a few per thousand words | a full stop |
-| a colon inside a sentence | rare | a full stop, or "such as" |
+| a colon inside a sentence | rare, except to introduce a list | a full stop, or "such as". A sentence that introduces a numbered list may end in a colon |
 | bold inside a sentence | never | plain text; bold belongs to headings and table labels |
 | a coined three-part hyphenated compound | never | the phrase in full ("host cell protein") |
 
@@ -112,14 +127,36 @@ them. A figure is described in the text that precedes it, what is plotted and wh
 should see. Every table and figure carries a caption and a label, and every number in the prose
 around it comes from the same helper that built it.
 
-## 7. Depth
+Real report tables are not flat. `pc_package/tables.py` builds the ones this corpus needs, with
+merged group cells, two-level headers, "n.t." for a test that was not run, and footnotes that say
+where a value came from. Use them where the brief lists them, and let the footnote carry a caveat
+that belongs to one cell. The prose then says what the table shows, not what each footnote says.
+
+## 7. Conventions of a controlled report
+
+These are what make a document read as a controlled record rather than an essay.
+
+- The revision history sits in the front matter. A Version 2.0 document says once, in "Changes
+  in this revision", what changed and why, and names the investigation. The rest of the document
+  is the current approved text. It does not narrate its own edits.
+- An acceptance criterion is stated with its basis, and a result is reported against it: the
+  value, the criterion, and "met" or "not met". A table with the columns Criterion, Result and
+  Met is the normal form.
+- Objectives, acceptance criteria, conclusions and actions are numbered lists. Findings that
+  readers will cite later carry a number of their own (F1, F2, …).
+- A cross-reference names the document and the section ("PCP-005 §7", "INV-001 §5"). A deviation,
+  a lot, a study and a method decision are cited by their identifier.
+- Dates are written as the record has them (2026-03-20). A value below the limit of quantitation
+  is written "< LOQ" and a test that was not run "n.t.", with a footnote saying why.
+
+## 8. Depth
 
 Depth follows the design. A step with a screening design and a response-surface model has a long
 Results section because it has many things to report. A step without a DoE has a short one, and
 that is correct. Achieve depth with grounded tables, analysis and full appendices, and end a
 paragraph when its point is made.
 
-## 8. Before you submit a section
+## 9. Before you submit a section
 
 Read it once as the assessor. Ask of each paragraph what it claims and what it shows, of each
 sentence that gives a reason whether the reason stands in the clause with its verb, and of each

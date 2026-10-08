@@ -83,14 +83,14 @@ class Config:
     # -- in-process acceptance criteria ----------------------------------------
     @property
     def ipc_limits(self) -> Dict[str, Any]:
-        """In-process acceptance criteria: the limit each step's own output must meet.
+        """The Rev 1.0 in-process limit rules, SUPERSEDED by ``iac`` at Rev 2.0 (INV-001) and
+        kept as data so the change can be tabulated. Nothing judges a step against them."""
+        return self._d.get("rev1_ipc_limits", {})
 
-        The criteria in ``cqas`` are drug-substance criteria and are the wrong yardstick for
-        an intermediate. Every entry here is a rule evaluated against the seeded outputs (a
-        backward calculation through the clearance chain, a capability alert limit, or a
-        modular clearance claim), never a literal number, so the limits move with the seed.
-        Returns ``{}`` when the block is absent, so an older config still loads."""
-        return self._d.get("ipc_limits", {})
+    @property
+    def iac(self) -> Dict[str, Any]:
+        """Rev 2.0 intermediate acceptance criteria rules (amab_process/iac.py)."""
+        return self._d.get("iac", {})
 
     # -- process ---------------------------------------------------------------
     @property

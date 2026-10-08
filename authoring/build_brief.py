@@ -305,7 +305,10 @@ def _mechanism_section(key: str) -> str:
     w = b.write
     w("## 2b. Mechanism — how the step works\n\n")
     w(f"> From `authoring/mechanism/{key}.yaml` ({m.get('source', 'domain knowledge')}; "
-      f"reviewed by owner: {m.get('reviewed_by_owner') or 'not yet'}). This is the physical "
+      f"reviewed by owner: {m.get('reviewed_by_owner') or 'not yet'}"
+      + (f"; NOT yet read by the owner: {', '.join(m['pending_owner_review'])}"
+         if m.get("pending_owner_review") else "")
+      + "). This is the physical "
       "chemistry the report's mechanistic prose rests on. It carries no number on purpose: "
       "the effects, their signs and their sizes come from the fitted models in §4 and §7, and "
       "the report says what the data show and why the chemistry makes that expected or "
@@ -430,6 +433,115 @@ def _helper_lines(module, mod_name, prefix=""):
     return lines
 
 
+def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
+    """Version 2.0: the revision, the investigation, the criteria old and new, the methods, the
+    chronology and the complex tables this document should carry. Facts only, all pulled."""
+    import tables as T
+    b = io.StringIO()
+    w = b.write
+    ver, eff = P.doc_version(doc_id)
+    w("## 4c. Version 2.0 — revision facts\n\n")
+    w(f"- **This document:** Version {ver}, effective {eff} (`doc_version(DOC)`). "
+      + ("New document." if doc_id == P.INV["id"] else
+         f"Supersedes Version {P.REV1['rev']} of {P.REV1['effective']}, frozen in "
+         "`pc_package/superseded/rev1/`.") + "\n")
+    w(f"- **Investigation:** {P.INV['id']}, {P.INV['title']}; opened {P.INV['opened']}, closed "
+      f"{P.INV['closed']}; trigger: {P.INV['trigger']}; classification {P.INV['classification']} "
+      "(`INV`).\n")
+    w(f"- **Method decision:** {P.AMD['id']}, {P.AMD['date']}: {P.AMD['title']} (`AMD`).\n")
+    w("- **Revision history:** `revision_history(DOC)` under an unnumbered heading after the "
+      "approvals. The story is STORY_BIBLE §9b; the findings are numbered there.\n\n")
+    w("### Study chronology — `csv(\"study_chronology.csv\")`\n\n")
+    ch = P.csv("study_chronology.csv")
+    if key is not None:
+        ch = ch[ch["step"] == key]
+    w(ch.to_markdown(index=False) + "\n\n")
+    if key is not None:
+        mp = P.csv("method_plan.csv")
+        mp = mp[mp["step"] == key]
+        w("### Fragment method by study — `csv(\"method_plan.csv\")`\n\n")
+        w(mp.to_markdown(index=False) + "\n\n")
+        it = D.iac_table(key)
+        if not it.empty:
+            w("### Intermediate acceptance criteria for this step — `D.iac_table(UO)`\n\n")
+            w(it.drop(columns=["iac_low_apriori"], errors="ignore").to_markdown(index=False) + "\n\n")
+        r1 = D.rev1_criteria(key)
+        if not r1.empty:
+            w("### Version 1.0 criteria for this step — `D.rev1_criteria(UO)`\n\n")
+            w(r1.to_markdown(index=False) + "\n\n")
+        if doe and is_report:
+            w("### What moved: the PAR table under Version 1.0 criteria — `D.par_table_rev1(UO)`\n\n"
+              "The same models judged against the Version 1.0 criteria. Compare with §4b for "
+              "'Changes in this revision'. Use only to say what moved; never present it as a "
+              "result.\n\n")
+            try:
+                w(D.par_table_rev1(key).to_markdown(index=False) + "\n\n")
+            except Exception as e:  # noqa: BLE001
+                w(f"_(unavailable: {e})_\n\n")
+        v = D.iac_verification(key)
+        if not v.empty:
+            w("### Platform worst cases this step verifies — `D.iac_verification(UO)`\n\n")
+            w(v.to_markdown(index=False) + "\n\n")
+        if key in ("harvest", "protein_a", "viral_inactivation"):
+            w(f"### Hold-time stability — `T.hold_stability(\"{key}\")`, data `csv(\"hold_{key}.csv\")`\n\n")
+            w(P.csv(f"hold_{key}.csv").round(3).to_markdown(index=False) + "\n\n")
+        if key == "cex":
+            w("### SEC against nrCE-SDS (S-CEX-FRC) — `T.method_comparability()`\n\n")
+            c = P.csv("cex_fraction_comparability.csv")
+            w(c.groupby("sample", sort=False)[["lmw_sec_pct", "lmw_cesds_pct", "difference"]]
+              .mean().round(3).to_markdown() + "\n\n")
+    else:
+        w("### Corpus-level tables\n\n")
+        for name in ("iac.csv", "criteria_rev1.csv", "iac_verification.csv", "iac_viral_cumulative.csv", "p_oos.csv"):
+            w(f"`csv(\"{name}\")`:\n\n" + P.csv(name).round(4).to_markdown(index=False) + "\n\n")
+        c = P.csv("cex_fraction_comparability.csv")
+        w("SEC against nrCE-SDS by sample (means of `cex_fraction_comparability.csv`):\n\n")
+        w(c.groupby("sample", sort=False)[["lmw_sec_pct", "lmw_cesds_pct", "difference"]].mean().round(3).to_markdown() + "\n\n")
+        r1 = P.csv("capability.csv")
+        w("Capability (Version 2.0, acidic variants two-sided). Version 1.0's minimum Cpk was "
+          "the one-sided value; recompute it as `(acc_high - mean) / (3 sd)` for acidic variants "
+          "if it is needed, never type it:\n\n")
+        w(r1[["key", "spec_type", "mean", "sd", "Cpl", "Cpu", "Cpk"]].round(3).to_markdown(index=False) + "\n\n")
+    # the complex tables for this document
+    w("### Complex tables this document should carry (pc_package/tables.py, `import tables as T`)\n\n")
+    w("Print each in its own chunk with `#| output: asis` as `T.<builder>(...).show()`. Use the "
+      "exact call below: the annex builder calls the same one to anchor its rows.\n\n")
+    calls = []
+    if key is not None:
+        calls.append(f'T.methods_by_study(["{key}"])')
+        if not D.iac_table(key).empty:
+            calls.append(f'T.criteria_change(["{key}"])')
+        if is_report and doe:
+            calls += [f'T.criteria_results("{key}")', f'T.doe_results("{key}", "screening")',
+                      f'T.doe_results("{key}", "rsm")']
+            if not D.iac_verification(key).empty:
+                calls.append(f'T.worst_case_verification(["{key}"])')
+        if is_plan and not D.iac_table(key).empty:
+            calls.append(f'T.iac_derivation(["{key}"])')
+        if key in ("harvest", "protein_a", "viral_inactivation") and is_report:
+            calls.append(f'T.hold_stability("{key}")')
+        if key == "cex" and is_report:
+            calls.append("T.method_comparability()")
+        if key == "aex" and is_report:
+            calls.append('T.doe_results("aex", "rsm", superseded=True)')
+    else:
+        calls += {"INV-001": ["T.criteria_change()", "T.method_comparability()", "T.methods_by_study()",
+                              "T.iac_derivation()", "T.worst_case_verification()"],
+                  "PCMP-001": ["T.iac_derivation()", "T.methods_by_study()", "T.parameters_by_step()"],
+                  "PCMR-001": ["T.iac_derivation()", "T.worst_case_verification()", "T.methods_by_study()",
+                               "T.parameters_by_step()", "T.criteria_change()"],
+                  "PTP-001": ["T.parameters_by_step()", "T.methods_by_study()"],
+                  "RA-001": ["T.methods_by_study()"]}.get(doc_id, [])
+    for c in calls:
+        try:
+            t = eval(c, {"T": T})
+            w(f"- `{c}` — label `@{t.label}`: {t.caption}\n")
+        except Exception as e:  # noqa: BLE001
+            w(f"- `{c}` — unavailable ({e})\n")
+    w("\n")
+    return b.getvalue()
+
+
 def build(doc_id: str, review: bool = False) -> str:
     if doc_id not in P.DOC_REGISTRY:
         raise SystemExit(f"unknown document id: {doc_id} (see _pcpkg.DOC_REGISTRY)")
@@ -529,13 +641,13 @@ def build(doc_id: str, review: bool = False) -> str:
     # 4b. Proven acceptable ranges (computed live by doe_report) -----------------
     if key is not None and doe:
         w("## 4b. Proven acceptable ranges (computed)\n\n")
-        w("Acceptance = the study drug-substance specs (impurities / formed CQAs); a "
-          "viral-clearance CQA uses the back-calculated step floor (cumulative requirement "
-          "minus the other steps' credited clearance). `D.acceptance_for(UO, resp)` returns "
-          "the right criterion. Two flavours per CQA×parameter — at set-point and "
-          "NOR-propagated (Monte-Carlo of the fitted model). Table: `D.par_table(UO)`; plot a "
-          "governed CQA with `D.fig_par(UO, resp, D.governing_factor(UO, resp))` "
-          "(parameter x, response y, acceptable region shaded green, set-point + NOR marked).\n\n")
+        w("Acceptance = the step's intermediate acceptance criterion (Version 2.0, see §4c): "
+          "`D.effective_acceptance(UO, resp)` returns it and `D.acceptance_basis(UO, resp)` says "
+          "how it was set. Quality attributes are judged per batch (95 % predictive interval); "
+          "viral clearance on the mean LRF across the NOR (`D.decision_statistic(resp)`). Two "
+          "flavours per CQA×parameter: the 'PAR (set-point)' column and the NOR-propagated "
+          "column. Table: `D.par_table(UO)`; plot a governed CQA with "
+          "`D.fig_par(UO, resp, D.governing_factor(UO, resp))`.\n\n")
         try:
             w(D.par_table(key).to_markdown(index=False) + "\n\n")
             gov = {r: D.governing_factor(key, r) for r in D.responses(key)
@@ -545,6 +657,9 @@ def build(doc_id: str, review: bool = False) -> str:
                   + ", ".join(f"`{r}`→`{f}`" for r, f in gov.items()) + "\n\n")
         except Exception as e:  # noqa: BLE001
             w(f"_(PAR table unavailable: {e})_\n\n")
+
+    # 4c. Version 2.0 facts ------------------------------------------------------
+    w(_rev2_section(doc_id, key, is_report, is_plan, doe))
 
     # 5. Deviations -------------------------------------------------------------
     w("## 5. Deviations — structured facts (author writes the prose; Option A)\n\n")
@@ -649,6 +764,8 @@ def build(doc_id: str, review: bool = False) -> str:
         w("\n".join(_helper_lines(RC, "ra_content", prefix="RC.")) + "\n\n")
     w("### Constants & globals\n\n")
     w("- `SYN_BANNER`, `PRODUCT`, `COMPANY`, `EFFECTIVE_DATE`, `VERSION` — front-matter.\n")
+    w("- Version 2.0: `REV1`, `REV2`, `INV`, `AMD`, `PLAN_APPROVAL`, `rev1_date(DOC)`, "
+      "`CAPA` (DataFrame), `EFFECTIVENESS`, `THRESHOLDS`, `CPK_TARGET`, `CPK_MIN`.\n")
     w("- `V` — `outputs/report_values.json` dict (e.g. `` `{python} f\"{V['n_monte_carlo']:,}\"` ``).\n")
     w("- `CFG` — config; `CFG.unit_op(key).param(name).nor` / `.prange` for NOR/PAR edges.\n")
     w("- `D.RESP_LABEL` — response-key → display label.\n")

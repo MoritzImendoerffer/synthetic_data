@@ -18,10 +18,20 @@ Invoke as:
   `outputs/data/*.csv` + `outputs/report_values.json` are present. (The scientific stack is
   under `uv`; always `uv run python …`, never bare `python3`.)
 - **You must NOT read any `pc_package/*.qmd`.** Authoring depends only on: `config` → the
-  model → `outputs/`, the `_pcpkg` / `doe_report` helpers, the `authoring/` artifacts
-  (guide, brief, section plan, register exemplar, story bible, template, and the step's
-  mechanism file `authoring/mechanism/<uokey>.yaml`, which the brief carries as §2b), and the
-  published human sources in `refs/text/`. `authoring/check_blank_repo.sh` proves this.
+  model → `outputs/`, the `_pcpkg` / `doe_report` / `tables` helpers, the `authoring/`
+  artifacts (guide, brief, section plan, register exemplar, story bible, template, and the
+  step's mechanism file `authoring/mechanism/<uokey>.yaml`, which the brief carries as §2b),
+  and the published human sources in `refs/text/`. `authoring/check_blank_repo.sh` proves this.
+- **Exception, for content only (owner's decision, 2026-10-08).** A report's author reads the
+  RENDERED text of its own approved plan and of the master plan:
+  `pdftotext -layout pc_package/PCP-00N_<uokey>.pdf -` and
+  `pdftotext -layout pc_package/PCMP-001_master_plan.pdf -`, and a step plan's author reads the
+  rendered master plan. That is what a real author has open when writing a report: the
+  protocol that governed the study. It is read for the design, the criteria and the methods,
+  never for voice, and never the `.qmd`. Isolation from every other document stays. Before
+  2026-10-08 the report author could not see its own protocol, and plan/report conflicts
+  (TASK-020's sampling point, D-001's method) were the result. The registered D-001 must still
+  be written as the brief's §5c directs, even though the author can now read the plan.
 - **The mechanism file has been read by the project owner.** `authoring/mechanism/<uokey>.yaml`
   is prose written from domain knowledge with no source to ground it against, which is why its
   `reviewed_by_owner` field carries the date the owner read it. A brief whose §2b says

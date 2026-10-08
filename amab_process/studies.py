@@ -189,6 +189,13 @@ def _sample_overrides(proc: Process, rng: np.random.Generator,
     return overrides
 
 
+def _ops(overrides: Dict[str, Dict[str, float]]) -> Dict[str, float]:
+    """The operating point the analytical layer needs, recorded per batch. Recording it draws
+    nothing, so every other column of the batch is unchanged (Rev 2.0, amab_process.analytics)."""
+    from .analytics import FRAG_OPS
+    return {f"op_{k}_{p}": float(overrides[k][p]) for k, p in FRAG_OPS}
+
+
 def ppq_batches(proc: Process, n: Optional[int] = None,
                 rng: Optional[np.random.Generator] = None) -> pd.DataFrame:
     """Run a PPQ / validation campaign; one row per batch with DS CQAs and yield."""
@@ -196,9 +203,11 @@ def ppq_batches(proc: Process, n: Optional[int] = None,
     rng = rng or proc.rng(1000)
     rows = []
     for b in range(1, n + 1):
-        batch = proc.run_batch(rng, overrides=_sample_overrides(proc, rng))
+        ov = _sample_overrides(proc, rng)
+        batch = proc.run_batch(rng, overrides=ov)
         row = {"batch": f"PPQ-{b:03d}", "overall_yield": batch.overall_yield}
         row.update(batch.drug_substance.cqas)
+        row.update(_ops(ov))
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -210,19 +219,27 @@ def monte_carlo(proc: Process, n: Optional[int] = None,
     rng = rng or proc.rng(5000)
     rows = []
     for b in range(n):
-        batch = proc.run_batch(rng, overrides=_sample_overrides(proc, rng))
+        ov = _sample_overrides(proc, rng)
+        batch = proc.run_batch(rng, overrides=ov)
         row = {"batch": b, "overall_yield": batch.overall_yield}
         row.update(batch.drug_substance.cqas)
+        row.update(_ops(ov))
         rows.append(row)
     return pd.DataFrame(rows)
 
 
 # capability spec type: 'upper' = smaller-is-better impurity (upper limit only);
 # 'lower' = larger-is-better viral clearance (lower requirement only);
-# otherwise a two-sided target range. Acidic charge variants (deamidation) are a
-# very-low-criticality attribute whose risk is elevated levels, so capability is
-# assessed one-sided against the upper design-space bound.
-UPPER_ONLY = {"aggregates_hmw", "hcp", "residual_dna", "leached_protein_a", "acidic_variants"}
+# otherwise a two-sided target range.
+#
+# Acidic charge variants are TWO-SIDED from Rev 2.0. Rev 1.0 printed the range 18-40 % and
+# assessed capability against 40 % alone, on the argument that the risk of a very-low-
+# criticality attribute lies in elevated levels. INV-001 found the inconsistency: a reader saw a
+# two-sided range beside an index that knew only its ceiling. The range is the criterion the
+# documents print, so capability is now assessed against both ends of it, and the 18 % floor
+# (the range-of-experience lower bound, A-Mab p.42-44) becomes the tight side. This moved the
+# headline minimum Cpk; docs/results/ records the number before and after.
+UPPER_ONLY = {"aggregates_hmw", "hcp", "residual_dna", "leached_protein_a", "fragments_lmw"}
 LOWER_ONLY = {"lrv_xmulv", "lrv_mvm"}
 
 

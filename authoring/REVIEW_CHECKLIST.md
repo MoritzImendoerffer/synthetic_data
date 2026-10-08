@@ -45,6 +45,19 @@ separate; this file is about what the text commits to, not how it is shaped.
 | Is the range of each factor justified, not only its presence? | Prior knowledge; Study design | the reason for the edges — platform history, the RA-001 score, the mechanism — next to each range |
 | Where the text gives a mechanism, does it name a physical cause — which species, which interaction, which property of the resin, the buffer or the culture, and in which direction it acts? | Prior knowledge; Results (mechanistic interpretation); Discussion | a cause a chemist could dispute; "acts through the capacity of the bed", "behaves as a resin property", "the physical chemistry of affinity capture" name a category and are the failure |
 
+## Version 2.0 — a controlled report, not an essay
+
+Added 2026-10-08 with the owner's rule change (`docs/next/rev2-campaign.md`). A report states
+results against criteria. It explains mechanism where a conclusion depends on it, in the
+mechanistic interpretation and the Discussion, and does not elsewhere.
+
+| question | applies to | shows itself as |
+|---|---|---|
+| Is every acceptance criterion stated with its basis, and every result reported against its criterion as met or not met? | Results; PARs; Capability; Conclusions | the criterion, the value and the verdict side by side, in a table or a sentence |
+| Does "Changes in this revision" say what changed in this document and why, once, and is the rest written as the current approved text? | every Version 2.0 document | one subsection naming INV-001; no "previously", "now" or "in the earlier version" elsewhere in the body |
+| Do the prose, the table footnotes and the table agree, and does the prose say what the table shows rather than repeat the footnotes? | any section with a complex table | the same method, study and deviation named in both; no footnote contradicted |
+| Does a cause appear only where a conclusion depends on it? | Materials and methods; Study design; Results | method sections that say what was done and cite the SOP, without a mechanism attached to each step |
+
 ## Content — what a sentence commits to
 
 Added 2026-08-19 (TASK-010). Everything above is about whether a section carries what it should.
@@ -56,7 +69,7 @@ promotion** until the author has addressed it.
 
 | # | question | a "no" looks like |
 |---|---|---|
-| 1 | Does every `because`, `since`, `governs`, `sets`, `acts on / through` name a physical cause — a species, an interaction, a property of the resin, the buffer or the culture, and a direction — **in the clause where the verb stands**, and not only in a clause that follows a colon or in the next sentence? | "governs pool host cell protein because it sets the aggressiveness of desorption"; "acts through the capacity of the bed"; "follows from the physical chemistry of affinity capture" |
+| 1 | Where the text gives a cause (in the mechanistic interpretation, the Discussion, or wherever a conclusion depends on it), does every `because`, `since`, `governs`, `sets`, `acts on / through` name a physical cause — a species, an interaction, a property of the resin, the buffer or the culture, and a direction — **in the clause where the verb stands**, and not only in a clause that follows a colon or in the next sentence? | "governs pool host cell protein because it sets the aggressiveness of desorption"; "acts through the capacity of the bed"; "follows from the physical chemistry of affinity capture" |
 | 2 | Is every technical term a term of art in the chromatography, cell-culture or virology literature? | "aggressiveness of desorption"; "resin property" used for a process; "parameter of a single run" for "operating parameter" |
 | 3 | Can each sentence in a mechanism paragraph be disagreed with on its own? | a sentence that stacks a claim, a cause, a list and an inference so that no part can be denied without the rest |
 | 4 | Does any sentence tell the reader how to file the finding it has just stated? | a trailing clause that renames the finding as a category ("…, which is the curvature a two-level design cannot see"; "…, which is the interaction already seen in Table 5.8"); a causal gloss that answers an objection nobody raised |

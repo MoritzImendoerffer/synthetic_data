@@ -31,6 +31,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from amab_process import Process, load_config      # noqa: E402
 from amab_process import studies as st              # noqa: E402
 from amab_process import deviations as dv           # noqa: E402
+from amab_process import analytics as an           # noqa: E402
+import pandas as pd                                # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "outputs", "data")
@@ -61,6 +63,11 @@ def main() -> None:
         rng = proc.rng(int(sup.get("seed_offset", 800)))  # dedicated, reproducible stream
         for kind in sup.get("kinds", ["screening", "rsm"]):
             df = st.superseded_doe(proc, key, feeds[key], rng, kind, deam, top_factors=top)
+            # Rev 2.0: the first execution measured fragments by SEC (before AMD-001); the
+            # re-execution measured them by nrCE-SDS. Drawn from its own stream, after the run.
+            ps = pd.read_csv(os.path.join(DATA, "process_summary.csv"))
+            df = an.annotate_doe(cfg, key, "superseded", df, ps,
+                                 sub=0 if kind == "screening" else 1)
             path = os.path.join(DATA, f"doe_{key}_{kind}_superseded.csv")
             df.to_csv(path, index=False)
             n_new += 1

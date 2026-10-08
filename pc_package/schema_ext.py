@@ -127,6 +127,7 @@ DocumentType = Literal[
     "process_characterization_plan",
     "process_characterization_master_plan",
     "process_characterization_master_report",
+    "investigation_report",            # Rev 2.0: INV-001
 ]
 
 
@@ -282,6 +283,32 @@ class RhetoricalSpan(BaseModel):
 # --------------------------------------------------------------------------- #
 # The composite annex wrapper                                                  #
 # --------------------------------------------------------------------------- #
+class RevisionEntry(BaseModel):
+    """One row of a document's revision history (Rev 2.0)."""
+    model_config = ConfigDict(extra="forbid")
+    revision: str
+    effective_date: str
+    description: str
+    source: Optional[SourceReference] = None
+
+
+class AcceptanceCriterionRecord(BaseModel):
+    """An acceptance criterion a step's output is judged against, tagged with the revision that
+    applied it and whether it is still in force (Rev 2.0). The same step and attribute can carry
+    a superseded Rev 1.0 record and an in-force Rev 2.0 record in one annex; telling them apart
+    is the point."""
+    model_config = ConfigDict(extra="forbid")
+    step: str
+    attribute: str
+    low: Optional[float] = None
+    high: Optional[float] = None
+    unit: Optional[str] = None
+    basis: str
+    revision: str
+    status: Literal["in force", "superseded"]
+    source: Optional[SourceReference] = None
+
+
 class GroundTruthAnnex(BaseModel):
     """Ground truth for one document, covering all target NLP tasks.
 
@@ -321,3 +348,7 @@ class GroundTruthAnnex(BaseModel):
     # discourse / benchmark-annotation layers (local extensions)
     weak_claims: list[WeakClaim] = Field(default_factory=list)
     rhetorical_spans: list[RhetoricalSpan] = Field(default_factory=list)
+    # revision layer (Rev 2.0, local extensions)
+    supersedes: Optional[str] = None
+    revision_history: list[RevisionEntry] = Field(default_factory=list)
+    acceptance_criteria: list[AcceptanceCriterionRecord] = Field(default_factory=list)

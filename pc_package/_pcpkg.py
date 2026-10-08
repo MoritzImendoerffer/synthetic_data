@@ -22,6 +22,7 @@ if ROOT not in sys.path:
 
 from amab_process import load_config  # noqa: E402
 from amab_process import studies as st  # noqa: E402  (re-exported)
+from ctable import C, CTable  # noqa: E402,F401  (re-exported: complex tables, Rev 2.0)
 
 CFG = load_config()
 DATA = os.path.join(ROOT, "outputs", "data")
@@ -39,9 +40,35 @@ for _dev_name, _dev_val in DEV_SCALARS.items():
     if _dev_name.isidentifier() and _dev_name not in globals():
         globals()[_dev_name] = _dev_val
 
-# Package-wide document metadata (keep in sync across the set).
-EFFECTIVE_DATE = "2026-07-24"
-VERSION = "1.0"
+# Package-wide document metadata. Rev 2.0 (INV-001): every Rev 1.0 document is reissued, and
+# INV-001 is new at its own Version 1.0. Dates come from config campaign: (seed-independent).
+CAMPAIGN = CFG.raw()["campaign"]
+REVISIONS = CAMPAIGN["revisions"]                       # [{rev, effective, reason}, ...]
+REV1, REV2 = REVISIONS[0], REVISIONS[-1]
+INV = CAMPAIGN["investigation"]
+AMD = CAMPAIGN["method_decision"]
+EFFECTIVE_DATE = REV2["effective"]
+VERSION = REV2["rev"]
+
+
+PLAN_APPROVAL = CAMPAIGN.get("plan_approval", {})
+CAPA = pd.DataFrame(CAMPAIGN.get("capa", []))
+EFFECTIVENESS = CAMPAIGN.get("effectiveness_check", {})
+THRESHOLDS = CAMPAIGN.get("thresholds", {})
+CPK_TARGET = THRESHOLDS.get("cpk_target")
+CPK_MIN = THRESHOLDS.get("cpk_minimum")
+
+
+def rev1_date(doc_id):
+    """Version 1.0 approval date: before the studies for a plan, the package date otherwise."""
+    return PLAN_APPROVAL.get(doc_id, REV1["effective"])
+
+
+def doc_version(doc_id):
+    """(version, effective date) of a document at its current revision."""
+    if doc_id == INV["id"]:
+        return "1.0", INV["closed"]
+    return VERSION, EFFECTIVE_DATE
 COMPANY = "Novacyte Biologics"          # fictional sponsor
 SENDING_SITE = "Novacyte Biologics — Cambridge, MA (Development)"
 RECEIVING_SITE = "Novacyte Biologics — Grafton, WI (Commercial DS)"
@@ -80,6 +107,7 @@ DOC_REGISTRY = {
     "PCMP-001": ("Process Characterization Master Plan", "A-Mab Drug Substance", None),
     "PCMR-001": ("Process Characterization Master Report", "A-Mab Drug Substance", None),
     **_uo_docs(),
+    "INV-001": ("Investigation Report", CAMPAIGN["investigation"]["title"], None),
 }
 
 # Placeholder controlled-document numbers referenced across the set. Prefixes
@@ -94,6 +122,7 @@ SOP_REFS = [
     ("SOP-3012", "Host-Cell-Protein Quantitation by ELISA"),
     ("SOP-3013", "Charge-Variant Analysis by icIEF"),
     ("SOP-3014", "Residual Host-Cell DNA by qPCR"),
+    ("SOP-3015", "Purity by Non-Reduced CE-SDS"),
     ("SOP-4001", "Process-Parameter Classification and Control-Strategy Definition"),
 ]
 AMV_REFS = [
@@ -102,6 +131,7 @@ AMV_REFS = [
     ("AMV-3012", "Host-Cell Protein ELISA"),
     ("AMV-3013", "Charge Variants (icIEF)"),
     ("AMV-3014", "Residual DNA (qPCR)"),
+    ("AMV-3020", "Purity (non-reduced CE-SDS)"),
 ]
 
 # Harvest / clarification (Step 4) controlled-document subsets. Placeholders,
@@ -316,10 +346,22 @@ def report_params(key):
 def cqas_for(key):
     """CQAs primarily set/controlled by a unit operation, with acceptance criteria."""
     d = cqa_reg[cqa_reg.set_by == key].copy()
-    d["Acceptance"] = d.apply(lambda r: f"{r.acc_low:g}–{r.acc_high:g} {r.unit}", axis=1)
+    d["Acceptance"] = d.apply(_acc_text, axis=1)
     d = d.rename(columns={"cqa": "CQA", "category": "Category", "criticality": "Criticality",
                           "tool1_score": "Tool #1"})
     return d[["CQA", "Category", "Acceptance", "Criticality", "Tool #1"]]
+
+
+def _acc_text(r):
+    """A CQA criterion as its spec type reads: a clearance has a floor only, an impurity a
+    ceiling only. Version 1.0 printed both ends of the config range for every attribute, so
+    viral clearance read "16.7–30" as if an upper limit on clearance existed."""
+    st_ = getattr(r, "spec_type", "two_sided")
+    if st_ == "lower":
+        return f"≥ {r.acc_low:g} {r.unit}"
+    if st_ == "upper":
+        return f"≤ {r.acc_high:g} {r.unit}"
+    return f"{r.acc_low:g}–{r.acc_high:g} {r.unit}"
 
 
 def cqas_by_keys(keys):
@@ -333,16 +375,28 @@ def cqas_by_keys(keys):
     d = cqa_reg[cqa_reg.key.isin(keys)].copy()
     d["__order"] = d["key"].apply(keys.index)
     d = d.sort_values("__order")
-    d["Acceptance"] = d.apply(lambda r: f"{r.acc_low:g}–{r.acc_high:g} {r.unit}", axis=1)
+    d["Acceptance"] = d.apply(_acc_text, axis=1)
     d = d.rename(columns={"cqa": "CQA", "category": "Category", "criticality": "Criticality",
                           "tool1_score": "Tool #1"})
     return d[["CQA", "Category", "Acceptance", "Criticality", "Tool #1"]]
 
 
+def _acc_text(r):
+    """A CQA criterion as its spec type reads: a clearance has a floor only, an impurity a
+    ceiling only. Version 1.0 printed both ends of the config range for every attribute, so
+    viral clearance read "16.7–30" as if an upper limit on clearance existed."""
+    st_ = getattr(r, "spec_type", "two_sided")
+    if st_ == "lower":
+        return f"≥ {r.acc_low:g} {r.unit}"
+    if st_ == "upper":
+        return f"≤ {r.acc_high:g} {r.unit}"
+    return f"{r.acc_low:g}–{r.acc_high:g} {r.unit}"
+
+
 def cap_for(keys):
     """Commercial-scale capability rows for the given CQA keys."""
     d = cap[cap.key.isin(keys)].copy()
-    d["Acceptance"] = d.apply(lambda r: f"{r.acc_low:g}–{r.acc_high:g}", axis=1)
+    d["Acceptance"] = d.apply(lambda r: _acc_text(r).replace(f" {r.unit}", ""), axis=1)
     d["Mean ± SD"] = d.apply(lambda r: f"{r['mean']:.3g} ± {r['sd']:.2g}", axis=1)
     d = d.rename(columns={"cqa": "CQA", "criticality": "Crit.", "spec_type": "Spec"})
     return d[["CQA", "Crit.", "Spec", "Acceptance", "Mean ± SD", "Cpk"]]
@@ -388,6 +442,8 @@ def dev_register(doc_id):
         return ""
     d = d.rename(columns={"dev_id": "Deviation", "summary": "Summary",
                           "detected_during": "Detected during", "disposition": "Disposition"})
+    # dispositions are config tokens (supplementary_runs_executed); print them as words
+    d["Disposition"] = d["Disposition"].astype(str).str.replace("_", " ")
     return d[["Deviation", "Summary", "Detected during", "Disposition"]].to_markdown(index=False)
 
 
@@ -411,19 +467,34 @@ SYN_BANNER = (
 def title_block(doc_id, unit_op=None):
     """Render the controlled-document title block for a document."""
     cls, subject, _ = DOC_REGISTRY[doc_id]
+    ver, eff = doc_version(doc_id)
     rows = [
         ("Document ID", doc_id),
         ("Document class", cls),
         ("Title", f"{cls} — {subject}" if unit_op is None else f"{cls}: {unit_op}"),
         ("Product", PRODUCT),
-        ("Version", VERSION),
-        ("Effective date", EFFECTIVE_DATE),
+        ("Version", ver),
+        ("Effective date", eff),
+        ("Supersedes", "—" if doc_id == INV["id"] else f"{doc_id} Version {REV1['rev']} ({rev1_date(doc_id)})"),
         ("Status", "Approved (synthetic)"),
-        ("Document owner", "Manufacturing Science & Technology (MSAT)"),
+        ("Document owner", "Quality Assurance (QA)" if doc_id == INV["id"]
+         else "Manufacturing Science & Technology (MSAT)"),
         ("Sponsor / sites", f"{COMPANY}; {SENDING_SITE} → {RECEIVING_SITE}"),
     ]
     df = pd.DataFrame(rows, columns=["Field", "Value"])
-    return df.to_markdown(index=False)
+    return df.to_markdown(index=False, disable_numparse=True)
+
+
+def revision_history(doc_id):
+    """The revision-history table: every revision of the document, oldest first."""
+    if doc_id == INV["id"]:
+        rows = [["1.0", INV["closed"], "Initial issue"]]
+    else:
+        rows = [[r["rev"], rev1_date(doc_id) if r is REV1 else r["effective"],
+                 r["reason"] + (f" (see {INV['id']})" if r is not REV1 else "")] for r in REVISIONS]
+    # disable_numparse keeps "1.0" a version string; tabulate would print it as the number 1
+    return pd.DataFrame(rows, columns=["Version", "Effective date", "Description of change"]).to_markdown(
+        index=False, disable_numparse=True)
 
 
 def related_docs_md(doc_id):
@@ -436,6 +507,7 @@ def related_docs_md(doc_id):
         sib = ("PCR-%03d" % step) if doc_id.startswith("PCP") else ("PCP-%03d" % step)
         order.append(sib)
     order.append("PCMR-001")
+    order.append(INV["id"])
     rows = []
     for rid in order:
         if rid == doc_id:
@@ -445,6 +517,7 @@ def related_docs_md(doc_id):
                "RA-001": "Parent — risk basis for study scope",
                "PCMP-001": "Parent — master plan",
                "PCMR-001": "Rolls up into",
+               INV["id"]: "Reason for this revision",
                }.get(rid, "Sibling — paired document")
         rows.append([rid, f"{cls} ({subject})", rel])
     df = pd.DataFrame(rows, columns=["Document ID", "Title", "Relationship"])
@@ -534,6 +607,7 @@ def corpus_docs_md(doc_id=None):
         step = CFG.unit_op(key).step
         order += [f"PCP-{step:03d}", f"PCR-{step:03d}"]
     order.append("PCMR-001")
+    order.append(INV["id"])
     rows = []
     for rid in order:
         if rid == doc_id or rid not in DOC_REGISTRY:
@@ -548,10 +622,10 @@ def corpus_docs_md(doc_id=None):
 UNIT_OP_ROLE = {
     "bioreactor": "Forms the glycan, charge-variant and aggregate CQAs (design-space step)",
     "harvest": "Primary recovery and clarification; forms no product-quality CQA",
-    "protein_a": "Capture; sets leached Protein A; principal HCP and DNA clearance",
-    "viral_inactivation": "Low-pH hold; sets the cumulative XMuLV (enveloped) clearance",
+    "protein_a": "Capture; principal HCP and DNA clearance; source of leached Protein A",
+    "viral_inactivation": "Low-pH hold; inactivates enveloped virus (XMuLV credit)",
     "cex": "Polish; principal aggregate reduction; major HCP/DNA/leached-PA clearance",
-    "aex": "Flow-through polish; sets the cumulative MVM clearance; clears XMuLV/HCP/DNA",
+    "aex": "Flow-through polish; clears HCP, DNA and virus (XMuLV and MVM credit)",
     "virus_filtration": "Dedicated small-virus removal; principal MVM clearance",
     "ufdf": "Formulation / mass balance; delivers drug substance at target concentration",
 }

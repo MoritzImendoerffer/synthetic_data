@@ -49,9 +49,15 @@ UO = "protein_a"
 UO_TITLE = "Protein A Chromatography (Step 5)"
 
 # --- doc-local derived scalars (all pulled from config -> model -> outputs) ---
-uo = CFG.unit_op(UO)
+with D.characterized_nor():      # a plan states the NOR its studies were planned and judged against
+    uo = CFG.unit_op(UO)
 P = {p.key: p for p in uo.parameters}
-PP = plan_params(UO)
+PP = plan_params(UO).reset_index(drop=True)
+assert list(PP["Parameter"]) == [p.name for p in uo.parameters]
+NARROWED = [p for p in uo.parameters if list(p.nor) != list(CFG.unit_op(UO).param(p.key).nor)]
+assert [p.key for p in NARROWED] == ["load"], "text: PCR-005 narrowed the load NOR only"
+_nor_in_force = CFG.unit_op(UO).param("load").nor
+PP["NOR"] = [f"{p.nor[0]:g}–{p.nor[1]:g}" + ("^a)^" if p in NARROWED else "") for p in uo.parameters]
 n_par = len(PP)
 n_multi = int((PP["Study type"] == "multivariate").sum())
 n_uni = int((PP["Study type"] == "univariate").sum())
@@ -114,6 +120,7 @@ res_fast = res_min(P["flow"].prange[1])
 res_slow = res_min(P["flow"].prange[0])
 
 ALPHA = THRESHOLDS["lof_alpha"]
+ALPHA_EFF = THRESHOLDS["effect_alpha"]
 DR2 = THRESHOLDS["max_r2_minus_pred_r2"]
 SCALE = V["commercial_scale_l"]
 PAR_GRID, PAR_MC = D.PAR_GRID, D.PAR_MC_N
@@ -132,19 +139,114 @@ frag_add = IAC.loc["lmw_cesds_pct", "downstream_added"]
 ds_hcp = IAC.loc["pool_hcp_ng_mg", "ds_high"]
 ds_lpa = IAC.loc["leached_protein_a_ppm", "ds_high"]
 ds_frag = IAC.loc["lmw_cesds_pct", "ds_high"]
+hcp_fold_s, frag_fold_s, lpa_fold_s = f"{hcp_fold:,.3f}", f"{frag_fold:.3f}", f"{lpa_fold:g}"
+assert f"{ds_hcp * float(hcp_fold_s.replace(',', '')):,.0f}" == f"{hcp_iac:,.0f}"
+assert f"{ds_frag * float(frag_fold_s) - frag_add:.2f}" == f"{frag_iac:.2f}"
+assert f"{ds_lpa * float(lpa_fold_s):g}" == f"{lpa_iac:g}"
 R1C = D.rev1_criteria(UO).set_index("response")
 rev1_hcp = R1C.loc["pool_hcp_ng_mg", "high"]
 rev1_margin = R1C.loc["pool_hcp_ng_mg", "margin"]
+# Version 1.0 applied one analysis limit at this step, for pool HCP only
+assert list(R1C.index) == ["pool_hcp_ng_mg"]
+assert hcp_iac > rev1_hcp, "text says the Version 2.0 HCP criterion is wider than Version 1.0"
+
+# criteria in force: which were widened or tightened on verification (PCMP-001 §7.5)
+WID = [r for r in IAC_RESP if bool(IAC.loc[r, "widened"])]
+TIG = [r for r in IAC_RESP if bool(IAC.loc[r, "tightened"])]
+assert WID == ["pool_hcp_ng_mg"] and not TIG, "text names the widened criterion"
+assert not bool(IAC.loc["lmw_cesds_pct", "widened"]) and IAC.loc["lmw_cesds_pct", "iac_high"] == IAC.loc["lmw_cesds_pct", "iac_high_apriori"]
+n_wid = len(WID)
+hcp_apriori = IAC.loc["pool_hcp_ng_mg", "iac_high_apriori"]
+frag_apriori = IAC.loc["lmw_cesds_pct", "iac_high_apriori"]
+lpa_apriori = IAC.loc["leached_protein_a_ppm", "iac_high_apriori"]
+assert lpa_iac == lpa_apriori
+
+# downstream values the criteria rest on, and the value in force for each
+WIDEN_ON = bool(CFG.raw()["iac"].get("allow_widening", False))
+VER = D.iac_verification()
+VER = VER[VER["cqa"].isin(set(IAC["cqa"]))].reset_index(drop=True)
+
+
+def in_force(r):
+    """(value used by the criterion in force, how it was set) for one downstream assumption."""
+    if pd.isna(r["met"]):
+        return r["assumed"], "Platform^d)^"
+    if not bool(r["met"]):
+        return r["predicted_nor_bound95"], "Bound, tightened^e)^"
+    if WIDEN_ON and bool(r["widening_supported"]):
+        return r["predicted_nor_bound95"], "Bound, widened^b)^"
+    _better = (r["predicted_nor_bound95"] > r["assumed"]) if r["assumption"] == "fold_min" else (r["predicted_nor_bound95"] < r["assumed"])
+    if _better and not bool(r["model_adequate"]):
+        return r["assumed"], "Platform, model not adequate^c)^"
+    return r["assumed"], "Platform^a)^"
+
+
+VER["used"] = [in_force(r)[0] for _, r in VER.iterrows()]
+VER["how"] = [in_force(r)[1] for _, r in VER.iterrows()]
+_u_of = lambda s, c: float(VER.loc[(VER.step_key == s) & (VER.cqa == c), "used"].iloc[0])
+assert abs(_u_of("cex", "hcp") * _u_of("aex", "hcp") - hcp_fold) < 1e-3 * hcp_fold
+assert abs(_u_of("cex", "fragments_lmw") - frag_fold) < 1e-4
+assert abs(_u_of("viral_inactivation", "fragments_lmw") - frag_add) < 1e-6
+assert abs(_u_of("cex", "leached_protein_a") * _u_of("aex", "leached_protein_a") - lpa_fold) < 1e-6
+_how = lambda s, c: VER.loc[(VER.step_key == s) & (VER.cqa == c), "how"].iloc[0]
+# text: HCP widened through both CEX and AEX, fragments through CEX only; leached PrA not checkable
+assert "widened" in _how("cex", "hcp") and "not adequate" in _how("aex", "hcp")
+assert "not adequate" in _how("cex", "fragments_lmw") and "not adequate" in _how("viral_inactivation", "fragments_lmw")
+_aex_hcp = VER[(VER.step_key == "aex") & (VER.cqa == "hcp")].iloc[0]
+_cex_frag = VER[(VER.step_key == "cex") & (VER.cqa == "fragments_lmw")].iloc[0]
+assert _aex_hcp["r2_minus_pred_r2"] > DR2 and _cex_frag["r2_minus_pred_r2"] > DR2, "text: both fail the predicted-R² test"
+assert _aex_hcp["p_lack_of_fit"] > ALPHA and _cex_frag["p_lack_of_fit"] > ALPHA
+assert all("d)" in _how(s, "leached_protein_a") for s in ("cex", "aex"))
 
 # criteria the held eluate carries (Protein A does not change aggregate or charge variants)
 agg_bx = D.iac_limit("bioreactor", "aggregates_hmw")
 acid_bx = D.iac_limit("bioreactor", "acidic_variants")
+_BX = D.iac_table("bioreactor").set_index("response")
+agg_apriori = _BX.loc["aggregates_hmw", "iac_high_apriori"]
+acid_hi_apriori = _BX.loc["acidic_variants", "iac_high_apriori"]
+# why each moved: the downstream assumptions behind them (whole verification table)
+_VA = D.iac_verification().set_index(["step_key", "cqa"])
+cex_agg = _VA.loc[("cex", "aggregates_hmw")]
+vi_agg = _VA.loc[("viral_inactivation", "aggregates_hmw")]
+vi_acid = _VA.loc[("viral_inactivation", "acidic_variants")]
+assert not bool(cex_agg["met"]) and bool(vi_agg["widening_supported"]) and bool(vi_acid["widening_supported"])
+assert bool(_BX.loc["aggregates_hmw", "tightened"]) and bool(_BX.loc["aggregates_hmw", "widened"])
+assert bool(_BX.loc["acidic_variants", "widened"]) and not bool(_BX.loc["acidic_variants", "tightened"])
+assert agg_bx[1] < agg_apriori, "text: the net effect on the aggregate criterion is stricter"
+assert acid_bx[1] > acid_hi_apriori and acid_bx[0] == _BX.loc["acidic_variants", "iac_low_apriori"]
+assert abs(cex_agg["predicted_nor_bound95"] - _BX.loc["aggregates_hmw", "downstream_fold"]) < 1e-3
+assert abs(vi_agg["predicted_nor_bound95"] - _BX.loc["aggregates_hmw", "downstream_added"]) < 1e-3
+assert abs(vi_acid["predicted_nor_bound95"] - _BX.loc["acidic_variants", "downstream_added"]) < 1e-3
 
-# chronology of the studies of this step
+# chronology of the studies this plan governs. A study the plan did not foresee is a
+# discrepancy recorded in PCR-005 (campaign.plan_discrepancies), not a study of this plan.
+PD_STUDIES = {s for ds in PLAN_DISCREPANCIES.values() for d in ds if d["plan"] == DOC for s in d.get("studies", [])}
 CH = csv("study_chronology.csv")
-CH = CH[CH.step == UO].sort_values("start").reset_index(drop=True)
+CH = CH[(CH.step == UO) & ~CH.id.isin(PD_STUDIES)].sort_values("start").reset_index(drop=True)
 S = CH.set_index("id")
 first_start, last_end = CH.start.min(), CH.end.max()
+assert str(rev1_date(DOC)) < first_start, "Version 1.0 approved before the first study"
+assert list(CH.kind) == ["qualification", "screening", "univariate", "rsm", "hold", "retest"]
+assert S.loc["S-PA-HLD", "start"] <= S.loc["S-PA-RSM", "end"], "hold runs alongside the RSM"
+# the method decision came after qualification, univariate and hold studies, before the retest
+assert S.loc["S-PA-SDM", "end"] < AMD["date"] and S.loc["S-PA-UNI", "end"] < AMD["date"]
+assert S.loc["S-PA-HLD", "end"] < AMD["date"] < S.loc["S-PA-RET", "start"]
+
+# scale-down model qualification by offsets (PCMP-001 Version 2.0 §7.1). A plan reports no offset:
+# only the design of the qualification (runs at each scale, outputs) is read here.
+SDM_CFG = CFG.raw()["analytics"]["sdm"]
+OFF_CI = 100 * float(SDM_CFG["offset_ci"])
+n_sdm_sd, n_sdm_m = int(SDM_CFG["n_scale_down"]), int(SDM_CFG["n_manufacturing"])
+_Q = csv("sdm_qualification.csv")
+_Q = _Q[(_Q.step == UO) & (_Q.study == "S-PA-SDM")]
+assert int((_Q.scale == "scale-down").sum()) == n_sdm_sd and int((_Q.scale == "manufacturing").sum()) == n_sdm_m
+SDM_OUT = [c for c in T.SDM_OUTPUT if c in _Q.columns and _Q[c].notna().any()]
+assert set(SDM_OUT) == {"pool_hcp_ng_mg", "leached_protein_a_ppm", "step_yield", "plates_per_m", "asymmetry"}
+SDM_JUDGED = [r for r in SDM_OUT if D.effective_acceptance(UO, r) is not None]
+assert SDM_JUDGED == ["pool_hcp_ng_mg", "leached_protein_a_ppm"], "text: two outputs judged, the rest recorded"
+assert D.sdm_offset(UO, "lmw_cesds_pct") is None, "fragments carry no offset"
+assert bool(SDM_CFG.get("apply_offset", False))
+assert len(cqas_for(UO)) == 1 and cqas_for(UO).iloc[0]["CQA"] == "Leached Protein A"
 
 # hold study design
 HOLD = csv(f"hold_{UO}.csv")
@@ -156,6 +258,7 @@ hold_cesds_days = sorted(int(d) for d in HOLD.loc[HOLD.lmw_cesds_pct.notna(), "d
 VI = CFG.unit_op("viral_inactivation")
 vi_ph, vi_time = VI.param("ph"), VI.param("hold_time")
 res_short = P["bed_height"].prange[0] / P["flow"].setpoint * 60.0   # min, shortest bed at set-point velocity
+assert res_short < res_fast, "text: the shortest bed is shorter in residence time than any design run"
 rng_vi_ph = f"pH {vi_ph.prange[0]:.1f}–{vi_ph.prange[1]:.1f}"
 rng_vi_time = f"{vi_time.prange[0]:g}–{vi_time.prange[1]:g} {vi_time.unit}"
 COOK = 4.0 / n_rsm      # conventional Cook's distance flag, 4/n
@@ -194,7 +297,7 @@ print(SYN_BANNER)
 | Reviewer | Statistics | — | — | — |
 | Approver | Quality Assurance | — | — | — |
 
-: Approval record (synthetic; signatures not applied). {#tbl-appr}
+Synthetic record. Signatures are not applied.
 
 {{< pagebreak >}}
 
@@ -210,21 +313,21 @@ print(revision_history(DOC))
 ```{python}
 #| output: asis
 print(abbreviations_table([
+    ('ALCOA+', 'attributable, legible, contemporaneous, original and accurate, plus complete, consistent, enduring and available'),
     ('AMD', 'analytical method decision'),
     ('AMV', 'analytical method validation'),
     ('BLA', 'Biologics License Application'),
     ('CQA', 'critical quality attribute'),
     ('CV', 'column volume'),
     ('DNA', 'deoxyribonucleic acid'),
+    ('DS', 'drug substance'),
     ('ELISA', 'enzyme-linked immunosorbent assay'),
     ('Fab', 'antigen-binding fragment'),
     ('Fc', 'crystallizable fragment'),
-    ('GPP', 'general process parameter'),
     ('HCP', 'host cell protein'),
     ('HMW', 'high molecular weight species'),
     ('IAC', 'intermediate acceptance criterion'),
     ('icIEF', 'imaged capillary isoelectric focusing'),
-    ('KPP', 'key process parameter'),
     ('LMW', 'low molecular weight species'),
     ('MSAT', 'Manufacturing Science and Technology'),
     ('NOR', 'normal operating range'),
@@ -235,7 +338,6 @@ print(abbreviations_table([
     ('RSM', 'response surface methodology'),
     ('SEC', 'size exclusion chromatography'),
     ('SOP', 'standard operating procedure'),
-    ('WC-CPP', 'well-controlled critical process parameter'),
 ]))
 ```
 
@@ -247,17 +349,17 @@ This plan is the protocol for the process characterization of the Protein A chro
 
 Protein A chromatography is the capture step of the A-Mab purification train. The resin binds the antibody from the clarified harvest, and most of the host cell protein and DNA leave the column in the flow-through and the wash. The antibody is then eluted at low pH and passed to low-pH viral inactivation (Step 6) without neutralization. The step adds one impurity of its own, which is Protein A ligand that leaches from the resin.
 
-The characterization covers all `{python} n_par` process parameters of the step. Of these, `{python} n_multi` are studied in a screening design followed by a response-surface design, and `{python} n_uni` are studied one factor at a time. The plan also covers a hold study of the Protein A eluate at elution pH. All studies are run in a scale-down model of the commercial column. The commercial process is run at the `{python} f"{SCALE:,.0f}"` L scale at the receiving site in Grafton, WI, which is the scale this characterization supports under the Process Transfer Plan PTP-001.
+The characterization covers all `{python} n_par` process parameters of the step. Of these, `{python} n_multi` are studied in a screening design followed by a response-surface design, and `{python} n_uni` are studied one factor at a time. The plan also covers a hold study of the Protein A eluate at elution pH. All studies are run in a scale-down model of the commercial column. For pool host cell protein and leached Protein A, which the qualification of the model compares at both scales, each result is translated to manufacturing scale before it is judged against a criterion (@sec-sdm). The commercial process is run at the `{python} f"{SCALE:,.0f}"` L scale at the receiving site in Grafton, WI, which is the scale this characterization supports under the Process Transfer Plan PTP-001.
 
-The results are reported in PCR-005. They are the PARs of the multivariate parameters for each attribute with a criterion at this step, the data for the classification of every parameter of the step, and the conditions under which the eluate may be held. Although Protein A chromatography removes some virus, no viral clearance claim is made for this step [@amab2009]. The modular claim rests on low-pH inactivation, anion exchange and virus filtration (PCMP-001 §7.4), and no spiking study is planned here. The life cycle of the resin (its re-use limit, cleaning and sanitization) is governed by SOP-2008 and is outside the scope of this plan.
+PCR-005, the Process Characterization Report for this step, will report the results. It will give the proven acceptable ranges (PARs) of the multivariate parameters for each attribute of the Protein A pool with a criterion, the data for the classification of every parameter of the step, and the conditions under which the eluate may be held. Although Protein A chromatography removes some virus, no viral clearance claim is made for this step [@amab2009]. The viral clearance claim of the process rests on low-pH inactivation, anion exchange and virus filtration (PCMP-001, viral clearance claims), and no spiking study is planned here. The life cycle of the resin (its re-use limit, cleaning and sanitization) is governed by the resin life-cycle procedure SOP-2008 and is outside the scope of this plan.
 
 ## Changes in this revision {#sec-changes}
 
-Version 1.0 of this plan was approved on `{python} rev1_date(DOC)`, before the first study of the step began on `{python} first_start`. The studies of the step were executed between `{python} first_start` and `{python} last_end`. This Version 2.0 is a protocol amendment issued after that execution, under `{python} INV["id"]`. QA opened the investigation on `{python} INV["opened"]` after its review of PCMR-001 Version 1.0 for BLA readiness, and closed it on `{python} INV["closed"]` with the classification `{python} INV["classification"]`.
+Version 1.0 of this plan was approved on `{python} rev1_date(DOC)`, before the first study of the step began on `{python} first_start`. The studies that this plan governs were executed between `{python} first_start` and `{python} last_end`. This Version 2.0 is a protocol amendment issued after that execution, under the investigation `{python} INV["id"]`. QA opened the investigation on `{python} INV["opened"]` after its review of PCMR-001 Version 1.0 for BLA readiness, and closed it on `{python} INV["closed"]` with the classification `{python} INV["classification"]`.
 
-The investigation found that the criteria used to judge each step in the PAR analysis were not in any approved protocol and had been set after the data were seen (INV-001 finding 1). Three kinds of limit therefore need to be kept apart in this document. A Version 1.0 analysis limit is a limit applied in a Version 1.0 report at the time of analysis. An approved plan criterion is a criterion stated in an approved version of this plan before execution. A Version 2.0 criterion is a criterion of this revision, derived a priori by PCMP-001 §7.3.
+The investigation found that the criteria used to judge each step in the PAR analysis were not in any approved protocol and had been set after the data were seen (INV-001 finding 1). In this plan, a Version 1.0 analysis limit is a limit that a Version 1.0 report applied when its data were analysed, although no approved protocol stated it. An approved plan criterion is a criterion that an approved version of this plan stated before the studies were run. A Version 2.0 criterion is the drug substance criterion carried back through the platform worst case of each downstream step, and then checked against the A-Mab results of those steps, as PCMP-001 sets out for intermediate acceptance criteria.
 
-For this step, Version 1.0 of this plan contained no approved plan criterion for any output. Version 1.0 of PCR-005 applied one Version 1.0 analysis limit, `{python} f"{rev1_hcp:,.0f}"` ng/mg for pool host cell protein. That limit was the drug substance criterion carried back through the nominal downstream clearance of this campaign and divided by a safety factor of `{python} f"{rev1_margin:g}"` (INV-001 finding 2). Leached Protein A and fragments had no limit of their own at the step. @tbl-criteria-change sets the Version 1.0 analysis limits beside the Version 2.0 criteria.
+For this step, Version 1.0 of this plan contained no approved plan criterion. Version 1.0 of PCR-005 applied one analysis limit of its own, `{python} f"{rev1_hcp:,.0f}"` ng/mg for pool host cell protein. That limit was the drug substance criterion carried back through the nominal downstream clearance of this campaign and then divided by a safety factor of `{python} f"{rev1_margin:g}"`. The factor was chosen, not calculated from how the downstream steps perform (INV-001 finding 2). Version 1.0 of PCR-005 judged leached Protein A against the drug substance criterion, and it did not report fragments. @tbl-criteria-change sets the Version 1.0 limits beside the Version 2.0 criteria.
 
 ```{python}
 #| output: asis
@@ -266,12 +368,13 @@ T.criteria_change([UO]).show()
 
 This amendment makes the following changes.
 
-1. It states an intermediate acceptance criterion (IAC) for pool host cell protein, leached Protein A and fragments. Each is derived by the rule of PCMP-001 §7.3 from the drug substance criterion and the platform worst case of the downstream steps (@sec-par). The derivation uses no data from the studies it judges. For that reason it may be applied to studies that were already executed.
-2. It adds fragments measured by nrCE-SDS (AMV-3020, under SOP-3015) as a response of the response-surface design, as decided in `{python} AMD["id"]` on `{python} AMD["date"]`. The retained response-surface samples are tested by nrCE-SDS in study S-PA-RET. The screening samples were not retained, so their SEC fragment results are kept in the record and are not used for any decision (INV-001 finding 6).
-3. It states the model adequacy criteria and the statistic that the PAR analysis judges, which Version 1.0 left to the analysis (@sec-criteria).
-4. It records the execution window of every study of the step (@tbl-chrono, INV-001 finding 5).
+1. It states an intermediate acceptance criterion (IAC) for host cell protein, leached Protein A and fragments in the Protein A pool (@sec-iac). Each is the drug substance criterion carried back through the platform worst case of the downstream steps. Because this derivation uses no data from the Protein A studies, it may be applied to studies that were already executed. The criterion for pool host cell protein is in force at a wider value, because the A-Mab results of cation exchange showed at the one-sided 95 % confidence bound, from a model that passed the adequacy tests, that the step clears more host cell protein than its platform worst case.
+2. It qualifies the scale-down model by its offset from manufacturing scale, by the rule that PCMP-001 sets for scale-down model qualification. For each attribute that the qualification compares at both scales and that has a criterion, the offset is subtracted before a result is judged. The ranges and conclusions of PCR-005 for these attributes are therefore stated at manufacturing scale (@sec-sdm).
+3. It adds fragments measured by nrCE-SDS (AMV-3020, under the non-reduced CE-SDS procedure SOP-3015) as a response of the response-surface design. The method decision `{python} AMD["id"]` of `{python} AMD["date"]` set nrCE-SDS as the method for fragments at every step. The retained response-surface samples are tested by nrCE-SDS in study S-PA-RET, the retest of retained samples. The screening samples were not retained. Their SEC fragment results are kept in the record and are not used for any decision, because SEC overstates fragments in the Protein A pool (INV-001 finding 6, @sec-uo).
+4. It states the model adequacy criteria and the value that the PAR analysis compares with each criterion, which Version 1.0 left to the analysis (@sec-criteria).
+5. It records the execution window of every study that the plan governs (@tbl-chrono). INV-001 found that the Version 1.0 records gave no execution dates (finding 5).
 
-The Version 2.0 criterion for pool host cell protein, `{python} f"{hcp_iac:,.0f}"` ng/mg, is wider than the Version 1.0 analysis limit. This is not a loosening of an approved criterion. The Version 1.0 limit was never approved and appears in no approved plan. It is replaced by a criterion derived a priori, without data from the studies it judges. The rule that data may tighten a criterion and never loosen it (PCMP-001 §7.5) applies to the Version 2.0 criteria from this revision on.
+The Version 2.0 criterion for pool host cell protein, `{python} f"{hcp_iac:,.0f}"` ng/mg, is wider than the Version 1.0 analysis limit of `{python} f"{rev1_hcp:,.0f}"` ng/mg. The Version 1.0 limit was never an approved criterion, so the wider Version 2.0 criterion does not loosen one. From this revision on, a criterion of this plan changes only by the rule for verifying the platform worst cases, which @sec-iac states.
 
 The factors, their ranges and the designs are those of Version 1.0. No run is added, removed or repeated by this amendment.
 
@@ -279,13 +382,13 @@ The factors, their ranges and the designs are those of Version 1.0. No run is ad
 
 The objectives of the characterization are the following.
 
-1. To qualify the scale-down model for the outputs of the step at set-point, before the first characterization run.
+1. To estimate, before the first characterization run, the offset between the scale-down model and manufacturing scale for each quantity that the qualification compares, and to qualify the model by that offset for pool host cell protein and leached Protein A (@sec-sdm).
 2. To identify which of the `{python} n_fac` multivariate parameters, and which of their two-factor interactions, affect pool host cell protein, step yield and leached Protein A (screening design).
 3. To fit response-surface models for pool host cell protein, step yield, leached Protein A and fragments by nrCE-SDS over the ranges studied, and to judge their adequacy for prediction.
-4. To determine, from the response-surface models, the PAR of each multivariate parameter for each attribute with a criterion at the step.
+4. To determine from the response-surface models the PAR of each multivariate parameter for each attribute of the Protein A pool with a criterion, at manufacturing scale where an offset applies.
 5. To establish the effect of operating temperature and bed height over their ranges, one factor at a time.
 6. To establish how long, and at which temperature, the Protein A eluate may be held at elution pH before viral inactivation.
-7. To provide the data for the classification of every parameter of the step under SOP-4001.
+7. To provide the data for the classification of every parameter of the step under the parameter classification procedure SOP-4001.
 
 # Related documents {#sec-related}
 
@@ -301,11 +404,10 @@ print(related_docs_md(DOC))
 @tbl-sop lists the controlled procedures and method validations that the studies use. The SOP and AMV numbers are placeholders.
 
 ```{python}
-#| label: tbl-sop
-#| tbl-cap: "Controlled procedures and method validations used in this plan."
 #| output: asis
-print(sop_table(sops=PROTEIN_A_SOP_REFS + reg(SOP_REFS, ["SOP-3015"]),
-                amvs=PROTEIN_A_AMV_REFS + reg(AMV_ALL, ["AMV-3013", "AMV-3019", "AMV-3020"])))
+T.sop_references(sops=PROTEIN_A_SOP_REFS + reg(SOP_REFS, ["SOP-3015"]),
+                 amvs=PROTEIN_A_AMV_REFS + reg(AMV_ALL, ["AMV-3013", "AMV-3019", "AMV-3020"]),
+                 label="tbl-sop").show()
 ```
 
 # Prior knowledge and quality risk basis {#sec-prior}
@@ -314,19 +416,17 @@ print(sop_table(sops=PROTEIN_A_SOP_REFS + reg(SOP_REFS, ["SOP-3015"]),
 
 Protein A capture is an affinity step operated in bind and elute mode. Staphylococcal Protein A, immobilized on the resin, binds the Fc region of the antibody at neutral pH. The contact sits at the interface of the second and third constant domains of the heavy chain. Host cell protein, DNA and most other components of the clarified harvest do not bind and are removed in the load flow-through and the wash. When the pH is lowered, histidine residues at the Fc–ligand interface become protonated, the interaction weakens, and the antibody is released into a small volume of low-pH eluate.
 
-The same capture step has been used to purify the platform antibodies X-Mab, Y-Mab and Z-Mab, and A-Mab through clinical manufacture. Their history establishes the mechanism of the step and the performance to expect from it. The step is robust, and its main effects are known in direction [@amab2009].
+The same capture step has been used to purify the platform antibodies X-Mab, Y-Mab and Z-Mab, and A-Mab through clinical manufacture [@amab2009]. Five mechanisms set the expectations for this study.
 
-Five mechanisms set the expectations for this study.
-
-1. Host cell protein reaches the eluate by two routes. Some binds weakly to the resin backbone or the ligand and is released when the pH drops. Some is associated with the antibody and is carried through as a complex. As the load approaches the dynamic binding capacity, the mass transfer zone moves down the bed and carries impurity into the eluate that the wash would otherwise remove. A lower elution pH releases more of the weakly bound host cell protein with the product. Pool host cell protein is therefore expected to rise with protein load and to rise as elution buffer pH falls. At high load more host cell protein is held weakly on the bed, so there is more for a low elution pH to release. The rise with falling pH is therefore expected to be steeper at high load, and this is the physical basis for an interaction between the two parameters.
+1. Host cell protein reaches the eluate by two routes. Some binds to the resin backbone or to the ligand. Some associates with the antibody through electrostatic and hydrophobic interactions, which the wash does not disrupt while the antibody stays bound to the ligand. A lower elution pH disrupts more of both kinds of interaction and releases more host cell protein with the product, so pool host cell protein is expected to rise as elution buffer pH falls. In the A-Mab case study pool host cell protein rose with protein load and as elution pH fell [@amab2009], and the same directions are expected here. Pool host cell protein is reported per mass of antibody, and host cell protein that travels with the antibody rises in proportion to it, so that route alone does not explain a rise with load. No mechanism for the rise with load is assumed in this plan. Both parameters act on the host cell protein that is eluted, so an interaction between them is possible, and the designs can estimate it.
 2. Step yield is lost when antibody breaks through during the load or remains on the column at the end of collection. Breakthrough rises as the load approaches the dynamic binding capacity and as the residence time falls, because binding is limited by diffusion into the pores of the bead. A higher load flow rate shortens the residence time and lowers the dynamic binding capacity. At high load the bed is then close to its capacity, breakthrough starts earlier and yield falls. At low load the bed has capacity to spare and flow rate has little effect. Yield is therefore expected to fall with flow rate mainly at high load. Extending the end of pool collect recovers the tail of the elution peak and raises yield.
-3. Leached Protein A comes from hydrolysis of the coupling chemistry and from proteolysis of exposed ligand. The fragments still bind Fc and elute with the antibody. The amount depends on the coupling chemistry, the cycle number and the sanitization history of the resin, which are properties of the resin over its life and not of a single run. Within the ranges of one run, leached Protein A is expected to be flat.
-4. A fragment is captured only if it still carries Fc. Fab fragments flow through with the load, and the pool therefore carries less fragment than the feed. A lower elution pH may add a little acid-catalysed hinge hydrolysis during elution. The pool also still carries host cell protein, and the part of it that elutes in the low molecular weight window of SEC is read as fragment. For this reason SEC overstates fragments in this matrix, and nrCE-SDS does not (INV-001 finding 6).
+3. Leached Protein A comes from hydrolysis of the coupling chemistry and from proteolysis of exposed ligand. The ligand fragments still bind Fc and elute with the antibody. The amount depends on the coupling chemistry, the cycle number and the sanitization history of the resin, which are properties of the resin over its life and not of a single run. It also depends on how long the load is held before capture, because proteolytic activity in the clarified harvest is expected to rise while it is held, so that a load held longer cleaves more ligand from the resin. Leached Protein A is reported per mass of antibody (ppm). If a similar amount of ligand leaches in each cycle, leached Protein A in ppm falls as protein load rises, and it is expected to depend little on the other parameters within their ranges.
+4. An antibody fragment is captured only if it still carries Fc. Fab fragments flow through with the load, and the pool therefore carries less fragment than the feed. A lower elution pH may add a little acid-catalysed hinge hydrolysis during elution. The pool also still carries host cell protein, and the part of it that elutes in the low molecular weight window of SEC is read as fragment. For this reason SEC overstates fragments in the Protein A pool, and nrCE-SDS does not (INV-001 finding 6).
 5. DNA is polyanionic and does not bind Protein A. Its clearance is large and is not expected to depend on the operating parameters within their ranges.
 
-Protein A, when operated under platform conditions, does not separate glycan variants or charge variants, because it binds the Fc region independently of both [@amab2009]. These attributes are therefore not responses of the designs.
+Protein A, when operated under platform conditions, does not separate glycan variants or charge variants, because it binds the Fc region independently of both [@amab2009]. Glycan variants and charge variants are therefore not responses of the designs.
 
-Protein A does not separate aggregate from monomer, since both carry Fc. Low pH can partly unfold the antibody and promote aggregation, and the amount formed grows with the time spent at low pH. In the column the antibody is at elution pH only for the duration of the elution. In the Protein A characterization of the case study no process parameter had a significant effect on aggregate [@amab2009]. Aggregate formation at low pH is characterized in the low-pH viral inactivation study (PCP-006). That study spans `{python} rng_vi_ph` for `{python} rng_vi_time`, which covers the elution pH range of this step for a much longer time. For these reasons aggregate is not a response of the designs of this plan. It is measured on every pool by SEC for information, and the time the eluate waits at elution pH before inactivation is covered by the hold study (@sec-hold).
+Aggregate and monomer both carry Fc and both bind Protein A. Aggregates bind with higher avidity and can be partly resolved on elution, but under platform conditions the aggregate level of the pool follows that of the load. Low pH can partly unfold the antibody and promote aggregation, and the amount formed grows with the time spent at low pH. In the column the antibody is at elution pH only for the duration of the elution. In the Protein A characterization of the case study no process parameter had a significant effect on aggregate [@amab2009]. Aggregate formation at low pH is characterized in the low-pH viral inactivation study (PCP-006). That study spans `{python} rng_vi_ph` for `{python} rng_vi_time`, which covers the elution pH range of this step for a much longer time. For these reasons aggregate is not a response of the designs of this plan. It is measured on every pool by SEC for information. The time the eluate waits at elution pH before inactivation is covered by the hold study (@sec-hold).
 
 ## Quality attributes in scope {#sec-cqas}
 
@@ -336,34 +436,44 @@ Leached Protein A is the only CQA that this step introduces. It enters the proce
 #| label: tbl-cqas
 #| tbl-cap: "Quality attributes in scope of this plan, with the drug substance criterion and criticality."
 #| output: asis
-show(cqas_by_keys(["leached_protein_a", "hcp", "fragments_lmw", "residual_dna", "aggregates_hmw"]))
+show(cqas_by_keys(["leached_protein_a", "hcp", "fragments_lmw", "residual_dna", "aggregates_hmw"]).rename(columns={"Acceptance": "DS criterion"}))
 ```
 
-The drug substance criteria do not apply to the Protein A pool directly. Cation exchange and anion exchange remove host cell protein and leached Protein A after this step, and judging the pool against the drug substance limit would fail every acceptable run. Each output of the step with a downstream dependence is therefore judged against an IAC (@sec-par). Residual DNA is measured for information and is not a response of the designs, because its clearance is expected to be large and insensitive to the parameters. Its drug substance criterion of `{python} f"≤ {DNA_DS.acc_high:g} {DNA_DS.unit}"` is taken from the A-Mab case study (Table 2.17), where it is set far below the limit of the World Health Organization for DNA from continuous cell lines [@amab2009]. Aggregate is measured by SEC for information only. Step yield is a performance attribute. It has no acceptance criterion and is used for the classification of parameters that act on process performance.
+The drug substance criteria do not apply to the Protein A pool directly. Cation exchange and anion exchange remove host cell protein and leached Protein A after this step, so a pool that the later steps bring within the drug substance limit can itself lie far above it. Host cell protein, leached Protein A and fragments in the Protein A pool are therefore each judged against an intermediate acceptance criterion (@sec-iac). Residual DNA is measured for information and is not a response of the designs. DNA is polyanionic and does not bind Protein A, so it leaves the column in the flow-through and the wash, and its clearance is expected to be large and insensitive to the parameters. Its drug substance criterion of `{python} f"≤ {DNA_DS.acc_high:g} {DNA_DS.unit}"` is taken from the A-Mab case study (Table 2.17), where it is set far below the limit of the World Health Organization for DNA from continuous cell lines [@amab2009]. Aggregate is measured by SEC for information only. Step yield is a performance attribute. It has no acceptance criterion and is used for the classification of parameters that act on process performance.
 
 ## Risk-based prioritization of parameters {#sec-risk}
 
-RA-001 assessed every parameter of the step before characterization began. Each parameter was ranked on its potential impact on the CQAs and on process performance, and on its potential to interact with other parameters. RA-001 gives the scores and the rationale, and they are not repeated here.
+The pre-characterization risk assessment RA-001 assessed every parameter of the step before characterization began. Each parameter was ranked on its potential impact on the CQAs and on process performance, and on its potential to interact with other parameters.
 
-Protein load, elution buffer pH, load flow rate and end of pool collect were assigned to multivariate study. Pool host cell protein is expected to rise with protein load and as elution buffer pH falls, with an interaction between the two (@sec-uo). Step yield is expected to fall as load flow rate rises and to rise with end of pool collect. Load flow rate is expected to interact with protein load, because a shorter residence time lowers the dynamic binding capacity and costs yield only when the load is close to it. A design that varies the four together is needed to estimate these interactions.
+Protein load, elution buffer pH, load flow rate and end of pool collect were assigned to multivariate study. Pool host cell protein is expected to rise with protein load and as elution buffer pH falls, and the two may interact (@sec-uo). Step yield is expected to fall as load flow rate rises and to rise with end of pool collect. Load flow rate is expected to interact with protein load, because a shorter residence time lowers the dynamic binding capacity and costs yield only when the load is close to it. A design that varies the four parameters together is needed to estimate these interactions.
 
-Operating temperature and bed height were assigned to univariate study. A higher temperature speeds the diffusion of the antibody into the pores, which raises the dynamic binding capacity, and it strengthens the hydrophobic contacts at the Fc–ligand interface, which makes elution slightly less complete. A lower temperature acts the opposite way on both. Over the range studied both effects are expected to be small against those of load and pH, and the resin manufacturer specifies binding capacity across that range. Temperature is not expected to interact with the other parameters. Bed height is different. At constant linear velocity it sets the residence time, and a shorter residence time lowers the dynamic binding capacity, which interacts with protein load (@sec-uo). The shortest bed of the range, `{python} _u("bed_height", P["bed_height"].prange[0])` at the set-point velocity, gives a residence time of `{python} f"{res_short:g}"` min, shorter than any run of the designs. In manufacture bed height is held by the packing specification, so it is studied one factor at a time. What this leaves open is stated in @sec-univariate.
+Operating temperature was assigned to univariate study. A higher temperature speeds the diffusion of the antibody into the pores, which raises the dynamic binding capacity, and it strengthens the hydrophobic contacts at the Fc–ligand interface, which makes elution slightly less complete. A lower temperature acts the opposite way on both. Because temperature acts on the dynamic binding capacity, it could interact with protein load in the same way as load flow rate does. Over the range studied, however, its effect on binding capacity is expected to be small against that of residence time, and the resin manufacturer specifies binding capacity across that range. An interaction of temperature with protein load is therefore expected to be small, and on that basis temperature is studied one factor at a time. The univariate study runs at the set-point load, so an interaction of temperature with a high load is not estimated (@sec-univariate).
+
+Bed height was also assigned to univariate study, although it too can interact with protein load. At constant linear velocity bed height sets the residence time, and a shorter residence time lowers the dynamic binding capacity (@sec-uo). The designs study the interaction of residence time with protein load through load flow rate, at the set-point bed height. Bed height itself is fixed for each packed column by the packing specification and does not vary from run to run in manufacture, so it is studied one factor at a time. The shortest bed of the range, `{python} _u("bed_height", P["bed_height"].prange[0])` at the set-point velocity, gives a residence time of `{python} f"{res_short:g}"` min, shorter than any run of the designs. A short bed combined with a high protein load, where breakthrough is most likely, is therefore not studied, and no claim is made for it.
 
 # Materials and methods {#sec-methods}
 
 ## Scale-down model and its qualification {#sec-sdm}
 
-The scale-down model is a laboratory column packed with the commercial Protein A resin. It is designed on the scaling principles of PCMP-001 §5. The bed height and the residence time of the commercial column are kept. Load, wash and elution volumes are normalized to column volumes, and column efficiency is checked by plate count and peak asymmetry after packing. Buffers are made to the commercial recipes. The model is operated at the set-point of every parameter of @tbl-params unless a design sets it otherwise.
+The scale-down model is a laboratory column packed with the commercial Protein A resin. It is designed on the scaling principles that PCMP-001 sets for scale-down models. The bed height and the residence time of the commercial column are kept. Load, wash and elution volumes are normalized to column volumes, and column efficiency is checked by plate count and peak asymmetry after packing. Buffers are made to the commercial recipes. The model is operated at the set-point of every parameter of @tbl-params unless a design sets it otherwise.
 
-The model is qualified under SOP-1001 in study S-PA-SDM, before the first run of the screening design. Triplicate runs at set-point, as in the qualification of the case study [@amab2009], are compared with all manufacturing-scale batches of A-Mab run at set-point. The outputs compared are step yield, pool host cell protein, leached Protein A and column efficiency. Equivalence of the means is tested by two one-sided tests at α = `{python} f"{ALPHA:g}"`. The equivalence margin for each output is half the range (highest minus lowest value) of the manufacturing-scale batches. The margin is based on that spread so that the model may differ from manufacturing scale by no more than manufacturing batches differ among themselves. The model is qualified for an output when the 90 % confidence interval of the difference in means lies within that margin.
+The model is qualified under the scale-down model qualification procedure SOP-1001 in study S-PA-SDM, the scale-down model qualification, before the first run of the screening design. In that study, `{python} n_sdm_sd` runs of the model at set-point are compared with `{python} n_sdm_m` manufacturing-scale batches of A-Mab run at set-point. The quantities compared are pool host cell protein, leached Protein A, step yield and column efficiency (plate count and peak asymmetry).
 
-A difference that is consistent in direction and explained by a known scale effect may be accepted, as PCMP-001 §7.1 allows. For leached Protein A such an effect is expected. At manufacturing scale the clarified harvest is held longer before capture, so host cell proteases in the load cleave more ligand from the resin, and leached Protein A is expected to be higher at manufacturing scale than in the laboratory column. A difference in that direction is accepted and carried into the interpretation in PCR-005. It does not disqualify the model for the other outputs.
+The model is qualified by the rule that PCMP-001 sets for scale-down model qualification, which judges the model by its offset from manufacturing scale. The scale-down model need not reproduce the manufacturing mean, but the difference between the two scales must be known well enough that no conclusion depends on its exact size. The offset of a quantity is the mean of the scale-down runs minus the mean of the manufacturing-scale batches. It is estimated with its two-sided `{python} f"{OFF_CI:.0f}"` % confidence interval, each end of which is a one-sided `{python} f"{(100 + OFF_CI) / 2:.0f}"` % confidence bound, the level used to compare two means at `{python} f"{(100 - OFF_CI) / 2:.0f}"` % on each side. For a quantity that is compared at both scales and has a criterion, each scale-down result is translated to manufacturing scale by subtracting the offset before it is judged. The model is qualified for such a quantity when its conclusion over the NOR is the same with the offset at either end of the confidence interval. That conclusion is whether the Protein A pool meets the criterion at every combination of NOR low, set-point and NOR high of the `{python} n_fac` response-surface factors. A model whose conclusion for a quantity changes between the two ends of the interval is not used for that quantity.
 
-Fragments by nrCE-SDS are not part of the qualification, because the method decision AMD-001 was taken after the model was qualified. The model is taken as representative for fragments on mechanism. Capture of Fc-bearing species and the low-pH hinge hydrolysis do not depend on scale at equal bed height, residence time and elution pH. This assumption is recorded in @sec-risks.
+For this step the rule applies as follows.
+
+1. Pool host cell protein and leached Protein A have a criterion at the step (@tbl-outcrit). Their offsets are subtracted before each result is judged, and the model is qualified or not for each of them by the rule above.
+2. Step yield and column efficiency have no criterion at the step. Their offsets are recorded in PCR-005, and no conclusion depends on them.
+3. Fragments are not measured in the qualification. AMD-001 was taken on `{python} AMD["date"]`, after the scale-down model qualification S-PA-SDM had closed on `{python} S.loc["S-PA-SDM", "end"]`. The qualification therefore has no fragment result at either scale, and fragments carry no offset. They are judged as the response-surface model predicts them.
+
+Leached Protein A is expected to be lower in the laboratory column than at manufacturing scale. The manufacturing load is held longer before capture, so it is expected to cleave more ligand from the resin (@sec-uo, item 3). This difference is the offset of leached Protein A, and it is subtracted as every offset is. Where the cause of an offset is known, PCMP-001 asks the report to state it.
+
+Fragment results from the scale-down model are accepted on mechanism. The capture of Fc-bearing species depends on bed height and residence time, which the model keeps at their commercial values. The low-pH hinge hydrolysis depends on pH, time at low pH and temperature, and the model uses the commercial elution buffer at the same temperature and the same residence time. The plan has no fragment result at manufacturing scale with which to confirm the mechanism directly. The confirmation it relies on is indirect. The qualification compares the plate count and peak asymmetry of the laboratory column with those of the commercial column, which shows whether the laboratory bed behaves as the commercial bed does. PCR-005 tabulates the offsets of this step, and PCMR-001 summarises the offsets of the whole train.
 
 ## Operation {#sec-operation}
 
-Each run follows SOP-2007 at laboratory scale. The column is equilibrated, loaded with clarified harvest to the target protein load, washed and eluted with the elution buffer at the pH set by the design. The eluate is collected from the rise of the absorbance at 280 nm until the end of pool collect set by the design, expressed in column volumes. The column is then stripped, cleaned and stored as SOP-2008 specifies. The pool is not neutralized, because the commercial eluate passes to low-pH viral inactivation at elution pH.
+Each run follows the Protein A operating procedure SOP-2007 at laboratory scale. The column is equilibrated, loaded with clarified harvest to the target protein load, washed and eluted with the elution buffer at the pH set by the design. The eluate is collected from the rise of the absorbance at 280 nm until the end of pool collect set by the design, expressed in column volumes. The column is then stripped, cleaned and stored as the resin life-cycle procedure SOP-2008 specifies. The pool is not neutralized, because the commercial eluate passes to low-pH viral inactivation at elution pH.
 
 Each design is loaded from one pool of clarified harvest produced at set-point conditions and held frozen in aliquots. A single feed keeps feed variation out of the estimated effects. The effect of feed quality on the step is therefore not estimated in this plan. Runs are executed in random order within each design.
 
@@ -372,26 +482,28 @@ Each design is loaded from one pool of clarified harvest produced at set-point c
 Each response is measured by a validated method under its own AMV. @tbl-methods lists the methods, the samples on which each is run and the purpose of each measurement.
 
 ```{python}
-#| label: tbl-methods
-#| tbl-cap: "Analytical methods, samples and purpose of each measurement."
 #| output: asis
 _amv = dict(AMV_ALL)
+_hd = f"hold samples of days {and_list(hold_cesds_days)}"
 _rows = [
-    ["Pool host cell protein (ng/mg)", "AMV-3012", _amv["AMV-3012"], "Load and pool of every run", "Response of both designs"],
-    ["Leached Protein A (ppm)", "AMV-3016", _amv["AMV-3016"], "Pool of every run", "Response of both designs"],
-    ["Step yield", "AMV-3019", _amv["AMV-3019"], "Load and pool of every run", "Response of both designs"],
-    ["Fragments, LMW (%)", "AMV-3020", _amv["AMV-3020"], "Retained pools of the response-surface design, hold samples", "Response of the response-surface design, hold study"],
-    ["Fragments, LMW (%)", "AMV-3011", _amv["AMV-3011"], "Pool of every run of both designs", "For information only"],
-    ["Aggregates, HMW (%)", "AMV-3011", _amv["AMV-3011"], "Pool of every run, hold samples", "For information, hold study"],
-    ["Acidic variants (%)", "AMV-3013", _amv["AMV-3013"], "Hold samples", "Hold study"],
-    ["Residual DNA", "AMV-3014", _amv["AMV-3014"], "Load and pool of the centre-point runs", "For information only"],
+    ["Pool host cell protein (ng/mg)", _amv["AMV-3012"], "Load and pool of every run", "Response of both designs"],
+    ["Leached Protein A (ppm)", _amv["AMV-3016"], "Pool of every run", "Response of both designs"],
+    ["Step yield", _amv["AMV-3019"], "Load and pool of every run", "Response of both designs"],
+    ["Fragments, LMW (%)", _amv["AMV-3020"], f"Retained pools of the response-surface design, {_hd}", "Response of the response-surface design, hold study"],
+    ["Fragments, LMW (%)", _amv["AMV-3011"], "Pool of every run of both designs, every hold sample", "For information only"],
+    ["Aggregates, HMW (%)", _amv["AMV-3011"], "Pool of every run, every hold sample", "For information, hold study"],
+    ["Acidic variants (%)", _amv["AMV-3013"], "Every hold sample", "Hold study"],
+    ["Residual DNA", _amv["AMV-3014"], "Load and pool of the centre-point runs", "For information only"],
 ]
-show(pd.DataFrame(_rows, columns=["Attribute", "AMV", "Method", "Samples", "Purpose"]))
+T.frame(pd.DataFrame(_rows, columns=["Attribute", "Method", "Samples", "Purpose"]),
+        caption="Analytical methods, samples and purpose of each measurement. The method validations are listed in the procedures table of Section 3.",
+        label="tbl-methods", merge=["Attribute"],
+        align=["P{3.0cm}", "P{3.6cm}", "P{4.6cm}", "P{3.6cm}"]).show()
 ```
 
 Pool host cell protein is reported per mass of antibody in the pool, so that it does not depend on how far the pool is diluted by the end of pool collect. Step yield is the mass of antibody in the pool divided by the mass loaded, both from the protein concentration by absorbance at 280 nm and the measured volumes.
 
-Fragments are measured by nrCE-SDS, as PCMP-001 §7.8 sets for every step. SEC is kept as the method for aggregate, where no co-elution of this kind applies. SEC fragment results are recorded for every run of both designs, but they are not used for any decision (@sec-uo). @tbl-methods-by-study shows which method measured fragments in which study of the step.
+Fragments are measured by nrCE-SDS, which PCMP-001 sets as the method for fragments at every step. SEC is kept as the method for aggregate, because the co-eluting host cell protein falls in the low molecular weight window and not in the aggregate window. SEC fragment results are recorded for every run of both designs, but they are not used for any decision (@sec-uo). @tbl-methods-by-study shows which method measured fragments in each designed study of the step.
 
 ```{python}
 #| output: asis
@@ -406,13 +518,13 @@ The samples of the hold study are taken as described in @sec-hold. Every sample 
 
 ## Statistical methods {#sec-stats}
 
-The designs are built and analysed under SOP-1002 with the common approach of PCMP-001 §6. Factors are coded from −1 to +1 over their range studied, with 0 at the centre. For each of the `{python} n_fac` design factors the centre of the range studied is the set-point, so the centre-point runs of both designs are set-point runs.
+The designs are built and analysed under the DoE procedure SOP-1002 with the common statistical approach of PCMP-001. Factors are coded from −1 to +1 over their range studied, with 0 at the centre. For each of the `{python} n_fac` design factors the centre of the range studied is the set-point, so the centre-point runs of both designs are set-point runs.
 
-The screening data are fitted with a model of main effects and two-factor interactions, which has `{python} terms_scr` terms. Effects are reported as the change in the response over the coded range of the factor, which is twice the coefficient, and significance is judged at α = `{python} f"{ALPHA:g}"`. The screening model identifies effects. A two-level design cannot resolve curvature, so the screening model is not used to predict between its corners.
+The screening data are fitted with a model of main effects and two-factor interactions, which has `{python} terms_scr` terms. Effects are reported as the change in the response over the coded range of the factor, which is twice the coefficient, and significance is judged at α = `{python} f"{ALPHA_EFF:g}"`. The screening model identifies effects. A two-level design cannot resolve curvature, so the screening model is not used to predict between its corners.
 
-The response-surface data are fitted with a full quadratic model of `{python} terms_rsm` terms. This is the predictive model of the step. Every prediction and every PAR in PCR-005 comes from it. Each fitted model is reported with R², adjusted R² and predicted R², the model F-test, and the test of lack of fit against pure error from the centre points. Residuals are plotted against predicted values, against run order and on a normal probability plot. Where a model fails the adequacy criteria of @sec-criteria, a transformation of the response or a justified change of terms may be applied, and the change is reported with its reason.
+The response-surface data are fitted with a full quadratic model of `{python} terms_rsm` terms. The response-surface model is the predictive model of the step, and every prediction and every PAR in PCR-005 comes from it. Each fitted model is reported with R², adjusted R² and predicted R², the model F-test, and the test of lack of fit against pure error from the centre points. Residuals are plotted against predicted values, against run order and on a normal probability plot. Where a model fails the adequacy criteria of @sec-criteria, a transformation of the response or a justified change of terms may be applied, and the change is reported with its reason.
 
-The PAR analysis follows PCMP-001 §6.4 and is described in @sec-par. Where no adequate model results for a response, that response is reported descriptively against its criterion over the runs of the design, and no PAR is claimed from it.
+A prediction of pool host cell protein or leached Protein A is translated to manufacturing scale by subtracting the offset of that attribute before it is compared with a criterion (@sec-sdm). The PAR analysis is described in @sec-par. Where no adequate model results for a response, that response is reported descriptively against its criterion over the runs of the design, and no PAR is claimed from it.
 
 # Study design {#sec-design}
 
@@ -421,30 +533,35 @@ The PAR analysis follows PCMP-001 §6.4 and is described in @sec-par. Where no a
 @tbl-params lists the parameters of the step with their set-point, the range to be studied, the NOR and the type of study. The classification of each parameter is a result of the study and is not given here.
 
 ```{python}
-#| label: tbl-params
-#| tbl-cap: "Parameters of the Protein A step to be studied, with set-point, range studied, NOR and study type."
 #| output: asis
-show(PP)
+_pp = PP.reset_index(drop=True)          # T.frame masks NaN on the original index
+_pp["Set-point"] = [f"{v:g}" for v in _pp["Set-point"]]
+T.frame(_pp, caption="Parameters of the Protein A step to be studied, with set-point, range studied, NOR and study type.",
+        label="tbl-params", notes_per_row=True,
+        notes=[("a)", f"The NOR against which the studies were planned and judged. PCR-005 Version 2.0 narrowed "
+                      f"it to {_nor_in_force[0]:g}–{_nor_in_force[1]:g} {uo.param('load').unit}.")],
+        align=["P{3.6cm}", "P{1.8cm}", "r", "P{2.3cm}", "P{2.3cm}", "P{2.4cm}"]).show()
 ```
 
-The ranges studied are between `{python} f"{ratio_lo:.1f}"` and `{python} f"{ratio_hi:.1f}"` times the width of the NOR. A wider range shows how the step behaves near and beyond the edges of routine operation, and it gives the space within which a PAR can be claimed. A PAR is never claimed beyond the range studied (PCMP-001 §7.6).
+The ranges studied are between `{python} f"{ratio_lo:.1f}"` and `{python} f"{ratio_hi:.1f}"` times the width of the NOR. A range wider than the NOR shows how the step behaves near and beyond the edges of routine operation, and it gives the space within which a PAR can be claimed. A PAR is never claimed beyond the range studied (PCMP-001, proven acceptable ranges).
 
 Load flow rate is set as a linear velocity, so at the set-point bed height of `{python} sp("bed_height")` it fixes the residence time. The residence time is `{python} f"{res_sp:g}"` min at the set-point of `{python} sp("flow")`. Over the range studied it runs from `{python} f"{res_fast:g}"` min at the highest flow to `{python} f"{res_slow:g}"` min at the lowest. The upper end of the flow range therefore tests the shortest residence time against the highest load, which is the condition most likely to cause breakthrough.
 
-The lower end of the elution pH range, `{python} _u("elution_ph", P["elution_ph"].prange[0])`, tests the strongest elution and the largest release of weakly bound host cell protein. The upper end, `{python} _u("elution_ph", P["elution_ph"].prange[1])`, tests the weakest elution, with the broadest and latest peak and the least co-eluting host cell protein. The ranges of protein load and end of pool collect are set symmetrically about their set-points.
+The lower end of the elution pH range, `{python} _u("elution_ph", P["elution_ph"].prange[0])`, tests the strongest elution and the largest release of weakly bound host cell protein. The upper end, `{python} _u("elution_ph", P["elution_ph"].prange[1])`, tests the weakest elution, with the broadest and latest peak and the least co-eluting host cell protein.
 
-@tbl-legend gives the letter code of each design factor, which the design matrices in the appendices use.
+@tbl-legend gives the letter code of each design factor, which the design matrices in the appendices use. Every design factor is studied in both the screening and the response-surface design.
 
 ```{python}
-#| label: tbl-legend
-#| tbl-cap: "Letter codes of the design factors."
 #| output: asis
-show(D.factor_legend_df(UO))
+_leg = D.factor_legend_df(UO)
+assert set(_leg["Studied in"]) == {"screening + RSM"}, "text: every factor is in both designs"
+T.frame(_leg.drop(columns="Studied in"), caption="Letter codes of the design factors.",
+        label="tbl-legend").show()
 ```
 
 ## Screening design {#sec-screening}
 
-The screening design (study S-PA-SCR) is a full two-level factorial design in the `{python} n_fac` factors of @tbl-legend, with `{python} fact_scr` factorial runs and `{python} cp_scr` centre points, `{python} n_scr` runs in all. Appendix A gives the planned matrix in coded units. Because the design is a full factorial, no effect is aliased with another. Every main effect and every two-factor interaction can be estimated, which matters here because the mechanism predicts the interactions of protein load with elution buffer pH and with load flow rate.
+The screening design (study S-PA-SCR) is a full two-level factorial design in the `{python} n_fac` factors of @tbl-legend, with `{python} fact_scr` factorial runs and `{python} cp_scr` centre points, `{python} n_scr` runs in all. Appendix A gives the planned matrix in coded units. Because the design is a full factorial, no effect is aliased with another. Every main effect and every two-factor interaction can be estimated. An interaction of protein load with elution buffer pH is possible and one with load flow rate is expected (@sec-uo), so both must be estimable.
 
 The interaction model leaves `{python} n_scr - terms_scr` residual degrees of freedom. Of these, `{python} df_pe_scr` come from the replicated centre points as pure error and `{python} df_lof_scr` are available to test lack of fit. The centre points also allow a test for curvature. The responses are pool host cell protein, step yield and leached Protein A. Fragments by SEC are recorded for every run for information.
 
@@ -458,93 +575,146 @@ The full quadratic model leaves `{python} n_rsm - terms_rsm` residual degrees of
 
 ## Univariate assessment {#sec-univariate}
 
-Operating temperature and bed height are studied one factor at a time (study S-PA-UNI), with the other parameters at their set-points. Each is run in duplicate at the low end and at the high end of its range studied. The triplicate set-point runs of the qualification (@sec-sdm) serve as the reference. Operating temperature is studied from `{python} rng("temperature")` around a set-point of `{python} sp("temperature")`. The column and all buffers are equilibrated to the run temperature. Bed height is studied from `{python} rng("bed_height")` around a set-point of `{python} sp("bed_height")`, with the linear velocity held at its set-point, so that the residence time changes with the bed height. This is the more severe test, because the short bed also has the shortest residence time.
+Operating temperature and bed height are studied one factor at a time (study S-PA-UNI), with the other parameters at their set-points. Each is run in duplicate at the low end and at the high end of its range studied. The set-point runs of the scale-down model qualification (@sec-sdm) serve as the reference. Operating temperature is studied from `{python} rng("temperature")` around a set-point of `{python} sp("temperature")`. The column and all buffers are equilibrated to the run temperature. Bed height is studied from `{python} rng("bed_height")` around a set-point of `{python} sp("bed_height")`, with the linear velocity held at its set-point, so that the residence time changes with the bed height. Holding the velocity makes the short bed the more severe test, because the short bed then also has the shortest residence time.
 
-The responses are pool host cell protein, step yield and leached Protein A. Fragments are not measured in this study, which ran before AMD-001. The range of a univariate parameter is supported when every individual result at both ends meets the criterion of @tbl-outcrit for pool host cell protein and for leached Protein A. Step yield has no criterion and is reported as the size of the effect only. The difference between the mean at each end and the set-point mean is reported with its 95 % confidence interval, as the size of the effect. A univariate study cannot detect an interaction. The ranges of these two parameters are therefore supported only with the other parameters at their set-points, and PCR-005 states this beside each result. For bed height this matters, because the short bed is not run at high protein load. A short bed at the upper end of the load range, where breakthrough is most likely, is therefore not characterized by this plan, and no claim is made for it.
+The responses are pool host cell protein, step yield and leached Protein A. Fragments are not measured in the univariate study, which ran before AMD-001. A univariate study has no model, so there is no prediction interval to compute, and each individual result stands for a single batch. The range of a univariate parameter is therefore supported when every individual result at both ends meets the criterion of @tbl-outcrit for pool host cell protein and for leached Protein A, after the offset is subtracted. Step yield has no criterion and is reported as the size of the effect only. A univariate study cannot detect an interaction. The ranges of operating temperature and bed height are therefore supported only with the other parameters at their set-points, and PCR-005 states this beside each result.
 
 ## Hold study of the Protein A eluate {#sec-hold}
 
-The Protein A eluate is held at elution pH before viral inactivation, and the hold can change the product. Over days at low pH, partial unfolding can raise aggregate and hinge hydrolysis can raise fragments. The hold study (study S-PA-HLD) is planned here because PCMP-001 §5 assigns each hold study to the plan of the step that produces the pool.
+The Protein A eluate is held at elution pH before viral inactivation, and the hold can change the product. Over days at low pH, partial unfolding can raise aggregate and hinge hydrolysis can raise fragments. The hold study (study S-PA-HLD) is planned here because PCMP-001 assigns each hold study to the plan of the step that produces the pool.
 
-A pool produced at set-point is divided and held at `{python} and_list(hold_temps)` for up to `{python} hold_days[-1]` days. Samples are taken on days `{python} and_list(hold_days)` at each temperature. Aggregate and fragments are measured by SEC and acidic variants by icIEF at every sample point. The hold study ran before AMD-001. The samples of days `{python} and_list(hold_cesds_days)` were retained and tested by nrCE-SDS after AMD-001, together with the retained pools of the response-surface design in study S-PA-RET. The intermediate sample points have SEC fragment results only, which are for information.
+A pool produced at set-point is divided and held at `{python} and_list(hold_temps)` for up to `{python} hold_days[-1]` days. Samples are taken on days `{python} and_list(hold_days)` at each temperature. Aggregate and fragments are measured by SEC and acidic variants by icIEF at every sample point, as @tbl-methods lists. The hold study ran before AMD-001. The samples of days `{python} and_list(hold_cesds_days)` were retained and tested by nrCE-SDS afterwards, together with the retained pools of the response-surface design in study S-PA-RET. The intermediate sample points have SEC fragment results only, which are for information.
 
-Within the step itself, Protein A capture does not separate aggregate or charge variants (@sec-uo). The held eluate therefore carries the criteria that PCMP-001 Table 7.1 sets for the output of the production bioreactor, which reach the viral inactivation load unchanged. These are `{python} f"≤ {agg_bx[1]:.2f}"` % HMW for aggregate and `{python} f"{acid_bx[0]:g}–{acid_bx[1]:g}"` % for acidic variants. Fragments are judged against the IAC of the Protein A pool, `{python} f"≤ {frag_iac:.2f}"` % by nrCE-SDS, on the days with an nrCE-SDS result. The decision rule is item 7 of @sec-criteria.
+Protein A capture does not separate aggregate or charge variants (@sec-uo), so the eluate carries the aggregate and acidic variants of the production bioreactor output to the viral inactivation load. The criteria in force for that output, from the table of intermediate acceptance criteria in PCMP-001, are `{python} f"≤ {agg_bx[1]:.2f}"` % HMW for aggregate and `{python} f"{acid_bx[0]:g}–{acid_bx[1]:g}"` % for acidic variants.
+
+- From the platform worst cases alone the aggregate criterion was `{python} f"≤ {agg_apriori:.2f}"` %. Cation exchange clears aggregate less than its platform worst case (one-sided 95 % confidence bound `{python} f"{cex_agg['predicted_nor_bound95']:.2f}"`-fold, against `{python} f"{cex_agg['assumed']:.2f}"`-fold), which made the criterion stricter. Low-pH viral inactivation adds less aggregate than its platform worst case (one-sided 95 % confidence bound `{python} f"{vi_agg['predicted_nor_bound95']:.2f}"` percentage points, against `{python} f"{vi_agg['assumed']:.2f}"`), which made it wider. The net change is to a stricter criterion.
+- The upper limit for acidic variants was `{python} f"{acid_hi_apriori:.1f}"` % from the platform worst case. It is `{python} f"{acid_bx[1]:.1f}"` %, because low-pH viral inactivation adds fewer acidic variants than its platform worst case (one-sided 95 % confidence bound `{python} f"{vi_acid['predicted_nor_bound95']:.2f}"` percentage points, against `{python} f"{vi_acid['assumed']:.2f}"`).
+- For fragments the criterion is that of the Protein A pool, `{python} f"≤ {frag_iac:.2f}"` % by nrCE-SDS.
+
+The derivation of these criteria assumes that nothing changes the eluate between capture and viral inactivation. A hold can change it, so the hold criterion limits the increase during the hold. The increase at a sample point is the mean at that time minus the mean on day 0 at the same temperature. A hold time is supported when that increase, added to the highest level expected in the Protein A pool in manufacture, stays within the criterion. For aggregate and acidic variants the highest expected level is the upper 95 % prediction bound of the production bioreactor model within its NOR (PCR-003), because capture does not change them. For fragments it is the upper 95 % prediction bound of the response-surface model of this step within its NOR. Acidic variants rise during a hold, so their increase is judged against the upper limit. The qualification of the scale-down model does not compare aggregate, acidic variants or fragments, so the hold results carry no offset.
 
 # Acceptance and decision criteria {#sec-criteria}
 
-The criteria below apply PCMP-001 §7 to this step. They decide when the scale-down model is qualified, when a model may be used for prediction, when a range is proven acceptable and how a parameter is classified. Items 2 to 5 are the model adequacy criteria of PCMP-001 §7.2. The measures in item 5 are the ones this plan uses to apply the PCMP-001 criterion that residuals show no pattern and no run dominates the fit.
+These criteria decide when the scale-down model is qualified, when a model may be used for prediction, when a range is proven acceptable, how long the eluate may be held and how a parameter is classified. Criteria 2 to 5 are the model adequacy criteria of PCMP-001. Their limits are the campaign thresholds that PCMP-001 sets for every step alike. These are the conventional `{python} f"{100 * ALPHA:g}"` % significance level for the tests, and a limit of `{python} f"{DR2:.2f}"` on how far predicted R² may fall short of R², which guards against a model with more terms than the data support.
 
-1. Scale-down model qualification. The model is qualified for an output when the 90 % confidence interval of the difference between its set-point mean and the manufacturing-scale mean lies within the equivalence margin of @sec-sdm. A difference that is consistent and explained by a known scale effect may be accepted if PCR-005 carries it into the interpretation. A model that fails qualification for an output is not used for that output.
-2. Model significance. A response-surface model is used for prediction only if the model F-test is significant at α = `{python} f"{ALPHA:g}"`.
+1. Scale-down model qualification. For pool host cell protein and for leached Protein A, the model is qualified when the conclusion of criterion 6, whether the Protein A pool meets its criterion across the NOR, is the same with the offset at either end of its `{python} f"{OFF_CI:.0f}"` % confidence interval. A model that is not qualified for an attribute is not used for that attribute. Step yield and column efficiency have no criterion at the step, so their offsets are recorded only. Fragments carry no offset, because the qualification has no fragment result, and they are accepted on the mechanism stated in @sec-sdm.
+2. Model significance. A response-surface model is used for prediction only if the model F-test is significant at α = `{python} f"{ALPHA_EFF:g}"`.
 3. Lack of fit. The test of lack of fit against pure error is not significant at α = `{python} f"{ALPHA:g}"`.
-4. Predictive power. The predicted R², computed from the prediction error sum of squares (PRESS), falls short of the R² of the same model by no more than `{python} f"{DR2:.2f}"`. The limit is the campaign threshold of PCMP-001 §7.2 and is not changed for this step.
-5. Residuals. A regression of the absolute residuals on the predicted values, and a regression of the residuals on run order, each show no slope significant at α = `{python} f"{ALPHA:g}"`. No run has a Cook's distance above 4/n, which is `{python} f"{COOK:.2f}"` for the `{python} n_rsm` runs of the response-surface design.
-6. Step outputs and PARs. Each output with a criterion is judged against the criterion of @tbl-outcrit, by the analysis of @sec-par. A range is proven acceptable for an attribute when the NOR-propagated analysis meets the criterion across it.
-7. Hold. A hold time is supported at a temperature when aggregate and acidic variants meet their criteria at every sample point up to that time, and fragments by nrCE-SDS meet their criterion at the days tested by nrCE-SDS. SEC fragment results are not used for this decision. A trend is reported even where the criterion is met.
-8. Classification. Each parameter is classified under SOP-4001 by the decision logic of PCMP-001 §7.7. The size of each effect is stated beside its significance. An effect is practically relevant for an attribute when the NOR-propagated PAR of the parameter is narrower than its range studied. A significant effect whose PAR spans the whole range studied does not by itself make the parameter critical.
+4. Predictive power. The predicted R², computed from the prediction error sum of squares (PRESS), falls short of the R² of the same model by no more than `{python} f"{DR2:.2f}"`.
+5. Residuals. A regression of the absolute residuals on the predicted values, and a regression of the residuals on run order, each show no slope significant at α = `{python} f"{ALPHA:g}"`. No run has a Cook's distance above 4/n, a common screening cut-off for influential runs that scales with the number of runs, which is `{python} f"{COOK:.2f}"` for the `{python} n_rsm` runs of the response-surface design.
+6. Protein A pool and PARs. Each attribute of the Protein A pool with a criterion is judged against the criterion of @tbl-outcrit by the analysis of @sec-par, after the offset is subtracted where one applies. A range is proven acceptable for an attribute when the NOR-propagated analysis (a simulation in which the other factors vary within their NOR, @sec-par-analyses) meets the criterion across it.
+7. Hold. A hold time is supported at a temperature when, at every sample point up to that time, the increase in aggregate and in acidic variants over the hold, added to the highest level expected in the Protein A pool in manufacture, stays within the criterion (@sec-hold). The same applies to fragments by nrCE-SDS on the days tested by nrCE-SDS. SEC fragment results are not used for this decision. A trend is reported even where the criterion is met.
+8. Classification. Each parameter is classified under the parameter classification procedure SOP-4001 by the decision logic of PCMP-001. A parameter whose effect on a CQA is significant and practically relevant is critical, and it is well controlled when it has a low risk of leaving its acceptable range in operation. A parameter that affects only process performance is a key parameter, and one with no relevant effect is a general parameter. The size of each effect is stated beside its significance. An effect is practically relevant for an attribute when the NOR-propagated PAR of the parameter is narrower than its range studied. A significant effect whose PAR spans the whole range studied does not by itself make the parameter critical.
 
-A model that fails criterion 3 or 4 is either refitted with a justified change of terms or transformation, or it is not used to set a range. A run lost or invalidated during execution is reported in PCR-005, with a statement of whether the design was repaired or re-executed.
-
-@tbl-outcrit lists the outputs of the step, the criterion each is judged against, its basis and the statistic that is judged against it.
+A run lost or invalidated during execution is reported in PCR-005, with a statement of whether the design was repaired or re-executed.
 
 ```{python}
-#| label: tbl-outcrit
-#| tbl-cap: "Criteria for the outputs of the Protein A step, with basis and the statistic judged."
 #| output: asis
 _out = []
 for r in ["pool_hcp_ng_mg", "leached_protein_a_ppm", "lmw_cesds_pct"]:
     lo, hi, stype = D.effective_acceptance(UO, r)
-    _out.append([D.RESP_LABEL[r], T.crit(lo, hi, stype), D.acceptance_basis(UO, r) + " (PCMP-001 §7.3)",
-                 "Single batch, 95 % predictive interval"])
-_out.append([D.RESP_LABEL["step_yield"], "none", "performance attribute", "not applicable"])
-show(pd.DataFrame(_out, columns=["Output", "Criterion", "Basis", "Statistic judged"]))
+    assert D.decision_statistic(r) == "batch"
+    _b = "Carried back^a)^"
+    if bool(IAC.loc[r, "widened"]):
+        _b += ", widened^b)^"
+    assert not bool(IAC.loc[r, "tightened"]), "table notes cover carried back and widened only"
+    assert stype == "upper", "note c) describes an upper criterion"
+    _off = "Subtracted" if r in SDM_JUDGED else "None^d)^"
+    _out.append([D.RESP_LABEL[r], T.crit(lo, hi, stype), _b, "Single batch^c)^", _off])
+_out.append([D.RESP_LABEL["step_yield"], "none", "Performance attribute", "not applicable", "Recorded only"])
+T.frame(pd.DataFrame(_out, columns=["Attribute", "Criterion", "Basis", "Statistic judged", "Offset"]),
+        caption="Criteria for the Protein A pool, with their basis, the statistic judged and the "
+                "scale-down offset.",
+        label="tbl-outcrit", merge=["Statistic judged", "Offset"], notes_per_row=True,
+        notes=[("a)", "The drug substance criterion carried back through the platform worst case of "
+                      "the downstream steps (PCMP-001, intermediate acceptance criteria)."),
+               ("c)", "The value compared with the criterion is the upper end of the 95 % prediction "
+                      "interval of a single batch. The criterion is an upper limit, so only that end is "
+                      "compared, which makes it a one-sided 97.5 % prediction limit."),
+               ("d)", "The scale-down model qualification has no fragment result, so fragments carry "
+                      "no offset."),
+               ("b)", "Widened, because the A-Mab model of cation exchange, which passed the adequacy tests, "
+                      "showed at the one-sided 95 % confidence bound that the step clears more than its "
+                      "platform worst case (PCMP-001, "
+                      "verification of the platform worst cases).")],
+        align=["P{3.0cm}", "P{1.9cm}", "P{3.2cm}", "P{2.6cm}", "P{2.4cm}"]).show()
 ```
 
 # Proven acceptable ranges (planned analysis) {#sec-par}
 
 ## Intermediate acceptance criteria {#sec-iac}
 
-A drug substance criterion does not say what the Protein A pool must meet, because the steps after capture remove part of what the pool carries. Each output of this step is therefore judged against an IAC derived by the rule of PCMP-001 §7.3. The drug substance criterion is carried backward through the train, using the worst case that each downstream step showed on the platform with X-Mab, Y-Mab and Z-Mab. For a step that removes an attribute the worst case is the lowest clearance fold, and for a step that adds to it the largest increase. No margin is applied. @tbl-iac gives the three criteria of this step with their derivation.
+A drug substance criterion does not say what the Protein A pool must meet, because the steps after capture remove part of what the pool carries. Each attribute of the Protein A pool is therefore judged against an intermediate acceptance criterion (IAC), derived by the rule that PCMP-001 sets for these criteria. The drug substance criterion is carried backward through the train, using the worst case that each downstream step showed on the platform with X-Mab, Y-Mab and Z-Mab. For a step that removes an attribute the worst case is the lowest clearance fold. For fragments, which are a percentage, the clearance fold of a step is the fragment level in its load divided by the fragment level in its pool. For a step that adds to an attribute the worst case is the largest increase. No margin is applied. @tbl-iac gives the three criteria of this step with their derivation.
 
 ```{python}
 #| output: asis
-T.iac_derivation([UO]).show()
+_ti = T.iac_derivation([UO])
+_ti.show()
 ```
 
-For pool host cell protein the drug substance limit of `{python} f"{ds_hcp:g}"` ng/mg is carried back through the platform worst cases of anion exchange and cation exchange, which together remove host cell protein `{python} f"{hcp_fold:g}"`-fold. That gives `{python} f"{hcp_iac:,.0f}"` ng/mg. For leached Protein A the limit of `{python} f"{ds_lpa:g}"` ppm is carried back through the same two steps, which together remove it `{python} f"{lpa_fold:g}"`-fold, and gives `{python} f"{lpa_iac:g}"` ppm. For fragments the limit of `{python} f"{ds_frag:.2f}"` % is carried back through the lowest platform clearance of cation exchange, `{python} f"{frag_fold:g}"`-fold, and then through the largest increase of low-pH viral inactivation, `{python} f"{frag_add:g}"` %. That gives `{python} f"{frag_iac:.2f}"` %.
+For pool host cell protein the drug substance limit of `{python} f"{ds_hcp:g}"` ng/mg is carried back through cation exchange and anion exchange, which together clear host cell protein `{python} hcp_fold_s`-fold in the derivation. That gives `{python} f"{hcp_iac:,.0f}"` ng/mg. For leached Protein A the limit of `{python} f"{ds_lpa:g}"` ppm and a combined clearance of `{python} lpa_fold_s`-fold give `{python} f"{lpa_iac:g}"` ppm. For fragments the limit of `{python} f"{ds_frag:.2f}"` % is multiplied by the clearance fold of cation exchange, `{python} frag_fold_s`, and the largest increase of low-pH viral inactivation, `{python} f"{frag_add:g}"` percentage points, is subtracted. That gives `{python} f"{frag_iac:.2f}"` %.
 
-Each criterion rests on assumptions about the downstream steps. @tbl-worstcase lists them with the report that checks each one, under PCMP-001 §7.5. Data may tighten a criterion of this revision and never loosen it. Where a downstream report finds its step doing worse within its NOR than the platform worst case, the A-Mab value replaces the platform value and the criterion of this step is recalculated. Leached Protein A is not a response of the cation exchange or anion exchange designs, so the platform values for it cannot be checked in this campaign and they stand.
+The criterion for pool host cell protein is in force at a widened value. From the platform worst cases alone, the derivation gave `{python} f"{hcp_apriori:,.0f}"` ng/mg. The A-Mab model of cation exchange passed the adequacy tests, and it showed at the one-sided 95 % confidence bound that the step clears host cell protein better than its platform worst case. That bound replaced the platform value, which widened the criterion to the value above. The anion exchange model also gave a bound better than its platform worst case for host cell protein, and the cation exchange model did the same for fragments. Each of these two models fails the limit on how far predicted R² may fall short of R², so their bounds were not used and the platform values stand. The criterion for fragments is therefore at its a priori value of `{python} f"{frag_apriori:.2f}"` %. The criterion for leached Protein A is at its a priori value of `{python} f"{lpa_apriori:g}"` ppm, because leached Protein A is not a response of the cation exchange or anion exchange designs, so its platform values cannot be checked in this campaign.
+
+PCMP-001 sets, in its rule for verifying the platform worst cases, how the A-Mab results of a downstream step change a criterion of this step. The rule was set before any Version 2.0 report applied it.
+
+1. Where a downstream step does worse within its NOR than its platform worst case, the one-sided 95 % confidence bound of its A-Mab worst case, taken on the unfavourable side, replaces the platform value. The criterion of this step then becomes stricter.
+2. Where the one-sided 95 % confidence bound of the A-Mab worst case within the NOR is better than the platform value, and the model of the downstream step passes the adequacy tests of PCMP-001 (no significant lack of fit, and predicted R² within the limit of R²), the bound replaces the platform value. The criterion of this step then becomes wider. The point prediction is never used to widen a criterion.
+3. Otherwise the platform value stands.
+
+PCR-005 relies on the widened criterion for pool host cell protein. For it, PCR-005 gives the following.
+
+1. The bound and the platform value it replaced.
+2. The runs of the cation exchange design behind the bound.
+3. The adequacy results of the cation exchange model.
+4. The reason why the performance of cation exchange for A-Mab is known well enough to replace the platform value.
+
+ @tbl-worstcase lists the downstream values that the criteria of this step rest on, with the platform value, the value in force and the report that checks each.
 
 ```{python}
-#| label: tbl-worstcase
-#| tbl-cap: "Platform worst cases on which the criteria of this step rely, and the report that checks each."
 #| output: asis
-_v = D.iac_verification()
-_v = _v[_v["cqa"].isin(set(IAC["cqa"]))]
-_kind = {"fold_min": "Lowest clearance fold", "add_max": "Largest increase"}
+_kind = {"fold_min": "Lowest clearance fold", "add_max": "Largest increase (percentage points)"}
 _wc = []
-for _, r in _v.iterrows():
+for _, r in VER.iterrows():
     _cov = {D.RESP_TO_CQA.get(x, x) for x in list(D.responses(r["step_key"])) + D.fragment_responses(r["step_key"])}
-    _chk = f"PCR-{int(r['step']):03d}" if r["cqa"] in _cov else "not checked (not a design response)"
-    _wc.append([T.STEP_NAME[r["step_key"]], T.ATTR_NAME[r["cqa"]], _kind[r["assumption"]],
-                T.num(r["assumed"]), r["source"], _chk])
-show(pd.DataFrame(_wc, columns=["Downstream step", "Attribute", "Worst case", "Platform value", "Source", "Checked in"]))
+    _chk = f"PCR-{int(r['step']):03d}" if r["cqa"] in _cov else "not checked"
+    _wc.append([T.STEP_NAME[r["step_key"]], T.ATTR_NAME[r["cqa"]].split(" (")[0], _kind[r["assumption"]],
+                T.num(r["assumed"]), T.num(r["used"]), r["how"], _chk])
+T.frame(pd.DataFrame(_wc, columns=["Downstream step", "Attribute", "Worst case", "Platform value",
+                                   "Value in force", "Value set by", "Checked in"]),
+        caption="Downstream values on which the criteria of this step rely, the value in force and "
+                "the report that checks each.",
+        label="tbl-worstcase", merge=["Downstream step", "Worst case"], size="footnotesize",
+        header={"Platform value": "Platform\nvalue", "Value in force": "Value\nin force"},
+        notes_per_row=True,
+        notes=[("a)", "The A-Mab result confirmed the platform worst case, which stands."),
+               ("b)", "The one-sided 95 % confidence bound of the A-Mab worst case within the NOR was "
+                      "better than the platform value, and the model passed the adequacy tests. The bound "
+                      "replaced the platform value."),
+               ("c)", "The bound was better than the platform value, but the model fails an adequacy test "
+                      "of PCMP-001, so the platform value stands."),
+               ("d)", "Not a response of the downstream designs, so the platform value cannot be checked "
+                      "in this campaign and stands."),
+               ("e)", "The A-Mab worst case was worse than the platform value. The bound replaced it."),
+               ("", "Computed from unrounded values. A criterion recomputed from the rounded values "
+                    "shown can differ in its last digit.")],
+        align=["P{2.1cm}", "P{2.4cm}", "P{2.2cm}", "r", "r", "P{2.6cm}", "P{1.6cm}"]).show()
 ```
 
 ## The two analyses {#sec-par-analyses}
 
-A PAR is computed for each output of @tbl-outcrit that has a criterion and for each of the `{python} n_fac` factors of the response-surface model. Two analyses are run, as PCMP-001 §6.4 defines them.
+A PAR is computed for each attribute of @tbl-outcrit that has a criterion and for each of the `{python} n_fac` factors of the response-surface model. Two analyses are run, as PCMP-001 defines them for proven acceptable ranges. In both, a prediction of pool host cell protein or leached Protein A is translated to manufacturing scale by subtracting its offset before it is compared with the criterion (@sec-sdm).
 
-1. The set-point analysis holds the other factors at their set-points and scans the factor across its range studied. The PAR is the contiguous range around the set-point over which the mean prediction of the response-surface model meets the criterion.
-2. The NOR-propagated analysis scans the factor at `{python} PAR_GRID` grid points across its range studied. At each grid point it draws `{python} f"{PAR_MC:,}"` operating points for the other factors, each from a normal distribution centred on its set-point, with the width that PCMP-001 §6.4 sets from its NOR, and clipped to the range studied. The model residual is added to each draw. The PAR is the contiguous range around the set-point over which the 95 % predictive interval of a single batch meets the criterion.
+1. The set-point analysis is a one-factor scan of the model's mean prediction. It holds the other factors at their set-points and scans the factor across its range studied. The PAR is the contiguous range around the set-point over which the mean prediction of the response-surface model meets the criterion.
+2. The NOR-propagated analysis is a Monte Carlo simulation in which the other factors vary as they would in routine operation. It scans the factor at `{python} PAR_GRID` grid points across its range studied. At each grid point it draws `{python} f"{PAR_MC:,}"` operating points for the other factors. Each factor is drawn from a normal distribution centred on its set-point, with a standard deviation of one sixth of the width of its NOR, and clipped to the range studied. The model residual and the uncertainty of the fitted coefficients are included. The PAR is the contiguous range around the set-point over which the 95 % prediction interval of a single batch meets the criterion.
 
-The NOR-propagated PAR is the one that supports a claim. It is in general narrower than the set-point PAR, because the range must hold while the rest of the operating point moves within its NOR. A response-surface model predicts the mean response. At the edge of a region defined on mean predictions, a single batch meets its criterion only about half the time [@amab2009], and that is why the decision uses the predictive interval of a single batch.
+The NOR-propagated PAR is the one that supports a claim. It is in general narrower than the set-point PAR, because the range must hold while the rest of the operating point moves within its NOR. A response-surface model predicts the mean response, and at the edge of a region defined on mean predictions a single batch meets its criterion only about half the time [@amab2009].
 
 ## Decision rule and reporting {#sec-par-rule}
 
 A parameter that affects several attributes has a PAR for each, and the range carried into the control strategy is their intersection. Where the set-point itself fails a criterion, PCR-005 reports that no PAR exists for that attribute and states the consequence for the NOR. A PAR that reaches the edge of the range studied is reported as reaching it, and no claim is made beyond it.
 
-PCR-005 reports both analyses for every attribute and factor in one table. For each attribute with a criterion it shows, as a two-panel figure, the PAR of the factor with the largest main effect on that attribute in the response-surface model. The left panel shows the set-point analysis and the right panel the NOR-propagated analysis, with the region that meets the criterion shaded green. The univariate parameters have no model-based PAR. Their ranges are supported by the measured responses against the same criteria at each end of the range studied.
+PCR-005 reports both analyses for every attribute and factor in one table. For each attribute with a criterion it shows, as a two-panel figure, the PAR of the factor with the largest main effect on that attribute in the response-surface model. The left panel shows the set-point analysis and the right panel the NOR-propagated analysis, with the region that meets the criterion shaded green. The univariate parameters have no model-based PAR. The ranges of operating temperature and bed height are supported by the measured responses against the same criteria at each end of the range studied.
 
 # Data management and integrity {#sec-data}
 
@@ -563,21 +733,21 @@ Each result is second-person verified before it enters the analysis. An excluded
 show(pd.DataFrame([
     ["Process Development / MSAT", "Author of this plan and of PCR-005. Executes the runs, the hold study and the scale-down model qualification."],
     ["Analytical Development", "Runs the methods of the analytical methods table, the retest of retained samples and sample management."],
-    ["Manufacturing Science", "Supplies the manufacturing-scale data for qualification and reviews transfer of the ranges to Grafton."],
-    ["Statistics", "Reviews the designs, the models, the adequacy criteria and the PAR analysis."],
+    ["Manufacturing Science", "Supplies the manufacturing-scale data for the offsets of the scale-down model and reviews transfer of the ranges to Grafton."],
+    ["Statistics", "Reviews the designs, the models, the adequacy criteria, the offsets and the PAR analysis."],
     ["Quality Assurance", "Approves this plan and PCR-005, and closes the actions of INV-001 that concern this step."],
 ], columns=["Function", "Responsibility"]))
 ```
 
 # Deliverables and schedule {#sec-deliverables}
 
-The deliverable of this plan is PCR-005, the Process Characterization Report for the Protein A step, with its ground-truth annex. PCR-005 reports the qualification of the scale-down model, both designs, the univariate studies, the hold study and the PARs, and it proposes the classification of every parameter. It rolls up into PCMR-001.
+The deliverable of this plan is PCR-005, the Process Characterization Report for the Protein A step, with its ground-truth annex. PCR-005 reports the offsets and the qualification of the scale-down model, both designs, the univariate studies, the hold study and the PARs, and it proposes the classification of every parameter. It rolls up into PCMR-001.
 
-The studies run in this order. The scale-down model is qualified first. The screening design follows, then the univariate study and the response-surface design, and the hold study runs alongside the response-surface design. The retained pools are tested by nrCE-SDS after AMD-001. @tbl-chrono records the execution window of each study, as INV-001 finding 5 requires.
+The studies run in this order. The scale-down model is qualified first. The screening design follows, then the univariate study and the response-surface design. The hold study began on `{python} S.loc["S-PA-HLD", "start"]`, before the response-surface design ended on `{python} S.loc["S-PA-RSM", "end"]`. The retained pools are tested by nrCE-SDS after AMD-001. @tbl-chrono records the execution window of each study, because INV-001 found that the Version 1.0 records gave none (finding 5).
 
 ```{python}
 #| label: tbl-chrono
-#| tbl-cap: "Execution window of each study of the Protein A step."
+#| tbl-cap: "Execution window of each study of the Protein A step governed by this plan."
 #| output: asis
 _kinds = {"qualification": "scale-down model qualification", "screening": "screening design",
           "univariate": "univariate study", "rsm": "response-surface design", "hold": "hold study",
@@ -590,37 +760,44 @@ show(pd.DataFrame({"Study": CH["id"], "Study type": CH["kind"].map(_kinds),
 
 The studies carry the following risks and rest on the following assumptions.
 
-1. The scale-down model represents the commercial column. This is tested by the equivalence comparison of @sec-sdm for every output except fragments. For fragments it rests on mechanism, because capture and elution do not depend on scale at equal bed height, residence time and elution pH.
-2. Leached Protein A is expected to be lower in the laboratory column than at manufacturing scale, because the manufacturing load is held longer before capture (@sec-sdm). The levels measured in the designs therefore show the effects of the parameters, and the scale difference is carried into PCR-005. The life of the resin is controlled by SOP-2008.
+1. The scale-down model represents the commercial column within a known offset. For pool host cell protein and leached Protein A this is tested by the qualification rule of @sec-sdm. With `{python} n_sdm_sd` scale-down runs and `{python} n_sdm_m` manufacturing batches the confidence interval of an offset may be wide. If the conclusion for one of these attributes then differs between the two ends of its interval, the model is not used for it, and its ranges cannot be set from the designs. For fragments the model rests on mechanism, because capture depends on bed height and residence time, and hinge hydrolysis on pH, time and temperature, all of which the model keeps at commercial values. The qualification has no fragment result at either scale with which to confirm this directly.
+2. Leached Protein A is expected to be lower in the laboratory column than at manufacturing scale, because the manufacturing load is held longer before capture (@sec-uo, item 3). This difference is the offset of leached Protein A, and it is subtracted before any result for leached Protein A is judged.
 3. Each design uses one feed. The effect of feed host cell protein, titre and viability on the step is not estimated here. The case study reports that Protein A capture is robust over a wide range of feed inputs [@amab2009], and the feed is characterized in PCP-003 and PCP-004.
-4. The criteria of this step rest on the platform worst cases of @tbl-worstcase. A downstream step that does worse within its NOR tightens the criterion of this step, and PCR-005 must then use the tightened value. The platform values for leached Protein A cannot be checked in this campaign.
-5. Fragments by nrCE-SDS rest on retained samples, the pools of the response-surface design and the day `{python} and_list(hold_cesds_days)` samples of the hold study. If a retained pool is lost or found unsuitable, that run has no nrCE-SDS result. The fragment model is then fitted to the remaining runs only if the design still supports it, and otherwise fragments are reported descriptively.
+4. The criteria of this step rest on the downstream values of @tbl-worstcase. If the verification of a downstream step changes one of them before PCR-005 is approved, PCR-005 uses the criterion then in force.
+5. Fragments by nrCE-SDS rest on retained samples, which are the pools of the response-surface design and the day `{python} and_list(hold_cesds_days)` samples of the hold study. If a retained pool is lost or found unsuitable, that run has no nrCE-SDS result. The fragment model is then fitted to the remaining runs only if the design still supports it, and otherwise fragments are reported descriptively.
 6. Supply of clarified harvest and resin may limit the number of runs. The designs are executed in full before analysis, and no run is dropped to save material.
 
 # Approvals {#sec-approvals}
 
-This plan is approved by the functions listed in the approval record at the front of this document (@tbl-appr). Version 2.0 takes effect on `{python} doc_version(DOC)[1]`. It replaces Version 1.0 for the analysis and the reporting of the studies of the step.
+This plan is approved by the functions listed in the approval record at the front of this document. Version 2.0 takes effect on `{python} doc_version(DOC)[1]`. It replaces Version 1.0 for the analysis and the reporting of the studies of the step.
 
 # Appendix A. Planned screening design {.unnumbered #sec-appa}
 
-@tbl-appa gives the planned screening design (study S-PA-SCR) in coded units. The factor codes are those of @tbl-legend. Runs are listed in standard order and executed in random order.
+@tbl-appa gives the planned screening design (study S-PA-SCR) in coded units. The factor codes are those of @tbl-legend. Runs are listed in standard order, grouped by run type, and executed in random order.
 
 ```{python}
-#| label: tbl-appa
-#| tbl-cap: "Planned screening design in coded units (standard order)."
 #| output: asis
-show(D.planned_matrix_df(UO, "screening"))
+def planned(kind):
+    m = D.planned_matrix_df(UO, kind).copy()
+    m["Type"] = m["Type"].replace({"center": "centre"})
+    for c in [c for c in m.columns if c not in ("Run", "Type")]:
+        m[c] = [f"{int(v):+d}".replace("+0", "0").replace("-", "−") for v in m[c]]
+    assert m["Type"].tolist() == sorted(m["Type"].tolist(), key=["factorial", "axial", "centre"].index)
+    return m
+
+
+T.frame(planned("screening"), caption="Planned screening design in coded units (standard order).",
+        label="tbl-appa", merge=["Type"]).show()
 ```
 
 # Appendix B. Planned response-surface design {.unnumbered #sec-appb}
 
-@tbl-appb gives the planned face-centred central composite design (study S-PA-RSM) in coded units. Runs are listed in standard order and executed in random order.
+@tbl-appb gives the planned face-centred central composite design (study S-PA-RSM) in coded units. Runs are listed in standard order, grouped by run type, and executed in random order.
 
 ```{python}
-#| label: tbl-appb
-#| tbl-cap: "Planned response-surface design in coded units (standard order)."
 #| output: asis
-show(D.planned_matrix_df(UO, "rsm"))
+T.frame(planned("rsm"), caption="Planned response-surface design in coded units (standard order).",
+        label="tbl-appb", merge=["Type"]).show()
 ```
 
 # References {.unnumbered}

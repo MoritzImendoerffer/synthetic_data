@@ -5450,17 +5450,24 @@ def train_row_quotes():
     return row_quotes(P.process_steps_df(), P.CFG.train_order)
 
 
-def _corpus_steps(doc, file, sec_id, sec_title):
-    rows = train_row_quotes()
+def _corpus_steps(doc, file, sec_id, sec_title, rows=None, roles=None, table_title=None):
+    """One ProcessStep per step of the train, anchored on its row of the process-train table.
+
+    ``rows`` and ``roles`` default to ``process_steps_df()``. A document that prints its own
+    version of the table (PCMP-001 Version 2.0 rewrites the harvest role) passes the rows it
+    rendered, keyed by step, and the role each row states."""
+    rows = train_row_quotes() if rows is None else rows
+    roles = P.UNIT_OP_ROLE if roles is None else roles
     out = []
     for key in P.CFG.train_order:
         uo = P.CFG.unit_op(key)
         title = P.UNIT_OP_TITLES.get(key, uo.name)
         out.append(S.ProcessStep(
             step_id=f"step:{key}", step_name=title, step_number=str(uo.step),
-            unit_operation=title, description=P.UNIT_OP_ROLE.get(key, ""),
+            unit_operation=title, description=roles.get(key, ""),
             source_references=[ref(doc, file, sec_id, sec_title, rows[key],
-                                   table_header=rows.header)], metadata=meta()))
+                                   table_title=table_title, table_header=rows.header)],
+            metadata=meta()))
     return out
 
 
@@ -6004,6 +6011,9 @@ import contextlib as _contextlib
 import io as _io
 
 _QMD_NS: dict = {}
+#: ``qmd name -> {tbl- label -> (CTable, DataFrame or None)}``, filled by :func:`qmd_namespace`;
+#: read it through :func:`qmd_ctables`.
+_QMD_CT: dict = {}
 
 
 def qmd_namespace(qmd_name):
@@ -6020,12 +6030,20 @@ def qmd_namespace(qmd_name):
     ``"show"`` (``df.to_markdown``, read back with :func:`row_quotes`) or ``"md"`` (cells printed
     as ``str``, read back with :func:`_join_cells`). Chunks that draw a figure are skipped.
     The namespace is cached: INV-001's setup re-fits every response surface and takes a while.
+
+    A complex table (``T.frame(...).show()``, ``T.<builder>(...).show()``) is not a ``show``
+    call and does not appear in ``tables``. Every one the chunks print is recorded on the side,
+    with the DataFrame ``T.frame`` was given, and :func:`qmd_ctables` returns them.
     """
     if qmd_name in _QMD_NS:
         return _QMD_NS[qmd_name]
+    import ctable as _ctable
+    import tables as _tables
     src = open(os.path.join(HERE, qmd_name), encoding="utf-8").read()
     chunks = re.findall(r"```\{python\}\n(.*?)```", src, flags=re.S)
     ns, tables, cur = {"__name__": f"qmd:{qmd_name}"}, {}, {}
+    shown, frames = {}, {}
+    _ct_show0, _frame0 = _ctable.CTable.show, _tables.frame
 
     def _show(df, floatfmt=None):
         cur["t"] = ("show", df.copy(), floatfmt)
@@ -6033,8 +6051,17 @@ def qmd_namespace(qmd_name):
     def _md(df, widths=None):
         cur["t"] = ("md", df.copy(), None)
 
+    def _ct_show(self):
+        shown[self.label] = self
+        return _ct_show0(self)
+
+    def _frame(df, caption, label, *a, **kw):
+        frames[label] = df.reset_index(drop=True).copy()
+        return _frame0(df, caption, label, *a, **kw)
+
     cwd = os.getcwd()
     os.chdir(HERE)
+    _ctable.CTable.show, _tables.frame = _ct_show, _frame
     try:
         with _contextlib.redirect_stdout(_io.StringIO()):
             for i, code in enumerate(chunks):
@@ -6051,9 +6078,23 @@ def qmd_namespace(qmd_name):
                            or re.search(r'print\(f?": (.*?) \{\{?#tbl-', code))
                     tables[lab.group(1)] = cur["t"] + (cap.group(1) if cap else None,)
     finally:
+        _ctable.CTable.show, _tables.frame = _ct_show0, _frame0
         os.chdir(cwd)
     _QMD_NS[qmd_name] = (ns, tables)
+    _QMD_CT[qmd_name] = {lab: (t, frames.get(lab)) for lab, t in shown.items()}
     return ns, tables
+
+
+def qmd_ctables(qmd_name):
+    """``{tbl- label -> (CTable, DataFrame or None)}``: every complex table the document prints.
+
+    The CTable is the object the chunk printed, so ``ctable_rows`` on it gives the rendered rows
+    from the very call that rendered them. The DataFrame is the one ``T.frame`` was given (row
+    ``i`` of it is body row ``i`` of the table), so a record can be keyed by a column of it;
+    it is ``None`` for a table built by another ``T.`` builder, which the builder can call again.
+    """
+    qmd_namespace(qmd_name)
+    return _QMD_CT[qmd_name]
 
 
 def captured_rows(cap, keys=None):
@@ -6185,17 +6226,21 @@ def _method_concepts(amvs, names):
             for a in amvs]
 
 
-def size_variant_refs(doc, f, sec, steps, token, text):
+def size_variant_refs(doc, f, sec, steps, token, text, lead=2):
     """References to the rows of ``T.methods_by_study(steps)`` that name ``token`` ("SEC" or
     "nrCE-SDS") as a method used in a study. A row that occurs more than once in the document
-    (two continuation rows can read alike) is ambiguous and is not used."""
+    (two continuation rows can read alike) is ambiguous and is not used.
+
+    ``lead`` is the number of label cells before the method cells: the step and the attribute.
+    A table of one step has no step column (``tables._drop_step_column``), so pass ``lead=1``
+    for it, or its first method cell is read as a label."""
     import tables as T
     from check_grounding import normalize
     t = T.methods_by_study(steps)
     rows = ctable_rows(t)
     out = []
     for row in rows.values():
-        methods = row.split(CELL_SEP)[2:]
+        methods = row.split(CELL_SEP)[lead:]
         if not any(token in re.split(r"[ ,]+", m) for m in methods):
             continue
         if text.count(normalize(row)) != 1:
@@ -6221,8 +6266,8 @@ def _unrendered_note(ids):
 # --------------------------------------------------------------------------- #
 # PCP-005 — Process Characterization Plan, Protein A (Step 5), Version 2.0.     #
 # --------------------------------------------------------------------------- #
-#: Attribute cells of PCP-005 @tbl-methods -> attribute key (None: step yield, a performance
-#: attribute with no CQA concept of its own).
+#: Attribute cells of PCP-005 @tbl-methods -> attribute key. Step yield is a performance
+#: attribute with no CQA of its own; it is the concept attr:step_yield.
 PA2_METHOD_ATTR = {
     "Pool host cell protein (ng/mg)": "hcp", "Leached Protein A (ppm)": "leached_protein_a",
     "Step yield": "step_yield", "Fragments, LMW (%)": "fragments_lmw",
@@ -6232,7 +6277,13 @@ PA2_METHOD_ATTR = {
 
 
 def build_plan_protein_a():
-    """PCP-005 Version 2.0: the protocol amendment issued under INV-001."""
+    """PCP-005 Version 2.0: the protocol amendment issued under INV-001.
+
+    Fitted to the Version 2.0 text. Most of its tables are complex tables (``T.frame``), read
+    back through :func:`qmd_ctables` from the object the plan printed. The parameter table shows
+    the NOR the studies were planned and judged against (``nor_char_*``), not the narrower NOR
+    that PCR-005 Version 2.0 put in force, so the parameter records carry that NOR.
+    """
     import doe_report as D
     import tables as T
     from annex_contract.assertions import AssertionStore
@@ -6240,31 +6291,44 @@ def build_plan_protein_a():
     from annex_contract.discourse import DocumentRelationship, ExplicitNonClaim
     from annex_contract.summaries import ReportSection
     doc, f = "PCP-005", PCP5_FILE
-    ns, tabs = qmd_namespace("PCP-005_protein_a.qmd")
+    qmd = "PCP-005_protein_a.qmd"
+    ns, tabs = qmd_namespace(qmd)
+    ct = qmd_ctables(qmd)
     A, add, ST, st = _adders(doc, f)
+    text = _document_text(f)
 
     def sid(s):
         return f"{doc}_sec_{s}"
 
-    # ---- the rendered tables, rebuilt from the expressions the plan renders them with ----
-    prow = param_rows(PAUO, classified=False)                       # @tbl-params
-    cdf = tabs["tbl-cqas"][1]
+    # ---- the rendered tables, rebuilt from the objects the plan printed ---------------------
+    pt, pdf_ = ct["tbl-params"]                                     # T.frame, by parameter
+    prow = ctable_rows(pt, pdf_["Parameter"])
+    cdf = tabs["tbl-cqas"][1]                                       # show(), "DS criterion" column
     by_label = _attr_key_by_label()
     ckeys = [by_label[n] for n in cdf["CQA"]]
-    crow = cqa_rows(ckeys)                                          # @tbl-cqas
-    mdf = tabs["tbl-methods"][1]
-    mrow = captured_rows(tabs["tbl-methods"])                      # @tbl-methods, by row index
-    odf = tabs["tbl-outcrit"][1]
+    crow = captured_rows(tabs["tbl-cqas"], ckeys)
+    mt, mdf = ct["tbl-methods"]                                     # T.frame, by row index
+    mrow = ctable_rows(mt)
+    amv_of = {}                                                     # method title -> AMV id
+    for amv, title in ns["AMV_ALL"]:
+        if amv_of.setdefault(title, amv) != amv:
+            raise ValueError(f"two validations are titled {title!r}")
+    mdf = mdf.assign(AMV=[amv_of[m] for m in mdf["Method"]])
+    sop_t, sop_df = ct["tbl-sop"]                                   # T.sop_references, by reference
+    soprow = ctable_rows(sop_t, sop_df["Reference"])
+    ot, odf = ct["tbl-outcrit"]                                     # T.frame, by response
     resp_by_label = {D.RESP_LABEL[r]: r for r in list(D.responses(PAUO))
                      + D.fragment_responses(PAUO)}
-    orow = captured_rows(tabs["tbl-outcrit"], [resp_by_label[o] for o in odf["Output"]])
+    orow = ctable_rows(ot, [resp_by_label[o] for o in odf["Attribute"]])
     chdf = tabs["tbl-chrono"][1]
-    chrow = captured_rows(tabs["tbl-chrono"], chdf["Study"])       # @tbl-chrono, by study id
-    rel = md_string_rows(P.related_docs_md(doc))                   # @tbl-related
-    iac_t = T.iac_derivation([PAUO])
+    chrow = captured_rows(tabs["tbl-chrono"], chdf["Study"])      # @tbl-chrono, by study id
+    rel = md_string_rows(P.related_docs_md(doc))                  # @tbl-related
+    iac_t = ct["tbl-iac"][0]                                        # T.iac_derivation([UO])
     iac = ns["IAC"]                                                 # D.iac_table(UO), by response
-    iacrow = ctable_rows(iac_t, [by_label[c.split(" | ")[0]] for c in iac_t.rows()])
+    iacrow = ctable_rows(iac_t, [by_label[c.split(CELL_SEP)[0]] for c in iac_t.rows()])
     cap = {k: v[3] for k, v in tabs.items()}
+    cap["tbl-related"] = "Documents related to this plan."         # printed by related_docs_md
+    names = dict(zip(P.cqa_reg["key"], P.cqa_reg["cqa"]))
 
     # ---- entities ------------------------------------------------------------------------
     step = S.ProcessStep(
@@ -6293,18 +6357,19 @@ def build_plan_protein_a():
                                "The scale-down model is a laboratory column packed with the "
                                "commercial Protein A resin.")],
         metadata=meta())]
+    preg = P.param_reg[P.param_reg.unit_operation == PAUO_NAME].set_index("parameter")
     params = []
-    for r in PAPARAM_ROWS:
-        name = r["parameter"]
+    for name, row in prow.items():
+        r = preg.loc[name]
         params.append(S.ProcessParameter(
             parameter_id=PAPARAM_CONCEPT[name], parameter_name=name,
             parameter_type="unclassified", unit=r["unit"], target_value=f"{r['setpoint']:g}",
-            NOR=f"{r['nor_low']:g}–{r['nor_high']:g} {r['unit']}",
+            NOR=f"{r['nor_char_low']:g}–{r['nor_char_high']:g} {r['unit']}",
             PAR=f"{r['par_low']:g}–{r['par_high']:g} {r['unit']}",
             associated_step=PASTEP_LABEL,
-            source_references=[ref(doc, f, sid("factors"), "Factors, ranges and study type",
-                                   prow[name], table_title=cap["tbl-params"],
-                                   table_id=f"{doc}_tab_params", table_header=prow.header)],
+            source_references=[ref(doc, f, sid("factors"), "Factors, ranges and study type", row,
+                                   table_title=pt.caption, table_id=f"{doc}_tab_params",
+                                   table_header=prow.header)],
             metadata=meta()))
     method_of = {}
     for _, r in mdf.iterrows():
@@ -6314,7 +6379,7 @@ def build_plan_protein_a():
         r = _pa_cqa_row(key)
         attrs.append(S.QualityAttribute(
             attribute_id=f"attr:{key}", attribute_name=r["cqa"], attribute_type="CQA",
-            unit=r["unit"], acceptance_criteria=[f"{cdf['Acceptance'].iloc[i]} (drug substance)"],
+            unit=r["unit"], acceptance_criteria=[f"{cdf['DS criterion'].iloc[i]} (drug substance)"],
             analytical_method=method_of.get(key), associated_steps=[PASTEP_LABEL],
             rationale_for_criticality=f"A-Mab Tool #1 Risk Score = Impact × Uncertainty = "
                                       f"{r['tool1_score']}.",
@@ -6335,10 +6400,14 @@ def build_plan_protein_a():
             analytes=[mdf.loc[i, "Attribute"] for i in idx],
             associated_attributes=[f"attr:{k}" for k in keys], validation_status="validated",
             source_references=[ref(doc, f, sid("analytics"), "Analytical methods", mrow[i],
-                                   table_title=cap["tbl-methods"], table_id=f"{doc}_tab_methods",
+                                   table_title=mt.caption, table_id=f"{doc}_tab_methods",
                                    table_header=mrow.header) for i in idx]
+            # the methods table names the method by its title; the procedures table ties the
+            # title to the validation reference
+            + [ref(doc, f, sid("related"), "Related documents", soprow[amv],
+                   table_title=sop_t.caption, table_id=f"{doc}_tab_sop", table_header=soprow.header)]
             + (size_variant_refs(doc, f, "Analytical methods", [PAUO], SIZE_VARIANT_TOKEN[amv],
-                                 _document_text(f)) if amv in SIZE_VARIANT_TOKEN else []),
+                                 text, lead=1) if amv in SIZE_VARIANT_TOKEN else []),
             metadata=meta()))
     nc = [
         ExplicitNonClaim(
@@ -6346,7 +6415,7 @@ def build_plan_protein_a():
             statement="No viral clearance claim is made for the Protein A step, although it "
                       "removes some virus, and no spiking study is planned.",
             handled_elsewhere="low-pH inactivation, anion exchange and virus filtration "
-                              "(PCMP-001 §7.4)",
+                              "(PCMP-001, viral clearance claims)",
             source_references=[ref(doc, f, sid("purpose"), "Purpose and scope",
                                    "Although Protein A chromatography removes some virus, no "
                                    "viral clearance claim is made for this step")],
@@ -6354,14 +6423,14 @@ def build_plan_protein_a():
         ExplicitNonClaim(
             non_claim_id=f"{doc}-NC02", subject="short bed at high protein load",
             unit_operation=PAUO_NAME,
-            statement="A short bed at the upper end of the load range is not characterized and "
-                      "no claim is made for it.",
-            rationale="Bed height is studied one factor at a time, so the short bed is not run "
-                      "at high protein load.",
-            source_references=[ref(doc, f, sid("univariate"), "Univariate assessment",
-                                   "A short bed at the upper end of the load range, where "
-                                   "breakthrough is most likely, is therefore not characterized "
-                                   "by this plan, and no claim is made for it.")],
+            statement="A short bed combined with a high protein load is not studied, and no claim "
+                      "is made for it.",
+            rationale="Bed height is fixed for each packed column and is studied one factor at a "
+                      "time at the set-point load, so the short bed is not run at high protein load.",
+            source_references=[ref(doc, f, sid("risk"), "Risk-based prioritization of parameters",
+                                   "A short bed combined with a high protein load, where "
+                                   "breakthrough is most likely, is therefore not studied, and no "
+                                   "claim is made for it.")],
             metadata=meta()),
         ExplicitNonClaim(
             non_claim_id=f"{doc}-NC03", subject="resin life cycle", unit_operation=PAUO_NAME,
@@ -6369,7 +6438,8 @@ def build_plan_protein_a():
                       "scope of the plan.",
             handled_elsewhere="SOP-2008",
             source_references=[ref(doc, f, sid("purpose"), "Purpose and scope",
-                                   "is governed by SOP-2008 and is outside the scope of this plan")],
+                                   "is governed by the resin life-cycle procedure SOP-2008 and is "
+                                   "outside the scope of this plan")],
             metadata=meta()),
         ExplicitNonClaim(
             non_claim_id=f"{doc}-NC04", subject="effect of feed quality", unit_operation=PAUO_NAME,
@@ -6391,9 +6461,7 @@ def build_plan_protein_a():
             relationship_id=f"{doc}-R{len(rels) + 1:02d}", kind=kind_of.get(txt, "references"),
             source_document_id=doc, target_document_ref=target, statement=txt,
             source_references=[ref(doc, f, sid("related"), "Related documents", row,
-                                   table_title=cap.get("tbl-related") or
-                                   "Documents related to this plan.",
-                                   table_header=rel.header)],
+                                   table_title=cap["tbl-related"], table_header=rel.header)],
             metadata=meta()))
     entities = [
         S.SectionEntityExtraction(document_id=doc, section_id=sid("purpose"),
@@ -6402,13 +6470,12 @@ def build_plan_protein_a():
         S.SectionEntityExtraction(document_id=doc, section_id=sid("related"),
                                   document_relationships=rels),
         S.SectionEntityExtraction(document_id=doc, section_id=sid("cqas"), quality_attributes=attrs),
+        S.SectionEntityExtraction(document_id=doc, section_id=sid("risk"), non_claims=[nc[1]]),
         S.SectionEntityExtraction(document_id=doc, section_id=sid("sdm"), equipment=equipment),
         S.SectionEntityExtraction(document_id=doc, section_id=sid("operation"), non_claims=[nc[3]]),
         S.SectionEntityExtraction(document_id=doc, section_id=sid("analytics"),
                                   analytical_methods=methods),
         S.SectionEntityExtraction(document_id=doc, section_id=sid("factors"), parameters=params),
-        S.SectionEntityExtraction(document_id=doc, section_id=sid("univariate"),
-                                  non_claims=[nc[1]]),
     ]
 
     # ---- studies: each on its own row of the execution-window table, plus its design -----
@@ -6416,15 +6483,15 @@ def build_plan_protein_a():
     uni = [p.name for p in P.CFG.unit_op(PAUO).parameters if p.study != "multivariate"]
     resp_scr = list(D.responses(PAUO))
     resp_rsm = resp_scr + [r for r in D.fragment_responses(PAUO, "rsm") if r == "lmw_cesds_pct"]
-    # Keyed by the KIND of study, not by its id, so any study the chronology carries is
-    # handled (S-PA-SDM2, the supplementary qualification of DEV-005-03, arrived that way).
-    # The candidate prose spans name the study by its id; one that the rendered text does not
-    # contain is simply not used, and the chronology row alone anchors the record.
+    # Keyed by the KIND of study, not by its id, so any study the chronology carries is handled.
+    # The prose spans name the study by its id; one that the rendered text does not contain is a
+    # quote this builder expected and the document does not have, so it fails loudly below.
     def prose(kind, sid_):
         return {
             "qualification": [("Scale-down model and its qualification",
-                               f"The model is qualified under SOP-1001 in study {sid_}, before the "
-                               f"first run of the screening design.")],
+                               f"The model is qualified under the scale-down model qualification "
+                               f"procedure SOP-1001 in study {sid_}, the scale-down model "
+                               f"qualification, before the first run of the screening design.")],
             "screening": [("Screening design", f"The screening design (study {sid_}) is a full "
                                                f"two-level factorial design"),
                           ("Screening design", f"with {ns['fact_scr']} factorial runs and "
@@ -6449,7 +6516,6 @@ def build_plan_protein_a():
                                              "the range studied", factors=uni, responses=resp_scr),
               "qualification": dict(responses=resp_scr)}
     studies, unrendered = [], []
-    text = _document_text(f)
     for _, r in ns["CH"].iterrows():
         stype = STUDY_TYPE.get(r["kind"])
         if stype is None:
@@ -6461,8 +6527,7 @@ def build_plan_protein_a():
         refs = [ref(doc, f, sid("chrono"), "Deliverables and schedule", chrow[r["id"]],
                     table_title=cap["tbl-chrono"], table_id=f"{doc}_tab_chrono",
                     table_header=chrow.header)]
-        refs += [ref(doc, f, sid("design"), sec, q) for sec, q in prose(r["kind"], r["id"])
-                 if _present(q, text)]
+        refs += [ref(doc, f, sid("design"), sec, q) for sec, q in prose(r["kind"], r["id"])]
         studies.append(S.StudyDesign(
             study_id=f"study:{r['id']}", study_type=stype, unit_operation=PAUO_NAME,
             scale_down_model="laboratory column packed with the commercial Protein A resin",
@@ -6471,16 +6536,16 @@ def build_plan_protein_a():
             metadata=meta(), **d))
 
     # ---- assertions ------------------------------------------------------------------------
-    for name, cid in PAPARAM_CONCEPT.items():
-        add("step:protein_a", "step_has_parameter", cid, f"{PAUO_NAME} has process parameter {name}.",
-            "Factors, ranges and study type", prow[name], prow.header, cap["tbl-params"])
+    for name, row in prow.items():
+        add("step:protein_a", "step_has_parameter", PAPARAM_CONCEPT[name],
+            f"{PAUO_NAME} has process parameter {name}.", "Factors, ranges and study type", row,
+            prow.header, pt.caption)
     role = {"leached_protein_a": "introduces {n}, the only CQA the step introduces",
             "hcp": "is the principal point of clearance for {n}",
             "residual_dna": "is the principal point of clearance for {n}",
             "fragments_lmw": "partly clears {n}",
             "aggregates_hmw": "does not separate {n} from monomer; aggregate is measured on every "
                               "pool by SEC for information and is not a response of the designs"}
-    names = dict(zip(P.cqa_reg["key"], P.cqa_reg["cqa"]))
     for key in ckeys:
         add("step:protein_a", "step_has_quality_attribute", f"attr:{key}",
             f"{PAUO_NAME} " + role[key].format(n=names[key]) + ".", "Quality attributes in scope",
@@ -6489,38 +6554,54 @@ def build_plan_protein_a():
         key = PA2_METHOD_ATTR[r["Attribute"]]
         add(f"attr:{key}", "attribute_measured_by_method", f"method:{r['AMV']}",
             f"{r['Attribute']} is measured by {r['AMV']} ({r['Method']}) on: {r['Samples']}. "
-            f"Purpose: {r['Purpose']}.", "Analytical methods", mrow[i], mrow.header,
-            cap["tbl-methods"])
+            f"Purpose: {r['Purpose']}.", "Analytical methods", mrow[i], mrow.header, mt.caption)
     for resp, row in orow.items():
         if resp == "step_yield":
             continue
-        o = odf[odf["Output"] == D.RESP_LABEL[resp]].iloc[0]
+        o = odf[odf["Attribute"] == D.RESP_LABEL[resp]].iloc[0]
         key = D.RESP_TO_CQA.get(resp, resp)
+        basis = "carried back" + (", widened" if bool(iac.loc[resp, "widened"]) else "")
+        offset = ("after the scale-down offset is subtracted" if resp in ns["SDM_JUDGED"]
+                  else "with no scale-down offset, because the qualification has no result for it")
         add(f"attr:{key}", "attribute_has_acceptance_criterion", f"lit:{PAUO}_{key}_iac",
-            f"At the Protein A step, {o['Output']} is judged against the Version 2.0 intermediate "
-            f"acceptance criterion {o['Criterion']} ({o['Basis']}), on a single batch at the 95 % "
-            f"predictive interval.", "Acceptance and decision criteria", row, orow.header,
-            cap["tbl-outcrit"])
-    hold_q = (f"These are ≤ {ns['agg_bx'][1]:.2f} % HMW for aggregate and "
-              f"{ns['acid_bx'][0]:g}–{ns['acid_bx'][1]:g} % for acidic variants.")
+            f"At the Protein A step, {o['Attribute']} is judged against the Version 2.0 "
+            f"intermediate acceptance criterion {o['Criterion']} ({basis}), on the upper end of the "
+            f"95 % prediction interval of a single batch, {offset}.",
+            "Acceptance and decision criteria", row, orow.header, ot.caption)
+    hold = "Hold study of the Protein A eluate"
+    agg_bx, acid_bx = ns["agg_bx"], ns["acid_bx"]
+    hold_q = (f"The criteria in force for that output, from the table of intermediate acceptance "
+              f"criteria in PCMP-001, are ≤ {agg_bx[1]:.2f} % HMW for aggregate and "
+              f"{acid_bx[0]:g}–{acid_bx[1]:g} % for acidic variants.")
     add("attr:aggregates_hmw", "attribute_has_acceptance_criterion", "lit:pa_hold_aggregates",
-        f"The held Protein A eluate is judged against the production bioreactor criterion for "
-        f"aggregate, ≤ {ns['agg_bx'][1]:.2f} % HMW.", "Hold study of the Protein A eluate", hold_q)
+        f"The held Protein A eluate carries the criterion in force for the production bioreactor "
+        f"output for aggregate, ≤ {agg_bx[1]:.2f} % HMW.", hold, hold_q)
     add("attr:acidic_variants", "attribute_has_acceptance_criterion", "lit:pa_hold_acidic",
-        f"The held Protein A eluate is judged against the production bioreactor criterion for "
-        f"acidic variants, {ns['acid_bx'][0]:g}–{ns['acid_bx'][1]:g} %.",
-        "Hold study of the Protein A eluate", hold_q)
+        f"The held Protein A eluate carries the criterion in force for the production bioreactor "
+        f"output for acidic variants, {acid_bx[0]:g}–{acid_bx[1]:g} %.", hold, hold_q)
+    add("attr:fragments_lmw", "attribute_has_acceptance_criterion", "lit:pa_hold_fragments",
+        f"The held Protein A eluate is judged for fragments against the Protein A pool criterion, "
+        f"≤ {ns['frag_iac']:.2f} % by nrCE-SDS.", hold,
+        f"For fragments the criterion is that of the Protein A pool, ≤ {ns['frag_iac']:.2f} % by "
+        f"nrCE-SDS.")
     prior = "Unit-operation description and prior knowledge"
-    q_hcp = ("Pool host cell protein is therefore expected to rise with protein load and to rise "
-             "as elution buffer pH falls.")
+    q_hcp = ("Pool host cell protein is expected to rise with protein load and as elution buffer "
+             "pH falls, and the two may interact")
     add(PAPARAM_CONCEPT["Protein load"], "parameter_impacts_attribute", "attr:hcp",
-        "Pool host cell protein is expected to rise with protein load.", prior, q_hcp)
+        "Pool host cell protein is expected to rise with protein load.",
+        "Risk-based prioritization of parameters", q_hcp)
     add(PAPARAM_CONCEPT["Elution buffer pH"], "parameter_impacts_attribute", "attr:hcp",
-        "Pool host cell protein is expected to rise as elution buffer pH falls.", prior, q_hcp)
+        "Pool host cell protein is expected to rise as elution buffer pH falls.",
+        "Risk-based prioritization of parameters", q_hcp)
     add(PAPARAM_CONCEPT["Elution buffer pH"], "parameter_impacts_attribute", "attr:fragments_lmw",
         "A lower elution buffer pH may add acid-catalysed hinge hydrolysis, and so fragments, "
         "during elution.", prior,
         "A lower elution pH may add a little acid-catalysed hinge hydrolysis during elution.")
+    add(PAPARAM_CONCEPT["Protein load"], "parameter_impacts_attribute", "attr:leached_protein_a",
+        "Leached Protein A in ppm is expected to fall as protein load rises, if a similar amount "
+        "of ligand leaches in each cycle.", prior,
+        "If a similar amount of ligand leaches in each cycle, leached Protein A in ppm falls as "
+        "protein load rises")
     add(PAPARAM_CONCEPT["Load flow rate"], "parameter_impacts_attribute", "attr:step_yield",
         "Step yield is expected to fall with load flow rate, mainly at high load.", prior,
         "Yield is therefore expected to fall with flow rate mainly at high load.")
@@ -6530,6 +6611,7 @@ def build_plan_protein_a():
 
     # ---- report sections -------------------------------------------------------------------
     chg = "Changes in this revision"
+    sdm = "Scale-down model and its qualification"
     st("PCP-005 is the protocol for the process characterization of the Protein A chromatography "
        "step (Step 5), and applies PCMP-001 to the step.", "Purpose and scope",
        "This plan is the protocol for the process characterization of the Protein A "
@@ -6541,16 +6623,23 @@ def build_plan_protein_a():
        f"response-surface design, and {ns['n_uni']} are studied one factor at a time.")
     st("Version 2.0 is a protocol amendment issued under INV-001 after the studies of the step "
        "had been executed.", chg,
-       "This Version 2.0 is a protocol amendment issued after that execution, under INV-001.")
-    st("Version 1.0 of the plan contained no approved criterion for any output of the step.", chg,
-       "For this step, Version 1.0 of this plan contained no approved plan criterion for any output.")
-    st(f"Version 1.0 of PCR-005 applied one analysis limit, {ns['rev1_hcp']:,.0f} ng/mg for pool "
-       f"host cell protein, which was never approved; the Version 2.0 criterion of "
-       f"{ns['hcp_iac']:,.0f} ng/mg replaces it and is not a loosening of an approved criterion.",
-       chg, "This is not a loosening of an approved criterion.")
-    st("The intermediate acceptance criteria are derived without data from the studies they "
-       "judge, so they may be applied to studies already executed.", chg,
-       "The derivation uses no data from the studies it judges.")
+       f"This Version 2.0 is a protocol amendment issued after that execution, under the "
+       f"investigation {P.INV['id']}.")
+    st("Version 1.0 of the plan contained no approved criterion for the step.", chg,
+       "For this step, Version 1.0 of this plan contained no approved plan criterion.")
+    st(f"The Version 2.0 criterion for pool host cell protein, {ns['hcp_iac']:,.0f} ng/mg, is wider "
+       f"than the Version 1.0 analysis limit of {ns['rev1_hcp']:,.0f} ng/mg that Version 1.0 of "
+       f"PCR-005 applied.", chg,
+       f"The Version 2.0 criterion for pool host cell protein, {ns['hcp_iac']:,.0f} ng/mg, is "
+       f"wider than the Version 1.0 analysis limit of {ns['rev1_hcp']:,.0f} ng/mg.")
+    st("The Version 1.0 analysis limit was never an approved criterion, so the wider Version 2.0 "
+       "criterion does not loosen one.", chg,
+       "The Version 1.0 limit was never an approved criterion, so the wider Version 2.0 criterion "
+       "does not loosen one.")
+    st("The intermediate acceptance criteria are derived without data from the Protein A studies, "
+       "so they may be applied to studies already executed.", chg,
+       "Because this derivation uses no data from the Protein A studies, it may be applied to "
+       "studies that were already executed.")
     st("The amendment adds no run, removes none and repeats none; factors, ranges and designs "
        "are those of Version 1.0.", chg,
        "No run is added, removed or repeated by this amendment.")
@@ -6558,51 +6647,80 @@ def build_plan_protein_a():
        "with a downstream dependence is judged against an intermediate acceptance criterion.",
        "Quality attributes in scope",
        "The drug substance criteria do not apply to the Protein A pool directly.")
-    st("SEC overstates fragments in the Protein A matrix, so fragments are measured by "
-       "nrCE-SDS and SEC fragment results are not used for any decision.",
-       "Unit-operation description and prior knowledge",
-       "For this reason SEC overstates fragments in this matrix, and nrCE-SDS does not "
+    st("SEC overstates fragments in the Protein A pool, so fragments are measured by nrCE-SDS and "
+       "SEC fragment results are not used for any decision.", prior,
+       "For this reason SEC overstates fragments in the Protein A pool, and nrCE-SDS does not "
        "(INV-001 finding 6).")
+    st("For a quantity compared at both scales that has a criterion, each scale-down result is "
+       "translated to manufacturing scale by subtracting the offset before it is judged.", sdm,
+       "For a quantity that is compared at both scales and has a criterion, each scale-down result "
+       "is translated to manufacturing scale by subtracting the offset before it is judged.")
+    st("The model is qualified for such a quantity when its conclusion over the NOR is the same "
+       "with the offset at either end of its confidence interval.", sdm,
+       "The model is qualified for such a quantity when its conclusion over the NOR is the same "
+       "with the offset at either end of the confidence interval.")
+    st("Fragments are not measured in the scale-down qualification, so they carry no offset and "
+       "are judged as the response-surface model predicts them.", sdm,
+       "The qualification therefore has no fragment result at either scale, and fragments carry "
+       "no offset.")
+    st("Leached Protein A is expected to be lower in the laboratory column than at manufacturing "
+       "scale, because the manufacturing load is held longer before capture.",
+       "Risks and assumptions",
+       "Leached Protein A is expected to be lower in the laboratory column than at manufacturing "
+       "scale, because the manufacturing load is held longer before capture")
+    st("The difference between the scales for leached Protein A is its offset, and it is "
+       "subtracted as every offset is.", sdm,
+       "This difference is the offset of leached Protein A, and it is subtracted as every offset "
+       "is.")
     st("The response-surface model is the predictive model of the step, and every prediction "
        "and every PAR in PCR-005 comes from it.", "Statistical methods",
-       "Every prediction and every PAR in PCR-005 comes from it.")
-    st("The NOR-propagated PAR, judged on the 95 % predictive interval of a single batch, is the "
+       "The response-surface model is the predictive model of the step, and every prediction and "
+       "every PAR in PCR-005 comes from it.")
+    st("The NOR-propagated PAR, judged on the 95 % prediction interval of a single batch, is the "
        "one that supports a claim.", "The two analyses",
        "The NOR-propagated PAR is the one that supports a claim.")
-    st("Leached Protein A is expected to be higher at manufacturing scale than in the laboratory "
-       "column, because the harvest is held longer before capture and host cell proteases in the "
-       "load cleave more ligand; a difference in that direction is accepted.",
-       "Scale-down model and its qualification",
-       "At manufacturing scale the clarified harvest is held longer before capture, so host cell "
-       "proteases in the load cleave more ligand from the resin, and leached Protein A is expected "
-       "to be higher at manufacturing scale than in the laboratory column.")
     st("A PAR is never claimed beyond the range studied.", "Factors, ranges and study type",
-       "A PAR is never claimed beyond the range studied (PCMP-001 §7.6).")
+       "A PAR is never claimed beyond the range studied (PCMP-001, proven acceptable ranges).")
+    narrowed, notes = list(ns["NARROWED"]), pt.notes_text().split(CELL_SEP)
+    if len(narrowed) != len(notes):
+        raise ValueError(f"{pt.label}: {len(notes)} notes for {len(narrowed)} narrowed NORs")
+    for p, note in zip(narrowed, notes):
+        nor_now = P.CFG.unit_op(PAUO).param(p.key).nor
+        st(f"The {p.name.lower()} NOR in this plan, {p.nor[0]:g}–{p.nor[1]:g} {p.unit}, is the NOR "
+           f"against which the studies were planned and judged; PCR-005 Version 2.0 narrowed it to "
+           f"{nor_now[0]:g}–{nor_now[1]:g} {p.unit}.", "Factors, ranges and study type", note,
+           table_title=pt.caption)
     for key, row in iacrow.items():
         r = iac[iac["cqa"] == key].iloc[0]
-        st(f"The intermediate acceptance criterion for {names[key].lower()} at the Protein A step "
-           f"is the drug substance criterion carried back through a downstream worst-case "
-           f"clearance fold of {T.num(r['downstream_fold'])} and an increase of "
-           f"{T.num(r['downstream_added'])}, with no margin: "
-           f"{T.crit(r['iac_low'], r['iac_high'], r['spec_type'])}.",
+        moved = (" It is in force at a widened value: the A-Mab confidence bound of a downstream "
+                 "step replaced a platform worst case." if bool(r["widened"]) else "")
+        st(f"The intermediate acceptance criterion for {names[key]} at the Protein A step "
+           f"is the drug substance criterion carried back through a downstream clearance fold of "
+           f"{T.num(r['downstream_fold'])} and an increase of {T.num(r['downstream_added'])}, with "
+           f"no margin: {T.crit(r['iac_low'], r['iac_high'], r['spec_type'])}.{moved}",
            "Intermediate acceptance criteria", row, iacrow.header, iac_t.caption)
-    st("Leached Protein A is not a response of the cation exchange or anion exchange designs, so "
-       "the platform worst cases behind its criterion cannot be checked in this campaign and they "
-       "stand.", "Intermediate acceptance criteria",
-       "Leached Protein A is not a response of the cation exchange or anion exchange designs, so "
-       "the platform values for it cannot be checked in this campaign and they stand.")
+    st(f"From the platform worst cases alone, the criterion for pool host cell protein was "
+       f"{ns['hcp_apriori']:,.0f} ng/mg; the cation exchange bound widened it.",
+       "Intermediate acceptance criteria",
+       f"From the platform worst cases alone, the derivation gave {ns['hcp_apriori']:,.0f} ng/mg.")
+    st(f"The criterion for leached Protein A stays at its a priori value of {ns['lpa_apriori']:g} "
+       f"ppm, because leached Protein A is not a response of the cation exchange or anion exchange "
+       f"designs and its platform values cannot be checked in this campaign.",
+       "Intermediate acceptance criteria",
+       f"The criterion for leached Protein A is at its a priori value of {ns['lpa_apriori']:g} ppm, "
+       f"because leached Protein A is not a response of the cation exchange or anion exchange "
+       f"designs, so its platform values cannot be checked in this campaign.")
 
-    from annex_contract.concepts import Concept as _C
-    concepts = [_C(concept_id="step:protein_a", concept_type="PROCESS_STEP",
-                   canonical_name=PAUO_NAME,
-                   aliases=["Protein A", "Protein A capture", "capture step", "Step 5"],
-                   review_status="human_verified")]
-    concepts += [_C(concept_id=cid, concept_type="PROCESS_PARAMETER", canonical_name=name,
-                    review_status="human_verified") for name, cid in PAPARAM_CONCEPT.items()]
+    concepts = [Concept(concept_id="step:protein_a", concept_type="PROCESS_STEP",
+                        canonical_name=PAUO_NAME,
+                        aliases=["Protein A", "Protein A capture", "capture step", "Step 5"],
+                        review_status="human_verified")]
+    concepts += [Concept(concept_id=cid, concept_type="PROCESS_PARAMETER", canonical_name=name,
+                         review_status="human_verified") for name, cid in PAPARAM_CONCEPT.items()]
     concepts += _attr_concepts(ckeys + ["acidic_variants"])
-    concepts.append(_C(concept_id="attr:step_yield", concept_type="PERFORMANCE_ATTRIBUTE",
-                       canonical_name="Step yield", aliases=["yield"],
-                       review_status="human_verified"))
+    concepts.append(Concept(concept_id="attr:step_yield", concept_type="PERFORMANCE_ATTRIBUTE",
+                            canonical_name="Step yield", aliases=["yield"],
+                            review_status="human_verified"))
     concepts += _method_concepts(list(by_amv), {a: mdf.loc[i[0], "Method"]
                                                 for a, i in by_amv.items()})
     return S.GroundTruthAnnex(
@@ -6611,24 +6729,31 @@ def build_plan_protein_a():
         schema_extensions_used=COMMON_EXT + REV2_EXT,
         out_of_schema_notes=[
             "Classification is a result of the study, so every parameter_type is 'unclassified'. "
+            "ProcessParameter.NOR is the NOR the studies were planned and judged against, which "
+            "is the NOR the plan prints; the narrower protein load NOR that PCR-005 Version 2.0 "
+            "put in force is a statement anchored on the footnote of the parameter table. "
             "ProcessParameter.PAR carries the range studied, as everywhere in the corpus; the plan "
             "claims no proven acceptable range.",
             "The hold study S-PA-HLD and the nrCE-SDS retest of retained samples S-PA-RET have no "
             "StudyDesign.study_type. They appear only as rows of the execution-window table.",
             "acceptance_criteria holds the rows of the criteria-change table (Version 1.0 analysis "
             "limit, superseded, and the Version 2.0 criteria, in force). The criteria the held "
-            "eluate carries are the production bioreactor output criteria applied to a hold, so "
-            "they are assertions and not AcceptanceCriterionRecords of this step.",
+            "eluate carries are the production bioreactor output criteria in force and the "
+            "Protein A pool criterion for fragments, applied to a hold, so they are assertions "
+            "and not AcceptanceCriterionRecords of this step.",
             "Step yield is a performance attribute with no acceptance criterion; it is the concept "
             "attr:step_yield in the prior-knowledge assertions.",
-            "The planned design matrices (Appendices A and B) and the platform worst-case table are "
-            "not represented row by row. No rhetorical_spans: the Version 1.0 annex carried none for "
-            "this plan, and none were curated for Version 2.0. weak_claims is empty.",
+            "The methods table names each method by its title. Each AnalyticalMethod record is "
+            "also anchored on the row of the procedures table that ties the title to its AMV.",
+            "The planned design matrices (Appendices A and B), the factor letter codes and the "
+            "table of downstream values the criteria rest on are not represented row by row. No "
+            "rhetorical_spans: the Version 1.0 annex carried none for this plan, and none were "
+            "curated for Version 2.0. weak_claims is empty.",
         ] + _unrendered_note(unrendered),
         inventory=rev2_inventory(doc, f, "process_characterization_plan", PAUO_NAME,
                                  ["process characterization", "Protein A chromatography",
                                   "protocol amendment", "intermediate acceptance criteria",
-                                  "design of experiments", "hold study"]),
+                                  "scale-down offset", "design of experiments", "hold study"]),
         entities=entities, studies=studies,
         report_sections=[ReportSection(section_id=f"{doc}-summary", title="Plan summary",
                                        statements=ST)],
@@ -7233,7 +7358,14 @@ def _in_force_records(doc, f, sec, table):
 
 
 def build_master_plan():
-    """PCMP-001 Version 2.0: the master plan reissued with a-priori intermediate criteria."""
+    """PCMP-001 Version 2.0: the master plan reissued with a-priori intermediate criteria.
+
+    Fitted to the Version 2.0 text. Its tables are complex tables (``T.frame``, ``T.CTable`` and
+    the ``T.`` builders), read back through :func:`qmd_ctables` from the object the plan printed;
+    only the process-train table is still a ``show`` table. The parameter table shows the NOR in
+    force, so the parameter records carry that NOR, and each NOR a Version 2.0 report narrowed is
+    a statement anchored on its footnote.
+    """
     import doe_report as D
     import tables as T
     from annex_contract.assertions import AssertionStore
@@ -7242,44 +7374,58 @@ def build_master_plan():
     from annex_contract.results import ModularContribution
     from annex_contract.summaries import ReportSection
     doc, f = "PCMP-001", PCMP_FILE
-    ns, tabs = qmd_namespace("PCMP-001_master_plan.qmd")
+    qmd = "PCMP-001_master_plan.qmd"
+    ns, tabs = qmd_namespace(qmd)
+    ct = qmd_ctables(qmd)
     A, add, ST, st = _adders(doc, f)
+    text = _document_text(f)
     cap = {k: v[3] for k, v in tabs.items()}
 
     def sid(s):
         return f"{doc}_sec_{s}"
+    tdf = tabs["tbl-train"][1]                                     # show(steps_tab)
     train = captured_rows(tabs["tbl-train"], P.CFG.train_order)
-    cdf = tabs["tbl-cqa"][1]
-    ckeys = list(P.cqa_reg["key"])
-    crow = captured_rows(tabs["tbl-cqa"], ckeys)
-    pbs = T.parameters_by_step()
+    cqa_t, cdf = ct["tbl-cqa"]                                      # T.frame, ordered by category
+    key_of = dict(zip(P.cqa_reg["cqa"], P.cqa_reg["key"]))
+    cdf = cdf.assign(key=[key_of[c] for c in cdf["CQA"]]).set_index("key")
+    crow = ctable_rows(cqa_t, cdf.index)
+    pbs = ct["tbl-parameters-by-step"][0]                           # T.parameters_by_step()
     prow = ctable_rows(pbs, _pbs_keys())
-    eq_df = tabs["tbl-equipment"][1]
-    eqrow = captured_rows(tabs["tbl-equipment"])
-    ddf = tabs["tbl-designs"][1]
-    drow = captured_rows(tabs["tbl-designs"], ns["doe_keys"])
-    chdf = tabs["tbl-chronology"][1]
-    chrow = captured_rows(tabs["tbl-chronology"], chdf["Study"])
-    plrow = captured_rows(tabs["tbl-plans"], tabs["tbl-plans"][1]["Plan"])
-    vc = ns["vc_tab"]
-    vcrow = captured_rows(("md", vc, None), vc["Virus"])
-    sops = md_string_rows(P.all_sop_table())
-    iac_t = T.iac_derivation()
+    eq_t = ct["tbl-equipment"][0]                                   # T.calibration_windows(...)
+    eqdf = T.calibration_windows_data()                             # row i is body row i
+    eqrow = ctable_rows(eq_t)
+    if len(eqrow) != len(eqdf):
+        raise ValueError(f"{eq_t.label}: {len(eqrow)} rows for {len(eqdf)} studies")
+    des_t = ct["tbl-designs"][0]                                    # T.CTable from design_tab
+    drow = ctable_rows(des_t, ns["doe_keys"])
+    ch_t, chdf = ct["tbl-chronology"]                               # T.frame(chrono_tab)
+    chrow = ctable_rows(ch_t, chdf["Study"])
+    pl_t, pldf = ct["tbl-plans"]                                    # T.frame(plan_tab)
+    plrow = ctable_rows(pl_t, pldf["Plan"])
+    vc_t, vc = ct["tbl-viral"]                                      # T.frame(vc_tab)
+    vcrow = ctable_rows(vc_t, vc["Virus"])
+    sop_t, sop_df = ct["tbl-sops"]                                  # T.sop_references(...)
+    sops = ctable_rows(sop_t, sop_df["Reference"])
+    iac_t = ct["tbl-iac"][0]                                        # T.iac_derivation()
     in_force, iacrow = _in_force_records(doc, f, "Intermediate acceptance criteria", iac_t)
     iac = P.csv("iac.csv")
 
     # ---- entities --------------------------------------------------------------------------
-    steps = _corpus_steps(doc, f, sid("purpose"), "Purpose and scope")
+    steps = _corpus_steps(doc, f, sid("purpose"), "Purpose and scope", rows=train,
+                          roles={k: tdf.loc[tdf["Step"] == P.CFG.unit_op(k).step,
+                                            "Principal role"].iloc[0] for k in P.CFG.train_order},
+                          table_title=cap["tbl-train"])
     attrs = []
-    for i, r in enumerate(P.cqa_reg.to_dict("records")):
+    for r in P.cqa_reg.to_dict("records"):
+        c = cdf.loc[r["key"]]
         attrs.append(S.QualityAttribute(
             attribute_id=f"attr:{r['key']}", attribute_name=r["cqa"], attribute_type="CQA",
-            unit=r["unit"], acceptance_criteria=[f"{cdf['Acceptance'].iloc[i]} (drug substance)"],
-            associated_steps=[cdf["Formed or set at"].iloc[i]],
+            unit=r["unit"], acceptance_criteria=[f"{c['Acceptance']} (drug substance)"],
+            associated_steps=[c["Formed or set at"]],
             criticality_level=r["criticality"], tool1_score=int(r["tool1_score"]),
             tool2_severity=int(r["tool2_severity"]),
             source_references=[ref(doc, f, sid("cqa"), "Critical quality attribute framework",
-                                   crow[r["key"]], table_title=cap["tbl-cqa"],
+                                   crow[r["key"]], table_title=cqa_t.caption,
                                    table_id=f"{doc}_tab_cqa", table_header=crow.header)],
             metadata=meta()))
     preg = P.csv("parameter_classification.csv")
@@ -7302,33 +7448,30 @@ def build_master_plan():
                                    table_title=pbs.caption, table_id=f"{doc}_tab_params",
                                    table_header=prow.header)],
             metadata=meta()))
-    eq_ids = list(dict.fromkeys(eq_df["Equipment"]))
-    equipment = []
-    for e in eq_ids:
-        idx = list(eq_df.index[eq_df["Equipment"] == e])
-        equipment.append(S.Equipment(
-            equipment_id=f"equip:{e}", equipment_name=e,
-            equipment_type=eq_df.loc[idx[0], "Description"], site_name=P.SENDING_SITE,
-            source_references=[ref(doc, f, sid("sdm"), "Scale-down model strategy", eqrow[i],
-                                   table_title=cap["tbl-equipment"], table_id=f"{doc}_tab_eq",
-                                   table_header=eqrow.header) for i in idx],
-            metadata=meta()))
-    methods = []
-    amv_names = {}
+    eq_ids = list(dict.fromkeys(eqdf["Equipment"]))
+    first_row = {e: list(eqdf.index[eqdf["Equipment"] == e])[0] for e in eq_ids}
+    equipment = [S.Equipment(
+        equipment_id=f"equip:{e}", equipment_name=e,
+        equipment_type=eqdf.loc[first_row[e], "Description"], site_name=P.SENDING_SITE,
+        # the first row of each system names it; the rows below continue its merged cells
+        source_references=[ref(doc, f, sid("sdm"), "Scale-down model strategy", eqrow[first_row[e]],
+                               table_title=eq_t.caption, table_id=f"{doc}_tab_eq",
+                               table_header=eqrow.header)],
+        metadata=meta()) for e in eq_ids]
+    methods, amv_names = [], {}
     for rid, row in sops.items():
         if not rid.startswith("AMV-"):
             continue
-        amv_names[rid] = row.split(CELL_SEP)[1]
+        amv_names[rid] = sop_df.loc[sop_df["Reference"] == rid, "Title"].iloc[0]
         methods.append(S.AnalyticalMethod(
             method_id=rid, method_name=amv_names[rid], method_type=METHOD_TYPE.get(rid),
             associated_attributes=[f"attr:{a}" for a in METHOD_ATTRS.get(rid, [])],
             validation_status="validated",
             source_references=[ref(doc, f, sid("sdm"), "Scale-down model strategy", row,
-                                   table_title="Controlled procedures and method validations "
-                                               "cited in the characterization package.",
+                                   table_title=sop_t.caption, table_id=f"{doc}_tab_sops",
                                    table_header=sops.header)]
             + (size_variant_refs(doc, f, "Method for fragments", None, SIZE_VARIANT_TOKEN[rid],
-                                 _document_text(f)) if rid in SIZE_VARIANT_TOKEN else []),
+                                 text) if rid in SIZE_VARIANT_TOKEN else []),
             metadata=meta()))
     claims = P.CFG.raw()["iac"]["viral_claims"]
     vkey = {"lrv_xmulv": "xmulv_lrf", "lrv_mvm": "mvm_lrf"}
@@ -7348,9 +7491,7 @@ def build_master_plan():
                 contributing_steps=[P.UNIT_OP_TITLES[s] for s in vstep
                                     if s != sk and vkey[r.cqa] in claims[s]],
                 source_references=[ref(doc, f, sid("viral"), "Viral clearance claims", row,
-                                       table_title=cap.get("tbl-viral") or
-                                       "Platform claims per step (log10) and their sum against "
-                                       "the cumulative requirement of the drug substance.",
+                                       table_title=vc_t.caption, table_id=f"{doc}_tab_viral",
                                        table_header=vcrow.header)],
                 metadata=meta()))
     rels = []
@@ -7360,7 +7501,7 @@ def build_master_plan():
             source_document_id=doc, target_document_ref=plan,
             statement=f"{plan} is a Process Characterization Plan under PCMP-001.",
             source_references=[ref(doc, f, sid("register"), "Register of characterization plans",
-                                   row, table_title=cap["tbl-plans"], table_header=plrow.header)],
+                                   row, table_title=pl_t.caption, table_header=plrow.header)],
             metadata=meta()))
     entities = [
         S.SectionEntityExtraction(document_id=doc, section_id=sid("purpose"), process_steps=steps,
@@ -7374,23 +7515,14 @@ def build_master_plan():
         S.SectionEntityExtraction(document_id=doc, section_id=sid("register"),
                                   document_relationships=rels),
     ]
-    from annex_contract.results import Deviation
-    entities.append(S.SectionEntityExtraction(
-        document_id=doc, section_id=sid("sdm_dev"), deviations=[Deviation(
-            deviation_id="DEV-005-03", unit_operation=P.UNIT_OP_TITLES["protein_a"],
-            summary=f"One supplementary qualification study, {ns['post_ids']}, ran after the "
-                    f"Version 1.0 reports were approved, during INV-001.",
-            disposition="supplementary scale-down qualification runs",
-            source_references=[ref(doc, f, sid("sdm"), "Scale-down model strategy",
-                                   f"One supplementary qualification study, {ns['post_ids']} "
-                                   f"({ns['post_window']}), ran afterwards, during INV-001, under "
-                                   f"DEV-005-03.")],
-            metadata=meta())]))
 
     # ---- studies: every study of a schema type, on its chronology row (+ its design row) ---
     chrono = P.csv("study_chronology.csv")
+    # the study run after the Version 1.0 reports: a discrepancy from PCP-005, not a deviation
+    sdm2_q = (f"One supplementary qualification study of the Protein A scale-down model, "
+              f"{ns['post_ids']} ({ns['post_window']}), ran afterwards, while {ns['inv_id']} was "
+              f"open.")
     studies, unrendered = [], []
-    text = _document_text(f)
     for _, r in chrono.iterrows():
         stype = STUDY_TYPE.get(r["kind"])
         if stype is None:
@@ -7400,11 +7532,13 @@ def build_master_plan():
             continue
         k, uo = r["step"], P.CFG.unit_op(r["step"])
         refs = [ref(doc, f, sid("schedule"), "Deliverables and schedule", chrow[r["id"]],
-                    table_title=cap["tbl-chronology"], table_id=f"{doc}_tab_chrono",
+                    table_title=ch_t.caption, table_id=f"{doc}_tab_chrono",
                     table_header=chrow.header)]
+        if r["id"] == ns["post_id"]:
+            refs.append(ref(doc, f, sid("sdm"), "Scale-down model strategy", sdm2_q))
         kw = {}
         if r["kind"] in ("screening", "rsm"):
-            refs.append(ref(doc, f, sid("stats"), "Designs", drow[k], table_title=cap["tbl-designs"],
+            refs.append(ref(doc, f, sid("stats"), "Designs", drow[k], table_title=des_t.caption,
                             table_id=f"{doc}_tab_designs", table_header=drow.header))
             fac = D.screening_factors(k) if r["kind"] == "screening" else D.rsm_factors(k)
             kw = dict(factors=[uo.param(x).name for x in fac],
@@ -7431,13 +7565,14 @@ def build_master_plan():
             f"{P.UNIT_OP_TITLES[k]} has process parameter {name}.", "Risk-based prioritization",
             row, prow.header, pbs.caption)
     set_by = dict(zip(P.cqa_reg["key"], P.cqa_reg["set_by"]))
-    for i, r in enumerate(P.cqa_reg.to_dict("records")):
+    for r in P.cqa_reg.to_dict("records"):
+        c = cdf.loc[r["key"]]
         add(f"step:{set_by[r['key']]}", "step_has_quality_attribute", f"attr:{r['key']}",
-            f"{r['cqa']} is formed or set at {cdf['Formed or set at'].iloc[i]}.",
-            "Critical quality attribute framework", crow[r["key"]], crow.header, cap["tbl-cqa"])
+            f"{r['cqa']} is formed or set at {c['Formed or set at']}.",
+            "Critical quality attribute framework", crow[r["key"]], crow.header, cqa_t.caption)
         add(f"attr:{r['key']}", "attribute_has_acceptance_criterion", f"lit:{r['key']}_ds",
-            f"{r['cqa']} drug substance acceptance criterion: {cdf['Acceptance'].iloc[i]}.",
-            "Critical quality attribute framework", crow[r["key"]], crow.header, cap["tbl-cqa"])
+            f"{r['cqa']} drug substance acceptance criterion: {c['Acceptance']}.",
+            "Critical quality attribute framework", crow[r["key"]], crow.header, cqa_t.caption)
     for (sk, cqa), row in iacrow.items():
         r = iac[(iac["step_key"] == sk) & (iac["cqa"] == cqa)].iloc[0]
         add(f"attr:{cqa}", "attribute_has_acceptance_criterion", f"lit:{sk}_{cqa}_iac",
@@ -7447,12 +7582,12 @@ def build_master_plan():
             iac_t.caption)
     step_of_study = dict(zip(chrono["id"], chrono["step"]))
     for e in eq_ids:
-        i = list(eq_df.index[eq_df["Equipment"] == e])[0]
-        k = step_of_study[eq_df.loc[i, "Study"]]
+        i = first_row[e]
+        k = step_of_study[eqdf.loc[i, "Study"]]
         add(f"step:{k}", "step_uses_equipment", f"equip:{e}",
-            f"The {P.UNIT_OP_TITLES[k]} scale-down studies use {e} "
-            f"({eq_df.loc[i, 'Description']}).", "Scale-down model strategy", eqrow[i],
-            eqrow.header, cap["tbl-equipment"])
+            f"Study {eqdf.loc[i, 'Study']} of {P.UNIT_OP_TITLES[k]} used {e} "
+            f"({eqdf.loc[i, 'Description']}).", "Scale-down model strategy", eqrow[i],
+            eqrow.header, eq_t.caption)
 
     # ---- the one superseded criterion the master plan states, and the report sections -----
     r1 = ns["r1_cex_agg"]
@@ -7464,6 +7599,7 @@ def build_master_plan():
                    f"In Version 1.0 the cation exchange pool was judged against an aggregate limit "
                    f"of {ns['r1_cex_agg_hi']} % HMW."))]
     chg = "Changes in this revision"
+    verif = "Verification of the platform worst cases"
     st("PCMP-001 governs the Stage 1 process characterization of the A-Mab drug substance "
        "process, under the Process Transfer Plan PTP-001.", "Purpose and scope",
        "This plan governs the Stage 1 process characterization of the A-Mab drug substance process.")
@@ -7472,12 +7608,35 @@ def build_master_plan():
        "Each Process Characterization Plan (PCP-003 to PCP-010) applies this framework to one step.")
     st("Version 1.0 of the master plan defined no criteria for step outputs; Version 2.0 is "
        "issued under INV-001.", chg, "Version 1.0 of this plan defined no criteria for step outputs.")
-    st("Version 2.0 defines intermediate acceptance criteria for the step outputs by one rule "
-       "that uses no data from the studies it judges, as the corrective action for INV-001 "
-       "findings 1 to 3.", chg, "This is the corrective action for INV-001 findings 1 to 3.")
-    st("Version 2.0 sets nrCE-SDS as the method for fragments at every step.", "Method for fragments",
-       "One method across the train is needed because a fragment balance across steps cannot mix "
-       "two methods.")
+    st("Version 2.0 defines intermediate acceptance criteria for the step outputs by a rule that "
+       "uses no data from the studies it judges.", chg,
+       "The rule that derives them uses no data from the studies it judges.")
+    st("The intermediate acceptance criteria replace the Version 1.0 step criteria, the corrective "
+       "action for INV-001 findings 1 and 2.", chg,
+       "They replace the Version 1.0 step criteria described above (INV-001 findings 1 and 2).")
+    st("Version 2.0 qualifies each scale-down model by its offset from manufacturing scale, not by "
+       "a test of equivalence, and states every judgement against a criterion at manufacturing "
+       "scale.", chg,
+       "It qualifies each scale-down model by its offset from manufacturing scale, not by a test "
+       "of equivalence, and states every judgement against a criterion at manufacturing scale")
+    st(f"Version 1.0 judged the cation exchange pool against an aggregate limit of "
+       f"{ns['r1_cex_agg_hi']} % HMW; Version 2.0 credits no later step with aggregate removal, so "
+       f"the pool carries the drug substance criterion, {ns['cex_agg_iac']} %.", chg,
+       "The cation exchange pool therefore carries the drug substance criterion itself")
+    st("A scale-down model is qualified for each output by the offset between the scales, and "
+       "every judgement of a scale-down result against a criterion first subtracts that offset.",
+       "Scale-down model qualification",
+       "It is qualified by the offset between the scales, not by a test of equivalence.")
+    st(f"{ns['post_ids']} ran after the Version 1.0 reports were approved, to narrow the confidence "
+       f"interval of the offset for host cell protein in the Protein A pool; PCR-005 records it as "
+       f"discrepancy {ns['pd_id']} from {ns['pd_plan']}, not as a deviation.",
+       "Scale-down model strategy",
+       f"They are work that the Protein A plan {ns['pd_plan']} did not foresee, and the Protein A "
+       f"report {ns['pd_report']} records them as discrepancy {ns['pd_id']} from that plan.")
+    st(f"Version 2.0 sets nrCE-SDS ({ns['cesds_amv']}) as the method for fragments in every study "
+       f"at every step from {ns['amd_date']} ({ns['amd_id']}).", "Method for fragments",
+       f"From {ns['amd_date']}, fragments are measured by nrCE-SDS ({ns['cesds_amv']}, under "
+       f"{ns['cesds_sop']}) in every study at every step.")
     st("The screening model identifies effects, and the response-surface model is the predictive "
        "model from which every prediction, PAR and design space in the package comes.",
        "Models, and what each model is for",
@@ -7485,31 +7644,62 @@ def build_master_plan():
     st("No report should claim prediction from a screening model.",
        "Models, and what each model is for",
        "No report should claim prediction from a screening model.")
-    st("The decision statistic is the 95 % predictive interval of a single batch for a quality "
-       "attribute and the 2.5th percentile of the mean log reduction for viral clearance.",
-       "Proven acceptable ranges",
-       "For viral clearance it is the 2.5th percentile of the mean log reduction, without the "
-       "residual.")
-    st("The NOR-propagated PAR is the one that supports a claim, and a PAR is never extended "
-       "beyond the characterized range.", "Proven acceptable ranges",
-       "A PAR is never extended beyond the characterized range.")
+    st("For a quality attribute the NOR-propagated analysis compares the 95 % prediction interval "
+       "of a single batch with the criterion.", "Proven acceptable ranges",
+       "For a quality attribute it compares the 95 % prediction interval of a single batch, "
+       "because a single batch is what must meet the criterion.")
+    st("For viral clearance the NOR-propagated analysis compares the worst case within the NOR: "
+       "the lowest mean predicted log reduction over every combination of NOR low, set-point and "
+       "NOR high of the other factors must meet the claim of the step.",
+       "Proven acceptable ranges", "For viral clearance it compares the worst case within the NOR.")
+    st("The NOR-propagated PAR is the one that supports a claim.", "Proven acceptable ranges",
+       "The NOR-propagated PAR is the one that supports a claim.")
+    st("A PAR that reaches the edge of the characterized range is reported as reaching it, and no "
+       "claim is made beyond it.", "Proven acceptable ranges",
+       "A PAR that reaches the edge of the characterized range is reported as reaching it, and no "
+       "claim is made beyond it.")
     st("Each drug substance criterion is carried backward through the train using the platform "
        "worst case of each downstream step, with no margin applied.",
        "Intermediate acceptance criteria",
-       "For a step that adds to an attribute, it is the largest increase observed.")
-    st(f"Of the {ns['n_verif_testable']} platform worst cases that could be checked, "
-       f"{ns['n_verif_met']} were confirmed and {ns['n_verif_failed']} was not: cation exchange "
-       f"cleared aggregate {ns['cex_agg_pred']}-fold against a platform worst case of "
-       f"{ns['cex_agg_assumed']}-fold, which tightened {ns['n_tight']} aggregate criteria "
-       f"upstream of it.", "Verification of the platform worst cases",
-       f"Of those {ns['n_verif_testable']}, {ns['n_verif_met']} were confirmed and "
-       f"{ns['n_verif_failed']} was not.")
-    st("Data may tighten a criterion and may never loosen it.",
-       "Verification of the platform worst cases",
-       "Data may tighten a criterion and may never loosen it.")
+       "Each drug substance criterion is carried backward through the train, step by step, using "
+       "the worst case that each downstream step showed on the platform.")
+    st(f"For host cell protein the Protein A pool criterion is {ns['pa_hcp_iac']} ng/mg, widened "
+       f"from {ns['pa_hcp_apriori']} ng/mg a priori by the cation exchange bound, and the cation "
+       f"exchange pool criterion stays at {ns['cex_hcp_iac']} ng/mg.",
+       "Intermediate acceptance criteria",
+       f"The Protein A pool criterion is therefore {ns['pa_hcp_iac']} ng/mg, and the cation "
+       f"exchange pool criterion stays at {ns['cex_hcp_iac']} ng/mg.")
+    st(f"Of the {ns['n_iac']} intermediate acceptance criteria, {ns['n_apriori']} are in force at "
+       f"their a priori value and verification changed {ns['n_moved']}.",
+       "Intermediate acceptance criteria",
+       f"{ns['n_apriori']} are in force at their a priori value and verification changed "
+       f"{ns['n_moved']}.")
+    st("Verification may change a criterion in either direction: an A-Mab worst case worse than "
+       "the platform tightens it, and a better 95 % confidence bound from an adequate model "
+       "widens it.", verif, "Verification may change a criterion in either direction, by the "
+                            "following rule.")
+    st("In both directions the confidence bound, on its unfavourable side, replaces the platform "
+       "value, and the point prediction never does.", verif,
+       "In both directions the bound, on its unfavourable side, replaces the platform value, and "
+       "the point prediction never does.")
+    st(f"Of the {ns['n_verif']} platform worst cases the criteria assume, {ns['n_verif_testable']} "
+       f"can be checked against the response-surface designs of {ns['vtest_steps']}.", verif,
+       f"Of these, {ns['n_verif_testable']} are responses of the response-surface designs of "
+       f"{ns['vtest_steps']}, and they can be checked.")
+    st(f"The 95 % confidence bound replaced the platform value for {ns['vwid_list']}.", verif,
+       f"The 95 % confidence bound was better than the platform worst case for {ns['vwid_list']}, "
+       f"and these bounds replaced the platform values.")
+    st(f"For {ns['vinad_list']} the bound was also better, but the model does not meet the "
+       f"adequacy criteria, so the platform values stand.", verif,
+       f"For {ns['vinad_list']} the bound was also better, but the model does not meet the "
+       f"adequacy criteria, so the platform values stand.")
+    st("The aggregate clearance of cation exchange within its NOR is lower than the platform worst "
+       "case, which tightened the aggregate criteria upstream of cation exchange.", verif,
+       "Verification found that the aggregate clearance of cation exchange within its NOR is lower "
+       "than the platform worst case.")
     st("The viral clearance claims meet the cumulative requirements with little room, so a step "
-       "that falls short of its claim cannot be offset by another step.", "Viral clearance claims",
-       "A step that falls short of its claim therefore cannot be offset by the surplus of another "
+       "that falls short of its claim cannot be made up by another step.", "Viral clearance claims",
+       "A step that falls short of its claim therefore cannot be made up by the surplus of another "
        "step.")
     st(f"A Cpk of at least {ns['cpk_target']} is expected of a CQA in routine manufacture, and a "
        f"CQA below {ns['cpk_min']} needs an action in the control strategy.",
@@ -7518,9 +7708,31 @@ def build_master_plan():
     st("Acidic variants have a two-sided criterion, and their capability is assessed against "
        "both ends.", "Capability, and the integrated model",
        "and their capability is assessed against both ends.")
-    st("A step plan is approved before the first characterization run of its step, and PCMP-001 "
-       "is consolidated by PCMR-001, which is written last.", "Deliverables and schedule",
-       "A step plan is approved before the first characterization run of its step.")
+    st("In Version 1.0 each step plan was approved before the first characterization run of its "
+       "step, and each report after the data of all its studies were complete; PCMR-001 is "
+       "written last.", "Deliverables and schedule",
+       "In Version 1.0 each step plan was approved before the first characterization run of its "
+       "step, and each report after the data of all its studies were complete.")
+    # the NORs a Version 2.0 report narrowed: the table prints the NOR in force and footnotes it
+    notes = {n.split(" ", 1)[0]: n for n in pbs.notes_text().split(CELL_SEP)}
+    n_narrowed = 0
+    for (k, name), row in prow.items():
+        # the marker is its own run, so it reads " c1)" after the NOR; a row continuing the
+        # merged step cell starts with "| ", so the NOR is not at a fixed cell index
+        m = re.search(r"\s(c\d+\))(?=\s|$)", row)
+        if not m:
+            continue
+        p = P.CFG.unit_op(k).param(next(q.key for q in P.CFG.unit_op(k).parameters
+                                        if q.name == name))
+        n_narrowed += 1
+        st(f"At Version 2.0, PCR-{P.CFG.unit_op(k).step:03d} narrowed the NOR of "
+           f"{name[0].lower() + name[1:]} at {T.STEP_NAME[k]} from "
+           f"{p.nor_characterized[0]:g}–{p.nor_characterized[1]:g} to "
+           f"{p.nor[0]:g}–{p.nor[1]:g} {p.unit}; the table gives the NOR in force.",
+           "Risk-based prioritization", notes[m.group(1)], table_title=pbs.caption)
+    if n_narrowed != sum(list(p.nor) != list(p.nor_characterized)
+                         for k in P.CFG.train_order for p in P.CFG.unit_op(k).parameters):
+        raise ValueError(f"{pbs.label}: a narrowed NOR has no footnote marker")
 
     concepts = _corpus_step_concepts()
     concepts += [Concept(concept_id=pid[k], concept_type="PROCESS_PARAMETER", canonical_name=k[1],
@@ -7535,23 +7747,31 @@ def build_master_plan():
         schema_extensions_used=COMMON_EXT + REV2_EXT,
         out_of_schema_notes=[
             "The master plan spans the whole train: entities are the Step 3-10 process steps, the "
-            "CQA register, every parameter of the train with the class its report assigned, the "
-            "instrumented scale-down systems and the method validations of the package.",
+            "CQA register, every parameter of the train with the class its report assigned and "
+            "the NOR in force, the instrumented scale-down systems and the method validations of "
+            "the package. Each NOR a Version 2.0 report narrowed is a report statement anchored "
+            "on its footnote of the parameter table.",
             "acceptance_criteria holds one in-force Version 2.0 record per row of the intermediate "
             "acceptance criteria table (the plan prints no criteria-change table), plus the one "
             "Version 1.0 limit the plan states, the cation exchange aggregate limit, as superseded. "
-            "Two in-force records are tightened values; their a-priori values are stated in prose "
-            "and were never in force, so they have no record.",
+            "The in-force records that verification moved carry a value with an A-Mab confidence "
+            "bound in it; their a priori values are stated in prose and were never in force, so "
+            "they have no record.",
             "Studies are every chronology row of a schema study type. Hold studies, the method "
             "comparability study S-CEX-FRC, the nrCE-SDS retests and the invalidated first anion "
-            "exchange execution S-AEX-SUP have no StudyDesign.study_type and are left out.",
-            "The campaign thresholds for model adequacy and capability, the decision statistics and "
-            "the classification rules have no schema field; they are report_sections statements.",
+            "exchange execution S-AEX-SUP have no StudyDesign.study_type and are left out. The "
+            "supplementary qualification study S-PA-SDM2 is a discrepancy from PCP-005 that "
+            "PCR-005 records, not a deviation, and the schema has no record for a plan "
+            "discrepancy; it is a report statement.",
+            "Each instrumented system is anchored on the first row of its group in the calibration "
+            "table, which names it; the rows below continue its merged cells.",
+            "The campaign thresholds for model adequacy and capability, the decision statistics, "
+            "the verification rule and the classification rules have no schema field; they are "
+            "report_sections statements.",
             "The size-variant methods table anchors the SEC (AMV-3011) and nrCE-SDS (AMV-3020) "
             "method records on the rows that name each method and occur once in the document.",
             "No rhetorical_spans: the Version 1.0 annex carried none for the master plan, and none "
             "were curated for Version 2.0. weak_claims is empty.",
-
         ] + _unrendered_note(unrendered),
         inventory=rev2_inventory(doc, f, "process_characterization_master_plan",
                                  "A-Mab drug substance",

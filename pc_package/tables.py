@@ -189,7 +189,7 @@ def iac_derivation(steps: Optional[List[str]] = None, label="tbl-iac") -> CTable
             else:
                 deriv = [num(r["downstream_fold"]), num(r["downstream_added"])]
                 if r["basis"] == "drug substance":
-                    basis, m = "Drug substance^a)^", "a)"
+                    basis, m = "DS criterion^a)^", "a)"
                 elif "tightened and widened" in r["basis"]:
                     basis, m = "Carried back, tightened^b)^ and widened^e)^", None
                     marks.update({"b)", "e)"})
@@ -223,7 +223,7 @@ def iac_derivation(steps: Optional[List[str]] = None, label="tbl-iac") -> CTable
                "was better than the platform worst case. The bound replaced it."),
     ]
     step_h = [] if one_step else [C("Step output", rs=2)]
-    step_a = [] if one_step else ["P{2.2cm}"]
+    step_a = [] if one_step else ["P{2.9cm}"]      # one line for most step names
     return CTable(
         header=[[C("Attribute", rs=2), C("DS criterion", rs=2), *step_h,
                  C("Downstream worst case", cs=2), C("IAC", rs=2),

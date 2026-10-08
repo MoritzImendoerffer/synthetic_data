@@ -447,7 +447,9 @@ def dev_register(doc_id):
                           "detected_during": "Detected during", "disposition": "Disposition"})
     # dispositions are config tokens (supplementary_runs_executed); print them as words
     d["Disposition"] = d["Disposition"].astype(str).str.replace("_", " ")
-    return d[["Deviation", "Summary", "Detected during", "Disposition"]].to_markdown(index=False)
+    return md_table(["Deviation", "Summary", "Detected during", "Disposition"],
+                    d[["Deviation", "Summary", "Detected during", "Disposition"]].astype(str).values.tolist(),
+                    [16, 38, 30, 16])
 
 
 def discrepancy_register(doc_id):
@@ -458,7 +460,7 @@ def discrepancy_register(doc_id):
     if not ds:
         return ""
     rows = [[d["id"], d["subject"], f"{d['plan']}: {d['planned']}", d["done"], d["reason"]] for d in ds]
-    return md_table(["Discrepancy", "Subject", "Planned", "Done", "Reason"], rows, [12, 18, 22, 22, 26])
+    return md_table(["Discrepancy", "Subject", "Planned", "Done", "Reason"], rows, [16, 18, 20, 20, 26])
 
 
 def dev_facts(doc_id):

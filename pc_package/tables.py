@@ -225,12 +225,12 @@ def iac_derivation(steps: Optional[List[str]] = None, label="tbl-iac") -> CTable
     step_h = [] if one_step else [C("Step output", rs=2)]
     step_a = [] if one_step else ["P{2.2cm}"]
     return CTable(
-        header=[[C("Attribute", rs=2), C("Drug-substance\ncriterion", rs=2), *step_h,
-                 C("Downstream worst case", cs=2), C("Intermediate\nacceptance\ncriterion", rs=2),
+        header=[[C("Attribute", rs=2), C("DS criterion", rs=2), *step_h,
+                 C("Downstream worst case", cs=2), C("IAC", rs=2),
                  C("Basis", rs=2)],
                 ["Clearance fold", "Increase"]],
         body=body, align=["P{2.4cm}", "l", *step_a, "r", "r", "l", "P{2.6cm}"], size="footnotesize",
-        notes=[n for n in notes if n[0] in marks] + [("", "Computed from unrounded values. A criterion recomputed from the rounded values shown can differ in its last digit.")], notes_per_row=True,
+        notes=[n for n in notes if n[0] in marks] + [("", "DS, drug substance. IAC, intermediate acceptance criterion. Increase, in the unit of the criterion.")] + [("", "Computed from unrounded values. A criterion recomputed from the rounded values shown can differ in its last digit.")], notes_per_row=True,
         caption="Intermediate acceptance criteria and their derivation from the drug-substance "
                 "criteria" + (f", {STEP_NAME[t['step_key'].iloc[0]]} output" if one_step else "") + ".",
         label=label, resize=True)
@@ -408,11 +408,15 @@ def worst_case_verification(steps: Optional[List[str]] = None, label="tbl-iac-ve
                 while i + n < len(kinds) and kinds[i + n] == kinds[i]:
                     n += 1
                 kcell = [C(kind, rs=n) if n > 1 else kind]
+            if pd.isna(r["predicted_nor"]):
+                camp = [C("not a response^a)^", cs=4)]          # nothing to verify: one cell
+            else:
+                camp = [nt(r["observed_edge"]), nt(r["predicted_nor"]), nt(r["predicted_nor_bound95"]), out]
             row = ([C(STEP_NAME[sk], rs=len(g))] if i == 0 else []) + [
-                ATTR_NAME[r["cqa"]].split(" (")[0], *kcell, num(r["assumed"]), nt(r["observed_edge"]),
-                nt(r["predicted_nor"]), nt(r["predicted_nor_bound95"]), out]
+                ATTR_NAME[r["cqa"]].split(" (")[0], *kcell, num(r["assumed"]), *camp]
             body.append(row)
-    notes = [("a)", "Not a response of the response-surface study at this step."),
+    notes = [("a)", "Not a response of the response-surface study at this step, so the platform "
+                    "value stands unverified."),
              ("b)", "The criteria upstream of this step were recalculated with the 95 % confidence "
                     "bound of the value predicted within the NOR."),
              ("c)", "The 95 % confidence bound is better than the platform worst case. The criteria "
@@ -548,7 +552,9 @@ def criteria_results(step: str, label: Optional[str] = None) -> CTable:
         body=body, align="llrrl",
         notes=[("a)", "Judged at every combination of NOR low, set-point and NOR high. Quality "
                       "attributes: the 95 % prediction interval of a single run (t quantile, coefficient "
-                      "and residual uncertainty). Viral clearance: the mean prediction."),
+                      "and residual uncertainty)."
+                      + (" Viral clearance: the mean prediction." if any(str(x).startswith("lrv")
+                                                                        for x in t["cqa"]) else "")),
                ("b)", "At manufacturing scale: the scale-down prediction minus the offset of the "
                       "scale-down model for this output.")][:2 if any_off else 1],
         caption=f"{STEP_NAME[step]} outputs against their intermediate acceptance criteria.",
@@ -689,27 +695,34 @@ def sdm_offsets(steps: Optional[List[str]] = None, studies: Optional[List[str]] 
                 q = yn(r["qualified"])
             else:
                 concl = ["no criterion^a)^"]
-                q = "Yes^a)^"
+                q = "n.a.^a)^"
             body.append(lead + [name + (f" ({unit})" if unit else ""), str(r["n_sd"]), str(r["n_m"]),
                                 f(r["mean_sd"]), f(r["mean_m"]), f(r["offset"]),
                                 f"{f(r['lo'])} to {f(r['hi'])}", *concl, q])
     notes = [("a)", "The output has no acceptance criterion at this step, so no conclusion depends "
-                    "on its offset. The offset is recorded.")]
+                    "on its offset and qualification does not apply. The offset is recorded.")]
     used = any(not j for j in t["judged"])
-    legend = [("", "SD, scale-down model. Mfg, manufacturing scale. Offset, scale-down mean minus "
+    legend = [("", "SDM, scale-down model. Mfg, manufacturing scale. Offset, scale-down mean minus "
                    "manufacturing mean. Met over NOR: the criterion is met at every combination of NOR "
                    "low, set-point and NOR high, with the offset at the low end of its interval, at its "
                    "estimate (est.) and at the high end.")]
-    return CTable(
-        header=[[C("Step", rs=2), C("Output", rs=2), C("Runs", cs=2),
+    header = [[C("Step", rs=2), C("Output", rs=2), C("Runs", cs=2),
                  C("Mean", cs=2), C("Offset", cs=2),
                  C("Met over NOR\n(low/est./high)", rs=2), C("Qualified", rs=2)],
-                ["SD", "Mfg", "SD", "Mfg", "Estimate", f"{ci} % CI"]],
-        body=body, align=["P{2.0cm}", "P{2.6cm}", "c", "c", "r", "r", "r", "P{1.6cm}", "P{2.4cm}", "c"],
+                ["SDM", "Mfg", "SDM", "Mfg", "Estimate", f"{ci} % CI"]]
+    align = ["P{2.0cm}", "P{2.6cm}", "c", "c", "r", "r", "r", "P{1.6cm}", "P{2.4cm}", "c"]
+    one = t["step_key"].nunique() == 1
+    if one:
+        header, body = _drop_step_column(header, body)
+        align = align[1:]
+    sub = (f", {STEP_NAME[t['step_key'].iloc[0]]}" if one else "") + (
+        ", planned runs only" if studies else "")
+    return CTable(
+        header=header, body=body, align=align,
         size="footnotesize",
         notes=(notes if used else []) + legend, notes_per_row=True,
         caption=caption or ("Offsets of the scale-down models (scale-down minus manufacturing scale) "
-                            "and the qualification of each model for each output."),
+                            f"and the qualification of each model for each output{sub}."),
         label=label, resize=True)
 
 

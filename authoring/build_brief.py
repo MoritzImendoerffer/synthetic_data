@@ -450,7 +450,18 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
       "(`INV`).\n")
     w(f"- **Method decision:** {P.AMD['id']}, {P.AMD['date']}: {P.AMD['title']} (`AMD`).\n")
     w("- **Revision history:** `revision_history(DOC)` under an unnumbered heading after the "
-      "approvals. The story is STORY_BIBLE §9b; the findings are numbered there.\n\n")
+      "approvals. The story is STORY_BIBLE §9b; the findings are numbered there.\n")
+    w("- **Abbreviations:** `abbreviations_table([(abbreviation, meaning), ...])`, the pairs this "
+      "document uses (template.qmd).\n")
+    pds = P.PLAN_DISCREPANCIES.get(doc_id, [])
+    if pds:
+        w("- **Discrepancies from the plan** (`discrepancy_register(DOC)`, `PLAN_DISCREPANCIES`). "
+          "Work the plan did not foresee, with no departure from a procedure. Never call one a "
+          "deviation:\n")
+        for d in pds:
+            w(f"  - {d['id']}: {d['subject']}. Planned ({d['plan']}): {d['planned']}. Done: "
+              f"{d['done']}. Reason: {d['reason']}.\n")
+    w("\n")
     w("### Study chronology — `csv(\"study_chronology.csv\")`\n\n")
     ch = P.csv("study_chronology.csv")
     if key is not None:
@@ -524,12 +535,23 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
             calls.append("T.method_comparability()")
         if key == "aex" and is_report:
             calls.append('T.doe_results("aex", "rsm", superseded=True)')
+        has_sdm = key in set(P.csv("sdm_qualification.csv")["step"])
+        if is_report and has_sdm:
+            calls.append(f'T.sdm_offsets(["{key}"])')
+            for d in P.PLAN_DISCREPANCIES.get(doc_id, []):
+                planned = [s_ for s_ in P.csv("sdm_qualification.csv").query("step == @key")["study"].unique()
+                           if s_ not in d.get("studies", [])]
+                calls.append(f'T.sdm_offsets(["{key}"], studies={planned!r}, label="tbl-sdm-offsets-planned")')
     else:
         calls += {"INV-001": ["T.criteria_change()", "T.method_comparability()", "T.methods_by_study()",
-                              "T.iac_derivation()", "T.worst_case_verification()"],
-                  "PCMP-001": ["T.iac_derivation()", "T.methods_by_study()", "T.parameters_by_step()"],
+                              "T.iac_derivation()", "T.worst_case_verification()", "T.calibration_windows()"],
                   "PCMR-001": ["T.iac_derivation()", "T.worst_case_verification()", "T.methods_by_study()",
-                               "T.parameters_by_step()", "T.criteria_change()"],
+                               "T.parameters_by_step()", "T.criteria_change()", "T.studies_overview()",
+                               'T.pp_cqa_matrix("studied")', 'T.pp_cqa_matrix("affected")',
+                               'T.model_effects_overview(["bioreactor", "protein_a", "viral_inactivation"], label="tbl-model-effects-1")',
+                               'T.model_effects_overview(["cex", "aex", "virus_filtration"], label="tbl-model-effects-2")',
+                               "T.sdm_offsets()"],
+                  "PCMP-001": ["T.iac_derivation()", "T.methods_by_study()", "T.parameters_by_step()"],
                   "PTP-001": ["T.parameters_by_step()", "T.methods_by_study()"],
                   "RA-001": ["T.methods_by_study()"]}.get(doc_id, [])
     for c in calls:
@@ -570,7 +592,7 @@ def build(doc_id: str, review: bool = False) -> str:
       "> **This brief is a data sheet, not a style model.** It is written in terse note form "
       "with dashes, bold labels and fragments because it is a lookup table. The report's prose "
       "must not read like it. For voice, use `REGISTER_EXEMPLAR.md` (verbatim passages from "
-      "the four published human sources) and the ten rules in WRITING_GUIDE §2. This brief "
+      "the four published human sources) and the eleven rules in WRITING_GUIDE §2. This brief "
       "carries no counter; the reviewer's table is `build_brief.py --review`.\n\n")
 
     # 1. Identity ---------------------------------------------------------------

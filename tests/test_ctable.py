@@ -79,3 +79,18 @@ def test_render_docx_merges_and_grounds(tmp_path):
     for t in (t1, t2):
         for row in t.header_rows() + t.rows() + [t.notes_text()]:
             assert normalize(row) in text, row
+
+
+def test_line_break_in_a_cell():
+    t = CTable(header=[["A", "B"]], body=[["x\ny", "z"]], caption="c.", label="tbl-lb",
+               align=["P{2cm}", "l"])
+    assert r"x\newline y" in t.latex()
+    assert "x<br>y" in t.html()
+    assert t.rows() == ["x y | z"]          # the DOCX line break reads as a space
+
+
+def test_landscape_wraps_only_the_pdf_twin():
+    t = CTable(header=[["A"]], body=[["x"]], caption="c.", label="tbl-ls", landscape=True)
+    out = t.render()
+    assert out.index(r"\begin{landscape}") < out.index("::: {#tbl-ls}") < out.index(r"\end{landscape}")
+    assert out.count('when-format="pdf"') == 3 and out.count('when-format="docx"') == 1

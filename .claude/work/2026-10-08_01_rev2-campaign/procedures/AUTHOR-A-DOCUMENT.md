@@ -118,6 +118,12 @@ only.
 > 6. Which sentences read as written by a machine rather than by a process scientist (padding,
 >    restatement, hedged emphasis, a sentence that says nothing a reader would miss)? A sentence
 >    that is plain and short is not a flag.
+> 7. Can each sentence be understood by a reader in the field who has not read the rest of the
+>    document? Flag a sentence that refers to something by a code or label alone (a finding
+>    number, a rule code, a study code, a criterion code) when the thing is not named in the same
+>    sentence, and a sentence whose subject is an abstract stand-in for what was done or found
+>    ("the safety factor stood in for the worst case of downstream performance"). Say in a few
+>    words what the sentence should name instead.
 >
-> Report: which model you are, the flagged sentences grouped by question, and the six yes/no
-> answers (for question 6, "yes" means no sentence was flagged).
+> Report: which model you are, the flagged sentences grouped by question, and the seven yes/no
+> answers (for questions 6 and 7, "yes" means no sentence was flagged).

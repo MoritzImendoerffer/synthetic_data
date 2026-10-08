@@ -239,9 +239,18 @@ priori:
 - **Why applying them retrospectively is acceptable.** The derivation uses no data from the
   studies it judges.
 - **Verification.** Each report checks the worst cases that the criteria upstream of its step
-  rely on. Data may tighten a criterion and never loosen it. One assumption was not confirmed:
-  within its NOR, cation exchange cleared aggregate less than the platform worst case. That
-  tightened the aggregate criteria upstream of cation exchange. Whether any proven acceptable
+  rely on. The rule, stated in PCMP-001 before any study, is: where a step does worse within its
+  NOR than the platform worst case, the A-Mab prediction replaces the platform value and the
+  criteria upstream tighten. Where the A-Mab data show, at the 95 % confidence bound, that a step
+  does better than the platform worst case, that bound replaces the platform value and the
+  criteria upstream widen (owner's decision 2026-10-08: "if the data supports it, a criterion
+  could be widened, but it needs good arguments"). The point prediction is never used to widen.
+  Each report that relies on a widened criterion gives the argument: the bound, the runs behind
+  it, and why the downstream step's performance at A-Mab is known well enough. Which criteria
+  tightened and which widened is a result read from `iac.csv` (`tightened`, `widened`), never
+  typed. One assumption was not confirmed: within its NOR, cation exchange cleared aggregate less
+  than the platform worst case. That tightened the aggregate criteria upstream of cation
+  exchange. Whether any proven acceptable
   range moved because of it is a result. Each affected report states it from its own PAR table,
   and nothing here asserts it.
 - **The flow of the derivation.** Rule: `config` `iac:`. Derivation: `amab_process/iac.py`.
@@ -251,23 +260,41 @@ priori:
 
 **Wider than Version 1.0 is not a loosening (say so where it applies).** Several Version 2.0
 criteria are wider than the limits Version 1.0 applied. The Protein A host cell protein criterion
-is the clearest case. That is not data loosening an approved criterion, which the rule forbids:
+is the clearest case. That is not data loosening an approved criterion outside the rule:
 - The Version 1.0 limits were never approved criteria. They were applied at analysis and appear in
   no approved plan (finding 1).
 - Version 2.0 replaces them with criteria derived a priori. The tighten-only rule applies to the
-  a-priori criteria from here on.
+  a-priori criteria from here on, together with the widening rule above.
 
 A document that shows a criterion wider than its Version 1.0 value states this once, plainly. It
 does not leave the reader to infer it.
 
-**DEV-005-03 (Protein A scale-down qualification).** PCP-005 Version 2.0 sets an equivalence margin
-for the scale-down model and plans three set-point runs. With three runs, the confidence interval
-alone is wider than the margin, so equivalence could not be demonstrated whatever the means were.
-Six supplementary set-point runs (S-PA-SDM2) were made during the investigation. The margin was
-not changed: changing a criterion after seeing the data is what INV-001 is about. Whether each
-output is then equivalent is a result the report computes. Leached Protein A differs by a recorded
-scale effect: the manufacturing load is held longer before capture, so host cell proteases in it
-cleave more ligand (leaching by itself is highest on new resin, so cycle history is not the cause).
+**Scale-down models: offsets, not equivalence (owner's decision 2026-10-08).** A scale-down model
+may differ in mean from manufacturing scale, provided the difference is known precisely enough.
+- The offset of an output is the mean of the scale-down set-point runs minus the mean of the
+  manufacturing-scale batches, with its 90 % confidence interval (`D.sdm_offset`).
+- Every Version 2.0 judgement against a criterion subtracts the offset from the scale-down
+  prediction, so ranges and conclusions are stated at manufacturing scale.
+- The model is qualified for an output when its conclusion over the NOR is the same with the offset
+  at either end of its interval (`D.offset_qualification`). An output with no criterion at the step
+  (step yield, column efficiency) has its offset recorded, and nothing depends on it.
+- PCMP-001 states the rule. Each PCP-00N applies it, each PCR-00N reports `T.sdm_offsets([UO])`,
+  and PCMR-001 summarises `T.sdm_offsets()` for the whole train.
+- Leached Protein A is lower in the scale-down model. The manufacturing load is held longer before
+  capture, so host cell proteases in it cleave more ligand (leaching by itself is highest on new
+  resin, so cycle history is not the cause). Under the offset rule this is simply the offset of that
+  output, and the report gives the cause.
+
+**PD-005-01 (a discrepancy from the plan, not a deviation).** PCP-005 planned three scale-down
+set-point runs (S-PA-SDM). During the Version 2.0 re-analysis six further set-point runs were made
+(S-PA-SDM2) to narrow the offset interval of pool host cell protein, the output that sets the ranges
+of the step. The plan did not foresee them, so PCR-005 records them as a discrepancy from the plan
+(`discrepancy_register(DOC)`, config `campaign.plan_discrepancies`). It is not a deviation: no
+procedure or GMP requirement was departed from, and in the GMP sense a deviation is exactly that.
+The report shows that the qualification conclusion is the same on the three planned runs alone
+(`T.sdm_offsets(["protein_a"], studies=["S-PA-SDM"])`), so the extra runs narrowed an interval and
+changed no conclusion. Earlier drafts called this DEV-005-03 and framed it as an equivalence margin
+that three runs could never meet. That framing is retired with the equivalence test.
 
 **Hold-study fragment results.** The hold studies ran before AMD-001. Their first and last time
 points were retained and tested by nrCE-SDS together with the retained response-surface samples,
@@ -325,7 +352,7 @@ expression for the specific step — the "helper inventory".)
 | Complex DoE tables | `T.doe_results(key, kind)`, `T.criteria_results(key)`, `T.parameters_by_step(...)` |
 | Univariate studies | `csv("univariate_studies.csv")`: each univariate parameter in duplicate at both ends of its characterized range (S-xx-UNI); set-point reference = the qualification runs |
 | Run order, per-pool HMW, residual DNA (Protein A) | `run_order` column in every DoE CSV; `hmw_sec_pct`, `dna_load_pg_mg`, `dna_pool_pg_mg` in the Protein A DoE CSVs (DNA on centre points only) |
-| Scale-down model qualification | `csv("sdm_qualification.csv")` (with `plates_per_m`, `asymmetry` for the chromatography steps; DEV-005-03's supplementary runs are study S-PA-SDM2): set-point runs, scale-down (n=3) against manufacturing (n=5), per step; a recorded scale effect for leached Protein A, protease cleavage of the ligand during the longer load hold at scale (config `analytics.sdm.scale_offset`) |
+| Scale-down model qualification | `csv("sdm_qualification.csv")` (with `plates_per_m`, `asymmetry` for the chromatography steps; PD-005-01's supplementary runs are study S-PA-SDM2): set-point runs, scale-down (n=3) against manufacturing (n=5), per step. Offsets and qualification: `D.sdm_offset`, `D.offset_qualification`, `T.sdm_offsets`. Leached Protein A has a real scale effect, protease cleavage of the ligand during the longer load hold at scale (config `analytics.sdm.scale_offset`) |
 
 ## 11. Voice
 

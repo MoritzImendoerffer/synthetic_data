@@ -25,6 +25,7 @@ separate; this file is about what the text commits to, not how it is shaped.
 | Does the document open wide (product, step, basis), narrow to the studies, and widen again (control strategy, discussion, conclusions)? | the section order, and an opening paragraph in each part that says where the reader is |
 | Does every number trace to the model? | no typed set-point, range, effect, p-value or Cpk anywhere in the prose (`check_render.py` numeral lint) |
 | Is the same thing called the same name throughout, with explicit cross-references ("see §7") rather than restatements? | one name per attribute, parameter and study; no paraphrased repeat of a claim |
+| Can a reader in the field who has not read the rest of the document understand each sentence on its own? | things named, not referred to by a code alone ("R3", "F2", a study code); no abstract noun standing in for what was done or found (WRITING_GUIDE rule 11) |
 
 ## Per section
 

@@ -53,6 +53,7 @@ VERSION = REV2["rev"]
 
 PLAN_APPROVAL = CAMPAIGN.get("plan_approval", {})
 CAPA = pd.DataFrame(CAMPAIGN.get("capa", []))
+PLAN_DISCREPANCIES = CAMPAIGN.get("plan_discrepancies", {})   # {report: [{id, plan, planned, done, ...}]}
 EFFECTIVENESS = CAMPAIGN.get("effectiveness_check", {})
 THRESHOLDS = CAMPAIGN.get("thresholds", {})
 CPK_TARGET = THRESHOLDS.get("cpk_target")
@@ -447,6 +448,17 @@ def dev_register(doc_id):
     return d[["Deviation", "Summary", "Detected during", "Disposition"]].to_markdown(index=False)
 
 
+def discrepancy_register(doc_id):
+    """Markdown register of a report's discrepancies from its plan: what the plan foresaw, what
+    was done, and why. A discrepancy is not a deviation (config ``campaign.plan_discrepancies``).
+    Returns an empty string for a document with none."""
+    ds = PLAN_DISCREPANCIES.get(doc_id, [])
+    if not ds:
+        return ""
+    rows = [[d["id"], d["subject"], f"{d['plan']}: {d['planned']}", d["done"], d["reason"]] for d in ds]
+    return md_table(["Discrepancy", "Subject", "Planned", "Done", "Reason"], rows, [12, 18, 22, 22, 26])
+
+
 def dev_facts(doc_id):
     """Row(s) of the deviation register for a document (structured access)."""
     d = csv("deviations.csv")
@@ -481,8 +493,30 @@ def title_block(doc_id, unit_op=None):
          else "Manufacturing Science & Technology (MSAT)"),
         ("Sponsor / sites", f"{COMPANY}; {SENDING_SITE} → {RECEIVING_SITE}"),
     ]
-    df = pd.DataFrame(rows, columns=["Field", "Value"])
-    return df.to_markdown(index=False, disable_numparse=True)
+    return md_table(["Field", "Value"], rows, [22, 78])
+
+
+def md_table(header, rows, widths):
+    """A pipe table with fixed relative column widths (``widths`` in percent).
+
+    Pandoc sets a pipe table's column widths from the length of the dash runs in its separator
+    line, but only when some line is longer than 72 characters. ``df.to_markdown()`` sizes the
+    dashes to the content, so a short column such as "Version" got a width below its own header
+    and the header overflowed into the next column (owner's comment 2026-10-08). Here the
+    separator line is padded to more than 72 characters and the dashes follow ``widths``.
+    Cells are written as they are, so a cell must not contain "|"."""
+    sep = "|" + "|".join(":" + "-" * max(3, int(w)) for w in widths) + "|"
+    out = ["| " + " | ".join(str(h) for h in header) + " |", sep]
+    out += ["| " + " | ".join(str(c) for c in r) + " |" for r in rows]
+    return "\n".join(out)
+
+
+def abbreviations_table(pairs):
+    """The Abbreviations section as a two-column table, sorted case-insensitively.
+
+    ``pairs`` is a list of ``(abbreviation, expansion)`` the author writes in the document."""
+    rows = sorted(((a, e) for a, e in pairs), key=lambda p: p[0].lower())
+    return md_table(["Abbreviation", "Meaning"], rows, [20, 80])
 
 
 def revision_history(doc_id):
@@ -492,9 +526,7 @@ def revision_history(doc_id):
     else:
         rows = [[r["rev"], rev1_date(doc_id) if r is REV1 else r["effective"],
                  r["reason"] + (f" (see {INV['id']})" if r is not REV1 else "")] for r in REVISIONS]
-    # disable_numparse keeps "1.0" a version string; tabulate would print it as the number 1
-    return pd.DataFrame(rows, columns=["Version", "Effective date", "Description of change"]).to_markdown(
-        index=False, disable_numparse=True)
+    return md_table(["Version", "Effective date", "Description of change"], rows, [12, 18, 70])
 
 
 def related_docs_md(doc_id):

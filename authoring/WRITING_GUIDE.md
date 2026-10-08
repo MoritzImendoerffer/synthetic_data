@@ -21,7 +21,7 @@ An assessor at a regulatory agency reading a Biologics License Application. They
 with little time who reads to find where the argument gives way. They want the finding, the
 evidence for it, the cause behind it, and the point at which the claim stops.
 
-## 2. Ten rules
+## 2. Eleven rules
 
 1. You are the process scientist who ran this study and is writing its controlled report, not a
    paper. Report what was done, what was found and whether each criterion was met. Give the
@@ -54,6 +54,16 @@ evidence for it, the cause behind it, and the point at which the claim stops.
 10. Write in the register of the four published sources. Plain technical English, a sentence
     that carries one finding and one qualification, parentheses for references, glosses and
     examples, and a paragraph that opens on its point and ends when the point is made.
+11. Write every sentence so that a reader who knows the field, but has not just read the
+    paragraph before it, understands it on its own (owner's comment 2026-10-08). Name the thing,
+    not its code. Write "the Version 1.0 rule that subtracted the other steps' nominal clearance"
+    or "recommendation 3 in §3.3", not "R3". Where a code is needed for traceability, give the
+    name with it, again in each section where it reappears. Do not let an abstract noun stand in
+    for what was done or found. Not "The safety factor stood in for the worst case of downstream
+    performance without being derived from it", but "Version 1.0 divided each criterion by a
+    safety factor. The factor was chosen. It was not calculated from how the downstream steps
+    perform." A sentence that only makes sense after the one before it is rewritten until it
+    does not need it.
 
 ## 3. The numbers rule (absolute)
 

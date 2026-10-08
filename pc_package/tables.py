@@ -170,6 +170,8 @@ def iac_derivation(steps: Optional[List[str]] = None, label="tbl-iac") -> CTable
                     basis, m = "Drug substance^a)^", "a)"
                 elif "tightened" in r["basis"]:
                     basis, m = "Back-calculated, tightened^b)^", "b)"
+                elif "widened" in r["basis"]:
+                    basis, m = "Back-calculated, widened^e)^", "e)"
                 else:
                     basis, m = "Back-calculated", None
                 if m:
@@ -191,6 +193,8 @@ def iac_derivation(steps: Optional[List[str]] = None, label="tbl-iac") -> CTable
                "value than the platform worst case. The A-Mab value replaced it."),
         ("c)", "Log reduction claimed for this step in the modular viral clearance claim."),
         ("d)", "Cumulative requirement across the steps that clear the virus."),
+        ("e)", "The 95 % confidence bound of a downstream step's A-Mab worst case within its NOR "
+               "was better than the platform worst case. The bound replaced it."),
     ]
     return CTable(
         header=[[C("Attribute", rs=2), C("Drug-substance criterion", rs=2), C("Step output", rs=2),
@@ -330,26 +334,38 @@ def method_comparability(label="tbl-sec-cesds") -> CTable:
 # --------------------------------------------------------------------------------------
 def worst_case_verification(steps: Optional[List[str]] = None, label="tbl-iac-verification") -> CTable:
     v = _csv("iac_verification.csv")
+    widen = bool(_cfg().raw()["iac"].get("allow_widening", False))
     if steps:
         v = v[v["step_key"].isin(steps)]
     body = []
     for sk, g in v.groupby("step_key", sort=False):
         for i, (_, r) in enumerate(g.iterrows()):
             kind = "Clearance fold, lowest" if r["assumption"] == "fold_min" else "Increase, largest"
-            met = "n.t.^a)^" if pd.isna(r["met"]) else ("Yes" if bool(r["met"]) else "No^b)^")
+            if pd.isna(r["met"]):
+                out = "n.t.^a)^"
+            elif not bool(r["met"]):
+                out = "Not confirmed, tightened^b)^"
+            elif widen and bool(r.get("widening_supported")):
+                out = "Better, widened^c)^"
+            else:
+                out = "Confirmed"
+            nt = lambda x: num(x) if not pd.isna(x) else "n.t.^a)^"
             row = ([C(STEP_NAME[sk], rs=len(g))] if i == 0 else []) + [
-                ATTR_NAME[r["cqa"]], kind, num(r["assumed"]),
-                num(r["observed_edge"]) if not pd.isna(r["observed_edge"]) else "n.t.^a)^",
-                num(r["predicted_nor"]) if not pd.isna(r["predicted_nor"]) else "n.t.^a)^", met]
+                ATTR_NAME[r["cqa"]], kind, num(r["assumed"]), nt(r["observed_edge"]),
+                nt(r["predicted_nor"]), nt(r["predicted_nor_bound95"]), out]
             body.append(row)
+    notes = [("a)", "Not a response of the response-surface study at this step."),
+             ("b)", "The criteria upstream of this step were recalculated with the value predicted "
+                    "within the NOR."),
+             ("c)", "The 95 % confidence bound is better than the platform worst case. The criteria "
+                    "upstream of this step were recalculated with the bound.")]
+    used = {m for row in body for c in row for m in re.findall(r"\^([a-c]\))\^", str(getattr(c, "text", c)))}
     return CTable(
         header=[[C("Step", rs=2), C("Attribute", rs=2), C("Worst case", rs=2), C("Platform", rs=2),
-                 C("This campaign", cs=2), C("Confirmed", rs=2)],
-                ["At the edges", "Within the NOR"]],
-        body=body, align="lllrrrl",
-        notes=[("a)", "Not a response of the response-surface study at this step."),
-               ("b)", "The criteria upstream of this step were recalculated with the value predicted "
-                      "within the NOR.")],
+                 C("This campaign", cs=3), C("Outcome", rs=2)],
+                ["At the edges", "Within the NOR", "95 % bound"]],
+        body=body, align="lllrrrrl",
+        notes=[n for n in notes if n[0] in used],
         notes_per_row=True,
         caption="Platform worst cases assumed by the intermediate acceptance criteria, against this "
                 "campaign's results.", label=label, resize=True)
@@ -443,7 +459,7 @@ def criteria_results(step: str, label: Optional[str] = None) -> CTable:
     cfg = _cfg()
     t = _csv("iac.csv")
     t = t[t["step_key"] == step]
-    body = []
+    body, any_off = [], False
     for _, r in t.iterrows():
         resp = r["response"]
         try:
@@ -453,26 +469,24 @@ def criteria_results(step: str, label: Optional[str] = None) -> CTable:
         uo = cfg.unit_op(step)
         fac = res["factors"]
         grid = list(itertools.product(*[[uo.param(f).nor[0], uo.param(f).setpoint, uo.param(f).nor[1]] for f in fac]))
-        y = D.predict(step, resp, natural={f: [g[i] for g in grid] for i, f in enumerate(fac)})
+        # shown and judged at manufacturing scale: the scale-down prediction minus the offset
+        d = D._offset_value(step, resp)
+        any_off = any_off or d != 0
+        y = D.predict(step, resp, natural={f: [g[i] for g in grid] for i, f in enumerate(fac)}) - d
         lo, hi = float(np.min(y)), float(np.max(y))
-        # judged on the decision statistic of PCMP-001: a single batch (the mean prediction at
-        # every NOR corner widened by the 95 % prediction half-width, 1.96 x residual SD) for a
-        # quality attribute, the mean for viral clearance
-        if D.decision_statistic(resp) == "batch":
-            _, plo, phi = D.prediction_interval(step, resp, {f: [g[i] for g in grid] for i, f in enumerate(fac)})
-            ok = bool(np.all(D.meets_acceptance(step, resp, plo)) and np.all(D.meets_acceptance(step, resp, phi)))
-        else:
-            ok = bool(np.all(D.meets_acceptance(step, resp, y)))
-        sp = float(D.predict(step, resp, natural={f: uo.param(f).setpoint for f in fac})[0])
+        ok = bool(D.nor_met(step, resp))
+        sp = float(D.predict(step, resp, natural={f: uo.param(f).setpoint for f in fac})[0]) - d
         body.append([ATTR_NAME[r["cqa"]], crit(r["iac_low"], r["iac_high"], r["spec_type"]),
                      num(sp), f"{num(lo)} to {num(hi)}", "Yes" if ok else "No"])
     return CTable(
-        header=[[C("Attribute", rs=2), C("Criterion", rs=2), C("Mean predicted by the response-surface model", cs=2), C("Met across the NOR^a)^", rs=2)],
+        header=[[C("Attribute", rs=2), C("Criterion", rs=2), C("Mean predicted by the response-surface model" + ("^b)^" if any_off else ""), cs=2), C("Met across the NOR^a)^", rs=2)],
                 ["At the set-point", "Range over the NOR"]],
         body=body, align="llrrl",
         notes=[("a)", "Judged at every combination of NOR low, set-point and NOR high. Quality "
                       "attributes: the 95 % prediction interval of a single run (t quantile, coefficient "
-                      "and residual uncertainty). Viral clearance: the mean prediction.")],
+                      "and residual uncertainty). Viral clearance: the mean prediction."),
+               ("b)", "At manufacturing scale: the scale-down prediction minus the offset of the "
+                      "scale-down model for this output.")][:2 if any_off else 1],
         caption=f"{STEP_NAME[step]} outputs against their intermediate acceptance criteria.",
         label=label or f"tbl-criteria-{step.replace('_', '-')}")
 
@@ -511,3 +525,355 @@ def parameters_by_step(steps: Optional[List[str]] = None, label="tbl-parameters-
         notes=[n for n in notes if n[0] in used], notes_per_row=True,
         size="footnotesize", resize=True,
         caption="Process parameters by step: set-point, ranges and classification.", label=label)
+
+
+# --------------------------------------------------------------------------------------
+# 10. Calibration of the instrumented systems against the study execution windows (INV-001 F5)
+# --------------------------------------------------------------------------------------
+def calibration_windows_data() -> pd.DataFrame:
+    """One row per study that used an instrumented system, grouped by system, studies in the
+    order they started. The annex keys its records on these rows."""
+    eq = _csv("dev_equipment.csv")
+    chron = _csv("study_chronology.csv")
+    rev1 = str(_cfg().raw()["campaign"]["revisions"][0]["effective"])
+    rows = []
+    for _, e in eq.iterrows():
+        for _, s in chron[chron["equipment"] == e["id"]].sort_values("start").iterrows():
+            rows.append({"Equipment": e["id"], "Description": e["description"],
+                         "Next calibration due": e["cal_due"], "Study": s["id"],
+                         "Execution start": s["start"], "Execution end": s["end"],
+                         "Date in Version 1.0 title block": rev1})
+    return pd.DataFrame(rows)
+
+
+def calibration_windows(label="tbl-calibration") -> CTable:
+    d = calibration_windows_data()
+    body = []
+    for _, g in d.groupby("Equipment", sort=False):
+        n = len(g)
+        for i, (_, r) in enumerate(g.iterrows()):
+            lead = [C(r["Equipment"], rs=n), C(r["Description"], rs=n),
+                    C(r["Next calibration due"], rs=n)] if i == 0 else []
+            body.append(lead + [r["Study"], r["Execution start"], r["Execution end"]]
+                        + ([C(r["Date in Version 1.0 title block"], rs=n)] if i == 0 else []))
+    return CTable(
+        header=[[C("Equipment", rs=2), C("Description", rs=2), C("Next calibration due", rs=2),
+                 C("Study executed on the system", cs=3), C("Date in Version 1.0 title block", rs=2)],
+                ["Study", "Start", "End"]],
+        body=body, align=["l", "P{3.4cm}", "P{2.2cm}", "l", "l", "l", "P{2.2cm}"],
+        caption="Execution windows of the studies that used instrumented systems, against the "
+                "calibration due date and the date in the Version 1.0 title blocks.", label=label)
+
+
+# --------------------------------------------------------------------------------------
+# 11. Scale-down offsets and the qualification of each model for each output
+# --------------------------------------------------------------------------------------
+SDM_OUTPUT = {
+    "afucosylation": ("Afucosylation", "%", 2), "galactosylation": ("Galactosylation", "%", 2),
+    "high_mannose": ("High mannose", "%", 2), "acidic_variants": ("Acidic variants", "%", 2),
+    "aggregates_hmw": ("Aggregates, HMW", "%", 2), "aggregate_out_pct": ("Aggregates, HMW", "%", 2),
+    "pool_hcp_ng_mg": ("Host cell protein", "ng/mg", 0), "hcp_out_ng_mg": ("Host cell protein", "ng/mg", 1),
+    "leached_protein_a_ppm": ("Leached Protein A", "ppm", 2), "step_yield": ("Step yield", "%", 1),
+    "plates_per_m": ("Column efficiency", "plates/m", 0), "asymmetry": ("Peak asymmetry", "", 2),
+}
+
+
+def sdm_offsets_data(steps: Optional[List[str]] = None, studies: Optional[List[str]] = None) -> pd.DataFrame:
+    """One row per step and output of the scale-down qualification: the offset (scale-down minus
+    manufacturing), its interval, and the qualification of doe_report.offset_qualification.
+    Step yield is printed in percent (the data hold a fraction)."""
+    import doe_report as D
+    d = _csv("sdm_qualification.csv")
+    order = [s for s in STEP_NAME if s in set(d["step"])]
+    rows = []
+    for step in (steps or order):
+        sub = d[d["step"] == step]
+        for col in [c for c in SDM_OUTPUT if c in sub.columns and sub[c].notna().any()]:
+            q = D.offset_qualification(step, col, studies)
+            if q is None:
+                continue
+            k = 100.0 if col == "step_yield" else 1.0
+            rows.append({"step_key": step, "output": col, "n_sd": q["n_sd"], "n_m": q["n_m"],
+                         "mean_sd": q["mean_sd"] * k, "mean_m": q["mean_m"] * k,
+                         "offset": q["offset"] * k, "lo": q["lo"] * k, "hi": q["hi"] * k,
+                         "judged": q["judged"], "met_point": q["met_point"], "met_lo": q["met_lo"],
+                         "met_hi": q["met_hi"], "qualified": q["qualified"]})
+    return pd.DataFrame(rows)
+
+
+def sdm_offsets(steps: Optional[List[str]] = None, studies: Optional[List[str]] = None,
+                label="tbl-sdm-offsets", caption: Optional[str] = None) -> CTable:
+    """The offsets of the scale-down models, one block per step (merged step cell), with the
+    conclusion over the NOR at the offset and at both ends of its interval."""
+    t = sdm_offsets_data(steps, studies)
+    ci = int(round(100 * float(_cfg().raw()["analytics"]["sdm"].get("offset_ci", 0.90))))
+    yn = lambda v: "Yes" if v else "No"
+    body = []
+    for sk, g in t.groupby("step_key", sort=False):
+        for i, (_, r) in enumerate(g.iterrows()):
+            name, unit, nd = SDM_OUTPUT[r["output"]]
+            f = lambda v: f"{v:,.{nd}f}"
+            lead = [C(STEP_NAME[sk], rs=len(g))] if i == 0 else []
+            if r["judged"]:
+                concl = [yn(r["met_lo"]), yn(r["met_point"]), yn(r["met_hi"])]
+                q = yn(r["qualified"])
+            else:
+                concl = [C("no criterion at this step^a)^", cs=3)]
+                q = "Yes^a)^"
+            body.append(lead + [name + (f" ({unit})" if unit else ""), f"{r['n_sd']} / {r['n_m']}",
+                                f(r["mean_sd"]), f(r["mean_m"]), f(r["offset"]),
+                                f"{f(r['lo'])} to {f(r['hi'])}", *concl, q])
+    notes = [("a)", "The output has no acceptance criterion at this step, so no conclusion depends "
+                    "on its offset. The offset is recorded.")]
+    used = any(not j for j in t["judged"])
+    return CTable(
+        header=[[C("Step", rs=2), C("Output", rs=2), C("Runs, scale-down / manufacturing", rs=2),
+                 C("Mean", cs=2), C("Offset", cs=2),
+                 C("Criterion met across the NOR, with the offset at", cs=3), C("Qualified", rs=2)],
+                ["Scale-down", "Manufacturing", "Estimate", f"{ci} % CI", "Low end", "Estimate", "High end"]],
+        body=body, align=["P{2.4cm}", "P{3.0cm}", "P{2.2cm}", "r", "r", "r", "r", "c", "c", "c", "c"],
+        notes=notes if used else [], notes_per_row=True,
+        caption=caption or ("Offsets of the scale-down models (scale-down minus manufacturing scale) "
+                            "and the qualification of each model for each output."),
+        label=label, resize=True)
+
+
+# --------------------------------------------------------------------------------------
+# 12. Campaign overviews for PCMR-001: what was studied, and what each parameter affects
+# --------------------------------------------------------------------------------------
+# Short attribute names for the dense overview tables (legend in each table's notes).
+ATTR_SHORT = {
+    "afucosylation": "Afuc", "galactosylation": "Gal", "high_mannose": "Man5",
+    "acidic_variants": "Acidic", "aggregates_hmw": "HMW", "hcp": "HCP",
+    "leached_protein_a": "LPA", "fragments_lmw": "LMW", "lrv_xmulv": "XMuLV", "lrv_mvm": "MVM",
+}
+ATTR_ORDER = list(ATTR_SHORT)
+ATTR_LEGEND = ("Afuc, afucosylation. Gal, galactosylation. Man5, high mannose. Acidic, acidic "
+               "variants. HMW, aggregates. LMW, fragments. HCP, host cell protein. LPA, leached "
+               "Protein A. XMuLV and MVM, clearance of the model viruses.")
+
+# Parameter classes, the columns of the parameter-by-step matrices. A parameter not listed is
+# "Other". Classes are a reading aid, not data: the parameters come from the config.
+PARAM_CLASS = {
+    "pH": "pH", "elution_ph": "pH", "ph": "pH", "load_ph": "pH",
+    "temperature": "Temperature",
+    "duration": "Time", "hold_time": "Time",
+    "load": "Load", "filtration_volume": "Load", "depth_filter_load": "Load",
+    "flow": "Flow rate",
+    "wash_cond": "Conductivity", "wash1_cond": "Conductivity", "load_cond": "Conductivity",
+    "pressure": "Pressure", "tmp": "Pressure",
+    "ivcc": "Concentration", "medium_conc": "Concentration", "protein_conc": "Concentration",
+    "final_conc": "Concentration",
+    "end_collect": "Pool collection", "stop_collect": "Pool collection",
+}
+CLASS_ORDER = ["pH", "Temperature", "Time", "Load", "Flow rate", "Conductivity", "Pressure",
+               "Concentration", "Pool collection", "Other"]
+# fragments by SEC are unreliable in the capture matrices (AMD-001), so there they do not count
+_SEC_FRAGMENTS_VALID = ("cex", "aex", "virus_filtration")
+
+
+def _resp_cqa(resp: str, step: str) -> Optional[str]:
+    import doe_report as D
+    if resp == "lmw_cesds_pct":
+        return "fragments_lmw"
+    if resp == "lmw_sec_pct":
+        return "fragments_lmw" if step in _SEC_FRAGMENTS_VALID else None
+    if resp == "step_yield":
+        return None
+    return D.RESP_TO_CQA.get(resp, resp)
+
+
+def _alpha() -> float:
+    return float(_cfg().raw()["campaign"]["thresholds"]["effect_alpha"])
+
+
+def pp_study_map() -> pd.DataFrame:
+    """One row per process parameter of the train: the designs that varied it with their runs,
+    the attributes measured in them (``studied``) and the attributes with a significant term
+    involving the parameter (``affected``). A response-surface factor is judged on every term of
+    its quadratic model, a factor of the screening design alone on its screening model, and a
+    parameter of a univariate study on the slope of the attribute against its setting. Step
+    yield is a performance output and is not listed."""
+    import doe_report as D
+    from scipy import stats as sst
+    cfg, a = _cfg(), _alpha()
+    uni = _csv("univariate_studies.csv")
+    chron = _csv("study_chronology.csv")
+    rows = []
+    for step in STEP_NAME:
+        uo = cfg.unit_op(step)
+        doe = step in D.st.DOE_FACTORS
+        scr = D.screening_factors(step) if doe else []
+        rsm = D.rsm_factors(step) if doe else []
+        sid = lambda kind: ", ".join(chron.loc[(chron["step"] == step) & (chron["kind"] == kind), "id"])
+        for p in uo.parameters:
+            r = {"step_key": step, "param": p.key, "name": p.name, "classification": p.classification,
+                 "screening_runs": 0, "rsm_runs": 0, "uni_runs": 0, "studies": [],
+                 "studied": set(), "affected": set()}
+            for kind, facs in (("screening", scr), ("rsm", rsm)):
+                if p.key not in facs:
+                    continue
+                n = len(_csv(f"doe_{step}_{kind}.csv"))
+                r[f"{kind}_runs"] = n
+                r["studies"].append(sid(kind))
+                for resp in list(D.responses(step)) + D.fragment_responses(step, kind):
+                    cqa = _resp_cqa(resp, step)
+                    if cqa is None:
+                        continue
+                    r["studied"].add(cqa)
+                    # the predictive model decides; the screening model only for a factor the
+                    # response surface did not carry
+                    if kind == "rsm" or p.key not in rsm:
+                        m = D.fit(step, kind, resp)["model"]
+                        terms = [t for t in m.pvalues.index if t != "const" and
+                                 p.key in re.split(r"[:^]", t)]
+                        if any(m.pvalues[t] < a for t in terms):
+                            r["affected"].add(cqa)
+            u = uni[(uni["step"] == step) & (uni["parameter"] == p.key)]
+            if not u.empty:
+                r["uni_runs"] = len(u)
+                r["studies"].append(", ".join(sorted(u["study"].unique())))
+                for col in u.columns[6:]:
+                    if u[col].notna().all():
+                        cqa = _resp_cqa(col, step)
+                        if cqa is None:
+                            continue
+                        r["studied"].add(cqa)
+                        if u["value"].nunique() > 1 and u[col].nunique() > 1:
+                            if sst.linregress(u["value"], u[col]).pvalue < a:
+                                r["affected"].add(cqa)
+            r["studies"] = ", ".join(s for s in r["studies"] if s)
+            rows.append(r)
+    return pd.DataFrame(rows)
+
+
+def _attrs(s) -> str:
+    return ", ".join(ATTR_SHORT[c] for c in ATTR_ORDER if c in s)
+
+
+def pp_cqa_matrix(kind: str = "studied", label: Optional[str] = None) -> CTable:
+    """Process parameters (columns, by class) against unit operations (rows). Each cell names the
+    parameter and the attributes it was studied for (``kind="studied"``) or significantly affects
+    (``kind="affected"``), one line per parameter where a step has several of one class."""
+    if kind not in ("studied", "affected"):
+        raise ValueError(kind)
+    m = pp_study_map()
+    m["cls"] = m["param"].map(lambda k: PARAM_CLASS.get(k, "Other"))
+    classes = [c for c in CLASS_ORDER if c in set(m["cls"])]
+    body, none_used = [], False
+    for step, g in m.groupby("step_key", sort=False):
+        row = [STEP_NAME[step]]
+        for c in classes:
+            v = g[g["cls"] == c]
+            lines = []
+            for _, r in v.iterrows():
+                att = _attrs(r[kind])
+                if not att:
+                    att, none_used = "none^a)^", True
+                lines.append(f"{r['name']}: {att}")
+            row.append("\n".join(lines) or "–")
+        body.append(row)
+    if kind == "studied":
+        a = ("none^a)^", "The campaign data set holds no attribute result for a study of this "
+                         "parameter.")
+        cap = "Process parameters by unit operation, with the attributes each was studied for."
+    else:
+        a = ("none^a)^", f"No term involving the parameter is significant at p < {_alpha():g} for "
+                         "any attribute measured.")
+        cap = ("Process parameters by unit operation, with the attributes each significantly "
+               "affects.")
+    notes = ([("a)", a[1])] if none_used else []) + [("", ATTR_LEGEND)]
+    if kind == "affected":
+        notes.append(("", "A response-surface factor is judged on every term of its quadratic model "
+                          "(main effect, interaction, quadratic), a factor of the screening design alone "
+                          "on its screening model, and a parameter of a univariate study on the slope "
+                          "of the attribute against its setting."))
+    return CTable(
+        header=[[C("Unit operation", rs=2), C("Process parameters", cs=len(classes))], classes],
+        body=body, align=["P{1.9cm}"] + ["P{3.3cm}" if c == "Other" else "P{1.75cm}" for c in classes],
+        notes=notes, notes_per_row=True, style="grid", size="scriptsize", landscape=True,
+        caption=cap, label=label or f"tbl-pp-{kind}")
+
+
+def studies_overview(label: str = "tbl-studies-overview") -> CTable:
+    """Every process parameter of the train with the studies that varied it: screening and
+    response-surface runs (multivariate), univariate runs, and the attributes measured. Runs of
+    one design are merged over the parameters it varied."""
+    m = pp_study_map()
+    body = []
+    for step, g in m.groupby("step_key", sort=False):
+        g = g.reset_index(drop=True)
+        cols = {}
+        for col in ("screening_runs", "rsm_runs"):
+            # merge identical consecutive run counts of one design down the step
+            spans, i = [], 0
+            while i < len(g):
+                j = i
+                while j + 1 < len(g) and g.loc[j + 1, col] == g.loc[i, col] and g.loc[i, col] > 0:
+                    j += 1
+                spans.append((i, j - i + 1))
+                i = j + 1
+            cols[col] = {s: n for s, n in spans}
+        for i, r in g.iterrows():
+            row = [C(STEP_NAME[step], rs=len(g))] if i == 0 else []
+            row += [r["name"], r["classification"]]
+            for col in ("screening_runs", "rsm_runs"):
+                if i in cols[col]:
+                    v = int(r[col])
+                    row.append(C(str(v) if v else "–", rs=cols[col][i]))
+            row += [str(int(r["uni_runs"])) if r["uni_runs"] else "–",
+                    _attrs(r["studied"]) or "none^a)^", r["studies"] or "–"]
+            body.append(row)
+    return CTable(
+        header=[[C("Unit operation", rs=2), C("Process parameter", rs=2), C("Class", rs=2),
+                 C("Runs, multivariate", cs=2), C("Runs, univariate", rs=2),
+                 C("Attributes measured", rs=2), C("Studies", rs=2)],
+                ["Screening", "Response surface"]],
+        body=body, align=["P{2.2cm}", "P{3.4cm}", "l", "c", "c", "c", "P{3.2cm}", "P{3.0cm}"],
+        notes=[("a)", "The campaign data set holds no attribute result for a study of this "
+                      "parameter."), ("", ATTR_LEGEND)],
+        notes_per_row=True, size="scriptsize",
+        caption="Studies of the characterization campaign by unit operation and process parameter.",
+        label=label)
+
+
+def model_effects_overview(steps: Optional[List[str]] = None, label: str = "tbl-model-effects") -> CTable:
+    """For each step with a response-surface design and each attribute it measured: the main
+    effects, two-factor interactions and quadratic terms significant at the campaign's effect_alpha,
+    by parameter name, with R² and predicted R²."""
+    import doe_report as D
+    cfg, a = _cfg(), _alpha()
+    body = []
+    for step in [s for s in STEP_NAME if s in D.st.DOE_FACTORS and (steps is None or s in steps)]:
+        names = {p.key: p.name for p in cfg.unit_op(step).parameters}
+        resps = [r for r in list(D.responses(step)) + D.fragment_responses(step, "rsm")
+                 if _resp_cqa(r, step) is not None]
+        block = []
+        for resp in resps:
+            fr = D.fit(step, "rsm", resp)
+            pv = fr["model"].pvalues.drop("const")
+            sig = [t for t in pv.index if pv[t] < a]
+            main = [names[t] for t in sig if ":" not in t and "^" not in t]
+            inter = [" × ".join(names[x] for x in t.split(":")) for t in sig if ":" in t]
+            quad = [names[t.split("^")[0]] + "²" for t in sig if "^" in t]
+            cqa = _resp_cqa(resp, step)
+            lab = ATTR_NAME.get(cqa, cqa)
+            if resp == "lmw_sec_pct":
+                lab += ", SEC"
+            elif resp == "lmw_cesds_pct":
+                lab += ", nrCE-SDS"
+            block.append([lab, ", ".join(main) or "none", ", ".join(inter) or "none",
+                          ", ".join(quad) or "none", f"{fr['R2']:.2f}", f"{fr['predR2']:.2f}"])
+        for i, b in enumerate(block):
+            body.append(([C(STEP_NAME[step], rs=len(block))] if i == 0 else []) + b)
+    return CTable(
+        header=[[C("Unit operation", rs=2), C("Attribute", rs=2),
+                 C(f"Significant terms of the response-surface model (p < {a:g})", cs=3),
+                 C("R²", rs=2), C("Predicted R²", rs=2)],
+                ["Main effects", "Interactions", "Quadratic"]],
+        body=body, align=["P{2.4cm}", "P{3.4cm}", "P{5.4cm}", "P{6.4cm}", "P{2.6cm}", "r", "r"],
+        size="footnotesize", landscape=True,
+        caption="Significant effects of the response-surface models, by unit operation and attribute"
+                + ("" if steps is None else " (" + ", ".join(STEP_NAME[s_].lower() if s_ != "protein_a" else "Protein A"
+                                                          for s_ in steps) + ")") + ".",
+        label=label)

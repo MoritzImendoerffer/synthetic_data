@@ -1,5 +1,5 @@
-"""Rev 2.0 intermediate acceptance criteria: a priori, never loosened by data, and the Rev 1.0
-criteria they replace reproduced exactly.
+"""Rev 2.0 intermediate acceptance criteria: a priori, loosened by data only through the stated
+widening rule, and the Rev 1.0 criteria they replace reproduced exactly.
 
 INV-001's central finding is that the Rev 1.0 criteria were fitted to the data they judged. These
 tests are the reason the same cannot be said of Rev 2.0.
@@ -45,10 +45,28 @@ def test_viral_claims_meet_the_cumulative_requirement():
     assert c["met"].all(), c.to_string()
 
 
-def test_final_never_loosens():
+def test_final_loosens_only_by_the_widening_rule():
+    """A criterion may widen only where allow_widening is on and the 95 % confidence bound of the
+    A-Mab worst case beats the platform value (owner's decision 2026-10-08). Any other loosening is
+    a criterion fitted to its data, which is INV-001's finding."""
     t = pd.read_csv(os.path.join(DATA, "iac.csv"))
-    assert (t["iac_high"] <= t["iac_high_apriori"] + 1e-12).all()
-    assert (t["iac_low"] >= t["iac_low_apriori"] - 1e-12).all()
+    v = pd.read_csv(os.path.join(DATA, "iac_verification.csv"))
+    loose = (t["iac_high"] > t["iac_high_apriori"] + 1e-12) | (t["iac_low"] < t["iac_low_apriori"] - 1e-12)
+    assert (loose == t["widened"]).all()
+    if not CFG.raw()["iac"].get("allow_widening", False):
+        assert not loose.any()
+    else:
+        assert v["widening_supported"].fillna(False).astype(bool).any() or not loose.any()
+
+
+def test_widening_uses_the_bound_not_the_point_prediction():
+    v = pd.read_csv(os.path.join(DATA, "iac_verification.csv"))
+    f = iac.final(CFG, v)
+    v2 = v.copy()
+    v2["predicted_nor_bound95"] = v2["predicted_nor"]   # a point-prediction widening would move
+    g = iac.final(CFG, v2)
+    if f["widened"].any():
+        assert not np.allclose(f["iac_high"], g["iac_high"])
 
 
 def test_tightening_only_where_verification_failed():
@@ -61,8 +79,9 @@ def test_tightening_only_where_verification_failed():
 def test_final_is_apriori_when_every_assumption_holds():
     v = pd.read_csv(os.path.join(DATA, "iac_verification.csv"))
     v["met"] = True
+    v["widening_supported"] = False
     f = iac.final(CFG, v)
-    assert not f["tightened"].any()
+    assert not f["tightened"].any() and not f["widened"].any()
     assert np.allclose(f["iac_high"], f["iac_high_apriori"])
 
 

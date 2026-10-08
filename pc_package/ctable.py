@@ -62,17 +62,18 @@ _LATEX_ESC = {"\\": r"\textbackslash{}", "&": r"\&", "%": r"\%", "$": r"\$", "#"
 
 
 def _latex(text: str) -> str:
+    """A "\\n" in a cell is a line break (``\\newline``, so the column must wrap: ``P{…}``)."""
     parts = _MARK.split(_s(text))
     out = []
     for i, p in enumerate(parts):
-        esc = "".join(_LATEX_ESC.get(ch, ch) for ch in p)
+        esc = "".join(_LATEX_ESC.get(ch, ch) for ch in p).replace("\n", r"\newline ")
         out.append(r"\textsuperscript{" + esc + "}" if i % 2 else esc)
     return "".join(out)
 
 
 def _html(text: str) -> str:
     parts = _MARK.split(_s(text))
-    return "".join(f"<sup>{html.escape(p)}</sup>" if i % 2 else html.escape(p)
+    return "".join(f"<sup>{html.escape(p)}</sup>" if i % 2 else html.escape(p).replace("\n", "<br>")
                    for i, p in enumerate(parts))
 
 
@@ -101,6 +102,7 @@ class CTable:
     group_rule: bool = True                      # a rule before each body row that opens a group
     size: str = "small"                          # LaTeX size command for the table body
     resize: bool = True                          # shrink to \linewidth if wider (never enlarges)
+    landscape: bool = False                      # PDF: the table on a landscape page of its own
     ncols: int = field(init=False, default=0)
 
     def __post_init__(self):
@@ -271,6 +273,14 @@ class CTable:
 
     # -- the Quarto block -------------------------------------------------------------------
     def render(self) -> str:
+        if self.landscape:
+            # outside the cross-reference div, so the caption turns with the table
+            on = "::: {.content-visible when-format=\"pdf\"}\n```{=latex}\n\\begin{landscape}\n```\n:::\n\n"
+            off = "\n::: {.content-visible when-format=\"pdf\"}\n```{=latex}\n\\end{landscape}\n```\n:::\n"
+            return on + self._block() + off
+        return self._block()
+
+    def _block(self) -> str:
         return (f"::: {{#{self.label}}}\n\n"
                 "::: {.content-visible when-format=\"docx\"}\n```{=html}\n" + self.html() + "\n```\n:::\n\n"
                 "::: {.content-visible when-format=\"pdf\"}\n```{=latex}\n" + self.latex() + "\n```\n:::\n\n"

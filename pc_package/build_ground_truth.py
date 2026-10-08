@@ -7594,8 +7594,10 @@ def build_investigation():
     crow = captured_rows(tabs["tbl-cap-limits"], [by_label[a] for a in capdf["Attribute"]])
     pldf = tabs["tbl-plan-dates"][1]
     plrow = captured_rows(tabs["tbl-plan-dates"], pldf["Plan"])
-    eqdf = tabs["tbl-calibration"][1]
-    eqrow = captured_rows(tabs["tbl-calibration"])
+    eq_t = T.calibration_windows()
+    eqdf = T.calibration_windows_data()
+    eqrow = ctable_rows(eq_t)
+    cap["tbl-calibration"] = eq_t.caption
     psdf = tabs["tbl-par-change"][1]
     psrow = captured_rows(tabs["tbl-par-change"], psdf["Report"])
     rd = ns["res_df"]
@@ -7616,7 +7618,7 @@ def build_investigation():
         source_references=[ref(doc, f, sid("f5"), "F5. Approval and execution dates missing from "
                                "the records", eqrow[i], table_title=cap["tbl-calibration"],
                                table_id=f"{doc}_tab_calibration", table_header=eqrow.header)
-                           for i in eqdf.index[eqdf["Equipment"] == e]],
+                           for i in eqdf.index[eqdf["Equipment"] == e][:1]],
         metadata=meta()) for e in eq_ids]
     acid = ns["acid"]
     capdesc = "F4. Acidic variants assessed against one end of a two-sided range"
@@ -7684,10 +7686,10 @@ def build_investigation():
         + [ref(doc, f, sid("abbr"), "Abbreviations", abbr)],
         metadata=meta()) for tok, name, mtype, attrs_, abbr in [
         ("SEC", "size-exclusion chromatography", "chromatography",
-         ["aggregates_hmw", "fragments_lmw"], "SEC, size-exclusion chromatography"),
+         ["aggregates_hmw", "fragments_lmw"], CELL_SEP.join(["SEC", "size-exclusion chromatography"])),
         ("nrCE-SDS", "non-reduced capillary electrophoresis with sodium dodecyl sulfate",
          "capillary electrophoresis", ["fragments_lmw"],
-         "nrCE-SDS, non-reduced capillary electrophoresis with sodium dodecyl sulfate")]]
+         CELL_SEP.join(["nrCE-SDS", "non-reduced capillary electrophoresis with sodium dodecyl sulfate"]))]]
     dev = [
         Deviation(
             deviation_id=doc,

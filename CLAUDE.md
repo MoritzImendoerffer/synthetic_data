@@ -151,10 +151,13 @@ differ only in their `UO` key and unit-specific narrative:
   against its intermediate acceptance criterion (`config` `iac:` → `amab_process/iac.py` →
   `iac.csv`): the drug-substance criterion carried backward through the platform worst case of
   every downstream step, with no margin. `iac.derive()` reads the config only
-  (`tests/test_iac.py`). Verification against this campaign's data may TIGHTEN a criterion and
-  never loosen it. Version 1.0 did the opposite and that is `INV-001`; its criteria are data in
+  (`tests/test_iac.py`). Verification against this campaign's data tightens a criterion where a
+  step does worse than the platform worst case, and widens it only by the rule stated in advance:
+  the 95 % confidence bound of the A-Mab worst case beats the platform value
+  (`iac.allow_widening`, owner's decision 2026-10-08), and the report argues it. Version 1.0
+  fitted its criteria to the data instead and that is `INV-001`; its criteria are data in
   `criteria_rev1.csv`, never a yardstick. Quality attributes are judged per batch, viral clearance
-  on the mean LRF (`doe_report.decision_statistic`).
+  on the mean LRF at the least favourable NOR combination of the other parameters (`doe_report.decision_statistic`).
 - **Complex tables come from `pc_package/tables.py`** (merged cells, two-level headers,
   footnotes, n.t.), rendered by `ctable.CTable` as an HTML twin for DOCX and a raw-LaTeX twin for
   PDF. Annex rows come from the same builder call (`T.<builder>(...).rows()`), never retyped.

@@ -421,8 +421,9 @@ def acceptance_for(key, resp):
 # `acceptance_for` above returns the DRUG-SUBSTANCE criterion and keeps doing so. A step is
 # judged against its intermediate acceptance criterion (IAC), derived a priori in
 # amab_process/iac.py from the drug-substance criterion and the platform worst case of every
-# downstream step, then tightened (never loosened) wherever this campaign's verification showed
-# a downstream step doing worse within its NOR. The table is outputs/data/iac.csv; nothing here
+# downstream step, then tightened wherever this campaign's verification showed a downstream step doing worse
+# within its NOR, and widened only where the 95 % confidence bound of the A-Mab worst case beats
+# the platform value (config `iac.allow_widening`, owner's decision 2026-10-08). The table is outputs/data/iac.csv; nothing here
 # computes a limit, it only reads one. The Rev 1.0 criteria, fitted after the data were seen
 # (INV-001), are outputs/data/criteria_rev1.csv and are read only to tabulate the change.
 # --------------------------------------------------------------------------------------
@@ -465,6 +466,136 @@ def effective_acceptance(key, resp):
     if _CRITERIA["rev"] == "1.0" and resp == "lmw_cesds_pct":
         return None                       # Version 1.0 did not assess fragments
     return acc
+
+
+# --------------------------------------------------------------------------------------
+# Scale-down offsets (owner's decision 2026-10-08). A scale-down model may differ in mean from
+# manufacturing scale, provided the offset is known precisely enough. The offset of an output is
+# the mean of the scale-down set-point runs minus the mean of the manufacturing-scale batches,
+# with its two-sided 90 % confidence interval (pooled-variance Student t), from
+# sdm_qualification.csv. Every Version 2.0 judgement against a criterion translates the
+# scale-down prediction to manufacturing scale by subtracting the offset. The model is qualified
+# for an output when the conclusion against its criterion over the NOR is the same with the
+# offset at either end of its interval (:func:`offset_qualification`). Outputs with no SDM data
+# (fragments, viral clearance) have no offset and are judged as predicted.
+# --------------------------------------------------------------------------------------
+_OFFSET = {"end": "point"}                 # "point", "lo", "hi" or "none"
+
+
+def sdm_offset(key, resp, studies=None):
+    """dict(n_sd, n_m, mean_sd, mean_m, offset, lo, hi, half, df) for one output of one step, or
+    None when the qualification has no data for it. ``studies`` restricts the scale-down runs
+    (e.g. ``["S-PA-SDM"]``, the planned runs alone); by default every scale-down study counts."""
+    from scipy import stats as _st
+    d = csv("sdm_qualification.csv")
+    d = d[d["step"] == key]
+    if resp not in d.columns:
+        return None
+    a = d[d["scale"] == "scale-down"]
+    if studies is not None:
+        a = a[a["study"].isin(studies)]
+    a = a[resp].dropna().to_numpy(float)
+    b = d.loc[d["scale"] == "manufacturing", resp].dropna().to_numpy(float)
+    if len(a) < 2 or len(b) < 2:
+        return None
+    dfp = len(a) + len(b) - 2
+    sp = np.sqrt(((len(a) - 1) * a.var(ddof=1) + (len(b) - 1) * b.var(ddof=1)) / dfp)
+    ci = float(CFG.raw()["analytics"]["sdm"].get("offset_ci", 0.90))
+    half = float(_st.t.ppf(0.5 + ci / 2, dfp) * sp * np.sqrt(1 / len(a) + 1 / len(b)))
+    off = float(a.mean() - b.mean())
+    return dict(n_sd=len(a), n_m=len(b), mean_sd=float(a.mean()), mean_m=float(b.mean()),
+                offset=off, lo=off - half, hi=off + half, half=half, df=dfp, ci=ci)
+
+
+def _offset_value(key, resp):
+    """The offset the current judgement applies (0 in Version 1.0 mode, when switched off in the
+    config, or when the output has no SDM data)."""
+    if _CRITERIA["rev"] == "1.0" or _OFFSET["end"] == "none":
+        return 0.0
+    if not CFG.raw()["analytics"]["sdm"].get("apply_offset", False):
+        return 0.0
+    o = sdm_offset(key, resp, _OFFSET.get("studies"))
+    if o is None:
+        return 0.0
+    return {"point": o["offset"], "lo": o["lo"], "hi": o["hi"]}[_OFFSET["end"]]
+
+
+def _judging(key, resp):
+    """(lo, hi, stype) as the scale-down prediction is judged: the criterion moved by the offset.
+    A scale-down value y meets the criterion when y - offset does, that is when
+    lo + offset <= y <= hi + offset."""
+    acc = effective_acceptance(key, resp)
+    if acc is None:
+        return None
+    d = _offset_value(key, resp)
+    return acc[0] + d, acc[1] + d, acc[2]
+
+
+class offset_at:
+    """Context manager: judge with the offset at one end of its interval ("lo", "hi"), at its
+    point estimate ("point"), or without it ("none"); ``studies`` restricts the runs it is
+    estimated from."""
+    def __init__(self, end, studies=None):
+        self.end, self.studies = end, studies
+
+    def __enter__(self):
+        self._old = dict(_OFFSET)
+        _OFFSET["end"] = self.end
+        _OFFSET["studies"] = self.studies
+        return self
+
+    def __exit__(self, *a):
+        _OFFSET.clear()
+        _OFFSET.update(self._old)
+        return False
+
+
+def nor_met(key, resp):
+    """Does the output meet its criterion across the NOR, at manufacturing scale? Judged at every
+    combination of NOR low, set-point and NOR high of the response-surface factors: for a quality
+    attribute the 95 % prediction interval of a single run, for viral clearance the mean.
+    None when the output has no criterion or no response-surface model."""
+    acc = _judging(key, resp)
+    if acc is None:
+        return None
+    try:
+        r = fit(key, "rsm", resp)
+    except Exception:
+        return None
+    uo = CFG.unit_op(key)
+    grid = list(itertools.product(*[[uo.param(f).nor[0], uo.param(f).setpoint, uo.param(f).nor[1]]
+                                    for f in r["factors"]]))
+    nat = {f: [g[i] for g in grid] for i, f in enumerate(r["factors"])}
+    lo, hi, stype = acc
+    if decision_statistic(resp) == "batch":
+        _, plo, phi = prediction_interval(key, resp, nat)
+        return bool(np.all(_in_spec(plo, lo, hi, stype)) and np.all(_in_spec(phi, lo, hi, stype)))
+    return bool(np.all(_in_spec(np.asarray(predict(key, resp, natural=nat)), lo, hi, stype)))
+
+
+def offset_qualification(key, resp, studies=None):
+    """The qualification of the scale-down model for one output (owner's rule, 2026-10-08).
+
+    Returns dict(offset..., met_point, met_lo, met_hi, qualified, judged). ``judged`` is False for
+    an output with no criterion or no model at the step: its offset is recorded and nothing
+    depends on it. ``qualified`` is True when the conclusion of :func:`nor_met` is the same with
+    the offset at its point estimate and at either end of its confidence interval."""
+    o = sdm_offset(key, resp, studies)
+    if o is None:
+        return None
+    out = dict(o)
+    with offset_at("point", studies):
+        out["met_point"] = nor_met(key, resp)
+    if out["met_point"] is None:
+        out.update(met_lo=None, met_hi=None, judged=False, qualified=True)
+        return out
+    with offset_at("lo", studies):
+        out["met_lo"] = nor_met(key, resp)
+    with offset_at("hi", studies):
+        out["met_hi"] = nor_met(key, resp)
+    out["judged"] = True
+    out["qualified"] = out["met_lo"] == out["met_point"] == out["met_hi"]
+    return out
 
 
 class rev1_criteria_in_force:
@@ -582,7 +713,7 @@ def meets_acceptance(key, resp, values):
     configured, otherwise the drug-substance criterion (and for viral-clearance responses
     the back-calculated STEP floor rather than the cumulative requirement). Returns None
     when the response maps to no acceptance criterion (e.g. step yield)."""
-    acc = effective_acceptance(key, resp)
+    acc = _judging(key, resp)
     if acc is None:
         return None
     lo, hi, stype = acc
@@ -660,7 +791,7 @@ def par_at_design_centre(key, resp, factor, n_grid=201):
     acc = effective_acceptance(key, resp)
     if acc is None:
         return None
-    lo, hi, stype = acc
+    lo, hi, stype = _judging(key, resp)
     r = fit(key, "rsm", resp)
     xs = np.linspace(-1, 1, n_grid)
     coded = pd.DataFrame({f: (xs if f == factor else np.zeros(n_grid)) for f in r["factors"]})
@@ -759,7 +890,7 @@ def par_nor_propagated(key, resp, factor, n_grid=PAR_GRID, n_mc=PAR_MC_N, batch=
     acc = effective_acceptance(key, resp)
     if acc is None:
         return None
-    lo, hi, stype = acc
+    lo, hi, stype = _judging(key, resp)
     r = fit(key, "rsm", resp)
     others = [g for g in r["factors"] if g != factor]
     rng = np.random.default_rng(PAR_SEED)
@@ -833,7 +964,7 @@ def design_space_grid(key, n=11):
     ok = np.ones(len(coded), dtype=bool)
     per = {}
     for resp in responses(key):
-        acc = effective_acceptance(key, resp)
+        acc = _judging(key, resp)
         if acc is None:
             continue
         lo, hi, stype = acc
@@ -946,13 +1077,16 @@ def fig_par(key, resp, factor):
             a.axvspan(par_nat[0], par_nat[1], color="#2ecc71", alpha=0.25, lw=0,
                       label="PAR (acceptable)")
 
-    ax[0].plot(ps["xs_nat"], ps["y"], color="#2a78d6", lw=1.6)
+    # predictions drawn at manufacturing scale (scale-down prediction minus the offset), so the
+    # criterion is drawn as it stands
+    d = _offset_value(key, resp)
+    ax[0].plot(ps["xs_nat"], ps["y"] - d, color="#2a78d6", lw=1.6)
     _limits(ax[0]); _shade(ax[0], ps["par_nat"]); _marks(ax[0])
     ax[0].set_title("At set-point (others fixed)", fontsize=10)
     ax[0].set_xlabel(f"{pname} ({unit})"); ax[0].set_ylabel(label)
 
-    ax[1].plot(pn["xs_nat"], pn["med"], color="#2a78d6", lw=1.6, label="median")
-    ax[1].fill_between(pn["xs_nat"], pn["p_lo"], pn["p_hi"], color="#2a78d6", alpha=0.18,
+    ax[1].plot(pn["xs_nat"], pn["med"] - d, color="#2a78d6", lw=1.6, label="median")
+    ax[1].fill_between(pn["xs_nat"], pn["p_lo"] - d, pn["p_hi"] - d, color="#2a78d6", alpha=0.18,
                        lw=0, label="95% predictive")
     _limits(ax[1]); _shade(ax[1], pn["par_nat"]); _marks(ax[1])
     ax[1].set_title("Others varying within NOR (Monte-Carlo)", fontsize=10)

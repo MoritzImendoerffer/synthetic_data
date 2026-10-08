@@ -189,7 +189,8 @@ def verification(cfg: Config, data: Dict[str, pd.DataFrame], ps: pd.DataFrame,
 
 def final(cfg: Config, ver: pd.DataFrame) -> pd.DataFrame:
     """The criteria in force: the a-priori table, tightened wherever verification showed a step
-    doing worse within its NOR than the platform worst case assumed. Never loosened."""
+    doing worse within its NOR than the platform worst case assumed, and widened only where the 95 %
+    confidence bound of the A-Mab worst case beats the platform value and ``allow_widening`` is on."""
     tighten = {}
     for _, r in ver[ver["met"] == False].iterrows():  # noqa: E712  (None stays unverified)
         tighten[(r["step_key"], r["cqa"])] = {r["assumption"]: float(r["predicted_nor"])}

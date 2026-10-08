@@ -90,3 +90,12 @@ teria of R3 have the same weakness" you could say something like recommendation 
 | INV-001 Table 4.4: merge equipment rows | Rebuilt as a complex table with merged equipment cells. |
 | Dense sentences ("The safety factor stood in for…", "R3 have the same weakness") | A new rule in WRITING_GUIDE (a sentence must be understood by a reader who has not just read the paragraph before it: name the thing, not its code; no abstract stand-ins), and a seventh review question. All four pilot documents get a readability pass. |
 | Commit (no comment) | Nothing committed yet. Asked again in the session. |
+
+## Decisions taken in the session of 2026-10-08 (afternoon)
+
+| Question | Owner's answer | What changed |
+|---|---|---|
+| Commit a checkpoint? | On a branch | Branch `rev2-campaign`, commit `6c51a1a`. `main` stays at tag `corpus-rev1.0` until the campaign ships. |
+| Apply widening? | Turn on | `iac.allow_widening: true`. Five criteria widen (Protein A pool HCP 16,000 → 19,241 ng/mg, CEX HCP 400 → 476, Protein A and VI fragments, bioreactor acidic variants upper limit). Two tighten (aggregates upstream of CEX). Widening uses the 95 % confidence bound, never the point prediction. `T.worst_case_verification` shows the bound and the outcome, `T.iac_derivation` marks a widened row. |
+| What is "offset known with sufficient precision"? | Decision-based | Qualified for an output when its conclusion over the NOR is the same with the offset at either end of its 90 % CI. Every Version 2.0 judgement subtracts the offset (`D.sdm_offset`, `D.offset_qualification`, `T.sdm_offsets`). Every model qualifies on its planned runs. |
+| DEV-005-03 and S-PA-SDM2 | "Write as in step 3 but add a discrepancy to the plan in the report. Reports can do stuff which was not planned but a discrepancy has to describe it. Note that the word 'deviation' has a very clear meaning in the GMP world." | DEV-005-03 removed from the deviations. The six runs stay and are recorded as **PD-005-01**, a discrepancy from the plan (`campaign.plan_discrepancies`, `discrepancy_register(DOC)`). The report section becomes "Deviations and discrepancies from the plan", and section_plan tells authors never to call a discrepancy a deviation. |

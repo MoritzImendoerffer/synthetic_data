@@ -286,6 +286,17 @@ SDM_RESPONSES = {
 }
 
 
+def _assay_noise(cfg: Config, row: dict, si: int, stream: int, i: int) -> None:
+    """Analytical repeatability on a qualification result, from its own stream. A step whose
+    process model passes an attribute through unchanged (acidic variants across low-pH
+    inactivation) would otherwise report the same value for every run at both scales."""
+    cv = _a(cfg)["sdm"].get("assay_cv", {})
+    rng = _rng(cfg, 11, si, stream, i)
+    for r, c in cv.items():
+        if r in row and row[r] is not None:
+            row[r] = float(row[r] * rng.lognormal(0.0, float(c)))
+
+
 def sdm_qualification(cfg: Config, proc, feeds) -> pd.DataFrame:
     """Set-point runs at small scale against manufacturing-scale batches, per step.
 
@@ -310,6 +321,7 @@ def sdm_qualification(cfg: Config, proc, feeds) -> pd.DataFrame:
                     if scale == "manufacturing" and r in off:
                         v *= float(off[r])
                     row[r] = v
+                _assay_noise(cfg, row, si, stream, i)
                 if step in CHROM_STEPS:
                     ce = _rng(cfg, 7, si, stream, i)
                     row["plates_per_m"] = float(ce.normal(*a["column"]["plates_per_m"]))
@@ -325,6 +337,7 @@ def sdm_qualification(cfg: Config, proc, feeds) -> pd.DataFrame:
                 row = {"study": sup["study"], "step": step, "scale": "scale-down", "run": i + 1}
                 for r in resps:
                     row[r] = _response_value(res, r)
+                _assay_noise(cfg, row, si, 9, i)
                 ce = _rng(cfg, 7, si, 9, i)
                 row["plates_per_m"] = float(ce.normal(*a["column"]["plates_per_m"]))
                 row["asymmetry"] = float(ce.normal(*a["column"]["asymmetry"]))

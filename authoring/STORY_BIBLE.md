@@ -323,7 +323,8 @@ not designed experiments, and no document calls them one.
   across the depth filter load NOR and rises steeply at the top of the characterized range, as the
   filter nears capacity. Host cell protein, aggregate and step yield show no trend beyond assay
   precision. This keeps A-Mab's assumption (p.85) that harvest has no impact on product quality.
-  Post-clarification turbidity is the outcome of the other two parameters and was not varied.
+  Post-clarification turbidity is the outcome of the other two parameters. It was studied as a
+  challenge: clarified filtrate adjusted to each level with centrate, and the attributes measured.
 - UF/DF: residual buffer falls as exp(−DV) (0.034 % at 8 DV, the value Version 1.0 printed).
   Aggregate rises a little with final concentration and TMP. The source gives nothing for this
   step (A-Mab p.86), so this effect is the campaign's own finding, and PCR-010 presents it as a

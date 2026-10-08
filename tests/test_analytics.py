@@ -167,7 +167,10 @@ def test_nodoe_design_and_findings():
     cfg = load_config().raw()["analytics"]["univariate_nodoe"]
     n = len(cfg["levels"]) * int(cfg["replicates"])
     assert (u.groupby(["step", "parameter"]).size() == n).all()
-    assert "turbidity" not in set(u["parameter"])           # an outcome, not a setting
+    # post-clarification turbidity is studied as a challenge: the level set is the level measured
+    t = u[u["parameter"] == "turbidity"]
+    assert np.allclose(t["clarified_turbidity_ntu"], t["value"], rtol=0.15)
+    assert t["centrate_turbidity_ntu"].isna().all()
     # residual buffer at the 8 DV set-point is the 0.034 % Version 1.0 printed
     sp = u[(u["parameter"] == "diavolumes") & (u["level"] == "set-point")]
     assert abs(sp["residual_buffer_pct"].mean() - 0.034) < 0.003

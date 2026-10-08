@@ -507,8 +507,9 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
                  "quality (A-Mab p.85, 'for simplicity'; 'This might not be true in a real life "
                  "scenario'): host cell protein and aggregate pass through, and differ only by "
                  "assay precision. Turbidity is a performance output, not an attribute. "
-                 "Post-clarification turbidity is the outcome of the other two parameters and was "
-                 "not varied; its NOR is tested through the clarified turbidity response."
+                 "Post-clarification turbidity is the outcome of the other two parameters. It was "
+                 "studied as a challenge: clarified filtrate adjusted to each level with centrate, "
+                 "the level measured, the attributes recorded (centrate turbidity not reported)."
                  if key == "harvest" else
                  "The source gives nothing for this step (A-Mab p.86: UF/DF 'not included in case "
                  "study'). The aggregate effect at high final concentration and high TMP is this "

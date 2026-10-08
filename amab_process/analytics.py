@@ -401,8 +401,8 @@ def univariate_nodoe(cfg: Config, proc, feeds) -> pd.DataFrame:
     rows = []
     for si, (step, study) in enumerate(u["studies"].items()):
         uo = _unit(proc, step)
-        skip = set(u.get("not_varied", {}).get(step, []))
-        params = [q for q in cfg.unit_op(step).parameters if q.study == "univariate" and q.key not in skip]
+        challenge = u.get("challenge", {}).get(step, {})
+        params = [q for q in cfg.unit_op(step).parameters if q.study == "univariate"]
         for pi, p in enumerate(params):
             for li, (level, val) in enumerate(zip(u["levels"], _nodoe_levels(p))):
                 rng = _rng(cfg, 12, si, pi, li)
@@ -412,7 +412,17 @@ def univariate_nodoe(cfg: Config, proc, feeds) -> pd.DataFrame:
                     row = {"study": study, "step": step, "parameter": p.key, "level": level,
                            "value": float(val), "replicate": rep}
                     for r in u["responses"][step]:
-                        v = float(res.out.cqas[attr[r]]) if r in attr else _response_value(res, r)
+                        if p.key in challenge:
+                            # the level set is the response; another performance output is not reported
+                            if r == challenge[p.key]:
+                                v = float(val)
+                            elif r in attr or r == "step_yield":
+                                v = float(res.out.cqas[attr[r]]) if r in attr else float(res.step_yield)
+                            else:
+                                row[r] = np.nan
+                                continue
+                        else:
+                            v = float(res.out.cqas[attr[r]]) if r in attr else _response_value(res, r)
                         if r in u["assay"]:
                             v *= float(np.exp(rng.normal(0, _assay_cv(cfg, u["assay"][r]))))
                         row[r] = v

@@ -94,3 +94,14 @@ def test_landscape_wraps_only_the_pdf_twin():
     out = t.render()
     assert out.index(r"\begin{landscape}") < out.index("::: {#tbl-ls}") < out.index(r"\end{landscape}")
     assert out.count('when-format="pdf"') == 3 and out.count('when-format="docx"') == 1
+
+
+def test_cross_reference_in_a_cell_or_note_is_refused():
+    """A table cell or note is raw HTML/LaTeX; Quarto would print "@sec-x" literally."""
+    import pytest
+    from ctable import CTable
+    with pytest.raises(ValueError):
+        CTable(header=[["A"]], body=[["see @sec-results"]], caption="x", label="tbl-x")
+    with pytest.raises(ValueError):
+        CTable(header=[["A"]], body=[["1"]], caption="x", label="tbl-x", notes=[("", "As in @tbl-y.")])
+    CTable(header=[["A"]], body=[["1"]], caption="As in @tbl-y.", label="tbl-x")

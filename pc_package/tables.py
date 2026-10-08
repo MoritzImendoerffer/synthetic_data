@@ -338,16 +338,16 @@ def hold_stability(pool: str, label: Optional[str] = None) -> CTable:
     for temp, g in h.groupby("temperature", sort=False):
         for i, (_, r) in enumerate(g.iterrows()):
             row = ([C(temp, rs=len(g))] if i == 0 else []) + [
-                str(int(r["day"])), num(r["hmw_pct"]), num(r["lmw_sec_pct"]) + "^a)^",
+                str(int(r["day"])), num(r["hmw_pct"]), num(r["lmw_sec_pct"]),
                 (num(r["lmw_cesds_pct"]) if not pd.isna(r["lmw_cesds_pct"]) else "n.t.^b)^"),
                 num(r["acidic_pct"], 1)]
             body.append(row)
     return CTable(
         header=[[C("Storage", rs=2), C("Day", rs=2), C("Size variants (%)", cs=3), C("Acidic variants (%)", rs=2)],
-                ["HMW (SEC)", "LMW (SEC)", "LMW (nrCE-SDS)"]],
+                ["HMW (SEC)", "LMW (SEC)^a)^", "LMW (nrCE-SDS)"]],
         body=body, align="lrrrrr", style="grid",
-        notes=[("a)", "Includes host cell protein eluting in the low molecular weight window "
-                      "(AMD-001). Not used for evaluation."),
+        notes=[("a)", "Every SEC result for low molecular weight species includes host cell "
+                      "protein eluting in that window (AMD-001). Not used for evaluation."),
                ("b)", "Not tested. The first and last time points were retained and tested by "
                       "nrCE-SDS after AMD-001, with the retained response-surface samples.")],
         caption=f"Hold-time stability of the {HOLD_POOL[pool]}.", label=label or f"tbl-hold-{pool.replace('_', '-')}")
@@ -473,11 +473,21 @@ def doe_results(step: str, kind: str, label: Optional[str] = None, superseded: b
     factors = [c[len("coded_"):] for c in d.columns if c.startswith("coded_")]
     resps = [r for r in st.DOE_RESPONSES[step] if r in d.columns]
     lmw = [c for c in ("lmw_sec_pct", "lmw_cesds_pct") if c in d.columns]
+    # a column with no result in any run says nothing; a note names it instead
+    untested = [c for c in resps + lmw if d[c].isna().all()]
+    resps = [r for r in resps if r not in untested]
+    lmw = [c for c in lmw if c not in untested]
     devs = {} if superseded else _deviation_runs(step, kind)
-    fl = []
-    for f in factors:
+    # factors as letter codes with their units; the note gives the names (owner, 2026-10-08)
+    codes = [chr(ord("A") + i) for i in range(len(factors))]
+    fl, fnote = [], []
+    for k, f in zip(codes, factors):
         p = cfg.unit_op(step).param(f)
-        fl.append(f"{p.name} ({p.unit})")
+        unit = re.sub(r"\s*\(.*\)$", "", p.unit)       # "AU (OD280, descending)" -> "AU"
+        fl.append(f"{k}\n({unit})")
+        name = p.name[0].lower() + p.name[1:] if p.name[1:2].islower() else p.name
+        fnote.append(f"{k}, {name}" + (f" ({p.unit.replace(' (', ', ').rstrip(')')})" if unit != p.unit else ""))
+    factor_note = ". ".join(fnote) + "."
     head1 = [C("Run", rs=2), C("Type", rs=2), C("Factor settings", cs=len(factors)),
              C("Responses", cs=len(resps))]
     head2 = fl + [RESP_LABEL.get(r, r) for r in resps]
@@ -501,10 +511,14 @@ def doe_results(step: str, kind: str, label: Optional[str] = None, superseded: b
         body.append(row)
     dev = _csv("deviations.csv").set_index("dev_id")
     notes = [(mk, f"{did}: {dev.loc[did, 'summary']}. Run retained.") for did, mk in marks.items()]
+    notes.append(("", f"Factors: {factor_note}"))
     if lmw and step in ("protein_a", "viral_inactivation") and "lmw_sec_pct" in lmw:
-        notes.append(("", "LMW by SEC is biased in this matrix and is not used for evaluation (AMD-001). n.t. = not tested."))
-    elif lmw:
+        notes.append(("", "LMW by SEC is biased in this matrix and is not used for evaluation (AMD-001)."))
+    if any(d[c].isna().any() for c in resps + lmw):
         notes.append(("", "n.t. = not tested."))
+    if untested:
+        lab = lambda c: {"lmw_sec_pct": "LMW by SEC", "lmw_cesds_pct": "LMW by nrCE-SDS"}.get(c, RESP_LABEL.get(c, c))
+        notes.append(("", f"Not tested in this design: {', '.join(lab(c) for c in untested)}."))
     title = {"screening": "screening", "rsm": "response-surface"}[kind]
     return CTable(
         header=[head1, head2], body=body, align=["l", "l"] + ["R{1.35cm}"] * len(head2),

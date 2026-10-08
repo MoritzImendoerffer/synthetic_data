@@ -34,6 +34,7 @@ from typing import List, Optional, Sequence, Tuple, Union
 
 CELL_SEP = " | "
 _MARK = re.compile(r"\^([^^]+)\^")
+_XREF = re.compile(r"@(?:sec|tbl|fig|eq|apx)-[\w-]+")
 
 
 @dataclass
@@ -108,6 +109,12 @@ class CTable:
     def __post_init__(self):
         self.header = [[_c(x) for x in r] for r in self.header]
         self.body = [[_c(x) for x in r] for r in self.body]
+        # cells and notes are raw HTML/LaTeX, so Quarto never resolves a cross-reference in them
+        # and "@sec-x" would print literally. Name the section in words; the caption may refer.
+        for t in [c.text for r in self.header + self.body for c in r] + [n[1] for n in self.notes]:
+            if _XREF.search(_s(t)):
+                raise ValueError(f"{self.label}: a cross-reference cannot resolve inside a table "
+                                 f"cell or note ({_XREF.search(_s(t)).group(0)!r}); name it in words")
         self._relabel_notes()
         self.ncols = sum(c.cs for c in self.header[0])
         if not self.label.startswith("tbl-"):

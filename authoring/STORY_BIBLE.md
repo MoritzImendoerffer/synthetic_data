@@ -314,6 +314,23 @@ were planned against. `T.parameters_by_step` footnotes each narrowed NOR.
 Monte Carlo and PPQ sample the NOR in force. INV-001 closed before either report was issued, so it
 says only that the reports narrow the NOR, from its own computed finding.
 
+**Harvest and UF/DF univariate studies (owner's decision 2026-10-08, option A).** Version 1.0 had
+no parameter data for the two steps without a design. Version 2.0 reports S-HAR-UNI and
+S-UFDF-UNI (`univariate_studies.csv`; config `analytics.univariate_nodoe`): each parameter at five
+levels (low, low-mid, set-point, mid-high, high) in duplicate, the others at set-point. They are
+not designed experiments, and no document calls them one.
+- Harvest: centrate turbidity falls with centrifuge rcf and levels off. Clarified turbidity is flat
+  across the depth filter load NOR and rises steeply at the top of the characterized range, as the
+  filter nears capacity. Host cell protein, aggregate and step yield show no trend beyond assay
+  precision. This keeps A-Mab's assumption (p.85) that harvest has no impact on product quality.
+  Post-clarification turbidity is the outcome of the other two parameters and was not varied.
+- UF/DF: residual buffer falls as exp(−DV) (0.034 % at 8 DV, the value Version 1.0 printed).
+  Aggregate rises a little with final concentration and TMP. The source gives nothing for this
+  step (A-Mab p.86), so this effect is the campaign's own finding, and PCR-010 presents it as a
+  result, not as prior knowledge. Its size against the criterion is computed, never stated here.
+- The process model carries the same effects (`process.harvest.model`, `process.ufdf.model`), so
+  Monte Carlo and PPQ include them. They are zero at set-point, so the nominal batch is unchanged.
+
 **Hold-study fragment results.** The hold studies ran before AMD-001. Their first and last time
 points were retained and tested by nrCE-SDS together with the retained response-surface samples,
 and the intermediate time points have SEC only. A hold criterion for fragments is judged on the

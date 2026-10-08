@@ -19,6 +19,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from amab_process.config import load_config
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "outputs", "data")
 TAG = "corpus-rev1.0"
@@ -138,3 +140,56 @@ def test_method_decision_between_comparability_and_aex_repeat():
     st = {s["id"]: s for s in cfg["campaign"]["studies"]}
     d = cfg["campaign"]["method_decision"]["date"]
     assert st["S-CEX-FRC"]["end"] < d < st["S-AEX-SCR"]["start"]
+
+
+# --------------------------------------------------------------------------------------
+# Harvest and UF/DF univariate studies (owner's option A, 2026-10-08)
+# --------------------------------------------------------------------------------------
+def _nodoe():
+    u = pd.read_csv(os.path.join(DATA, "univariate_studies.csv"))
+    return u[u["step"].isin(["harvest", "ufdf"])]
+
+
+def test_nodoe_effects_vanish_at_set_point():
+    """The new effects are zero at set-point and draw no random number, so the nominal batch is
+    the one Version 1.0 described."""
+    from amab_process.process import Process
+    proc = Process(load_config())
+    a, b = proc.nominal_batch(), proc.nominal_batch()
+    ds = a.drug_substance.cqas
+    assert ds == b.drug_substance.cqas
+    ufdf = a.steps[-1]
+    assert ufdf.out.cqas["aggregates_hmw"] == ufdf.inp.cqas["aggregates_hmw"]
+
+
+def test_nodoe_design_and_findings():
+    u = _nodoe()
+    cfg = load_config().raw()["analytics"]["univariate_nodoe"]
+    n = len(cfg["levels"]) * int(cfg["replicates"])
+    assert (u.groupby(["step", "parameter"]).size() == n).all()
+    assert "turbidity" not in set(u["parameter"])           # an outcome, not a setting
+    # residual buffer at the 8 DV set-point is the 0.034 % Version 1.0 printed
+    sp = u[(u["parameter"] == "diavolumes") & (u["level"] == "set-point")]
+    assert abs(sp["residual_buffer_pct"].mean() - 0.034) < 0.003
+    # the clarified turbidity knee lies above the depth filter load NOR, not inside it
+    d = u[u["parameter"] == "depth_filter_load"].groupby("value")["clarified_turbidity_ntu"].mean()
+    assert d.iloc[-1] > 2 * d.iloc[0] and d.iloc[:-1].max() < 1.3 * d.iloc[0]
+
+
+def test_harvest_keeps_the_no_quality_impact_assumption():
+    """A-Mab p.85: harvest has no impact on product quality. No attribute slope is significant."""
+    from scipy import stats
+    u = _nodoe()
+    for (step, par), g in u[u["step"] == "harvest"].groupby(["step", "parameter"]):
+        for col in ("hcp_out_ng_mg", "aggregate_out_pct"):
+            assert stats.linregress(g["value"], g[col]).pvalue > 0.05, (par, col)
+
+
+def test_nodoe_responses_are_not_attributes():
+    import sys
+    sys.path.insert(0, os.path.join(ROOT, "pc_package"))
+    import tables as T
+    for r in ("centrate_turbidity_ntu", "clarified_turbidity_ntu", "residual_buffer_pct",
+              "ds_concentration_g_per_l"):
+        assert T._resp_cqa(r, "harvest") is None
+    assert T._resp_cqa("aggregate_out_pct", "ufdf") == "aggregates_hmw"

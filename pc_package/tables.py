@@ -768,7 +768,9 @@ def _resp_cqa(resp: str, step: str) -> Optional[str]:
         return "fragments_lmw" if step in _SEC_FRAGMENTS_VALID else None
     if resp == "step_yield":
         return None
-    return D.RESP_TO_CQA.get(resp, resp)
+    # a performance output (turbidity, residual buffer, concentration) is not an attribute
+    cqa = D.RESP_TO_CQA.get(resp, resp)
+    return cqa if cqa in set(_csv("cqa_register.csv")["key"]) else None
 
 
 def _alpha() -> float:

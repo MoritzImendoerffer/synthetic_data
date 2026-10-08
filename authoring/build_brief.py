@@ -493,6 +493,38 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
         if not v.empty:
             w("### Platform worst cases this step verifies — `D.iac_verification(UO)`\n\n")
             w(v.to_markdown(index=False) + "\n\n")
+        if key in ("harvest", "ufdf"):
+            uni = P.csv("univariate_studies.csv")
+            uni = uni[uni["step"] == key].dropna(axis=1, how="all")
+            sid = uni["study"].iloc[0]
+            w(f"### Univariate study {sid} — `csv(\"univariate_studies.csv\")`, rows of step `{key}`\n\n")
+            w("Owner's decision 2026-10-08 (option A): each parameter at five levels in duplicate, the "
+              "others at set-point. This is **not** a designed experiment; never call it one and "
+              "never fit a multifactor model to it. Judge each response on its slope against the "
+              "setting (`scipy.stats.linregress`, α = campaign `effect_alpha`) and on the level "
+              "means against the criterion. "
+              + ("Harvest keeps the source's assumption that the step has no impact on product "
+                 "quality (A-Mab p.85, 'for simplicity'; 'This might not be true in a real life "
+                 "scenario'): host cell protein and aggregate pass through, and differ only by "
+                 "assay precision. Turbidity is a performance output, not an attribute. "
+                 "Post-clarification turbidity is the outcome of the other two parameters and was "
+                 "not varied; its NOR is tested through the clarified turbidity response."
+                 if key == "harvest" else
+                 "The source gives nothing for this step (A-Mab p.86: UF/DF 'not included in case "
+                 "study'). The aggregate effect at high final concentration and high TMP is this "
+                 "campaign's own finding; residual buffer and concentration are performance "
+                 "outputs, not attributes.")
+              + " Means by level:\n\n")
+            means = uni.groupby(["parameter", "level", "value"], sort=False).mean(numeric_only=True)
+            w(means.drop(columns=["replicate"]).round(4).to_markdown() + "\n\n")
+            from scipy import stats as _st
+            rows = []
+            for par, g in uni.groupby("parameter", sort=False):
+                for col in [c for c in uni.columns[6:] if g[c].notna().all()]:
+                    fit = _st.linregress(g["value"], g[col])
+                    rows.append({"parameter": par, "response": col, "slope": fit.slope, "p": fit.pvalue})
+            import pandas as _pd
+            w("Slopes against the setting:\n\n" + _pd.DataFrame(rows).to_markdown(index=False, floatfmt=".3g") + "\n\n")
         if key in ("harvest", "protein_a", "viral_inactivation"):
             w(f"### Hold-time stability — `T.hold_stability(\"{key}\")`, data `csv(\"hold_{key}.csv\")`\n\n")
             w(P.csv(f"hold_{key}.csv").round(3).to_markdown(index=False) + "\n\n")

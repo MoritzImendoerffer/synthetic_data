@@ -209,8 +209,14 @@ differ only in their `UO` key and unit-specific narrative:
 Steps with screening + RSM data (use `doe_report.py` fully): **bioreactor (3),
 protein_a (5), viral_inactivation (6), cex (7), aex (8), virus_filtration (9)**.
 Steps **without** DoE: **harvest (4)** and **UF/DF (10)** — their plan/report present
-univariate/qualitative characterization and are correspondingly shorter; do not
-fabricate a DoE for them.
+univariate characterization and are correspondingly shorter; do not fabricate a DoE for
+them. The rule follows the source: A-Mab p.85 assumes harvest has no impact on product
+quality "for simplicity", and p.86 leaves UF/DF out of the case study, so there is nothing
+to calibrate a design against. Version 2.0 gives both steps univariate studies
+(`S-HAR-UNI`, `S-UFDF-UNI`: five levels in duplicate, `analytics.univariate_nodoe`, owner's
+decision 2026-10-08). Harvest keeps the no-quality-impact assumption (turbidity responds,
+attributes do not). The UF/DF aggregate effect at high concentration and TMP is our own
+addition (`process.ufdf.model`) and a document must say so.
 
 ## Adding a unit-operation Plan/Report pair
 

@@ -374,6 +374,52 @@ def univariate_studies(cfg: Config, proc, feeds) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _nodoe_levels(p) -> list:
+    """Five levels: the range ends, set-point, and halfway between set-point and each end."""
+    lo, hi, sp = float(p.prange[0]), float(p.prange[1]), float(p.setpoint)
+    return [lo, (lo + sp) / 2, sp, (sp + hi) / 2, hi]
+
+
+def _assay_cv(cfg: Config, spec) -> float:
+    if isinstance(spec, str):
+        meth = {m["id"]: m for m in cfg.raw()["deviations"]["methods"]}[spec]
+        return float(meth["precision_pct"]) / 100
+    return float(spec)
+
+
+def univariate_nodoe(cfg: Config, proc, feeds) -> pd.DataFrame:
+    """S-HAR-UNI and S-UFDF-UNI: the two steps without a design (owner's option A, 2026-10-08).
+
+    Each varied parameter at five levels in duplicate, the others at set-point, from its own
+    stream (key 12). Each result carries the repeatability of its method
+    (``analytics.univariate_nodoe.assay``). Harvest keeps A-Mab's no-quality-impact assumption:
+    its attributes pass through and differ only by assay noise. Rows have the columns of
+    ``univariate_studies`` and are appended to it."""
+    from .studies import _response_value, _unit
+    u = _a(cfg)["univariate_nodoe"]
+    attr = {"hcp_out_ng_mg": "hcp", "aggregate_out_pct": "aggregates_hmw"}
+    rows = []
+    for si, (step, study) in enumerate(u["studies"].items()):
+        uo = _unit(proc, step)
+        skip = set(u.get("not_varied", {}).get(step, []))
+        params = [q for q in cfg.unit_op(step).parameters if q.study == "univariate" and q.key not in skip]
+        for pi, p in enumerate(params):
+            for li, (level, val) in enumerate(zip(u["levels"], _nodoe_levels(p))):
+                rng = _rng(cfg, 12, si, pi, li)
+                for rep in range(1, int(u["replicates"]) + 1):
+                    feed = feeds.get(step)
+                    res = uo.run(None if feed is None else feed.copy(), rng, setpoints={p.key: float(val)})
+                    row = {"study": study, "step": step, "parameter": p.key, "level": level,
+                           "value": float(val), "replicate": rep}
+                    for r in u["responses"][step]:
+                        v = float(res.out.cqas[attr[r]]) if r in attr else _response_value(res, r)
+                        if r in u["assay"]:
+                            v *= float(np.exp(rng.normal(0, _assay_cv(cfg, u["assay"][r]))))
+                        row[r] = v
+                    rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def run_order(cfg: Config, df: pd.DataFrame, study_index: int) -> np.ndarray:
     """A randomized execution order for a design, from its own stream. Recorded in the CSV beside
     the standard-order run number (the record had standard order only)."""

@@ -418,14 +418,23 @@ def select_model(df: pd.DataFrame, resp: str, factors: Sequence[str], thresholds
     3. The check: the selected model against PCMP-001 §7.2. ``adequate`` also requires a
        significant model F-test when the model has terms; a model with no term says the output
        does not depend on the parameters within the range studied.
-    An output that the data give without error is fitted exactly by several models; the smallest
-    of them is taken, ``exact`` is True and AICc is not defined (NaN).
+    An output whose results the full quadratic reproduces exactly (identical replicates, no residual)
+    is fitted exactly by several models; the smallest of them is taken, ``exact`` is True and AICc is
+    not defined (NaN). Such a model is never ``adequate``: with no residual there is no pure error for
+    the lack-of-fit test and no residual mean square for the model F-test, so PCMP-001 §7.2 cannot be
+    applied, and its prediction interval has zero width. The output is judged on its measured
+    results, and it cannot widen a criterion (INV-002 review run 2; owner, 2026-10-09). No Box-Cox
+    interval is computed for it: the profile likelihood is unbounded when every λ fits exactly.
     Returns the ``adequacy`` dict of the selected model with ``scale``, ``ycol``, ``boxcox``,
     ``aicc``, ``aicc_full``, ``exact`` and the data (``data``) it was fitted to."""
     d = df[df[resp].notna()].reset_index(drop=True)
     blk = has_blocks(d) if block is None else block
     scale, ycol, bc = "raw", resp, None
-    if transform and (d[resp] > 0).all():
+    y0 = d[resp].to_numpy(float)
+    X0 = matrix(d, full_terms(factors), blk).to_numpy()
+    sst0 = float(((y0 - y0.mean()) ** 2).sum())
+    exact_raw = sst0 > 0 and float(((y0 - X0 @ np.linalg.lstsq(X0, y0, rcond=None)[0]) ** 2).sum()) / sst0 < EXACT_TOL
+    if transform and not exact_raw and (d[resp] > 0).all():
         bc = boxcox_interval(d, resp, factors, full_terms(factors))
         if bc["lo"] <= 0.0 <= bc["hi"] and not (bc["lo"] <= 1.0 <= bc["hi"]):
             scale, ycol = "log", f"ln_{resp}"
@@ -456,6 +465,9 @@ def select_model(df: pd.DataFrame, resp: str, factors: Sequence[str], thresholds
     terms = [t for t in order if t in best[1]]
     fit = adequacy(d, ycol, factors, terms, thresholds, blk)
     if terms and not fit["f_ok"]:
+        fit["adequate"] = False
+    if exact:
+        # §7.2 cannot be applied to a model with no residual (see the docstring)
         fit["adequate"] = False
     fit.update(scale=scale, ycol=ycol, boxcox=bc, aicc=best[0], exact=exact,
                aicc_full=float("nan") if exact else aicc(y, X.to_numpy()), data=d)

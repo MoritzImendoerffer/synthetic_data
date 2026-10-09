@@ -235,9 +235,12 @@ def method_plan(cfg: Config, extra: Optional[list] = None) -> pd.DataFrame:
 
 
 def hold_study(cfg: Config, pool: str, ps: pd.DataFrame) -> pd.DataFrame:
-    """Hold-time stability of one intermediate: HMW and acidic variants at every time point,
-    LMW by SEC at every time point and by CE-SDS only at ``cesds_days``. NaN = not tested."""
+    """Hold-time stability of one intermediate: HMW and acidic variants at every time point, LMW by
+    CE-SDS at ``cesds_days`` and by SEC only where the method plan lists SEC for the study. The hold
+    studies were made after AMD-001 (owner, 2026-10-09): nrCE-SDS on every sample, no SEC fragment
+    result. NaN = not tested."""
     h = _a(cfg)["holds"][pool]
+    sec = "sec" in (_a(cfg)["plan"].get(h["study"]) or [])
     pools = list(_a(cfg)["holds"])
     rng = _rng(cfg, 4, pools.index(pool))
     nom = nominal_train(cfg)
@@ -255,7 +258,7 @@ def hold_study(cfg: Config, pool: str, ps: pd.DataFrame) -> pd.DataFrame:
                 "pool": pool, "temperature": temp, "day": d,
                 "hmw_pct": float(h["hmw0"] + h["hmw_rate"][ti] * d + rng.normal(0, 0.05)),
                 "acidic_pct": float(h["acid0"] + h["acid_rate"][ti] * d + rng.normal(0, 0.25)),
-                LMW_SEC: float(measure(cfg, "sec", [true_f], rng, hcp[0], lpa[0])[0]),
+                LMW_SEC: (float(measure(cfg, "sec", [true_f], rng, hcp[0], lpa[0])[0]) if sec else np.nan),
                 LMW_CE: (float(measure(cfg, "cesds", [true_f], rng)[0]) if d in h["cesds_days"] else np.nan),
             })
     return pd.DataFrame(rows)
@@ -512,6 +515,36 @@ def vi_ofat(cfg: Config, proc, feeds) -> pd.DataFrame:
                 rows.append({"study": o["study"], "ph": float(ph), "hold_min": int(t),
                              "temperature": float(o["temperature"]), "replicate": rep,
                              "aggregate_out_pct": agg, "acidic_variants": acid, LMW_CE: frag})
+    return pd.DataFrame(rows)
+
+
+def vi_concentration_xmulv(cfg: Config, proc, feeds) -> pd.DataFrame:
+    """S-VI-UNI2 (PD-006-06, owner 2026-10-09): XMuLV-spiked low-pH holds at the low and the high end
+    of the A-Mab concentration range studied, in duplicate, the other parameters at their set-points as
+    characterized, from its own stream (key 20). It measures what PCP-006 Version 1.0 required of the
+    concentration study and S-VI-UNI did not (DEV-006-03). The step model has no concentration term in
+    the inactivation (acid denaturation of the viral envelope consumes no antibody), so the results
+    differ by run-to-run variation only. Aggregate and acidic variants carry the repeatability of their
+    methods, as in S-VI-OFAT. Rows have the columns of ``univariate_studies`` plus ``xmulv_lrf``."""
+    from .studies import _response_value, _unit
+    spec = _a(cfg)["vi_concentration"]
+    uo = _unit(proc, "viral_inactivation")
+    p = cfg.unit_op("viral_inactivation").param(spec["parameter"])
+    meth = {m["id"]: m for m in cfg.raw()["deviations"]["methods"]}
+    sec_cv = float(meth["AMV-3221"]["precision_pct"]) / 100
+    icief_cv = float(_a(cfg)["sdm"]["assay_cv"]["acidic_variants"])
+    rows = []
+    for li, (level, val) in enumerate((("low", p.prange[0]), ("high", p.prange[1]))):
+        rng = _rng(cfg, 20, li)
+        for rep in range(1, int(spec["replicates"]) + 1):
+            feed = feeds.get("viral_inactivation")
+            res = uo.run(None if feed is None else feed.copy(), rng, setpoints={p.key: float(val)})
+            agg = _response_value(res, "aggregate_out_pct") * float(np.exp(rng.normal(0.0, sec_cv)))
+            acid = _response_value(res, "acidic_variants") * float(np.exp(rng.normal(0.0, icief_cv)))
+            rows.append({"study": spec["study"], "step": "viral_inactivation", "parameter": p.key,
+                         "level": level, "value": float(val), "replicate": rep,
+                         "aggregate_out_pct": agg, "acidic_variants": acid,
+                         "xmulv_lrf": float(res.metrics["xmulv_lrf"])})
     return pd.DataFrame(rows)
 
 

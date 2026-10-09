@@ -44,6 +44,8 @@ PARAM_CONCEPT = {
     "Culture pH": "param:culture_ph",
     "Culture temperature": "param:culture_temperature",
     "Dissolved CO2 (pCO2)": "param:dissolved_co2",
+    # renamed on 2026-10-09 (owner): pCO2 is a partial pressure; the concept keeps its id
+    "CO2 partial pressure (pCO2)": "param:dissolved_co2",
     "Osmolality": "param:osmolality",
     "Culture duration": "param:culture_duration",
     "Dissolved oxygen": "param:dissolved_oxygen",
@@ -8576,6 +8578,11 @@ def build_investigation():
          "verif",
          f"For {ns['n_ver_wsup']} of them the single-batch bound was also better than the platform "
          f"value, on an adequate model, and the criteria upstream were recalculated with the bound."),
+    ] + ([   # a bettered bound on a model that is not adequate (the exact fit, owner 2026-10-09)
+        ("For the acidic-variant increase at low-pH viral inactivation the bound was better than the "
+         "platform value, but the model fits the results exactly and the platform value stands.", "verif",
+         ns["vin_sentence"]),
+    ] if ns["n_ver_better_inadequate"] else []) + [
         (f"For the other {ns['n_ver_kept']} the single-batch bound was not better than the platform "
          f"value, so the platform value stands.", "verif",
          f"For the other {ns['nw'](ns['n_ver_kept'])} the single-batch bound was not better than the "
@@ -8622,19 +8629,19 @@ def build_investigation():
          "verif",
          f"The aggregate criteria upstream of cation exchange were recalculated with the bound, and "
          f"the {ns['n_tight']} aggregate criteria at the {ns['tight_steps']} steps were tightened."),
-        (f"The bioreactor criterion for acidic variants was widened on the increase of acidic variants "
-         f"at low-pH viral inactivation, {f2(ns['vi_acid_bound'])} points at the single-batch bound "
-         f"against a platform value of {f2(ns['vi_acid_assumed'])}.", "verif",
-         f"The bioreactor criterion for acidic variants was widened in the same way, on the increase of "
-         f"acidic variants at low-pH viral inactivation ({f2(ns['vi_acid_bound'])} points against a "
-         f"platform value of {f2(ns['vi_acid_assumed'])})."),
-        (f"The platform values of the aggregate and acidic variant increases at low-pH viral "
-         f"inactivation are increases over a hold of {ns['plat_hold_min']} min.", "verif",
-         f"Both platform values are increases over a hold of {ns['plat_hold_min']} min."),
-        (f"The A-Mab values are increases within the NOR as characterized, where the hold lasts at most "
+        (f"The platform value of the aggregate increase at low-pH viral inactivation is an increase over "
+         f"a hold of {ns['plat_hold_min']} min.", "verif",
+         f"The platform value is an increase over a hold of {ns['plat_hold_min']} min."),
+        (f"The A-Mab value is an increase within the NOR as characterized, where the hold lasts at most "
          f"{ns['amab_hold_max']:g} min.", "verif",
-         f"The A-Mab values are increases within the NOR as characterized, where the hold lasts at most "
+         f"The A-Mab value is an increase within the NOR as characterized, where the hold lasts at most "
          f"{ns['amab_hold_max']:g} min."),
+        (f"The acidic-variant increase at low-pH viral inactivation, {f2(ns['vi_acid_bound'])} points, is "
+         f"below its platform value of {f2(ns['vi_acid_assumed'])}, but its model fits exactly, so the "
+         f"bioreactor criterion for acidic variants stays at its a priori value.", "verif",
+         f"The acidic-variant increase at low-pH viral inactivation, {f2(ns['vi_acid_bound'])} points, is "
+         f"also below its platform value of {f2(ns['vi_acid_assumed'])}, but its model fits exactly, so the "
+         f"bioreactor criterion for acidic variants stays at its a priori value."),
     ] + [   # why each moved, decided per attribute in the document (PCP-006 factual check, 2026-10-09)
         (q, "verif", q) for q in ns["_vi_why"]
     ] + [

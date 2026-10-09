@@ -214,8 +214,10 @@ def main() -> None:
         save(an.hold_study(cfg, pool, ps).round(4), f"hold_{pool}.csv")
     save(an.comparability(cfg, ps).round(4), "cex_fraction_comparability.csv")
     save(an.sdm_qualification(cfg, proc, feeds), "sdm_qualification.csv")
-    save(pd.concat([an.univariate_studies(cfg, proc, feeds), an.univariate_nodoe(cfg, proc, feeds)],
-                   ignore_index=True), "univariate_studies.csv")
+    # S-VI-UNI2 (PD-006-06) appended last: XMuLV clearance at the ends of the A-Mab concentration range
+    save(pd.concat([an.univariate_studies(cfg, proc, feeds), an.univariate_nodoe(cfg, proc, feeds),
+                    an.vi_concentration_xmulv(cfg, proc, feeds)], ignore_index=True),
+         "univariate_studies.csv")
     values["fragments_nominal"] = {k: round(v, 3) for k, v in an.nominal_train(cfg).items()}
 
     # -- 12. Rev 2.0 intermediate acceptance criteria (config only), Rev 1.0 criteria (data),

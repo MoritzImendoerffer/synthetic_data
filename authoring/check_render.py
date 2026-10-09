@@ -200,7 +200,16 @@ def check_unresolved_refs(qmd: str) -> int:
               + ", ".join(sorted(set(hits))[:8]))
         print("      Never put @sec-/@tbl- inside an inline expression; write it in the text.")
         return 1
-    print(f"OK    {os.path.basename(pdf)}: every cross-reference resolved")
+    # an inline expression that Quarto did not evaluate prints as its source. Two inline
+    # expressions separated only by a space did so in PCP-005 Version 2.0 ("{python} inad_text",
+    # found by the PCR-005 author on 2026-10-09): join them in one expression instead
+    leaks = re.findall(r"\{python\}\s*[^\s]{0,40}", text)
+    if leaks:
+        print(f"FAIL  {os.path.basename(pdf)}: {len(leaks)} inline expression(s) printed as source: "
+              + ", ".join(sorted(set(leaks))[:8]))
+        print("      Join adjacent inline expressions into one, e.g. `{python} a + ' ' + b`.")
+        return 1
+    print(f"OK    {os.path.basename(pdf)}: every cross-reference resolved, no inline source printed")
     return 0
 
 

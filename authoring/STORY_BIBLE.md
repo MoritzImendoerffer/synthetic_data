@@ -324,6 +324,13 @@ cases (`iac.py`) alike.
 3. The selected model judged against PCMP-001 §7.2 (and a significant F-test when it has terms). A
    model with no term says the output does not depend on the parameters within the range studied. An
    output with no adequate model is judged on its measured results and sets no range.
+   **An exact fit is never adequate** (owner, 2026-10-09; INV-002 review run 2). Where the results have no
+   scatter (acidic variants in the low-pH design, which depend on hold time alone), the full quadratic
+   reproduces them exactly: there is no pure error for the lack-of-fit test and no residual mean square
+   for the model F-test, the prediction interval has zero width, and the Box-Cox profile is unbounded, so
+   no scale is chosen. Such an output has no adequate model, is judged on its measured results, and its
+   bound cannot replace a platform value. So the bioreactor acidic-variant upper limit stays at its a
+   priori value (`iac.csv`), and the INV-002 count of adequate selected models excludes it.
 4. A scale-down offset on the scale of the model: a ratio of geometric means for a log-scale model.
 **Explaining the log scale and the search to a reader (owner, 2026-10-09: "Do not expect that a reader
 will understand this reasoning").** A document that uses either must give the reader all of this, with
@@ -399,6 +406,37 @@ QA opened INV-002 during INV-001 (config `campaign.investigation_2`). Its record
   with a block term (`T.model_reevaluation(UO)`), and the discrepancies from the plan. They cite INV-002
   for the sample size and never recompute it.
 
+**What a Version 2.0 plan may add (coordinator, 2026-10-09, after the PCP-006 factual check).** A
+Version 2.0 plan is an amendment issued after its studies ran (CA2). It states the a priori criteria, the
+fragment method, the scale-down offset rule, the adequacy tests, the judgement statistics, the
+verification rule and the execution windows, as PCMP-001 Version 2.0 sets them, and lists each as a
+change. It must not add a step-specific decision rule (a refit procedure, a NOR rule for one parameter, a
+test chosen for one study) or an execution detail the record does not hold, because such a rule is
+written with the data known: that is INV-001 finding 1 again. It never says a rule was "fixed before
+the data". It keeps the design, sampling and spiking as Version 1.0 planned them, even where a study
+departed from them; the report records the departure. Where Version 1.0 had no rule the report needs,
+the plan says it has none, and the report states its approach and records it as a discrepancy.
+
+**The hold studies, the concentration study and the labels (owner, 2026-10-09).**
+- **Hold studies.** No Version 1.0 document planned or reported a hold study. They were made during the
+  Version 2.0 re-analysis, after INV-001 closed and after AMD-001 (S-HAR-HLD, S-PA-HLD, S-VI-HLD in
+  `study_chronology.csv`), so fragments are by nrCE-SDS on every sample and SEC gives aggregate only.
+  Each report records its hold study as a discrepancy from the plan (PD-004-02, PD-005-05, PD-006-05);
+  no plan describes one. The held pool is the nominal set-point material of the step model. The retests
+  S-PA-RET and S-VI-RET covered the retained response-surface samples only.
+- **The A-Mab concentration study at low pH.** PCP-006 Version 1.0 required XMuLV clearance on every run
+  of S-VI-UNI; the study measured aggregate and acidic variants only, and PCR-006 Version 1.0 did not
+  notice. Version 2.0: the plan keeps the Version 1.0 design; PCR-006 records the omission as deviation
+  DEV-006-03, found in the re-analysis, closed by the confirmation study S-VI-UNI2 (PD-006-06: XMuLV-spiked
+  holds at both ends of the concentration range, in duplicate, other parameters at their set-points as
+  characterized). Concentration does not enter the inactivation in the step model, so the two levels
+  differ by run-to-run variation only; PCR-006 judges that with the run-to-run SD of the design, and a
+  single run below the claim is not the claim failing (the claim is judged on the model at the least
+  favourable NOR combination).
+- **Labels.** pCO2 is "CO2 partial pressure (pCO2)" in mmHg; osmolality in mOsm/kg; dissolved oxygen in %
+  air saturation; initial viable cell concentration in 10⁶ cells/mL; basal medium concentration as a
+  multiple of standard strength (× standard).
+
 **Version 2.0 NOR and set-point decisions (owner, 2026-10-08 and 2026-10-09).** Config `nor_v2` and
 `setpoint_v2`; `Parameter.nor`/`.setpoint` are in force, `nor_characterized`/`setpoint_characterized`
 (and `D.characterized_nor()`) give what the studies were planned against and run around.
@@ -420,11 +458,14 @@ so no NOR or set-point decision moves a criterion or a Version 1.0 number.
   as characterized, at most 120 min. So the bioreactor aggregate criterion moves because the A-Mab hold is
   shorter, not because the product is more stable: at the edges of the range studied, which include
   180 min, A-Mab adds more aggregate than the platform value. Say so wherever that replacement is
-  described (PCP-006 review run 2). **It is not true for acidic variants** (PCP-006 factual check,
-  2026-10-09): every 180-min run of the low-pH design adds less than the platform value, so A-Mab adds
-  fewer acidic variants over the same hold, and the shorter hold lowers the increase further. Decide the
-  wording per attribute from `iac_verification.csv` (`observed_edge` against `assumed`), never in
-  general. Both criteria are still right, because routine manufacture never holds longer than the NOR.
+  described (PCP-006 review run 2). It is not true for acidic variants (PCP-006 factual check,
+  2026-10-09): every 180-min run of the low-pH design adds less than the platform value. But their model
+  is an exact fit, so no acidic-variant bound replaces the platform value and the bioreactor upper limit
+  stays at its a priori value (see "An exact fit is never adequate"). Decide any wording per attribute
+  from `iac_verification.csv` (`observed_edge` against `assumed`, `model_adequate`), never in general.
+  The aggregate criterion is still right, because routine manufacture never holds longer than the NOR,
+  and the aggregate model has no pH term, so the bound over the NOR as characterized also covers the NOR
+  in force (same longest hold and highest temperature).
 - **PCR-006, low-pH inactivation: a decision revised, and confirmation runs.** On the selected XMuLV model
   (main effects of pH, hold time and temperature) the 6.6 claim fails at the worst corner of the
   characterized NOR. First decision: pH NOR 3.30–3.50 with the set-point re-centred to 3.40 (owner: "0.04 pH
@@ -494,11 +535,9 @@ experiments, and no document calls them one.
   Monte Carlo and PPQ include them. They are zero at set-point, so the nominal batch is unchanged.
 
 
-**Hold-study fragment results.** The hold studies ran before AMD-001. Their first and last time
-points (and day 3 of the low-pH inactivation pool, config `analytics.holds` `cesds_days`) were
-retained and tested by nrCE-SDS together with the retained response-surface samples,
-and the intermediate time points have SEC only. A hold criterion for fragments is judged on the
-nrCE-SDS time points.
+**Hold-study fragment results.** The hold studies were made after AMD-001, during the Version 2.0
+re-analysis (owner, 2026-10-09), so every sample has an nrCE-SDS fragment result and none has an SEC
+fragment result. A hold criterion for fragments is judged on every time point.
 
 **What moved because of it.**
 - Several Version 1.0 findings were artefacts of the tuned limits. The best example is the
@@ -516,7 +555,7 @@ before the calibration due date of the equipment it used, and before Version 1.0
 
 **Hold studies.** The clarified harvest, the Protein A eluate (held at elution pH, before the
 inactivation step) and the neutralized viral inactivation pool were each held at two temperatures for seven days (`hold_<pool>.csv`,
-`T.hold_stability(pool)`). The design of the viral-inactivation pool study follows A-Mab
+`T.hold_stability(pool)`), in September 2026, as discrepancies from the plans (see above). The design of the viral-inactivation pool study follows A-Mab
 Table 4.17.
 
 ## 10. Grounding map — pull, never type

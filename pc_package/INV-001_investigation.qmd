@@ -110,7 +110,10 @@ chron = csv("study_chronology.csv")
 chron_aug = chron[(chron["kind"] == "augmentation") & (chron["start"] <= CLOSED)]
 chron = chron[(chron["kind"] != "augmentation") & (chron["start"] <= CLOSED)].reset_index(drop=True)
 _st = chron.set_index("id")
-_pd = [d for d in PLAN_DISCREPANCIES.get("PCR-005", []) if d.get("studies")]
+# the Protein A discrepancy whose study ran within this investigation's record (the hold study PD-005-05
+# was made after closure, during the Version 2.0 re-analysis, and is outside it)
+_pd = [d for d in PLAN_DISCREPANCIES.get("PCR-005", [])
+       if d.get("studies") and set(d["studies"]) <= set(chron["id"])]
 assert len(_pd) == 1
 pd_id, pd_studies = _pd[0]["id"], list(_pd[0]["studies"])
 assert len(pd_studies) == 1
@@ -406,7 +409,22 @@ n_ver_better_inadequate = int((_better & _met & ~_wsup).sum())
 # confirmed, but the single-batch bound is not better than the platform value: the platform value stands
 n_ver_kept = int((_met & ~_better).sum())
 assert n_ver_met == n_ver_wsup + n_ver_better_inadequate + n_ver_kept
-assert n_ver_better_inadequate == 0                           # "for the other N ... the platform value stands"
+# a bound better than the platform value on a model that is not adequate: the acidic variants of the
+# low-pH design, whose results have no scatter, so the model fits them exactly and the adequacy criteria
+# cannot be applied (owner, 2026-10-09). The platform value stands.
+_vin = _vt[_better & _met & ~_wsup]
+_vin_resp = {("viral_inactivation", "acidic_variants"): "acidic_variants"}
+assert set(zip(_vin["step_key"], _vin["cqa"])) <= set(_vin_resp)
+# "no scatter": every result at the same hold time is identical (asserted on the data, outside any
+# Version 1.0 analysis context, which would force the full quadratic)
+for _k, _c in zip(_vin["step_key"], _vin["cqa"]):
+    _dd = csv(f"doe_{_k}_rsm.csv")
+    assert (_dd.groupby("hold_time")[_vin_resp[(_k, _c)]].nunique() == 1).all()
+vin_sentence = ("For the increase of acidic variants at low-pH viral inactivation the bound was also better, but "
+                "the acidic-variant results of that design have no scatter. The model fits them exactly, so the "
+                "lack-of-fit test and the model F-test cannot be applied, and the platform value stands."
+                if n_ver_better_inadequate else "")
+assert n_ver_better_inadequate == len(_vin) <= 1
 _pah = _iac[(_iac["step_key"] == "protein_a") & (_iac["cqa"] == "hcp")].iloc[0]
 pa_hcp_apriori, pa_hcp_v2 = _pah["iac_high_apriori"], _pah["iac_high"]
 assert str(_pah["widened"]) == "True" and pa_hcp_v2 > pa_hcp_apriori > pa_hcp_crit
@@ -533,9 +551,9 @@ cex_load_v1 = par_cell("cex", "Aggregates (HMW, %)", "Protein load", 1)
 cex_load_v2 = par_cell("cex", "Aggregates (HMW, %)", "Protein load", 2)
 cex_load_nor = CFG.unit_op("cex").param("load").nor
 assert _span(cex_load_v1)[1] < cex_load_nor[1] <= _span(cex_load_v2)[1]
-brx_gal_v1 = par_cell("bioreactor", "Galactosylation", "Dissolved CO2 (pCO2)", 1)
+brx_gal_v1 = par_cell("bioreactor", "Galactosylation", CFG.unit_op("bioreactor").param("co2").name, 1)
 brx_co2_nor = CFG.unit_op("bioreactor").param("co2").nor
-brx_gal_v2 = par_cell("bioreactor", "Galactosylation", "Dissolved CO2 (pCO2)", 2)
+brx_gal_v2 = par_cell("bioreactor", "Galactosylation", CFG.unit_op("bioreactor").param("co2").name, 2)
 assert _span(brx_gal_v1)[0] > brx_co2_nor[0] >= _span(brx_gal_v2)[0]
 
 # acidic variants at the bioreactor: the ranges that changed, and what constrains them
@@ -805,12 +823,14 @@ assert bool(_vagg["widening_supported"])
 vi_agg_assumed, vi_agg_bound = _vagg["assumed"], _vagg["predicted_nor_bound95"]
 cex_agg_bound = _vx["predicted_nor_bound95"]
 assert cex_agg_bound < cex_agg_assumed
-# the bioreactor acidic variant criterion, widened on the same low-pH hold
+# the bioreactor acidic variant criterion is not widened: the low-pH acidic-variant model is an exact fit,
+# so its bound cannot replace the platform value (owner, 2026-10-09)
 _vacid = ver[(ver["step_key"] == "viral_inactivation") & (ver["cqa"] == "acidic_variants")].iloc[0]
-assert bool(_vacid["widening_supported"])
+assert not bool(_vacid["widening_supported"]) and not bool(_vacid["model_adequate"])
 vi_acid_assumed, vi_acid_bound = _vacid["assumed"], _vacid["predicted_nor_bound95"]
+assert vi_acid_bound < vi_acid_assumed
 _wvi = _iac[_is_w & (_iac["step_key"] == "bioreactor")]
-assert set(_wvi["cqa"]) == {"aggregates_hmw", "acidic_variants"}       # the two widened at the bioreactor
+assert set(_wvi["cqa"]) == {"aggregates_hmw"}                         # the one widened at the bioreactor
 # The platform values of the low-pH hold are increases over a longer hold than A-Mab's NOR allows: the
 # A-Mab values are increases within the NOR as characterized. Why each criterion moved differs by
 # attribute (PCP-006 factual check, 2026-10-09). The edges of the range studied include the platform's
@@ -826,7 +846,8 @@ amab_hold_max = CFG.unit_op("viral_inactivation").param("hold_time").nor_charact
 assert amab_hold_max < plat_hold_min
 assert CFG.unit_op("viral_inactivation").param("hold_time").prange[1] >= plat_hold_min   # the edges include it
 _vi_why = []
-for _c, _w in [("aggregates_hmw", "aggregate"), ("acidic_variants", "acidic variants")]:
+for _c, _w in [(c, w) for c, w in [("aggregates_hmw", "aggregate"), ("acidic_variants", "acidic variants")]
+               if c in set(_wvi["cqa"])]:
     _r = ver[(ver["step_key"] == "viral_inactivation") & (ver["cqa"] == _c)].iloc[0]
     if _r["observed_edge"] >= _r["assumed"]:
         _vi_why.append(f"For {_w}, the largest increase measured at the edges of the range studied, which include "
@@ -1314,7 +1335,7 @@ This campaign's data enter the Version 2.0 criteria, as they entered the Version
 
 ## Verification of the platform worst cases
 
-The platform worst cases are assumptions about A-Mab. Each was checked against the data of the downstream step it describes, under the first rule of CA1 in §6.1. The value observed at the edges of the characterization range is shown for information. @tbl-iac-verification gives the result. Of the `{python} n_ver` assumptions that could be tested, `{python} n_ver_met` were confirmed, because the prediction within the NOR was no worse than the platform value. For `{python} n_ver_wsup` of them the single-batch bound was also better than the platform value, on an adequate model, and the criteria upstream were recalculated with the bound. For the other `{python} nw(n_ver_kept)` the single-batch bound was not better than the platform value, so the platform value stands.
+The platform worst cases are assumptions about A-Mab. Each was checked against the data of the downstream step it describes, under the first rule of CA1 in §6.1. The value observed at the edges of the characterization range is shown for information. @tbl-iac-verification gives the result. Of the `{python} n_ver` assumptions that could be tested, `{python} n_ver_met` were confirmed, because the prediction within the NOR was no worse than the platform value. For `{python} n_ver_wsup` of them the single-batch bound was also better than the platform value, on an adequate model, and the criteria upstream were recalculated with the bound. `{python} vin_sentence` For the other `{python} nw(n_ver_kept)` the single-batch bound was not better than the platform value, so the platform value stands.
 
 ```{python}
 #| output: asis
@@ -1323,7 +1344,7 @@ T.worst_case_verification().show()
 
 At the edges of the characterization range, cation exchange cleared host cell protein `{python} f1(cex_hcp_edge)`-fold, short of the platform worst case of `{python} f1(cex_hcp_assumed)`-fold. Within the NOR, the lowest clearance the model predicts is `{python} f1(cex_hcp_nor)`-fold, and the single-batch bound is `{python} f1(cex_hcp_bound)`-fold. The edges of the characterization range lie outside the NOR, so the edge value does not decide the criterion. The prediction within the NOR confirms the platform value. The single-batch bound is below it, so the platform value of `{python} f1(cex_hcp_assumed)`-fold stands for cation exchange. The verification used the models that `{python} INV2["id"]` corrective action CA3 selects for each output (§2). At anion exchange, the single-batch bound for host cell protein is `{python} T.num(aex_hcp_bound)`-fold, which is better than the platform value of `{python} T.num(aex_hcp_assumed)`-fold. The anion exchange model passes the adequacy tests, so this bound replaced the platform value. The anion exchange bound widened the cation exchange criterion for host cell protein from `{python} T.num(cex_hcp_apriori)` to `{python} T.num(cex_hcp_v2)` ng/mg. Carried back through the platform value at cation exchange and this bound at anion exchange, the Protein A criterion for host cell protein was widened from `{python} big(pa_hcp_apriori)` to `{python} big(pa_hcp_v2)` ng/mg. The Protein A criterion is also wider than the Version 1.0 limit of `{python} big(pa_hcp_crit)` ng/mg, which was never an approved criterion (finding F1). In all, `{python} n_wid` criteria were widened, for `{python} wid_list`. @tbl-par-change in §6.3 gives the ranges that widened as a result.
 
-One assumption was not confirmed. The platform worst case for aggregate at cation exchange is a fold clearance of `{python} f1(cex_agg_assumed)`. Within its NOR, the lowest fold clearance the response surface model of this campaign predicts is `{python} f2(cex_agg_nor)`, and the single-batch bound is `{python} f2(cex_agg_bound)`. The aggregate criteria upstream of cation exchange were recalculated with the bound, and the `{python} n_tight` aggregate criteria at the `{python} tight_steps` steps were tightened. At the bioreactor the same criterion was also widened, because the single-batch bound of the aggregate increase at low-pH viral inactivation, `{python} f2(vi_agg_bound)` percentage points, is smaller than the platform value of `{python} f2(vi_agg_assumed)`. The bioreactor criterion for acidic variants was widened in the same way, on the increase of acidic variants at low-pH viral inactivation (`{python} f2(vi_acid_bound)` points against a platform value of `{python} f2(vi_acid_assumed)`). Both platform values are increases over a hold of `{python} plat_hold_min` min. The A-Mab values are increases within the NOR as characterized, where the hold lasts at most `{python} f"{amab_hold_max:g}"` min. `{python} vi_why_text` Both are still the right criteria, because routine manufacture does not hold longer than the NOR. `{python} tight_phrase`
+One assumption was not confirmed. The platform worst case for aggregate at cation exchange is a fold clearance of `{python} f1(cex_agg_assumed)`. Within its NOR, the lowest fold clearance the response surface model of this campaign predicts is `{python} f2(cex_agg_nor)`, and the single-batch bound is `{python} f2(cex_agg_bound)`. The aggregate criteria upstream of cation exchange were recalculated with the bound, and the `{python} n_tight` aggregate criteria at the `{python} tight_steps` steps were tightened. At the bioreactor the same criterion was also widened, because the single-batch bound of the aggregate increase at low-pH viral inactivation, `{python} f2(vi_agg_bound)` percentage points, is smaller than the platform value of `{python} f2(vi_agg_assumed)`. The platform value is an increase over a hold of `{python} plat_hold_min` min. The A-Mab value is an increase within the NOR as characterized, where the hold lasts at most `{python} f"{amab_hold_max:g}"` min. `{python} vi_why_text` The criterion is still right, because routine manufacture does not hold longer than the NOR. The acidic-variant increase at low-pH viral inactivation, `{python} f2(vi_acid_bound)` points, is also below its platform value of `{python} f2(vi_acid_assumed)`, but its model fits exactly, so the bioreactor criterion for acidic variants stays at its a priori value. `{python} tight_phrase`
 
 The criterion of `{python} T.num(lpa_crit)` ppm for leached Protein A at the Protein A step rests on two platform worst cases, for cation exchange and anion exchange, that no response of this campaign could test (not a response in @tbl-iac-verification). Together they assume a clearance of `{python} f1(lpa_assumed)`-fold. Judged per batch at manufacturing scale, the upper 95 % prediction limit for the Protein A pool is at most `{python} f2(lpa_hi)` ppm over the NOR (@tbl-results). It meets the step criterion. For a batch at that level to meet the drug-substance criterion of `{python} f"{ds_lpa:g}"` ppm, the downstream steps need to clear only `{python} f2(lpa_need)`-fold. The untested platform worst cases therefore carry little of the weight of this criterion.
 

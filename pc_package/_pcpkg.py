@@ -500,7 +500,7 @@ def _augmentation_discrepancies():
         step = r["step_key"]
         n = CFG.unit_op(step).step
         doc = f"PCR-{n:03d}"
-        k = len(CAMPAIGN.get("plan_discrepancies", {}).get(doc, [])) + len(out.get(doc, [])) + 1
+        k = _first_free_pd(n, CAMPAIGN.get("plan_discrepancies", {}).get(doc, []) + out.get(doc, []))
         attrs = [_AUG_ATTR.get(x, x) for x in str(r["responses"]).split()]
         what = attrs[0] if len(attrs) == 1 else ", ".join(attrs[:-1]) + " and " + attrs[-1]
         out.setdefault(doc, []).append({
@@ -515,6 +515,17 @@ def _augmentation_discrepancies():
                       "the number of runs",
             "studies": [aug[step]["id"]]})
     return out
+
+
+def _first_free_pd(n, entries):
+    """The smallest discrepancy number of report PCR-00n that no entry uses yet. A computed
+    discrepancy takes it, so a configured one added later with an explicit higher number does not
+    renumber the computed ones a report already cites (the hold studies of 2026-10-09)."""
+    used = {d["id"] for d in entries}
+    k = 1
+    while f"PD-{n:03d}-{k:02d}" in used:
+        k += 1
+    return k
 
 
 def _model_selection_discrepancy(doc, step, k):
@@ -540,9 +551,12 @@ PLAN_DISCREPANCIES = {k: list(v) for k, v in CAMPAIGN.get("plan_discrepancies", 
 for _doc, _ds in _augmentation_discrepancies().items():
     PLAN_DISCREPANCIES.setdefault(_doc, []).extend(_ds)
 for _step in st.DOE_FACTORS:
-    _doc = f"PCR-{CFG.unit_op(_step).step:03d}"
+    _n = CFG.unit_op(_step).step
+    _doc = f"PCR-{_n:03d}"
     PLAN_DISCREPANCIES.setdefault(_doc, []).append(
-        _model_selection_discrepancy(_doc, _step, len(PLAN_DISCREPANCIES.get(_doc, [])) + 1))
+        _model_selection_discrepancy(_doc, _step, _first_free_pd(_n, PLAN_DISCREPANCIES.get(_doc, []))))
+# each register in the order of its numbers
+PLAN_DISCREPANCIES = {k: sorted(v, key=lambda d: d["id"]) for k, v in PLAN_DISCREPANCIES.items()}
 
 
 def discrepancy_register(doc_id):

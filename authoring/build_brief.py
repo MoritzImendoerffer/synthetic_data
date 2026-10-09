@@ -776,8 +776,47 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
             import pandas as _pd
             w("Slopes against the setting:\n\n" + _pd.DataFrame(rows).to_markdown(index=False, floatfmt=".3g") + "\n\n")
         if key in ("harvest", "protein_a", "viral_inactivation"):
-            w(f"### Hold-time stability — `T.hold_stability(\"{key}\")`, data `csv(\"hold_{key}.csv\")`\n\n")
-            w(P.csv(f"hold_{key}.csv").round(3).to_markdown(index=False) + "\n\n")
+            # owner, 2026-10-09: no Version 1.0 document planned or reported a hold study; the hold
+            # studies were made during the Version 2.0 re-analysis and each report records its own as a
+            # discrepancy from the plan
+            hstudy = P.CFG.raw()["analytics"]["holds"][key]["study"]
+            hpd = [d for d in P.PLAN_DISCREPANCIES.get(f"PCR-{P.CFG.unit_op(key).step:03d}", [])
+                   if hstudy in d.get("studies", [])]
+            hchron = P.csv("study_chronology.csv").set_index("id").loc[hstudy]
+            if is_plan:
+                w(f"### Hold study — not a study of this plan\n\n- The hold study {hstudy} was made "
+                  f"{hchron['start']} to {hchron['end']}, during the Version 2.0 re-analysis. Version 1.0 of "
+                  "this plan did not foresee a hold study, and this amendment does not add one: the report "
+                  f"records it as {hpd[0]['id']}, a discrepancy from the plan. Do not describe its design, "
+                  "sampling or criterion as part of this plan.\n\n")
+            else:
+                w(f"### Hold-time stability — `T.hold_stability(\"{key}\")`, data `csv(\"hold_{key}.csv\")`\n\n")
+                w(f"- Made {hchron['start']} to {hchron['end']}, during the Version 2.0 re-analysis and after "
+                  f"AMD-001, so fragments by nrCE-SDS on every sample. Version 1.0 planned and reported no hold "
+                  f"study: record it as {hpd[0]['id']} (`discrepancy_register(DOC)`), a discrepancy from the "
+                  "plan, never as a deviation. The pool is the nominal set-point material of the step "
+                  "model.\n\n")
+                w(P.csv(f"hold_{key}.csv").round(3).to_markdown(index=False) + "\n\n")
+        if key == "viral_inactivation":
+            dv = {e["id"]: e for e in P.CFG.raw()["deviations"]["events"]["PCR-006"]}["DEV-006-03"]
+            vc = P.CFG.raw()["analytics"]["vi_concentration"]
+            if is_plan:
+                w("### The A-Mab concentration study as Version 1.0 planned it\n\n- Version 1.0 of this "
+                  "plan set the concentration study across the range studied, with the other three parameters "
+                  "at their set-points, and required aggregate, acidic variants and XMuLV clearance on every "
+                  "run. This amendment keeps that design. That S-VI-UNI measured no XMuLV clearance is a "
+                  f"deviation the report records ({dv['id']}); the plan does not change to match what was "
+                  "done.\n\n")
+            else:
+                u = P.csv("univariate_studies.csv")
+                vu = u[u["study"] == vc["study"]][["level", "value", "replicate", "xmulv_lrf",
+                                                     "aggregate_out_pct", "acidic_variants"]]
+                w(f"### {dv['id']} and the confirmation study {vc['study']}\n\n- {dv['id']}: "
+                  f"{dv['summary']}. Detected during the {dv['detected_during']}. Disposition: closed by "
+                  f"study {vc['study']} (`discrepancy_register(DOC)`). Version 1.0 of PCR-006 did not "
+                  "notice it.\n- The confirmation study, XMuLV-spiked holds at both ends of the concentration "
+                  "range, in duplicate, other parameters at their set-points as characterized:\n\n")
+                w(vu.round(3).to_markdown(index=False) + "\n\n")
         if key == "cex":
             w("### SEC against nrCE-SDS (S-CEX-FRC) — `T.method_comparability()`\n\n")
             c = P.csv("cex_fraction_comparability.csv")

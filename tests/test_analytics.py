@@ -247,3 +247,69 @@ def test_recentred_low_ph_support():
         r = n[n["cqa"] == cqa].iloc[0]
         lb = np.log(v[col]).mean() - z * r["sigma_ln"] / np.sqrt(len(v))
         assert lb >= np.log(r["f_required"]), cqa
+
+
+# --------------------------------------------------------------------------------------
+# Owner's decisions of 2026-10-09 (second session): exact fits, hold studies, the
+# concentration confirmation study, and the numbering of discrepancies from the plan
+# --------------------------------------------------------------------------------------
+def test_exact_fit_is_never_adequate():
+    """A response the full quadratic reproduces exactly has no residual, so neither the lack-of-fit
+    test nor the model F-test can be computed: PCMP-001 §7.2 cannot pass it, no Box-Cox interval is
+    reported, and it cannot widen a criterion (INV-002 review run 2)."""
+    from amab_process import adequacy as ad
+    lv = [-1.0, 0.0, 1.0]
+    df = pd.DataFrame([{"coded_a": a, "coded_b": b} for a in lv for b in lv] * 2)
+    df["y"] = 20.0 + 0.2 * df["coded_b"]                     # depends on one factor, no error
+    th = {k: float(v) for k, v in load_config().raw()["campaign"]["thresholds"].items()}
+    fit = ad.select_model(df, "y", ["a", "b"], th)
+    assert fit["exact"] and not fit["adequate"] and fit["boxcox"] is None
+    v = pd.read_csv(os.path.join(DATA, "iac_verification.csv"))
+    r = v[(v["step_key"] == "viral_inactivation") & (v["cqa"] == "acidic_variants")].iloc[0]
+    assert not bool(r["model_adequate"]) and not bool(r["widening_supported"])
+
+
+def test_hold_studies_are_version2_discrepancies_with_nrcesds_throughout():
+    """No Version 1.0 document planned or reported a hold study, so they were made during the
+    Version 2.0 re-analysis, after AMD-001: nrCE-SDS on every sample and no SEC fragment result.
+    Each is a discrepancy from its plan."""
+    cfg = load_config().raw()
+    st = {s["id"]: s for s in cfg["campaign"]["studies"]}
+    rev1 = cfg["campaign"]["revisions"][0]["effective"]
+    amd = cfg["campaign"]["method_decision"]["date"]
+    pd_studies = {x for ds in cfg["campaign"]["plan_discrepancies"].values() for d in ds
+                  for x in d.get("studies", [])}
+    for pool, h in cfg["analytics"]["holds"].items():
+        assert st[h["study"]]["start"] > max(rev1, amd) and h["study"] in pd_studies, pool
+        d = pd.read_csv(os.path.join(DATA, f"hold_{pool}.csv"))
+        assert d["lmw_cesds_pct"].notna().all() and d["lmw_sec_pct"].isna().all(), pool
+
+
+def test_concentration_confirmation_study_closes_the_deviation():
+    """DEV-006-03: PCP-006 Version 1.0 required XMuLV clearance on every run of the A-Mab
+    concentration study and S-VI-UNI measured none. S-VI-UNI2 (PD-006-06) measures it at both ends
+    of the range in duplicate, and the inactivation does not depend on the concentration."""
+    cfg = load_config()
+    devs = {e["id"]: e for e in cfg.raw()["deviations"]["events"]["PCR-006"]}
+    assert "DEV-006-03" in devs
+    u = pd.read_csv(os.path.join(DATA, "univariate_studies.csv"))
+    old = u[u["study"] == "S-VI-UNI"]
+    assert old.get("xmulv_lrf", pd.Series(dtype=float)).isna().all()      # the deviation itself
+    new = u[u["study"] == cfg.raw()["analytics"]["vi_concentration"]["study"]]
+    p = cfg.unit_op("viral_inactivation").param("protein_conc")
+    assert sorted(new["value"].unique()) == [float(p.prange[0]), float(p.prange[1])]
+    assert new["xmulv_lrf"].notna().all() and (new.groupby("level").size() == 2).all()
+
+
+def test_computed_discrepancies_keep_their_numbers():
+    """A configured discrepancy given an explicit higher number does not renumber the computed ones
+    a report already cites: model selection stays PD-005-04 beside the hold study PD-005-05."""
+    import sys
+    sys.path.insert(0, os.path.join(ROOT, "pc_package"))
+    from _pcpkg import PLAN_DISCREPANCIES
+    for doc, ds in PLAN_DISCREPANCIES.items():
+        ids = [d["id"] for d in ds]
+        assert ids == sorted(ids) and len(set(ids)) == len(ids), doc
+    sel = {d["id"] for ds in PLAN_DISCREPANCIES.values() for d in ds
+           if d["subject"].startswith("Model selection")}
+    assert {"PD-005-04", "PD-006-04"} <= sel

@@ -143,10 +143,11 @@ def methods_by_study(steps: Optional[List[str]] = None, label="tbl-methods-by-st
             body.append(["Fragments, LMW", fs or "n.t.", fr or "n.t."])
     ret = st["S-PA-RET"]
     notes = [
-        ("a)", "In this matrix part of the host cell protein elutes in the SEC low molecular weight "
-               f"window. Reported for information only ({amd['id']})."),
-        ("b)", f"Retained samples of the response-surface design and of the hold study, tested "
-               f"{ret['start']} to {ret['end']}."),
+        ("a)", "In the Protein A and low-pH viral inactivation pools part of the host cell protein "
+               f"elutes in the SEC low molecular weight window. Reported for information only ({amd['id']})."),
+        # the hold studies were made after AMD-001 and measured fragments by nrCE-SDS directly
+        # (owner, 2026-10-09), so the retests covered the response-surface samples only
+        ("b)", f"Retained samples of the response-surface design, tested {ret['start']} to {ret['end']}."),
         ("c)", "Both methods on the same samples of this design."),
         ("d)", "Re-executed design (DEV-008-01). The invalidated first execution measured "
                "fragments by SEC."),
@@ -349,30 +350,27 @@ HOLD_POOL = {"harvest": "clarified harvest", "protein_a": "Protein A eluate (hel
              "viral_inactivation": "neutralized viral inactivation pool"}
 
 
-def _days_tested(h: pd.DataFrame) -> str:
-    """The hold days with an nrCE-SDS result, as words ("day 0 and day 7", "days 0, 3 and 7")."""
-    days = [str(int(d)) for d in sorted(h.loc[h["lmw_cesds_pct"].notna(), "day"].unique())]
-    return "day " + days[0] if len(days) == 1 else "days " + ", ".join(days[:-1]) + " and " + days[-1]
-
-
 def hold_stability(pool: str, label: Optional[str] = None) -> CTable:
+    """The hold study of one intermediate. The hold studies were made during the Version 2.0
+    re-analysis, after AMD-001 (owner, 2026-10-09), so fragments are by nrCE-SDS on every sample and
+    an SEC fragment column appears only where the method plan still lists SEC for the study."""
     h = _csv(f"hold_{pool}.csv")
+    sec = "lmw_sec_pct" in h and h["lmw_sec_pct"].notna().any()
     body = []
     for temp, g in h.groupby("temperature", sort=False):
         for i, (_, r) in enumerate(g.iterrows()):
             row = ([C(temp, rs=len(g))] if i == 0 else []) + [
-                str(int(r["day"])), num(r["hmw_pct"]), num(r["lmw_sec_pct"]),
-                (num(r["lmw_cesds_pct"]) if not pd.isna(r["lmw_cesds_pct"]) else "n.t.^b)^"),
+                str(int(r["day"])), num(r["hmw_pct"])] + ([num(r["lmw_sec_pct"])] if sec else []) + [
+                (num(r["lmw_cesds_pct"]) if not pd.isna(r["lmw_cesds_pct"]) else "n.t."),
                 num(r["acidic_pct"], 1)]
             body.append(row)
+    sub = ["HMW (SEC)"] + (["LMW (SEC)^a)^"] if sec else []) + ["LMW (nrCE-SDS)"]
+    notes = ([("a)", "Every SEC result for low molecular weight species includes host cell protein "
+                     "eluting in that window (AMD-001). Not used for evaluation.")] if sec else [])
     return CTable(
-        header=[[C("Storage", rs=2), C("Day", rs=2), C("Size variants (%)", cs=3), C("Acidic variants (%)", rs=2)],
-                ["HMW (SEC)", "LMW (SEC)^a)^", "LMW (nrCE-SDS)"]],
-        body=body, align="lrrrrr", style="grid",
-        notes=[("a)", "Every SEC result for low molecular weight species includes host cell "
-                      "protein eluting in that window (AMD-001). Not used for evaluation."),
-               ("b)", "Not tested. The samples of " + _days_tested(h) + " were retained and tested "
-                      "by nrCE-SDS after AMD-001, with the retained response-surface samples.")],
+        header=[[C("Storage", rs=2), C("Day", rs=2), C("Size variants (%)", cs=len(sub)),
+                 C("Acidic variants (%)", rs=2)], sub],
+        body=body, align="l" + "r" * (len(sub) + 2), style="grid", notes=notes,
         caption=f"Hold-time stability of the {HOLD_POOL[pool]}.", label=label or f"tbl-hold-{pool.replace('_', '-')}")
 
 
@@ -1201,7 +1199,7 @@ REASON_TEXT = {
     "not a drug substance test": "Viral clearance, not a drug substance test",
     "no effect to resolve": "No effect to resolve",
     "assurance not reached within the size of the planned design":
-        "Assurance not reached within the size of the planned design",
+        "Probability of success not reached within the size of the planned design",
 }
 
 
@@ -1301,13 +1299,17 @@ def adequacy_remedy(steps: Optional[List[str]] = None, label: str = "tbl-remedy"
                       f"{float(_cfg().raw()['campaign']['thresholds']['effect_alpha']):g}. A main effect in "
                       "parentheses is not significant and is kept because an interaction or a square of "
                       "it remains in the refit."),
-               ("", f"Runs needed: the smallest augmentation that gives an assurance of at least "
-                    f"{float(ma['assurance']):.2f} that the planned model meets PCMP-001 §7.2. A dash means "
+               ("", f"Runs needed: the smallest augmentation that gives a probability of success of at least "
+                    f"{float(ma['assurance']):.2f}, at the effects estimated from the planned runs, that the "
+                    "planned model meets PCMP-001 §7.2. A dash means "
                     "not reached within the size of the planned design, or not computed when the refit keeps "
                     "no effect. For a refitted model the number is what an augmentation would have needed, "
                     "and no runs were made.")],
         notes_per_row=True, size="footnotesize", landscape=True,
         caption="Remedy of each model that does not meet the model-adequacy criteria.", label=label)
+
+
+_ORDINAL = {1: "", 2: "second", 3: "third", 4: "fourth"}
 
 
 def sample_size(steps: Optional[List[str]] = None, label: str = "tbl-sample-size") -> CTable:
@@ -1324,7 +1326,8 @@ def sample_size(steps: Optional[List[str]] = None, label: str = "tbl-sample-size
         resps = list(dict.fromkeys(gg["response"]))
         for i, resp in enumerate(resps):
             x = gg[gg["response"] == resp].set_index("m")
-            cells = [f"{x.loc[m, 'assurance']:.2f}" if m in x.index else "–" for m in show]
+            # three decimals: at two, 0.895 to 0.899 printed as the 0.90 target (INV-002 review run 2)
+            cells = [f"{x.loc[m, 'assurance']:.3f}" if m in x.index else "–" for m in show]
             hit = x[(x.index > 0) & (x["assurance"] >= target)]
             m_req = int(hit.index[0]) if len(hit) else None
             pw = "–" if m_req is None else (f"{x.loc[m_req, 'min_power']:.2f}"
@@ -1332,30 +1335,31 @@ def sample_size(steps: Optional[List[str]] = None, label: str = "tbl-sample-size
             body.append(([C(STEP_NAME[sk], rs=len(resps))] if i == 0 else []) + [
                 _attr_label(resp, sk), *cells, "–" if m_req is None else str(m_req), pw])
     return CTable(
-        header=[[C("Step", rs=2), C("Attribute", rs=2), C("Assurance with further runs", cs=len(show)),
+        header=[[C("Step", rs=2), C("Attribute", rs=2), C("Probability of success with further runs", cs=len(show)),
                  C("Runs\nneeded", rs=2), C("Lowest\npower", rs=2)],
                 [str(m) for m in show]],
         body=body, align=["P{2.2cm}", "P{3.2cm}"] + ["r"] * (len(show) + 2),
         # the wording INV-002 settled on after review run 1 (2026-10-09): what the simulation
         # conditions on, its scale, and why no size takes the assurance much above 1 - lof_alpha
-        notes=[("", f"Assurance: the probability, at the effects estimated from the planned runs, that the "
+        notes=[("", f"Probability of success: the probability, at the effects estimated from the planned runs, that the "
                     "planned model meets the lack-of-fit test and the limit on overfitting of PCMP-001 "
                     f"§7.2, estimated from {int(ma['reps']):,} simulated data sets. It does not include the "
                     "uncertainty of those estimates. The planned model is the full quadratic, with a block "
                     "term where there are further runs. The data are simulated on the raw scale from the "
                     "refit of the planned runs and its residual standard deviation. Further runs: a "
                     f"D-optimal augmentation of that size. Sizes in steps of {int(ma['step'])} were computed, "
-                    "and the table shows every fourth. A dash in an assurance column marks a size larger "
+                    f"and the table shows every {_ORDINAL[(show[1] - show[0]) // int(ma['step'])]} size. A dash in a "
+                    "probability column marks a size larger "
                     "than the planned design, which was not computed. Runs needed: the smallest size with "
-                    f"an assurance of at least {target:.2f}, and a dash where it is not reached within the "
+                    f"a probability of success of at least {target:.2f}, and a dash where it is not reached within the "
                     "size of the planned design. Lowest power: the power, at that size and α = "
                     f"{float(_cfg().raw()['campaign']['thresholds']['effect_alpha']):g}, of the weakest "
                     "significant effect of the refit. The lack-of-fit test rejects a correct model in "
                     f"{100 * float(_cfg().raw()['campaign']['thresholds']['lof_alpha']):g} % of data sets, so "
-                    f"no size takes the assurance much above {1 - float(_cfg().raw()['campaign']['thresholds']['lof_alpha']):.2f}.")],
+                    f"no size takes the probability much above {1 - float(_cfg().raw()['campaign']['thresholds']['lof_alpha']):.2f}.")],
         notes_per_row=True, size="footnotesize", landscape=True,
-        caption="Assurance that the planned model meets the model-adequacy criteria, by the number "
-                "of further runs.", label=label)
+        caption="Probability of success that the planned model meets the model-adequacy criteria, by the "
+                "number of further runs.", label=label)
 
 
 def _name_unit(name: str, unit: str) -> str:

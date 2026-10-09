@@ -518,6 +518,9 @@ def _inv2_section() -> str:
     w("Discrepancies from the plan that the augmentations are: "
       + "; ".join(f"{d['id']} ({doc}): {d['done']}" for doc, ds in P.PLAN_DISCREPANCIES.items()
                   for d in ds if "Augmentation" in d["subject"]) + ".\n\n")
+    w("Figure: `D.fig_assurance()` — the assurance against the number of further runs, one line "
+      "per failing model with an effect (viral clearance dotted), the target dashed. Print it in "
+      "a chunk with `#| label: fig-assurance` and a `#| fig-cap:`.\n\n")
     w(f"CAPA (`CAPA2`):\n\n{P.CAPA2.to_markdown(index=False)}\n\nEffectiveness check: "
       f"{P.EFFECTIVENESS2}\n\n")
     return b.getvalue()

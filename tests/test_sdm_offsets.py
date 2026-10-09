@@ -15,9 +15,17 @@ import tables as T  # noqa: E402
 
 
 def test_offset_is_scale_down_minus_manufacturing():
-    o = D.sdm_offset("protein_a", "pool_hcp_ng_mg")
+    """On the scale the output is modelled on: a difference for leached Protein A, and a ratio of
+    geometric means for pool host cell protein, which PCR-005 models on the log scale (PD-005-03)."""
+    o = D.sdm_offset("protein_a", "leached_protein_a_ppm")
+    assert o["scale"] == "difference"
     assert o["offset"] == pytest.approx(o["mean_sd"] - o["mean_m"])
     assert o["lo"] < o["offset"] < o["hi"]
+    h = D.sdm_offset("protein_a", "pool_hcp_ng_mg")
+    assert D.fit("protein_a", "rsm", "pool_hcp_ng_mg")["transform"] == "log"
+    assert h["scale"] == "ratio"
+    assert h["offset"] == pytest.approx(h["mean_sd"] / h["mean_m"])
+    assert h["lo"] < h["offset"] < h["hi"]
 
 
 def test_planned_runs_alone_are_three():
@@ -26,10 +34,27 @@ def test_planned_runs_alone_are_three():
 
 
 def test_judging_moves_the_criterion_by_the_offset():
+    acc = D.effective_acceptance("protein_a", "leached_protein_a_ppm")
+    j = D._judging("protein_a", "leached_protein_a_ppm")
+    d = D.sdm_offset("protein_a", "leached_protein_a_ppm")["offset"]
+    assert j[1] == pytest.approx(acc[1] + d)
+    # a ratio scales the criterion: y_sd / r <= criterion  <=>  y_sd <= criterion * r
     acc = D.effective_acceptance("protein_a", "pool_hcp_ng_mg")
     j = D._judging("protein_a", "pool_hcp_ng_mg")
-    d = D.sdm_offset("protein_a", "pool_hcp_ng_mg")["offset"]
-    assert j[1] == pytest.approx(acc[1] + d)
+    r = D.sdm_offset("protein_a", "pool_hcp_ng_mg")["offset"]
+    assert j[1] == pytest.approx(acc[1] * r)
+
+
+def test_back_transformed_limits_keep_their_coverage():
+    """A log-scale model gives the interval on the log scale, back-transformed: the limits are the
+    exponentials of the log-scale limits (exp is increasing), and the centre is the median."""
+    import numpy as np
+    r = D.fit("protein_a", "rsm", "pool_hcp_ng_mg")
+    m, lo, hi = D.prediction_interval("protein_a", "pool_hcp_ng_mg", {"load": [36.0]})
+    sf = r["model"].get_prediction(D._design_matrix(r, __import__("pandas").DataFrame(
+        {f: [D._to_coded(36.0, "protein_a", f) if f == "load" else 0.0] for f in r["factors"]}))).summary_frame(alpha=0.05)
+    assert np.allclose([m[0], lo[0], hi[0]], np.exp(sf[["mean", "obs_ci_lower", "obs_ci_upper"]].iloc[0].to_numpy()))
+    assert hi[0] - m[0] > m[0] - lo[0]          # asymmetric in ng/mg, as a skewed quantity is
 
 
 def test_version_1_judgement_has_no_offset():

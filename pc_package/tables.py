@@ -540,7 +540,13 @@ def doe_results(step: str, kind: str, label: Optional[str] = None, superseded: b
                 body[k_].pop(1)
         i = j + 1
     dev = _csv("deviations.csv").set_index("dev_id")
-    notes = [(mk, f"{did}: {dev.loc[did, 'summary']}. Run retained.") for did, mk in marks.items()]
+    import doe_report as D
+    corr = {d_: (f_, v_) for _, f_, v_, d_ in D.setting_corrections(step, kind)} if not superseded else {}
+    pname = {p.key: p.name for p in cfg.unit_op(step).parameters}
+    notes = [(mk, f"{did}: {dev.loc[did, 'summary']}. Run retained"
+                  + (f", and analysed at the recorded {pname[corr[did][0]][:1].lower() + pname[corr[did][0]][1:]} "
+                     f"of {corr[did][1]:g} in Version 2.0" if did in corr else "") + ".")
+             for did, mk in marks.items()]
     notes.append(("", f"Factors: {factor_note}"))
     short = [f"{RESP_SHORT[r_]}, {RESP_SHORT_LEGEND[r_]}" for r_ in resps if r_ in RESP_SHORT]
     if short:
@@ -567,14 +573,17 @@ def doe_results(step: str, kind: str, label: Optional[str] = None, superseded: b
 # 8. Criterion | Result | Met
 # --------------------------------------------------------------------------------------
 def criteria_results(step: str, label: Optional[str] = None) -> CTable:
-    """Each step output against its IAC: the model-predicted range over the NOR box of the
-    response-surface factors, and whether the whole range meets the criterion."""
+    """Each step output against its IAC, at manufacturing scale: the model's prediction at the
+    set-point and its range over the NOR box of the response-surface factors, and whether the
+    criterion is met across the NOR. An output with no adequate model (PCMP-001 §7.2) shows the
+    range of its measured results instead and is judged on them; an output modelled on the log
+    scale shows the median (its back-transformed mean)."""
     import itertools
     import doe_report as D
     cfg = _cfg()
     t = _csv("iac.csv")
     t = t[t["step_key"] == step]
-    body, any_off = [], False
+    body, any_off, any_meas, any_log, any_ratio = [], False, False, False, False
     for _, r in t.iterrows():
         resp = r["response"]
         try:
@@ -583,27 +592,45 @@ def criteria_results(step: str, label: Optional[str] = None) -> CTable:
             continue
         uo = cfg.unit_op(step)
         fac = res["factors"]
-        grid = list(itertools.product(*[[uo.param(f).nor[0], uo.param(f).setpoint, uo.param(f).nor[1]] for f in fac]))
-        # shown and judged at manufacturing scale: the scale-down prediction minus the offset
-        d = D._offset_value(step, resp)
-        any_off = any_off or d != 0
-        y = D.predict(step, resp, natural={f: [g[i] for g in grid] for i, f in enumerate(fac)}) - d
-        lo, hi = float(np.min(y)), float(np.max(y))
+        kind, v = D._offset(step, resp)
+        any_off = any_off or v != (1.0 if kind == "ratio" else 0.0)
+        any_ratio = any_ratio or kind == "ratio"
         ok = bool(D.nor_met(step, resp))
-        sp = float(D.predict(step, resp, natural={f: uo.param(f).setpoint for f in fac})[0]) - d
+        if res["status"] == "none":
+            # no adequate model sets a range: the measured results, at manufacturing scale
+            m = D.to_mfg(step, resp, D.measured_values(step, resp))
+            any_meas = True
+            body.append([ATTR_NAME[r["cqa"]], crit(r["iac_low"], r["iac_high"], r["spec_type"]),
+                         "n.a.^c)^", f"{num(m.min())} to {num(m.max())}^c)^", "Yes" if ok else "No"])
+            continue
+        grid = list(itertools.product(*[[uo.param(f).nor[0], uo.param(f).setpoint, uo.param(f).nor[1]] for f in fac]))
+        y = D.to_mfg(step, resp, D.predict(step, resp, natural={f: [g[i] for g in grid] for i, f in enumerate(fac)}))
+        lo, hi = float(np.min(y)), float(np.max(y))
+        sp = float(D.to_mfg(step, resp, D.predict(step, resp, natural={f: uo.param(f).setpoint for f in fac}))[0])
+        lg = res.get("transform") == "log"
+        any_log = any_log or lg
+        mk = "^d)^" if lg else ""
         body.append([ATTR_NAME[r["cqa"]], crit(r["iac_low"], r["iac_high"], r["spec_type"]),
-                     num(sp), f"{num(lo)} to {num(hi)}", "Yes" if ok else "No"])
+                     num(sp) + mk, f"{num(lo)} to {num(hi)}" + mk, "Yes" if ok else "No"])
+    notes = [("a)", "Judged at every combination of NOR low, set-point and NOR high. Quality "
+                    "attributes: the 95 % prediction interval of a single run (t quantile, coefficient "
+                    "and residual uncertainty)."
+                    + (" Viral clearance: the mean prediction." if any(str(x).startswith("lrv")
+                                                                      for x in t["cqa"]) else ""))]
+    if any_off:
+        notes.append(("b)", "At manufacturing scale: the scale-down prediction minus the offset of the "
+                            "scale-down model for this output"
+                            + (", or divided by it where the offset is a ratio" if any_ratio else "") + "."))
+    if any_meas:
+        notes.append(("c)", "No adequate model (PCMP-001 §7.2): the range of the measured results of the "
+                            "designs at manufacturing scale, on which the output is judged."))
+    if any_log:
+        notes.append(("d)", "Modelled on the log scale: the median, the back-transformed mean "
+                            "prediction."))
     return CTable(
         header=[[C("Attribute", rs=2), C("Criterion", rs=2), C("Mean predicted by the response-surface model" + ("^b)^" if any_off else ""), cs=2), C("Met across\nthe NOR^a)^", rs=2)],
                 ["At the set-point", "Range over the NOR"]],
-        body=body, align="llrrl",
-        notes=[("a)", "Judged at every combination of NOR low, set-point and NOR high. Quality "
-                      "attributes: the 95 % prediction interval of a single run (t quantile, coefficient "
-                      "and residual uncertainty)."
-                      + (" Viral clearance: the mean prediction." if any(str(x).startswith("lrv")
-                                                                        for x in t["cqa"]) else "")),
-               ("b)", "At manufacturing scale: the scale-down prediction minus the offset of the "
-                      "scale-down model for this output.")][:2 if any_off else 1],
+        body=body, align="llrrl", notes=notes, notes_per_row=True,
         caption=f"{STEP_NAME[step]} outputs against their intermediate acceptance criteria.",
         label=label or f"tbl-criteria-{step.replace('_', '-')}")
 
@@ -716,9 +743,11 @@ def sdm_offsets_data(steps: Optional[List[str]] = None, studies: Optional[List[s
             if q is None:
                 continue
             k = 100.0 if col == "step_yield" else 1.0
+            ratio = q.get("scale") == "ratio"           # an output modelled on the log scale
+            ko = 1.0 if ratio else k
             rows.append({"step_key": step, "output": col, "n_sd": q["n_sd"], "n_m": q["n_m"],
-                         "mean_sd": q["mean_sd"] * k, "mean_m": q["mean_m"] * k,
-                         "offset": q["offset"] * k, "lo": q["lo"] * k, "hi": q["hi"] * k,
+                         "mean_sd": q["mean_sd"] * k, "mean_m": q["mean_m"] * k, "ratio": ratio,
+                         "offset": q["offset"] * ko, "lo": q["lo"] * ko, "hi": q["hi"] * ko,
                          "judged": q["judged"], "met_point": q["met_point"], "met_lo": q["met_lo"],
                          "met_hi": q["met_hi"], "qualified": q["qualified"]})
     return pd.DataFrame(rows)
@@ -752,12 +781,21 @@ def sdm_offsets(steps: Optional[List[str]] = None, studies: Optional[List[str]] 
                 runs = [C(str(r["n_sd"]), rs=len(g)), C(str(r["n_m"]), rs=len(g))]
             else:
                 runs = []
-            body.append(lead + [name + (f" ({unit})" if unit else ""), *runs,
-                                f(r["mean_sd"]), f(r["mean_m"]), f(r["offset"]),
-                                f"{f(r['lo'])} to {f(r['hi'])}", *concl, q])
+            if r.get("ratio"):
+                # modelled on the log scale: geometric means, and the offset as a ratio
+                g3 = lambda v: f"{v:.3f}"
+                cells = [f(r["mean_sd"]) + "^b)^", f(r["mean_m"]) + "^b)^", "×" + g3(r["offset"]) + "^b)^",
+                         f"×{g3(r['lo'])} to ×{g3(r['hi'])}"]
+            else:
+                cells = [f(r["mean_sd"]), f(r["mean_m"]), f(r["offset"]), f"{f(r['lo'])} to {f(r['hi'])}"]
+            body.append(lead + [name + (f" ({unit})" if unit else ""), *runs, *cells, *concl, q])
     notes = [("a)", "The output has no acceptance criterion at this step, so no conclusion depends "
-                    "on its offset and qualification does not apply. The offset is recorded.")]
+                    "on its offset and qualification does not apply. The offset is recorded."),
+             ("b)", "Modelled on the log scale: geometric means, and the offset as the ratio of the "
+                    "scale-down to the manufacturing geometric mean. The manufacturing-scale value is "
+                    "the scale-down value divided by the ratio.")]
     used = any(not j for j in t["judged"])
+    used_ratio = bool(t.get("ratio", pd.Series(dtype=bool)).fillna(False).astype(bool).any())
     from amab_process.config import _NOR_MODE
     which = "the NOR as characterized" if _NOR_MODE["mode"] == "characterized" else "the NOR in force"
     legend = [("", "SDM, scale-down model. Mfg, manufacturing scale. Offset, scale-down mean minus "
@@ -778,7 +816,8 @@ def sdm_offsets(steps: Optional[List[str]] = None, studies: Optional[List[str]] 
     return CTable(
         header=header, body=body, align=align,
         size="footnotesize",
-        notes=(notes if used else []) + legend, notes_per_row=True,
+        notes=[n for n in notes if (n[0] == "a)" and used) or (n[0] == "b)" and used_ratio)] + legend,
+        notes_per_row=True,
         caption=caption or ("Offsets of the scale-down models (scale-down minus manufacturing scale) "
                             f"and the qualification of each model for each output{sub}."),
         label=label, resize=True)
@@ -1184,7 +1223,11 @@ def adequacy_remedy(steps: Optional[List[str]] = None, label: str = "tbl-remedy"
     return CTable(
         header=[["Step", "Attribute", "Effects in the refit\n(planned runs)", "Runs\nneeded",
                  "Remedy", "Reason"]],
-        body=body, align=["P{2.2cm}", "P{3.0cm}", "P{4.2cm}", "r", "P{2.2cm}", "P{4.2cm}"],
+        # landscape text width on letter paper with 1 in margins is 22.9 cm: at 4.2 cm the effects
+        # column wrapped to six lines and the table ran off its page, and a table taller than the
+        # text height leaves an empty landscape page before it (tables are placed [H]; INV-002
+        # authoring, 2026-10-08)
+        body=body, align=["P{2.0cm}", "P{3.6cm}", "P{7.0cm}", "r", "P{2.5cm}", "P{4.8cm}"],
         notes=[("a)", "The step's augmentation has the largest number of runs any of its models "
                       "needs."),
                ("", f"Runs needed: the smallest augmentation that gives an assurance of at least "

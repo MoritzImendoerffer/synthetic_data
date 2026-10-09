@@ -340,3 +340,39 @@ def plan(cfg, rsm: Dict[str, pd.DataFrame], rng_for) -> Dict[str, object]:
     return {"models": pd.DataFrame(models), "grid": pd.DataFrame(grid),
             "steps": pd.DataFrame(steps, columns=["step_key", "n_planned", "m", "responses"]),
             "designs": designs}
+
+
+# --------------------------------------------------------------------------------------
+# Transformation (the other remedy PCMP-001 §7.2 names): the log scale, where the data support it
+# --------------------------------------------------------------------------------------
+def boxcox_interval(df: pd.DataFrame, resp: str, factors: Sequence[str], terms: Sequence[str],
+                    level: float = 0.95, grid=None) -> Dict[str, float]:
+    """Profile likelihood of the Box-Cox exponent λ for the model ``terms``: the estimate and its
+    ``level`` interval (likelihood within chi²₁(level)/2 of the maximum). The log scale is λ = 0, the
+    raw scale λ = 1. The response must be positive."""
+    d = df[df[resp].notna()]
+    y = d[resp].to_numpy(float)
+    X = matrix(d, terms, has_blocks(d)).to_numpy()
+    n = len(y)
+    gm = float(np.exp(np.log(y).mean()))
+    lams = np.linspace(-2.0, 2.0, 401) if grid is None else np.asarray(grid)
+
+    def llf(lam):
+        z = np.log(y) * gm if abs(lam) < 1e-12 else (y ** lam - 1) / (lam * gm ** (lam - 1))
+        r = sm.OLS(z, X).fit()
+        return -n / 2 * np.log(r.ssr / n)
+
+    ll = np.array([llf(l_) for l_ in lams])
+    keep = lams[ll >= ll.max() - stats.chi2.ppf(level, 1) / 2]
+    return {"lambda": float(lams[ll.argmax()]), "lo": float(keep.min()), "hi": float(keep.max()),
+            "ll_log": float(llf(0.0) - ll.max()), "ll_raw": float(llf(1.0) - ll.max())}
+
+
+def log_supported(df: pd.DataFrame, resp: str, factors: Sequence[str], terms: Sequence[str]) -> bool:
+    """True when the response is positive and the Box-Cox interval contains 0 and excludes 1: the
+    data support the log scale and reject the raw one."""
+    d = df[df[resp].notna()]
+    if not (d[resp] > 0).all():
+        return False
+    b = boxcox_interval(d, resp, factors, terms)
+    return b["lo"] <= 0.0 <= b["hi"] and not (b["lo"] <= 1.0 <= b["hi"])

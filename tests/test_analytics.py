@@ -196,3 +196,14 @@ def test_nodoe_responses_are_not_attributes():
               "ds_concentration_g_per_l"):
         assert T._resp_cqa(r, "harvest") is None
     assert T._resp_cqa("aggregate_out_pct", "ufdf") == "aggregates_hmw"
+
+
+def test_version1_capability_reproduced():
+    """The Version 1.0 capability-based limits and INV-001's capability findings come from the
+    simulation at the NOR as characterized, which reproduces Version 1.0 for every attribute those
+    limits use: no Version 2.0 NOR decision may move a Version 1.0 number."""
+    old = _at_tag("capability").set_index("key")
+    new = pd.read_csv(os.path.join(DATA, "capability_rev1.csv")).set_index("key")
+    for k in ("afucosylation", "galactosylation", "high_mannose", "acidic_variants"):
+        assert np.allclose(old.loc[k, ["mean", "sd"]].to_numpy(float),
+                           new.loc[k, ["mean", "sd"]].to_numpy(float), rtol=1e-9), k

@@ -117,7 +117,7 @@ def has_superseded(key, kind="screening"):
 # step, planned and augmentation, with a block term, and the model PCMP-001 §7.2 allows: the full
 # quadratic when it is adequate, else the hierarchical refit. ``planned_full_models`` restores the
 # full quadratic on the planned runs, which is what Version 1.0 fitted and what INV-001 compared.
-_MODELS = {"runs": "all", "form": "auto"}
+_MODELS = {"runs": "all", "form": "auto", "corrected": True}
 _FIT_CACHE: dict = {}
 TH = {k: float(v) for k, v in CFG.raw()["campaign"]["thresholds"].items()}
 
@@ -127,7 +127,7 @@ class planned_full_models:
     planned runs, with no augmentation and no refit."""
     def __enter__(self):
         self._old = dict(_MODELS)
-        _MODELS.update(runs="planned", form="full")
+        _MODELS.update(runs="planned", form="full", corrected=False)
         return self
 
     def __exit__(self, *a):
@@ -136,13 +136,30 @@ class planned_full_models:
         return False
 
 
-def rsm_data(key, runs="all"):
+def setting_corrections(key, kind="rsm"):
+    """[(run, factor, recorded value, deviation)] for the runs of a design that Version 2.0 analyses
+    at a recorded setting rather than the design setting (config ``campaign.setting_corrections``;
+    the value is read from the deviation record)."""
+    events = {e["id"]: e for evs in CFG.raw()["deviations"]["events"].values() for e in evs}
+    return [(int(c["run"]), c["factor"], float(events[c["deviation"]]["values"][c["value_from"]]),
+             c["deviation"])
+            for c in CFG.raw()["campaign"].get("setting_corrections", [])
+            if c["step"] == key and c["kind"] == kind]
+
+
+def rsm_data(key, runs="all", corrected=True):
     """The response-surface runs of a step: the planned design (block 1) and, with ``runs="all"``,
-    the INV-002 augmentation (block 2) where the step has one."""
+    the INV-002 augmentation (block 2) where the step has one. With ``corrected`` a run recorded off
+    its design setting carries the recorded setting (``setting_corrections``)."""
     import os
     from _pcpkg import DATA
     df = csv(f"doe_{key}_rsm.csv").copy()
     df[ad.BLOCK] = 1
+    if corrected:
+        for run, factor, value, _ in setting_corrections(key, "rsm"):
+            i = df.index[df["run"] == run]
+            df.loc[i, factor] = value
+            df.loc[i, "coded_" + factor] = float(_to_coded(value, key, factor))
     path = os.path.join(DATA, f"doe_{key}_aug.csv")
     if runs == "all" and os.path.exists(path):
         aug = csv(f"doe_{key}_aug.csv").copy()
@@ -156,24 +173,42 @@ def has_augmentation(key):
     return os.path.exists(os.path.join(DATA, f"doe_{key}_aug.csv"))
 
 
-def _rsm_fit(key, resp, runs, form):
+def _rsm_fit(key, resp, runs, form, corrected=True):
     """The response-surface fit of INV-002 and PCMP-001 §7.2. ``status`` is "full" (the full
     quadratic is adequate), "refit" (the hierarchical refit is), or "none" (no adequate model: the
     response is judged on its measured results). ``full`` carries the full model's statistics."""
     factors = rsm_factors(key)
-    df = rsm_data(key, runs)
+    df = rsm_data(key, runs, corrected)
     d = df[df[resp].notna()].reset_index(drop=True)
     full = ad.adequacy(d, resp, factors, ad.full_terms(factors), TH)
+    transform, ycol, boxcox = None, resp, None
     if form == "full" or full["adequate"]:
         chosen, frm = full, "full"
     else:
         rt = ad.reduce(d, resp, factors, ad.full_terms(factors), TH["effect_alpha"])
         chosen, frm = ad.adequacy(d, resp, factors, rt, TH), "refit"
+        if not chosen["adequate"] and ad.log_supported(d, resp, factors, ad.full_terms(factors)):
+            # PCMP-001 §7.2 also names a transformation. The log scale, where the Box-Cox interval
+            # contains 0 and excludes 1: the full quadratic on it if adequate, else its refit.
+            boxcox = ad.boxcox_interval(d, resp, factors, ad.full_terms(factors))
+            ycol = f"ln_{resp}"
+            d = d.assign(**{ycol: np.log(d[resp].to_numpy(float))})
+            lf = ad.adequacy(d, ycol, factors, ad.full_terms(factors), TH)
+            if lf["adequate"]:
+                chosen, frm, transform = lf, "full", "log"
+            else:
+                lrt = ad.reduce(d, ycol, factors, ad.full_terms(factors), TH["effect_alpha"])
+                lr = ad.adequacy(d, ycol, factors, lrt, TH)
+                if lr["adequate"]:
+                    chosen, frm, transform = lr, "refit", "log"
+                else:
+                    d, ycol = d.drop(columns=[ycol]), resp
     # a caller that asks for the full model (Version 1.0, which applied no adequacy test, and
     # INV-001's comparison on Version 1.0's models) gets it with no gate
     status = "full" if form == "full" else (frm if chosen["adequate"] else "none")
     m = chosen["model"]
     return dict(model=m, df=d, factors=factors, names=list(chosen["terms"]), quad=True,
+                transform=transform, ycol=ycol, boxcox=boxcox,
                 block=bool(chosen["block"]), n=chosen["n"], R2=chosen["R2"], adjR2=chosen["adjR2"],
                 predR2=chosen["predR2"], gap=chosen["gap"], F=chosen["F"], p=chosen["p"],
                 rmse=chosen["rmse"], ss_pe=chosen["ss_pe"], df_pe=chosen["df_pe"],
@@ -197,11 +232,12 @@ def fit(key, kind, resp, superseded=False, runs=None, form=None):
     if kind == "rsm" and not superseded:
         runs = runs or _MODELS["runs"]
         form = form or _MODELS["form"]
+        corrected = _MODELS["corrected"]
         if _CRITERIA["rev"] == "1.0":
-            runs, form = "planned", "full"
-        ck = (key, resp, runs, form)
+            runs, form, corrected = "planned", "full", False
+        ck = (key, resp, runs, form, corrected)
         if ck not in _FIT_CACHE:
-            _FIT_CACHE[ck] = _rsm_fit(key, resp, runs, form)
+            _FIT_CACHE[ck] = _rsm_fit(key, resp, runs, form, corrected)
         return _FIT_CACHE[ck]
     suffix = "_superseded" if superseded else ""
     df = csv(f"doe_{key}_{kind}{suffix}.csv")
@@ -415,7 +451,7 @@ def fig_diagnostics(key, resp):
     fitted = m.fittedvalues.values
     resid = m.resid.values
     std_resid = resid / (r["rmse"] if r["rmse"] else 1.0)
-    actual = r["df"][resp].values
+    actual = r["df"][r.get("ycol", resp)].values          # on the scale of the model
     fig, ax = plt.subplots(1, 3, figsize=(11, 3.4))
     ax[0].scatter(fitted, std_resid, s=18, color="#2a78d6")
     ax[0].axhline(0, color="grey", lw=0.8)
@@ -579,37 +615,67 @@ def sdm_offset(key, resp, studies=None):
     b = d.loc[d["scale"] == "manufacturing", resp].dropna().to_numpy(float)
     if len(a) < 2 or len(b) < 2:
         return None
+    # on the scale the output is modelled on: for a log-scale model the difference of the mean logs,
+    # reported as a ratio of geometric means (PCR-005 Version 2.0, discrepancy from the plan)
+    try:
+        log = fit(key, "rsm", resp).get("transform") == "log"
+    except Exception:
+        log = False
+    if log:
+        a, b = np.log(a), np.log(b)
     dfp = len(a) + len(b) - 2
     sp = np.sqrt(((len(a) - 1) * a.var(ddof=1) + (len(b) - 1) * b.var(ddof=1)) / dfp)
     ci = float(CFG.raw()["analytics"]["sdm"].get("offset_ci", 0.90))
     half = float(_st.t.ppf(0.5 + ci / 2, dfp) * sp * np.sqrt(1 / len(a) + 1 / len(b)))
     off = float(a.mean() - b.mean())
+    if log:
+        return dict(n_sd=len(a), n_m=len(b), mean_sd=float(np.exp(a.mean())), mean_m=float(np.exp(b.mean())),
+                    offset=float(np.exp(off)), lo=float(np.exp(off - half)), hi=float(np.exp(off + half)),
+                    half=half, df=dfp, ci=ci, scale="ratio", log_offset=off)
     return dict(n_sd=len(a), n_m=len(b), mean_sd=float(a.mean()), mean_m=float(b.mean()),
-                offset=off, lo=off - half, hi=off + half, half=half, df=dfp, ci=ci)
+                offset=off, lo=off - half, hi=off + half, half=half, df=dfp, ci=ci, scale="difference")
+
+
+def _offset(key, resp):
+    """("difference", d) or ("ratio", r): the offset the current judgement applies, on the scale
+    the output is modelled on. ("difference", 0) in Version 1.0 mode, when switched off in the
+    config, or when the output has no SDM data."""
+    if _CRITERIA["rev"] == "1.0" or _OFFSET["end"] == "none":
+        return "difference", 0.0
+    if not CFG.raw()["analytics"]["sdm"].get("apply_offset", False):
+        return "difference", 0.0
+    o = sdm_offset(key, resp, _OFFSET.get("studies"))
+    if o is None:
+        return "difference", 0.0
+    return o["scale"], {"point": o["offset"], "lo": o["lo"], "hi": o["hi"]}[_OFFSET["end"]]
 
 
 def _offset_value(key, resp):
-    """The offset the current judgement applies (0 in Version 1.0 mode, when switched off in the
-    config, or when the output has no SDM data)."""
-    if _CRITERIA["rev"] == "1.0" or _OFFSET["end"] == "none":
-        return 0.0
-    if not CFG.raw()["analytics"]["sdm"].get("apply_offset", False):
-        return 0.0
-    o = sdm_offset(key, resp, _OFFSET.get("studies"))
-    if o is None:
-        return 0.0
-    return {"point": o["offset"], "lo": o["lo"], "hi": o["hi"]}[_OFFSET["end"]]
+    """The additive offset the current judgement applies (0 for none). For an output modelled on
+    the log scale the offset is a ratio: use ``to_mfg``."""
+    kind, v = _offset(key, resp)
+    return v if kind == "difference" else 0.0
+
+
+def to_mfg(key, resp, y):
+    """A scale-down value at manufacturing scale: minus the offset, or divided by it when the output
+    is modelled on the log scale and its offset is a ratio."""
+    kind, v = _offset(key, resp)
+    y = np.asarray(y, dtype=float)
+    return y / v if kind == "ratio" else y - v
 
 
 def _judging(key, resp):
     """(lo, hi, stype) as the scale-down prediction is judged: the criterion moved by the offset.
-    A scale-down value y meets the criterion when y - offset does, that is when
-    lo + offset <= y <= hi + offset."""
+    A scale-down value y meets the criterion when its manufacturing-scale value does, that is when
+    lo + d <= y <= hi + d (an offset d), or lo·r <= y <= hi·r (a ratio r)."""
     acc = effective_acceptance(key, resp)
     if acc is None:
         return None
-    d = _offset_value(key, resp)
-    return acc[0] + d, acc[1] + d, acc[2]
+    kind, v = _offset(key, resp)
+    if kind == "ratio":
+        return acc[0] * v, acc[1] * v, acc[2]
+    return acc[0] + v, acc[1] + v, acc[2]
 
 
 class offset_at:
@@ -708,8 +774,7 @@ def nor_prediction_limit(key, resp, side="upper"):
                                     for f in r["factors"]]))
     nat = {f: [g[i] for g in grid] for i, f in enumerate(r["factors"])}
     _, lo, hi = prediction_interval(key, resp, nat)
-    d = _offset_value(key, resp)
-    return float(np.max(hi) - d) if side == "upper" else float(np.min(lo) - d)
+    return float(to_mfg(key, resp, np.max(hi))) if side == "upper" else float(to_mfg(key, resp, np.min(lo)))
 
 
 def offset_qualification(key, resp, studies=None):
@@ -865,10 +930,18 @@ def _to_coded(natural, key, f):
     return (np.asarray(natural, dtype=float) - (lo + hi) / 2) / ((hi - lo) / 2)
 
 
+def _back(r, v):
+    """From the scale of the model to the scale of the response: exp for a log-scale model. A
+    back-transformed mean is the median of the response (its mean is exp(σ²/2) higher); a
+    back-transformed prediction limit keeps its coverage, since exp is increasing."""
+    return np.exp(v) if r.get("transform") == "log" else v
+
+
 def _predict_points(r, coded):
-    """Predict the fitted model at coded factor settings (DataFrame of factor columns). A block
-    term is set to 0, the average of the two blocks."""
-    return _design_matrix(r, coded) @ np.asarray(r["model"].params)
+    """Predict the fitted model at coded factor settings (DataFrame of factor columns), on the
+    scale of the response (a log-scale model gives the median). A block term is set to 0, the
+    average of the two blocks."""
+    return _back(r, _design_matrix(r, coded) @ np.asarray(r["model"].params))
 
 
 def _in_spec(y, lo, hi, stype):
@@ -977,8 +1050,9 @@ def _mc_predictive(r, key, factor, x_coded, others, rng, n_mc, residual=True):
         X = _design_matrix(r, coded[r["factors"]])
         m = r["model"]
         b = rng.multivariate_normal(np.asarray(m.params), np.asarray(m.cov_params()), n_mc)
-        return np.einsum("ij,ij->i", X, b) + noise
-    return _predict_points(r, coded[r["factors"]]) + (noise if residual else 0.0)
+        return _back(r, np.einsum("ij,ij->i", X, b) + noise)
+    lin = _design_matrix(r, coded[r["factors"]]) @ np.asarray(r["model"].params)
+    return _back(r, lin + (noise if residual else 0.0))
 
 
 def _design_matrix(r, coded):
@@ -1010,7 +1084,10 @@ def prediction_interval(key, resp, natural, alpha=0.05):
         coded[f] = np.atleast_1d(_to_coded(np.atleast_1d(v), key, f)) * np.ones(n)
     X = _design_matrix(r, coded)
     sf = r["model"].get_prediction(X).summary_frame(alpha=alpha)
-    return sf["mean"].to_numpy(), sf["obs_ci_lower"].to_numpy(), sf["obs_ci_upper"].to_numpy()
+    # on a log-scale model the interval is computed on the log scale and back-transformed: its
+    # coverage is exact, it is asymmetric in the units of the response, and the centre is the median
+    return (_back(r, sf["mean"].to_numpy()), _back(r, sf["obs_ci_lower"].to_numpy()),
+            _back(r, sf["obs_ci_upper"].to_numpy()))
 
 
 def par_nor_propagated(key, resp, factor, n_grid=PAR_GRID, n_mc=PAR_MC_N, batch=None):
@@ -1229,14 +1306,14 @@ def fig_par(key, resp, factor):
 
     # predictions drawn at manufacturing scale (scale-down prediction minus the offset), so the
     # criterion is drawn as it stands
-    d = _offset_value(key, resp)
-    ax[0].plot(ps["xs_nat"], ps["y"] - d, color="#2a78d6", lw=1.6)
+    mfg = lambda v: to_mfg(key, resp, v)
+    ax[0].plot(ps["xs_nat"], mfg(ps["y"]), color="#2a78d6", lw=1.6)
     _limits(ax[0]); _shade(ax[0], ps["par_nat"]); _marks(ax[0])
     ax[0].set_title("At set-point (others fixed)", fontsize=10)
     ax[0].set_xlabel(f"{pname} ({unit})"); ax[0].set_ylabel(label)
 
-    ax[1].plot(pn["xs_nat"], pn["med"] - d, color="#2a78d6", lw=1.6, label="median")
-    ax[1].fill_between(pn["xs_nat"], pn["p_lo"] - d, pn["p_hi"] - d, color="#2a78d6", alpha=0.18,
+    ax[1].plot(pn["xs_nat"], mfg(pn["med"]), color="#2a78d6", lw=1.6, label="median")
+    ax[1].fill_between(pn["xs_nat"], mfg(pn["p_lo"]), mfg(pn["p_hi"]), color="#2a78d6", alpha=0.18,
                        lw=0, label="95% predictive")
     _limits(ax[1]); _shade(ax[1], pn["par_nat"]); _marks(ax[1])
     ax[1].set_title("Others varying within NOR (Monte-Carlo)", fontsize=10)
@@ -1246,4 +1323,33 @@ def fig_par(key, resp, factor):
     ax[1].legend(h, l, fontsize=7, loc="best")
     fig.suptitle(f"Proven acceptable range — {label} vs {pname}", fontsize=11)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
+    return fig
+
+
+def fig_assurance():
+    """INV-002: the assurance that the planned model meets PCMP-001 §7.2, against the number of
+    further runs, one line per failing model with an effect; the target as a dashed line."""
+    import matplotlib.pyplot as plt
+    g = csv("augmentation_sample_size.csv")
+    target = float(CFG.raw()["campaign"]["model_adequacy"]["assurance"])
+    names = {"bioreactor": "Bioreactor", "protein_a": "Protein A",
+             "viral_inactivation": "Low-pH inactivation", "cex": "Cation exchange",
+             "aex": "Anion exchange", "virus_filtration": "Virus filtration"}
+    attr = {"high_mannose": "high mannose", "acidic_variants": "acidic variants",
+            "hcp_out_ng_mg": "host cell protein", "pool_hcp_ng_mg": "host cell protein",
+            "lmw_cesds_pct": "fragments", "xmulv_lrf": "XMuLV clearance", "mvm_lrf": "MVM clearance",
+            "leached_protein_a_ppm": "leached Protein A", "afucosylation": "afucosylation",
+            "galactosylation": "galactosylation", "aggregates_hmw": "aggregate",
+            "aggregate_out_pct": "aggregate"}
+    fig, ax = plt.subplots(figsize=(8.2, 5.0))
+    for (step, resp), x in g.groupby(["step_key", "response"], sort=False):
+        ls = ":" if resp in ad.VIRAL else "-"
+        ax.plot(x["m"], x["assurance"], ls, marker="o", ms=3, lw=1.3,
+                label=f"{names.get(step, step)}, {attr.get(resp, resp)}")
+    ax.axhline(target, color="#c0392b", lw=1.0, ls="--", label=f"target {target:.2f}")
+    ax.set_xlabel("Further runs (D-optimal augmentation)")
+    ax.set_ylabel("Assurance")
+    ax.set_ylim(-0.02, 1.02)
+    ax.legend(fontsize=7, loc="upper center", bbox_to_anchor=(0.5, -0.14), ncol=3, frameon=False)
+    fig.tight_layout()
     return fig

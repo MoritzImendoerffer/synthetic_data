@@ -128,7 +128,10 @@ def _nor_worst(cfg: Config, step: str, df: pd.DataFrame, col: str, feed: float, 
     model = fit_effects(df, col, fac, quadratic=True)["model"]
     uo = cfg.unit_op(step)
     pts = []
-    for combo in itertools.product(*[[uo.param(f).nor[0], uo.param(f).setpoint, uo.param(f).nor[1]] for f in fac]):
+    # the NOR as characterized: the criteria were fixed at INV-001 closure, before any report
+    # narrowed a NOR, so no later NOR decision moves them
+    for combo in itertools.product(*[[uo.param(f).nor_characterized[0], uo.param(f).setpoint,
+                                      uo.param(f).nor_characterized[1]] for f in fac]):
         pts.append({f: (v - sum(uo.param(f).prange) / 2) / ((uo.param(f).prange[1] - uo.param(f).prange[0]) / 2)
                     for f, v in zip(fac, combo)})
     X = pd.DataFrame(pts)

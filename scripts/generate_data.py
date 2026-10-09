@@ -126,6 +126,16 @@ def main() -> None:
     save(mc.round(6), "monte_carlo.csv")
     cap = st.capability(mc, cfg)
     save(cap.round(4), "capability.csv")
+    # Version 1.0's simulation: the same Monte Carlo at the NOR as characterized, which is the NOR
+    # Version 1.0 sampled (same stream, so it reproduces Version 1.0). Its capability fixes the
+    # Version 1.0 capability-based limits and INV-001's capability findings; no Version 2.0 NOR
+    # decision may move them.
+    from amab_process.config import characterized_nor
+    with characterized_nor():
+        mc1 = st.monte_carlo(proc, n=n_mc)
+    mc1["fragments_lmw"] = an.frag_batches(cfg, mc1, stream=1)
+    cap1 = st.capability(mc1, cfg)
+    save(cap1.round(4), "capability_rev1.csv")
     values["n_monte_carlo"] = n_mc
     values["min_cpk"] = round(float(cap["Cpk"].min()), 2)
     values["all_cpk_ge_1_33"] = bool((cap["Cpk"] >= 1.33).all())
@@ -211,7 +221,7 @@ def main() -> None:
     #        verification of the platform worst cases, integrated-model P(OOS) --------------
     save(ia.derive(cfg), "iac_apriori.csv")
     save(ia.cumulative_claims(cfg), "iac_viral_cumulative.csv")
-    save(ia.rev1_criteria(cfg, ps, cap, vc.reset_index(drop=True)).round(4), "criteria_rev1.csv")
+    save(ia.rev1_criteria(cfg, ps, cap1, vc.reset_index(drop=True)).round(4), "criteria_rev1.csv")
     rsm_data = {k: pd.read_csv(os.path.join(ROOT, "outputs", "data", f"doe_{k}_rsm.csv"))
                 for k in st.DOE_FACTORS}
     ver = ia.verification(cfg, rsm_data, ps, an.nominal_train(cfg),
@@ -219,6 +229,7 @@ def main() -> None:
     save(ver.round(4), "iac_verification.csv")
     save(ia.final(cfg, ver), "iac.csv")
     save(ia.p_oos(cfg, mc), "p_oos.csv")
+    save(ia.p_oos(cfg, mc1), "p_oos_rev1.csv")        # the simulation at the NOR as characterized
 
     # -- write headline values -------------------------------------------------
     with open(os.path.join(ROOT, "outputs", "report_values.json"), "w") as fh:

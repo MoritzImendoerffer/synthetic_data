@@ -3,6 +3,48 @@
 Draft: `pc_package/PCP-003_bioreactor.DRAFT.qmd`. Nothing committed. Review:
 `content-review-PCP-003.md` (this directory).
 
+## 0000. Pass 4: COMPLETE
+
+`check_render.py --render` passed twice. The second run followed widening Table 5.1, where the AMV identifiers were
+breaking across lines. The PDF is 41 pages. I looked at Tables 3.2, 5.1, A.1 and B.1 as images.
+
+The body was rewritten in one pass from the Version 1.0 content:
+- §1.1 lists 11 changes, each set by PCMP-001 Version 2.0 or a record correction. Everything else is stated as
+  Version 1.0.
+- Pass 3 is superseded where it deleted Version 1.0 rules.
+- The residual tests use PCP-005's wording. The low-pH aggregate argument and the risk paragraph are removed
+  (review run 2 Q4-8 and Q3-1).
+- PCR-003 must record these departures:
+  - osmolality was active in screening but not carried forward, and the design was not amended;
+  - the NOR was not narrowed for the acidic variant worst corner;
+  - the univariate effect of initial viable cell concentration on acidic variants;
+  - HCP, DNA, VCD, viability and titer were not measured;
+  - the univariate study preceded the response surface study;
+  - the 16-run augmentation, which the Version 1.0 rule "or the design augmented" foresaw;
+  - the replicated univariate runs;
+  - the probe drift DEV-003-01 against the calibration verification;
+  - how osmolality was set.
+
+## 000. Pass 4 (final; `feedback-PCP-003.final.md`), plan
+
+The coordinator's correction: restore every Version 1.0 rule, design element and procedure that pass 3 deleted,
+and list every remaining change from Version 1.0 in §1.1. Version 1.0 content is read from
+`pdftotext pc_package/superseded/rev1/PCP-003_bioreactor.pdf` (content only). The PCP-005 residual-test wording
+comes from its PDF.
+
+Plan: one rewrite of the body.
+- §4.1 from the Version 1.0 expectations (high mannose corrected).
+- HCP and DNA sampling restored, with their methods.
+- The Version 1.0 qualification comparison scope.
+- The Version 1.0 §6.3 and §6.4 rules.
+- The Version 1.0 §7 rules: run acceptance, adequacy with normality and augmentation, practical importance,
+  operating region with the NOR inside, PAR met, classification, completion.
+- §9 calibration verification and second-person review.
+- §11 phases.
+- §13 amendment.
+- Appendices in design order (no start order).
+- The §1.1 change list completed.
+
 ## 00. Pass 3 (after `data-state-2026-10-09b.md`): COMPLETE, gate passes
 
 The coordinator's message is applied in full. Gate `check_render.py --render` passed twice in this pass (after the

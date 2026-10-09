@@ -74,6 +74,12 @@ STEP_NAME = {
     "viral_inactivation": "Low-pH viral inactivation", "cex": "Cation exchange",
     "aex": "Anion exchange", "virus_filtration": "Virus filtration", "ufdf": "UF/DF",
 }
+def step_mid(key: str) -> str:
+    """A step's name inside a sentence: "low-pH viral inactivation", but "Protein A" and "UF/DF"."""
+    n = STEP_NAME[key]
+    return n if (n.startswith("Protein A") or n[:2].isupper()) else n[0].lower() + n[1:]
+
+
 ATTR_NAME = {
     "afucosylation": "Afucosylation (%)", "galactosylation": "Galactosylation (%)",
     "high_mannose": "High mannose (%)", "acidic_variants": "Acidic variants (%)",
@@ -154,7 +160,7 @@ def methods_by_study(steps: Optional[List[str]] = None, label="tbl-methods-by-st
     align, cap = "llll", "Methods used for size variants in the designed studies, by step."
     if len(steps) == 1:
         header, body = _drop_step_column(header, body)
-        align, cap = "lll", f"Methods used for size variants in the designed studies, {STEP_NAME[steps[0]]}."
+        align, cap = "lll", f"Methods used for size variants in the designed studies, {step_mid(steps[0])}."
     return CTable(header=header, body=body, align=align, notes=notes, notes_per_row=True,
                   caption=cap, label=label)
 
@@ -232,7 +238,7 @@ def iac_derivation(steps: Optional[List[str]] = None, label="tbl-iac") -> CTable
         body=body, align=["P{2.4cm}", "l", *step_a, "r", "r", "l", "P{2.6cm}"], size="footnotesize",
         notes=[n for n in notes if n[0] in marks] + [("", "DS, drug substance. IAC, intermediate acceptance criterion. Increase, in the unit of the criterion.")] + [("", "Computed from unrounded values. A criterion recomputed from the rounded values shown can differ in its last digit.")], notes_per_row=True,
         caption="Intermediate acceptance criteria and their derivation from the drug-substance "
-                "criteria" + (f", {STEP_NAME[t['step_key'].iloc[0]]} output" if one_step else "") + ".",
+                "criteria" + (f", {step_mid(t['step_key'].iloc[0])} output" if one_step else "") + ".",
         label=label, resize=True)
 
 
@@ -299,7 +305,9 @@ def criteria_change(steps: Optional[List[str]] = None, label="tbl-criteria-chang
     notes += [(c, f"Version 1.0 rule: {old_rules[c]}.") for c in sorted(old_rules)]
     header = [[C("Step", rs=2), C("Attribute", rs=2), C("Version 1.0^b)^", cs=2), C("Version 2.0", cs=2)],
               ["Criterion", "Rule", "Criterion", "Basis"]]
-    align = ["P{2.3cm}", "P{3.1cm}", "l", "P{1.9cm}", "l", "P{3.3cm}"]
+    # wide enough that an attribute and a Version 1.0 rule take one line each: the table for the
+    # whole train otherwise runs past the foot of its page (INV-001 Table 3.1)
+    align = ["P{2.3cm}", "P{3.6cm}", "l", "P{2.3cm}", "l", "P{3.3cm}"]
     if len(by_step) == 1:
         header, body = _drop_step_column(header, body)
         align = align[1:]
@@ -308,7 +316,7 @@ def criteria_change(steps: Optional[List[str]] = None, label="tbl-criteria-chang
         body=body, align=align,
         notes=[x for x in notes if x[0] in marks], notes_per_row=True, size="footnotesize",
         caption="Acceptance criteria for the step outputs in Version 1.0 and Version 2.0"
-                + (f", {STEP_NAME[next(iter(by_step))]}." if len(by_step) == 1 else "."),
+                + (f", {step_mid(next(iter(by_step)))}." if len(by_step) == 1 else "."),
         label=label, resize=True)
 
 
@@ -332,6 +340,12 @@ HOLD_POOL = {"harvest": "clarified harvest", "protein_a": "Protein A eluate (hel
              "viral_inactivation": "neutralized viral inactivation pool"}
 
 
+def _days_tested(h: pd.DataFrame) -> str:
+    """The hold days with an nrCE-SDS result, as words ("day 0 and day 7", "days 0, 3 and 7")."""
+    days = [str(int(d)) for d in sorted(h.loc[h["lmw_cesds_pct"].notna(), "day"].unique())]
+    return "day " + days[0] if len(days) == 1 else "days " + ", ".join(days[:-1]) + " and " + days[-1]
+
+
 def hold_stability(pool: str, label: Optional[str] = None) -> CTable:
     h = _csv(f"hold_{pool}.csv")
     body = []
@@ -348,8 +362,8 @@ def hold_stability(pool: str, label: Optional[str] = None) -> CTable:
         body=body, align="lrrrrr", style="grid",
         notes=[("a)", "Every SEC result for low molecular weight species includes host cell "
                       "protein eluting in that window (AMD-001). Not used for evaluation."),
-               ("b)", "Not tested. The first and last time points were retained and tested by "
-                      "nrCE-SDS after AMD-001, with the retained response-surface samples.")],
+               ("b)", "Not tested. The samples of " + _days_tested(h) + " were retained and tested "
+                      "by nrCE-SDS after AMD-001, with the retained response-surface samples.")],
         caption=f"Hold-time stability of the {HOLD_POOL[pool]}.", label=label or f"tbl-hold-{pool.replace('_', '-')}")
 
 
@@ -426,7 +440,10 @@ def worst_case_verification(steps: Optional[List[str]] = None, label="tbl-iac-ve
     used = {m for row in body for c in row for m in re.findall(r"\^([a-d]\))\^", str(getattr(c, "text", c)))}
     rounding = [("", "Computed from unrounded values. A criterion recomputed from the rounded values shown can differ in its last digit.")]
     return CTable(
-        header=[[C("Step", rs=2), C("Attribute", rs=2), C("Worst case", rs=2), C("Platform", rs=2, align="c"),
+        # "Platform" spans two header rows, so it takes no align: an aligned cell becomes \multicolumn{1}{c},
+        # inside which multirow's "=" width is the whole line width, and the table was shrunk to 4.5 pt to
+        # fit (INV-001 final pass, 2026-10-09). It sits right-aligned over its right-aligned values.
+        header=[[C("Step", rs=2), C("Attribute", rs=2), C("Worst case", rs=2), C("Platform", rs=2),
                  C("This campaign", cs=3, align="c"), C("Outcome", rs=2)],
                 # centred in fixed-width columns: right-aligned two-line labels in narrow columns ran
                 # into each other (INV-001 and PCR-005 reviews, 2026-10-08)
@@ -821,7 +838,7 @@ def sdm_offsets(steps: Optional[List[str]] = None, studies: Optional[List[str]] 
     if one:
         header, body = _drop_step_column(header, body)
         align = align[1:]
-    sub = (f", {STEP_NAME[t['step_key'].iloc[0]]}" if one else "") + (
+    sub = (f", {step_mid(t['step_key'].iloc[0])}" if one else "") + (
         ", planned runs only" if studies else "")
     return CTable(
         header=header, body=body, align=align,
@@ -1134,6 +1151,10 @@ def sop_references(sops=None, amvs=None, label: str = "tbl-sops") -> CTable:
     import _pcpkg as P
     sops = P.SOP_REFS if sops is None else sops
     amvs = P.AMV_REFS if amvs is None else amvs
+    # one row per reference: a document may join a step list and the shared list, and a reference
+    # in both must not print twice (keep the first)
+    sops = [(i, t) for k, (i, t) in enumerate(sops) if i not in [x for x, _ in list(sops)[:k]]]
+    amvs = [(i, t) for k, (i, t) in enumerate(amvs) if i not in [x for x, _ in list(amvs)[:k]]]
     d = pd.DataFrame([["Standard operating procedure", i, t] for i, t in sops]
                      + [["Analytical method validation", i, t] for i, t in amvs],
                      columns=["Type", "Reference", "Title"])
@@ -1221,8 +1242,14 @@ def adequacy_remedy(steps: Optional[List[str]] = None, label: str = "tbl-remedy"
     body = []
     for sk, g in t.groupby("step_key", sort=False):
         for i, (_, r) in enumerate(g.iterrows()):
-            eff = str(r["effects"]) if isinstance(r["effects"], str) and r["effects"] else ""
-            eff_t = _terms_text(eff.split(), sk) if eff else "None"
+            # the whole refit, with a main effect it keeps only because a term containing it remains
+            # (not itself significant) in parentheses: a list of the significant terms alone read
+            # as a refit that broke hierarchy (INV-002 review, 2026-10-09)
+            eff = set(str(r["effects"]).split()) if isinstance(r["effects"], str) else set()
+            red = str(r["reduced_terms"]).split() if isinstance(r["reduced_terms"], str) else []
+            eff_t = ", ".join(_term_name(x, sk) if x in eff else f"({_term_name(x, sk)})" for x in red)
+            eff_t = (eff_t[:1].upper() + eff_t[1:] if not eff_t.startswith("(")
+                     else "(" + eff_t[1:2].upper() + eff_t[2:]) if eff_t else "None, the mean only"
             m_req = "–" if pd.isna(r["m_required"]) else str(int(r["m_required"]))
             rem = REMEDY_TEXT[r["remedy"]]
             if r["remedy"] == "augment":
@@ -1231,7 +1258,7 @@ def adequacy_remedy(steps: Optional[List[str]] = None, label: str = "tbl-remedy"
                 _attr_label(r["response"], sk), eff_t, m_req, rem,
                 REASON_TEXT.get(r["reason"], r["reason"])])
     return CTable(
-        header=[["Step", "Attribute", "Effects in the refit\n(planned runs)", "Runs\nneeded",
+        header=[["Step", "Attribute", "Terms of the refit\n(planned runs)^b)^", "Runs\nneeded",
                  "Remedy", "Reason"]],
         # landscape text width on letter paper with 1 in margins is 22.9 cm: at 4.2 cm the effects
         # column wrapped to six lines and the table ran off its page, and a table taller than the
@@ -1240,6 +1267,10 @@ def adequacy_remedy(steps: Optional[List[str]] = None, label: str = "tbl-remedy"
         body=body, align=["P{2.0cm}", "P{3.6cm}", "P{7.0cm}", "r", "P{2.5cm}", "P{4.8cm}"],
         notes=[("a)", "The step's augmentation has the largest number of runs any of its models "
                       "needs."),
+               ("b)", "Terms significant at α = "
+                      f"{float(_cfg().raw()['campaign']['thresholds']['effect_alpha']):g}. A main effect in "
+                      "parentheses is not significant and is kept because an interaction or a square of "
+                      "it remains in the refit."),
                ("", f"Runs needed: the smallest augmentation that gives an assurance of at least "
                     f"{float(ma['assurance']):.2f} that the planned model meets PCMP-001 §7.2 "
                     "(–: not reached within the size of the planned design, or not computed when "
@@ -1281,7 +1312,8 @@ def sample_size(steps: Optional[List[str]] = None, label: str = "tbl-sample-size
                     f"of {int(ma['step'])} were computed; the table shows every fourth. Runs "
                     f"needed: the smallest size with an assurance of at least {target:.2f} (–: not "
                     "reached within the size of the planned design). Lowest power: the power, at "
-                    "that size and α = 0.05, of the weakest effect the refit found.")],
+                    f"that size and α = {float(_cfg().raw()['campaign']['thresholds']['effect_alpha']):g}, "
+                    "of the weakest effect the refit found.")],
         notes_per_row=True, size="footnotesize", landscape=True,
         caption="Assurance that the planned model meets the model-adequacy criteria, by the number "
                 "of further runs.", label=label)
@@ -1308,7 +1340,7 @@ def augmentation_design(step: str, label: Optional[str] = None) -> CTable:
         notes=[("", "Factors: " + note), ("", "Block 2. Runs are numbered on from the planned "
                                               "design.")],
         notes_per_row=True, size="footnotesize",
-        caption=f"D-optimal augmentation of the {STEP_NAME[step].lower() if step != 'protein_a' else 'Protein A'} "
+        caption=f"D-optimal augmentation of the {step_mid(step)} "
                 "response-surface design.",
         label=label or f"tbl-aug-design-{step.replace('_', '-')}")
 
@@ -1353,11 +1385,15 @@ def model_reevaluation(step: str, label: Optional[str] = None) -> CTable:
         head1.append(C("All runs, full quadratic with block", cs=6))
         head2 += ["Runs", "R²", "Pred. R²", "Gap", "Lack of\nfit p", "Block p"]
     head1.append(C("Model used\n(terms)", rs=2))
+    # a lettered note only where a cell cites it: a step without augmentation and with an adequate
+    # model for every output printed both notes with no marker in the table (PCR-005, 2026-10-09)
+    cited = {m for row in body for c in row for m in re.findall(r"\^([a-z]\))\^", str(getattr(c, "text", c)))}
     return CTable(
         header=[head1, head2], body=body,
         align=["P{3.2cm}"] + ["r"] * (len(head2)) + ["P{2.4cm}"],
-        notes=[("a)", "Viral clearance was not measured in the augmentation runs (INV-002)."),
-               ("b)", "No adequate model. The output is judged on its measured results."),
+        notes=[n for n in [("a)", "Viral clearance was not measured in the augmentation runs (INV-002)."),
+                           ("b)", "No adequate model. The output is judged on its measured results.")]
+               if n[0] in cited] + [
                ("", f"Gap: R² minus predicted R², at most {float(th['max_r2_minus_pred_r2']):.2f} "
                     "under PCMP-001 §7.2. Model used: the scale chosen by the Box-Cox profile and the "
                     "model with the lowest AICc among the hierarchical submodels of the full quadratic, "
@@ -1366,3 +1402,148 @@ def model_reevaluation(step: str, label: Optional[str] = None) -> CTable:
         caption="Re-evaluation of the response-surface models"
                 + (" with the augmentation runs" if aug else "") + ".",
         label=label or f"tbl-reeval-{step.replace('_', '-')}")
+
+
+# --------------------------------------------------------------------------------------
+# 17. Support for the re-centred low-pH set-points (PCR-006, PD-006-01 and PD-006-02)
+# --------------------------------------------------------------------------------------
+def _p3(p) -> str:
+    return "<0.001" if p < 0.001 else f"{p:.3f}"
+
+
+def _sgn(v, nd=2) -> str:
+    """A signed difference, with no negative zero."""
+    return f"{0.0:.{nd}f}" if round(abs(v), nd) == 0 else f"{v:+.{nd}f}"
+
+
+def vi_ofat(label="tbl-vi-ofat") -> CTable:
+    """S-VI-OFAT: every result of the low-pH hold at the re-centred and the former pH set-point."""
+    d = _csv("vi_ofat.csv")
+    ph = sorted(d["ph"].unique())
+    o = _cfg().raw()["analytics"]["vi_ofat"]
+    attrs = [("aggregate_out_pct", "Aggregate,\n% HMW (SEC)"), ("lmw_cesds_pct", "Fragments,\n% LMW (nrCE-SDS)"),
+             ("acidic_variants", "Acidic variants,\n% (icIEF)")]
+    body = []
+    for t, g in d.groupby("hold_min", sort=True):
+        reps = sorted(g["replicate"].unique())
+        for i, rep in enumerate(reps):
+            row = ([C(str(int(t)), rs=len(reps))] if i == 0 else []) + [str(int(rep))]
+            for resp, _ in attrs:
+                for p in ph:
+                    v = g[(g["ph"] == p) & (g["replicate"] == rep)][resp]
+                    row.append(num(float(v.iloc[0]), 2))
+            body.append(row)
+    return CTable(
+        header=[[C("Hold time\n(min)", rs=2), C("Repli-\ncate", rs=2)] + [C(h, cs=len(ph)) for _, h in attrs],
+                [f"pH {p:.2f}" for _ in attrs for p in ph]],
+        body=body, align="ll" + "r" * (len(attrs) * len(ph)),
+        notes=[("", f"Temperature {o['temperature']:g} °C. Time 0 is the load after pH adjustment, before "
+                    "the hold. Each hold time was run in duplicate at each pH.")],
+        size="footnotesize",
+        caption="Quality attributes over the low-pH hold at the re-centred and the former pH set-point "
+                "(study S-VI-OFAT).", label=label)
+
+
+def ofat_effects(label="tbl-vi-ofat-effects") -> CTable:
+    """S-VI-OFAT: the analysis of covariance of each attribute on pH and hold time."""
+    import doe_report as D
+    a = D.ofat_analysis()
+    o = _cfg().raw()["analytics"]["vi_ofat"]
+    new, old = sorted(o["ph"])[0], sorted(o["ph"])[1]
+    hold_nor = _cfg().unit_op("viral_inactivation").param("hold_time").nor
+    body = []
+    for r in a.itertuples():
+        spec = ("two_sided" if not math.isnan(r.crit_lo) and not math.isnan(r.crit_hi)
+                else "upper" if not math.isnan(r.crit_hi) else "lower")
+        body.append([r.attribute, r.method, num(r.mean_new, 2), num(r.mean_old, 2),
+                     f"{_sgn(r.ph_effect)} ({_sgn(r.ph_lo)} to {_sgn(r.ph_hi)})", _p3(r.p_ph_holm),
+                     _p3(r.p_interaction), _sgn(r.slope_60), num(r.method_sd, 2),
+                     f"{num(r.min_nor, 2)}–{num(r.max_nor, 2)}", crit(r.crit_lo, r.crit_hi, spec)])
+    return CTable(
+        header=[[C("Attribute", rs=2), C("Method", rs=2), C("Mean", cs=2),
+                 C(f"Effect of pH {new:.2f} against pH {old:.2f}", cs=2),
+                 C("pH × hold\ntime, p^c)^", rs=2), C("Change per\n60 min^d)^", rs=2),
+                 C("Method\nrepeat-\nability, SD^e)^", rs=2), C(f"Results at\npH {new:.2f}^f)^", rs=2),
+                 C("Criterion\nof the step", rs=2)],
+                [f"pH {new:.2f}", f"pH {old:.2f}", "Difference\n(95 % CI)^a)^", "p^b)^"]],
+        body=body, align=["l", "l", "r", "r", "P{3.6cm}", "r", "r", "r", "r", "r", "r"],
+        notes=[("a)", "Difference of the means at any hold time, from a model of the result on pH (two "
+                      "levels) and hold time, in the unit of the attribute (points for a percentage)."),
+               ("b)", "Adjusted by Holm's method for the three attributes tested."),
+               ("c)", "Interaction: whether the change with hold time differs between the two pH values."),
+               ("d)", "Common to both pH values, in the unit of the attribute."),
+               ("e)", "At the mean level of the attribute in the study."),
+               ("f)", f"Lowest and highest single result at hold times up to {hold_nor[1]:g} min, the "
+                      "upper end of the hold time NOR in force.")],
+        notes_per_row=True, size="footnotesize", landscape=True,
+        caption=f"Effect of the inactivation pH on the quality attributes over the low-pH hold "
+                f"(study S-VI-OFAT).", label=label)
+
+
+def cex_verification_runs(label="tbl-cex-verification") -> CTable:
+    """S-CEX-VER: each cation exchange run on the worst-case material of the re-centred step, and the
+    decision on the clearance fold of each attribute."""
+    import doe_report as D
+    runs = _csv("cex_verification.csv")
+    s = D.cex_verification_summary().set_index("cqa")
+    lf = _cfg().raw()["analytics"]["cex_verification"]["load_from"]
+    body = []
+    for r in runs.itertuples():
+        body.append([str(int(r.run)), num(r.load_aggregate_pct, 2), num(r.aggregate_out_pct, 2),
+                     num(r.aggregate_fold, 2), num(r.load_lmw_cesds_pct, 2), num(r.lmw_cesds_pct, 2),
+                     num(r.fragment_fold, 2)])
+    ag, fr = s.loc["aggregates_hmw"], s.loc["fragments_lmw"]
+    for lab, a_, f_ in (("Geometric mean fold", num(ag["fold_gmean"], 2), num(fr["fold_gmean"], 2)),
+                        ("Lower 95 % confidence\nbound^a)^", num(ag["fold_bound"], 2), num(fr["fold_bound"], 2)),
+                        ("Fold the criteria\nrely on^b)^", num(ag["f_required"], 2), num(fr["f_required"], 2)),
+                        ("Result", "Passed" if ag["passed"] else "Not passed",
+                         "Passed" if fr["passed"] else "Not passed")):
+        body.append([lab, "", "", a_, "", "", f_])
+    return CTable(
+        header=[[C("Run", rs=2), C("Aggregate, % HMW (SEC)", cs=3), C("Fragments, % LMW (nrCE-SDS)", cs=3)],
+                ["Load", "Pool", "Fold", "Load", "Pool", "Fold"]],
+        body=body, align=["P{3.4cm}"] + ["R{1.45cm}"] * 6,
+        notes=[("", f"Load: material inactivated at pH {lf['ph']:.2f} for {lf['hold_time']:g} min at "
+                    f"{lf['temperature']:g} °C, the worst case of the NOR in force. Cation exchange at "
+                    "set-point. Fold: load divided by pool."),
+               ("a)", "One-sided, of the mean log fold, with the run-to-run SD of the log fold from the "
+                      "cation exchange data, as in the simulation that set the number of runs."),
+               ("b)", "The clearance fold through cation exchange that the intermediate acceptance "
+                      "criteria upstream of it assume (PCMP-001).")],
+        notes_per_row=True,
+        caption="Cation exchange runs on material from the re-centred low-pH step (study S-CEX-VER).",
+        label=label)
+
+
+def cex_verification_n(label="tbl-cex-verification-n") -> CTable:
+    """S-CEX-VER: the simulation that set the number of runs."""
+    import doe_report as D
+    g = _csv("cex_verification_n.csv")
+    s = D.cex_verification_summary().set_index("cqa")
+    v = _cfg().raw()["analytics"]["cex_verification"]
+    names = {"aggregates_hmw": "Aggregate", "fragments_lmw": "Fragments"}
+    body = []
+    for cqa, gg in g.groupby("cqa", sort=False):
+        r = s.loc[cqa]
+        for i, (_, x) in enumerate(gg.iterrows()):
+            lead = ([C(names[cqa], rs=len(gg)), C(num(r["f_data"], 2), rs=len(gg)),
+                     C(num(r["f_required"], 2), rs=len(gg)), C(f"{r['sigma_ln']:.3f}", rs=len(gg))]
+                    if i == 0 else [])
+            body.append(lead + [str(int(x["n"])), f"{x['p_pass_at_data']:.2f}", f"{x['p_pass_at_required']:.3f}"]
+                        + ([C(str(int(r["n_required"])), rs=len(gg))] if i == 0 else []))
+    return CTable(
+        header=[[C("Attribute", rs=2), C("Fold in the\ncation exchange\ndata^a)^", rs=2),
+                 C("Fold the\ncriteria\nrely on", rs=2), C("SD of the\nlog fold", rs=2), C("Runs", rs=2),
+                 C("Probability of passing", cs=2), C("Runs\nneeded^b)^", rs=2)],
+                ["Fold as in\nthe data", "Fold equal to\nthe required"]],
+        body=body, align="lrrrrrrr",
+        notes=[("", f"{int(v['reps']):,} simulated verifications per number of runs. A verification "
+                    "passes when the one-sided 95 % lower confidence bound of the mean log fold is at "
+                    "least the fold the criteria rely on."),
+               ("a)", "At set-point, from the selected model of aggregate. Fragments, which have no "
+                      "adequate model, from the centre points."),
+               ("b)", f"The smallest number of runs, at most {int(v['n_max'])}, with a probability of "
+                      f"passing of at least {float(v['power']):.2f} when cation exchange clears as its data show.")],
+        notes_per_row=True, size="footnotesize",
+        caption="Number of cation exchange verification runs, from a simulation of the verification.",
+        label=label)

@@ -84,6 +84,43 @@ def _plain(text: str) -> str:
     return re.sub(r"\s+", " ", _MARK.sub(r" \1 ", _s(text))).strip()
 
 
+#: characters per centimetre of DejaVu Serif at each table size, measured on rendered tables
+#: (INV-001 Tables 4.4 and 6.1): a low value, so that the lines a merged text needs are not
+#: underestimated, and a high value, so that the lines a row offers are not overestimated
+_CPC_LO = {"tiny": 7.4, "scriptsize": 6.3, "footnotesize": 5.4, "small": 4.9, "normalsize": 4.4}
+_CPC_HI = {"tiny": 9.0, "scriptsize": 7.7, "footnotesize": 6.6, "small": 6.0, "normalsize": 5.4}
+
+
+def _width_cm(spec: str) -> Optional[float]:
+    """The width of a wrapping column (``p{3.4cm}``), or None for a column that does not wrap."""
+    m = re.search(r"p\{([\d.]+)(cm|mm|in|pt)\}", spec)
+    if not m:
+        return None
+    return float(m.group(1)) * {"cm": 1.0, "mm": 0.1, "in": 2.54, "pt": 0.03515}[m.group(2)]
+
+
+def _lines_needed(text, width_cm: Optional[float], cpc: float) -> int:
+    """How many lines a cell's text takes: its explicit line breaks, and in a wrapping column the
+    lines a greedy word wrap at the column width gives."""
+    n = 0
+    for part in _MARK.sub("", _s(text)).split("\n"):       # a superscript marker takes no line
+        if width_cm is None:
+            n += 1
+            continue
+        cap, cur, k = max(1, int(width_cm * cpc)), 0, 1
+        for w in part.split():
+            if cur == 0:
+                cur = len(w)
+            elif cur + 1 + len(w) <= cap:
+                cur += 1 + len(w)
+            else:
+                k, cur = k + 1, len(w)
+            while cur > cap:
+                k, cur = k + 1, cur - cap
+        n += k
+    return n
+
+
 def _note(marker: str, text: str) -> str:
     """A footnote: its superscript marker, then the text. An empty marker is a plain note."""
     return f"^{marker}^ {text}" if marker else text
@@ -210,6 +247,15 @@ class CTable:
         grid = self.style == "grid"
         # a table is grouped when its first column has a row span somewhere
         grouped = any(c.rs > 1 for cells in placed for col, c in cells if col == 0)
+        # the lines each row takes, from its own cells, so that a merged cell whose text needs more
+        # lines than the rows it spans can hold is set in the first row of the span (which then
+        # grows) instead of in a \multirow that would run through the rule below it
+        lo, hi = _CPC_LO.get(self.size, _CPC_LO["small"]), _CPC_HI.get(self.size, _CPC_HI["small"])
+
+        def _w(col, c):
+            return _width_cm(aligns[col]) if ("p{" in aligns[col] and c.cs == 1) else None
+        row_lines = [max([_lines_needed(c.text, _w(col, c), hi) for col, c in cells if c.rs == 1] or [1])
+                     for cells in placed]
         for r, cells in enumerate(placed):
             starts = dict(cells)
             # the grid style already rules every row, so only booktabs needs a group rule
@@ -226,7 +272,7 @@ class CTable:
                         # \multicolumn below
                         a_ = c.align or (aligns[col] if len(aligns[col]) == 1 else "l")
                         txt = r"\makecell[" + a_ + "]{" + txt.replace(r"\newline ", r"\\") + "}"
-                    if c.rs > 1:
+                    if c.rs > 1 and _lines_needed(c.text, _w(col, c), lo) <= sum(row_lines[r:r + c.rs]):
                         # in a wrapping column the merged text must wrap to the column width
                         w = "=" if "p{" in aligns[col] and c.cs == 1 else "*"
                         txt = r"\multirow{" + str(c.rs) + "}{" + w + "}{" + txt + "}"

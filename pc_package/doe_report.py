@@ -179,19 +179,24 @@ def _rsm_fit(key, resp, runs, form, corrected=True):
     quadratic, block kept), with ``status`` "selected" when it meets PCMP-001 §7.2 and "none" when it
     does not (the output is then judged on its measured results). ``form="full"`` gives the full
     quadratic on the raw scale with no gate (``status`` "full"): Version 1.0's analysis, and the
-    planned model the reports compare against. ``full`` always carries the full model's statistics."""
+    planned model the reports compare against. ``full`` always carries the full model's statistics,
+    and ``full_scale`` the full quadratic on the scale of the chosen model (on the log scale for a
+    log-scale output, so that a term the selection dropped can be tested where it was dropped)."""
     factors = rsm_factors(key)
     df = rsm_data(key, runs, corrected)
     d = df[df[resp].notna()].reset_index(drop=True)
     full = ad.adequacy(d, resp, factors, ad.full_terms(factors), TH)
     if form == "full":
         chosen, frm, transform, ycol, boxcox, status = full, "full", None, resp, None, "full"
+        full_scale = full
     else:
         sel = ad.select_model(d, resp, factors, TH)
         chosen, frm = sel, "selected"
         transform = "log" if sel["scale"] == "log" else None
         ycol, boxcox, d = sel["ycol"], sel["boxcox"], sel["data"]
         status = "selected" if sel["adequate"] else "none"
+        full_scale = (ad.adequacy(d, ycol, factors, ad.full_terms(factors), TH)
+                      if transform == "log" else full)
     m = chosen["model"]
     return dict(model=m, df=d, factors=factors, names=list(chosen["terms"]), quad=True,
                 transform=transform, ycol=ycol, boxcox=boxcox, aicc=chosen.get("aicc"),
@@ -201,7 +206,8 @@ def _rsm_fit(key, resp, runs, form, corrected=True):
                 rmse=chosen["rmse"], ss_pe=chosen["ss_pe"], df_pe=chosen["df_pe"],
                 ss_lof=chosen["ss_lof"], df_lof=chosen["df_lof"], F_lof=chosen["F_lof"],
                 p_lof=chosen["p_lof"], sse=chosen["sse"], form=frm, status=status,
-                adequate=bool(chosen["adequate"]), full=full, runs=runs)
+                adequate=bool(chosen["adequate"]), full=full, full_scale=full_scale, runs=runs,
+                exact=bool(chosen.get("exact", False)))
 
 
 def fit(key, kind, resp, superseded=False, runs=None, form=None):
@@ -415,9 +421,18 @@ def fig_rsm_contours(key, xf="pH", yf="duration"):
         XX, YY, Z = _predict_grid(r, xf, yf)
         xn = _natural(XX, key, xf)
         yn = _natural(YY, key, yf)
-        cs = ax.contourf(xn, yn, Z, levels=12, cmap="viridis")
-        ax.contour(xn, yn, Z, levels=6, colors="white", linewidths=0.4, alpha=0.6)
-        fig.colorbar(cs, ax=ax, shrink=0.85)
+        zc = float(np.nanmean(Z))
+        if float(np.nanmax(Z) - np.nanmin(Z)) <= 1e-9 * max(1.0, abs(zc)):
+            # flat over these two factors (a model with no term in them): one level at its value,
+            # not twelve levels of rounding noise with an offset on the colour bar
+            d = max(1e-6, 0.005 * abs(zc))
+            cs = ax.contourf(xn, yn, np.full_like(Z, zc), levels=[zc - d, zc + d], cmap="viridis")
+            cb = fig.colorbar(cs, ax=ax, shrink=0.85, ticks=[zc])
+            cb.ax.set_yticklabels([f"{zc:.3g}"])
+        else:
+            cs = ax.contourf(xn, yn, Z, levels=12, cmap="viridis")
+            ax.contour(xn, yn, Z, levels=6, colors="white", linewidths=0.4, alpha=0.6)
+            fig.colorbar(cs, ax=ax, shrink=0.85)
         ax.set_title(RESP_LABEL.get(resp, resp), fontsize=10)
         ax.set_xlabel(names.get(xf, xf), fontsize=8)
         ax.set_ylabel(names.get(yf, yf), fontsize=8)
@@ -532,12 +547,71 @@ def acceptance_for(key, resp):
 # (INV-001), are outputs/data/criteria_rev1.csv and are read only to tabulate the change.
 # --------------------------------------------------------------------------------------
 def _iac_row(key, resp):
-    t = csv("iac.csv")
+    t = csv(_CRITERIA.get("file", "iac.csv"))
     r = t[(t["step_key"] == key) & (t["response"] == resp)]
     return None if r.empty else r.iloc[0]
 
 
 _CRITERIA = {"rev": "2.0"}
+
+
+class criteria_without_ca3:
+    """Context manager: inside it the Version 2.0 criteria are the ones the verification on the full
+    quadratic models gives (``iac_full.csv``), the criteria as they would have been without INV-002
+    corrective action CA3. The models stay the selected ones. INV-002 uses it to show whether any
+    conclusion of a report depends on the criteria that CA3 moved."""
+    def __enter__(self):
+        self._old = _CRITERIA.get("file")
+        _CRITERIA["file"] = "iac_full.csv"
+        return self
+
+    def __exit__(self, *a):
+        if self._old is None:
+            _CRITERIA.pop("file", None)
+        else:
+            _CRITERIA["file"] = self._old
+        return False
+
+
+def ca3_criteria_sensitivity():
+    """For every output with a criterion and a response-surface model: the judgement across the NOR
+    in force with the criteria in force and with the criteria as they would have been without CA3,
+    and whether the conclusion differs; every NOR-propagated PAR of the output; and, for an output
+    with a scale-down offset, whether the scale-down model is qualified under each (the conclusion
+    with the offset at either end of its interval), which can depend on the criterion even where the
+    conclusion at the estimate does not."""
+    rows = []
+    m = csv("model_adequacy.csv")
+    for _, r in m.iterrows():
+        key, resp = r["step_key"], r["response"]
+        acc_in = ipc_limit(key, resp)
+        met_in = nor_met(key, resp)
+        pars_in = {f: par_nor_propagated(key, resp, f)["par_nat"] for f in rsm_factors(key)} \
+            if fit(key, "rsm", resp)["status"] != "none" and acc_in is not None else {}
+        with criteria_without_ca3():
+            acc_wo = ipc_limit(key, resp)
+            met_wo = nor_met(key, resp)
+            pars_wo = {f: par_nor_propagated(key, resp, f)["par_nat"] for f in rsm_factors(key)} \
+                if fit(key, "rsm", resp)["status"] != "none" and acc_wo is not None else {}
+        same_par = all((pars_in.get(f) is None and pars_wo.get(f) is None) or
+                       (pars_in.get(f) is not None and pars_wo.get(f) is not None and
+                        np.allclose(pars_in[f], pars_wo[f], rtol=1e-6, atol=1e-9)) for f in set(pars_in) | set(pars_wo))
+        # the qualification of the scale-down model, which judges the conclusion with the offset at
+        # either end of its interval (an output with an offset at its step only)
+        q_in = offset_qualification(key, resp) if sdm_offset(key, resp) is not None else None
+        with criteria_without_ca3():
+            q_wo = offset_qualification(key, resp) if sdm_offset(key, resp) is not None else None
+        rows.append({"step_key": key, "response": resp,
+                     "qualified_in_force": None if not q_in or not q_in.get("judged") else bool(q_in["qualified"]),
+                     "qualified_without_ca3": None if not q_wo or not q_wo.get("judged") else bool(q_wo["qualified"]),
+                     "criterion_in_force": None if acc_in is None else acc_in[1] if acc_in[2] == "upper" else acc_in[0],
+                     "criterion_without_ca3": None if acc_wo is None else acc_wo[1] if acc_wo[2] == "upper" else acc_wo[0],
+                     "criterion_moved": acc_in != acc_wo, "met_in_force": met_in, "met_without_ca3": met_wo,
+                     "conclusion_differs": met_in != met_wo, "pars_same": bool(same_par)})
+    out = pd.DataFrame(rows)
+    out["qualification_differs"] = [a is not None and b is not None and a != b
+                                    for a, b in zip(out["qualified_in_force"], out["qualified_without_ca3"])]
+    return out
 
 
 def ipc_limit(key, resp):
@@ -1345,3 +1419,292 @@ def fig_assurance():
     ax.legend(fontsize=7, loc="upper center", bbox_to_anchor=(0.5, -0.14), ncol=3, frameon=False)
     fig.tight_layout()
     return fig
+
+
+# --------------------------------------------------------------------------------------
+# Version 2.0 support for the re-centred low-pH set-points (PCR-006, PD-006-01 and PD-006-02)
+# --------------------------------------------------------------------------------------
+#: the attributes of the low-pH hold study, with the method that measured each
+OFAT_ATTR = {"aggregate_out_pct": ("Aggregate", "% HMW", "SEC"),
+             "lmw_cesds_pct": ("Fragments", "% LMW", "nrCE-SDS"),
+             "acidic_variants": ("Acidic variants", "%", "icIEF")}
+
+
+def _ofat_method_sd(resp, level):
+    """The repeatability of the method behind an attribute of the low-pH hold study, as an SD in
+    the attribute's own unit at ``level``: SEC and icIEF from their CV, nrCE-SDS absolute."""
+    raw = CFG.raw()
+    if resp == "lmw_cesds_pct":
+        return float(raw["analytics"]["methods"]["cesds"]["sd_abs"])
+    if resp == "aggregate_out_pct":
+        meth = {m["id"]: m for m in raw["deviations"]["methods"]}
+        return float(meth["AMV-3221"]["precision_pct"]) / 100 * level
+    return float(raw["analytics"]["sdm"]["assay_cv"]["acidic_variants"]) * level
+
+
+def ofat_analysis():
+    """S-VI-OFAT (PD-006-01): the low-pH hold at the re-centred pH against the former set-point.
+
+    Per attribute, an analysis of covariance: the result on pH (two levels, as a factor) and hold
+    time. The pH effect (re-centred minus former set-point) is taken from the model with both main
+    effects, at any hold time, with its 95 % confidence interval and p-value; the p-values of the
+    three attributes are adjusted by Holm's method, because three attributes were tested. The
+    interaction (whether the rate of change with hold time differs between the two pH values) is
+    tested in the model with it. The slope is the change per 60 min, common to both pH values.
+    ``method_sd`` is the repeatability of the method at the mean level, so the pH effect can be set
+    against it. ``diff_t0`` is the difference between the two pH values at time 0, the pH-adjusted
+    load before any hold, where a hold effect cannot yet have acted. ``max_nor`` is the highest single result at the re-centred pH within the hold time
+    NOR in force, ``max_all`` the highest over the study, and ``criterion`` the step's
+    intermediate acceptance criterion for the attribute (low, high)."""
+    import statsmodels.formula.api as smf
+    o = CFG.raw()["analytics"]["vi_ofat"]
+    d = csv("vi_ofat.csv").copy()
+    new, old = float(CFG.unit_op("viral_inactivation").param("ph").setpoint), \
+        float(CFG.unit_op("viral_inactivation").param("ph").setpoint_characterized)
+    assert sorted({new, old}) == sorted(float(p) for p in o["ph"])
+    d["new"] = (d["ph"] == new).astype(int)
+    hold_nor = CFG.unit_op("viral_inactivation").param("hold_time").nor
+    rows = []
+    for resp, (name, unit, method) in OFAT_ATTR.items():
+        main = smf.ols(f"{resp} ~ new + hold_min", data=d).fit()
+        inter = smf.ols(f"{resp} ~ new * hold_min", data=d).fit()
+        ci = main.conf_int(alpha=0.05).loc["new"]
+        sl = main.params["hold_min"] * 60
+        sl_ci = main.conf_int(alpha=0.05).loc["hold_min"] * 60
+        at_new = d[d["new"] == 1]
+        lo, hi, typ = ipc_limit("viral_inactivation", resp)
+        lo, hi = (lo if typ in ("lower", "two_sided") else np.nan), (hi if typ in ("upper", "two_sided") else np.nan)
+        rows.append({"response": resp, "attribute": name, "unit": unit, "method": method,
+                     "n_per_ph": int((d["new"] == 1).sum()),
+                     "mean_new": float(at_new[resp].mean()), "mean_old": float(d[d["new"] == 0][resp].mean()),
+                     "ph_effect": float(main.params["new"]), "ph_lo": float(ci[0]), "ph_hi": float(ci[1]),
+                     "p_ph": float(main.pvalues["new"]), "p_interaction": float(inter.pvalues["new:hold_min"]),
+                     "slope_60": float(sl), "slope_lo": float(sl_ci[0]), "slope_hi": float(sl_ci[1]),
+                     "p_slope": float(main.pvalues["hold_min"]),
+                     "method_sd": _ofat_method_sd(resp, float(d[resp].mean())),
+                     "max_nor": float(at_new[at_new["hold_min"] <= hold_nor[1]][resp].max()),
+                     "max_all": float(at_new[resp].max()), "crit_lo": lo, "crit_hi": hi})
+    out = pd.DataFrame(rows)
+    # Holm's step-down adjustment over the attributes
+    order = np.argsort(out["p_ph"].to_numpy())
+    m, adj, run = len(out), np.empty(len(out)), 0.0
+    for i, j in enumerate(order):
+        run = max(run, min(1.0, (m - i) * float(out["p_ph"].iloc[j])))
+        adj[j] = run
+    out["p_ph_holm"] = adj
+    alpha = float(CFG.raw()["campaign"]["thresholds"]["effect_alpha"])
+    out["ph_significant"] = out["p_ph_holm"] < alpha
+    # where an apparent pH effect sits: already before the hold (time 0, the pH-adjusted load) or
+    # growing over it (the interaction)
+    t0 = d[d["hold_min"] == d["hold_min"].min()]
+    out["diff_t0"] = [float(t0[t0["new"] == 1][r].mean() - t0[t0["new"] == 0][r].mean()) for r in out["response"]]
+    # judged per result, against both ends where the criterion has two
+    at_nor = d[(d["new"] == 1) & (d["hold_min"] <= hold_nor[1])]
+    out["min_nor"] = [float(at_nor[r].min()) for r in out["response"]]
+    out["met_nor"] = [(np.isnan(r.crit_lo) or r.min_nor >= r.crit_lo) and (np.isnan(r.crit_hi) or r.max_nor <= r.crit_hi)
+                      for r in out.itertuples()]
+    return out
+
+
+def cex_verification_summary():
+    """S-CEX-VER (PD-006-02): cation exchange runs at set-point on the worst-case material of the
+    re-centred low-pH step, per attribute.
+
+    ``f_required`` is the clearance fold the Version 2.0 criteria rely on (the platform worst case,
+    or the 95 % bound that replaced it), ``f_data`` the fold the cation exchange data show at
+    set-point, ``sigma_ln`` the run-to-run SD of the log fold, and ``n_required`` the number of runs
+    the simulation gives for a power of ``analytics.cex_verification.power`` (``power_at_n``), at
+    most ``n_max``; ``alpha_at_n`` is the probability of passing when the true fold equals the
+    required one. The runs: the folds, their geometric mean, the one-sided 95 % lower confidence
+    bound of the mean log fold with sigma known, and whether it reaches the required fold
+    (``passed``). ``pool_max`` and ``pool_crit`` set the highest pool result against the cation
+    exchange criterion for the attribute."""
+    from scipy import stats as _st
+    v = CFG.raw()["analytics"]["cex_verification"]
+    g = csv("cex_verification_n.csv")
+    runs = csv("cex_verification.csv")
+    alpha = float(CFG.raw()["campaign"]["thresholds"]["effect_alpha"])
+    z = float(_st.norm.ppf(1 - alpha))
+    cols = {"aggregates_hmw": ("aggregate_fold", "aggregate_out_pct", "load_aggregate_pct", "Aggregate"),
+            "fragments_lmw": ("fragment_fold", "lmw_cesds_pct", "load_lmw_cesds_pct", "Fragments")}
+    rows = []
+    for cqa in v["attributes"]:
+        fcol, pcol, lcol, name = cols[cqa]
+        gg = g[g["cqa"] == cqa]
+        n_req = int(gg["n_required"].iloc[0])
+        at = gg[gg["n"] == n_req].iloc[0]
+        f = runs[fcol].to_numpy(float)
+        sigma = float(gg["sigma_ln"].iloc[0])
+        lb = float(np.exp(np.log(f).mean() - z * sigma / np.sqrt(len(f))))
+        f_req = float(gg["f_required"].iloc[0])
+        rows.append({"cqa": cqa, "attribute": name, "f_data": float(gg["f_data"].iloc[0]),
+                     "f_required": f_req, "sigma_ln": sigma, "n_required": n_req,
+                     "power_at_n": float(at["p_pass_at_data"]), "alpha_at_n": float(at["p_pass_at_required"]),
+                     "n_runs": len(f), "folds": [float(x) for x in f],
+                     "fold_gmean": float(np.exp(np.log(f).mean())), "fold_bound": lb,
+                     "passed": bool(lb >= f_req), "every_run_above": bool((f >= f_req).all()),
+                     "load_max": float(runs[lcol].max()), "pool_max": float(runs[pcol].max()),
+                     "pool_crit": ipc_limit("cex", pcol)[1] if ipc_limit("cex", pcol) else np.nan})
+    out = pd.DataFrame(rows)
+    assert int(out["n_runs"].iloc[0]) == int(out["n_required"].max())   # as many runs as the larger need
+    return out
+
+
+def par_margins(key):
+    """How far each set-point and each NOR edge sits from the edge of its NOR-propagated PAR.
+
+    One row per output with a criterion and an adequate model, and per response-surface factor:
+    the set-point, the NOR, the PAR and the range studied, and the margins in the unit of the
+    parameter. ``sp_lo``/``sp_hi`` are set-point minus the lower PAR edge and upper PAR edge minus
+    set-point, ``nor_lo``/``nor_hi`` the same from the NOR edges. A PAR edge that coincides with
+    the end of the range studied is where the study stopped, not where the criterion fails, and
+    its margins are None. ``contains_nor`` is False when the NOR reaches outside the PAR. Run it
+    inside :func:`characterized_nor` for the set-points and NOR the studies were run around."""
+    uo = CFG.unit_op(key)
+    rows = []
+    for resp in responses(key):
+        if effective_acceptance(key, resp) is None or fit(key, "rsm", resp)["status"] == "none":
+            continue
+        for f in rsm_factors(key):
+            p = uo.param(f)
+            par = par_nor_propagated(key, resp, f)["par_nat"]
+            tol = 1e-6 * (p.prange[1] - p.prange[0])
+            if par is None:
+                rows.append({"response": resp, "factor": f, "setpoint": p.setpoint, "nor_low": p.nor[0],
+                             "nor_high": p.nor[1], "range_low": p.prange[0], "range_high": p.prange[1],
+                             "par_low": None, "par_high": None, "sp_lo": None, "sp_hi": None,
+                             "nor_lo": None, "nor_hi": None, "contains_nor": False})
+                continue
+            lo, hi = float(par[0]), float(par[1])
+            lo_edge, hi_edge = lo > p.prange[0] + tol, hi < p.prange[1] - tol
+            rows.append({"response": resp, "factor": f, "setpoint": p.setpoint, "nor_low": p.nor[0],
+                         "nor_high": p.nor[1], "range_low": p.prange[0], "range_high": p.prange[1],
+                         "par_low": lo, "par_high": hi,
+                         "sp_lo": p.setpoint - lo if lo_edge else None, "sp_hi": hi - p.setpoint if hi_edge else None,
+                         "nor_lo": p.nor[0] - lo if lo_edge else None, "nor_hi": hi - p.nor[1] if hi_edge else None,
+                         "contains_nor": bool(lo <= p.nor[0] + tol and hi >= p.nor[1] - tol)})
+    return pd.DataFrame(rows)
+
+
+def nor_worst_corner(key, resp):
+    """The least favourable combination of NOR low, set-point and NOR high for an output with a
+    criterion, at manufacturing scale: the settings, the predicted value (the median on a log-scale
+    model) and the 95 % prediction interval of a single run there, and whether that interval meets
+    the criterion. For a two-sided criterion the corner is the one whose interval comes nearest to
+    either limit, relative to the width of the criterion. None when the output has no criterion or
+    no adequate model."""
+    # the manufacturing-scale criterion, against predictions taken to manufacturing scale (the
+    # same judgement as nor_met, which moves the criterion to the scale-down scale instead)
+    acc = effective_acceptance(key, resp)
+    if acc is None or _judging(key, resp) is None or fit(key, "rsm", resp)["status"] == "none":
+        return None
+    lo, hi, stype = acc
+    r = fit(key, "rsm", resp)
+    uo = CFG.unit_op(key)
+    grid = list(itertools.product(*[[uo.param(f).nor[0], uo.param(f).setpoint, uo.param(f).nor[1]]
+                                    for f in r["factors"]]))
+    nat = {f: [g[i] for g in grid] for i, f in enumerate(r["factors"])}
+    m, plo, phi = prediction_interval(key, resp, nat)
+    m, plo, phi = (np.asarray(to_mfg(key, resp, v), float) for v in (m, plo, phi))
+    if stype == "upper":
+        score, side = phi - hi, "upper"
+    elif stype == "lower":
+        score, side = lo - plo, "lower"
+    else:
+        w = hi - lo
+        s_lo, s_hi = (lo - plo) / w, (phi - hi) / w
+        score = np.maximum(s_lo, s_hi)
+        side = None
+    i = int(np.argmax(score))
+    if side is None:
+        side = "lower" if (lo - plo[i]) >= (phi[i] - hi) else "upper"
+    return {"settings": {f: float(nat[f][i]) for f in r["factors"]}, "predicted": float(m[i]),
+            "pi_low": float(plo[i]), "pi_high": float(phi[i]), "side": side,
+            "met": bool(_in_spec(np.array([plo[i]]), lo, hi, stype)[0] and _in_spec(np.array([phi[i]]), lo, hi, stype)[0]),
+            "median_met": bool(_in_spec(np.array([m[i]]), lo, hi, stype)[0]), "criterion": (lo, hi, stype)}
+
+
+def selection_comparison():
+    """INV-002: for every response-surface output with a criterion (``model_adequacy.csv``), the
+    model the exhaustive AICc search of CA3 selects against the models a stepwise search by AICc
+    would have stopped at (backward from the full quadratic, forward from the mean), on the same
+    scale and runs. An output the data give without error has no AICc (``exact``) and is left out
+    of the comparison. ``backward_worse``/``forward_worse``: the stepwise search stopped at a model
+    with a higher AICc than the best candidate."""
+    rows = []
+    m = csv("model_adequacy.csv")
+    for _, r in m.iterrows():
+        f = fit(r["step_key"], "rsm", r["response"])
+        row = {"step_key": r["step_key"], "response": r["response"], "scale": f["transform"] or "raw",
+               "exact": bool(f.get("exact", False)), "n_terms": len(f["names"]), "aicc": f["aicc"]}
+        if not row["exact"]:
+            for direction in ("backward", "forward"):
+                sw = ad.stepwise_aicc(f["df"], f["ycol"], f["factors"], bool(f["block"]), direction)
+                row[f"{direction}_terms"] = len(sw["terms"])
+                row[f"{direction}_aicc"] = sw["aicc"]
+                row[f"{direction}_worse"] = bool(sw["aicc"] > f["aicc"] + 1e-6)
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def augmentation_prediction_check():
+    """INV-002: an independent check of the models selected on the planned runs. For every output
+    of a step with an INV-002 augmentation, the model selected on the planned runs alone predicts
+    the augmentation runs, which it has not seen: how many of them fall inside its 95 % prediction
+    interval, the root mean square error of those predictions against the model's own residual SD
+    (on the scale of the model), and the block term of the model on all runs (a shift between the
+    two blocks would explain misses that the model does not)."""
+    rows = []
+    for key in st.DOE_FACTORS:
+        if not has_augmentation(key):
+            continue
+        aug = csv(f"doe_{key}_aug.csv")
+        for resp in list(responses(key)) + fragment_responses(key, "rsm"):
+            if resp not in aug.columns or aug[resp].isna().all():
+                continue
+            fp = fit(key, "rsm", resp, runs="planned")
+            if fp["status"] == "none":
+                continue
+            a = aug[aug[resp].notna()].reset_index(drop=True)
+            coded = pd.DataFrame({f: a["coded_" + f] for f in fp["factors"]})
+            sf = fp["model"].get_prediction(_design_matrix(fp, coded)).summary_frame(alpha=0.05)
+            y = a[resp].to_numpy(float)
+            y = np.log(y) if fp["transform"] == "log" else y
+            inside = (y >= sf["obs_ci_lower"].to_numpy()) & (y <= sf["obs_ci_upper"].to_numpy())
+            fa = fit(key, "rsm", resp)
+            m = fa["model"]
+            rows.append({"step_key": key, "response": resp, "scale_planned": fp["transform"] or "raw",
+                         "terms_planned": list(fp["names"]), "terms_all": list(fa["names"]),
+                         "scale_all": fa["transform"] or "raw", "n_new": int(len(a)),
+                         "inside_pi": int(inside.sum()),
+                         "rmsep": float(np.sqrt(np.mean((y - sf["mean"].to_numpy()) ** 2))),
+                         "rmse_model": float(np.sqrt(fp["model"].mse_resid)),
+                         "block_coef": float(m.params.get(ad.BLOCK, np.nan)),
+                         "block_p": float(m.pvalues.get(ad.BLOCK, np.nan))})
+    return pd.DataFrame(rows)
+
+
+def verification_all_runs():
+    """INV-002: the verification of the platform worst cases (``iac.verification``), which uses the
+    planned runs because the criteria were fixed before the augmentation runs existed, repeated on
+    all runs for each step with an augmentation, so a report can say whether the extra runs would
+    have moved a criterion. Rows as in ``iac_verification.csv`` for those steps."""
+    from amab_process import iac as _iac, load_config
+    cfg = load_config()
+    rows = []
+    v = csv("iac_verification.csv")
+    ps = csv("process_summary.csv")
+    for key in [k for k in st.DOE_FACTORS if has_augmentation(k)]:
+        if key not in set(v["step_key"]):
+            continue
+        data = {key: rsm_data(key, runs="all", corrected=False)}
+        # only this step's rows are kept; the low-pH acidic-variant feed is not needed for them
+        out = _iac.verification(cfg, data, ps, _nominal_fragments(), vi_feed_acidic=float("nan"))
+        rows.append(out[out["step_key"] == key])
+    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+
+
+def _nominal_fragments():
+    from amab_process import analytics as _an, load_config
+    return _an.nominal_train(load_config())
+

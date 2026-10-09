@@ -128,6 +128,10 @@ SOP_REFS = [
     ("SOP-3013", "Charge-Variant Analysis by icIEF"),
     ("SOP-3014", "Residual Host-Cell DNA by qPCR"),
     ("SOP-3015", "Purity by Non-Reduced CE-SDS"),
+    # the antibody in a clarified harvest or a column load is measured by Protein A affinity HPLC
+    # (A280 counts every protein there); it sets the protein load of a capture run (2026-10-09,
+    # PCR-005 review run 3)
+    ("SOP-3016", "Product Titre by Protein A Affinity HPLC"),
     ("SOP-4001", "Process-Parameter Classification and Control-Strategy Definition"),
 ]
 AMV_REFS = [
@@ -137,6 +141,7 @@ AMV_REFS = [
     ("AMV-3013", "Charge Variants (icIEF)"),
     ("AMV-3014", "Residual DNA (qPCR)"),
     ("AMV-3020", "Purity (non-reduced CE-SDS)"),
+    ("AMV-3021", "Product Titre (Protein A Affinity HPLC)"),
 ]
 
 # Harvest / clarification (Step 4) controlled-document subsets. Placeholders,
@@ -149,11 +154,14 @@ HARVEST_SOP_REFS = [
     ("SOP-2006", "Clarification by Depth and Sterile Filtration"),
     ("SOP-4001", "Process-Parameter Classification and Control-Strategy Definition"),
 ]
+# fragments by nrCE-SDS at every step that measures them (AMD-001, Version 2.0); a document that
+# also adds it from AMV_REFS prints it once (T.sop_references keeps the first of a reference)
 HARVEST_AMV_REFS = [
     ("AMV-3015", "Turbidity by Nephelometry (NTU)"),
     ("AMV-3012", "Host-Cell Protein ELISA"),
     ("AMV-3014", "Residual DNA (qPCR)"),
     ("AMV-3011", "Size-Variants (SEC-HPLC)"),
+    ("AMV-3020", "Purity (non-reduced CE-SDS)"),
 ]
 
 # Protein A capture (Step 5) controlled-document subsets. Placeholders defined
@@ -168,10 +176,12 @@ PROTEIN_A_SOP_REFS = [
     ("SOP-4001", "Process-Parameter Classification and Control-Strategy Definition"),
 ]
 PROTEIN_A_AMV_REFS = [
+    ("AMV-3021", "Product Titre (Protein A Affinity HPLC)"),
     ("AMV-3016", "Leached Protein A by ELISA (ppm)"),
     ("AMV-3012", "Host-Cell Protein ELISA"),
     ("AMV-3014", "Residual DNA (qPCR)"),
     ("AMV-3011", "Size-Variants (SEC-HPLC)"),
+    ("AMV-3020", "Purity (non-reduced CE-SDS)"),
 ]
 
 # Low-pH Viral Inactivation (Step 6) controlled-document subsets. Placeholders;
@@ -187,6 +197,7 @@ VIRAL_INACT_AMV_REFS = [
     ("AMV-3017", "XMuLV Infectivity Titre (TCID50)"),
     ("AMV-3011", "Size-Variants (SEC-HPLC)"),
     ("AMV-3013", "Charge Variants (icIEF)"),
+    ("AMV-3020", "Purity (non-reduced CE-SDS)"),
 ]
 
 # Cation Exchange polishing (Step 7) controlled-document subsets. Placeholders;
@@ -205,6 +216,7 @@ CEX_AMV_REFS = [
     ("AMV-3012", "Host-Cell Protein ELISA"),
     ("AMV-3014", "Residual DNA (qPCR)"),
     ("AMV-3016", "Leached Protein A by ELISA (ppm)"),
+    ("AMV-3020", "Purity (non-reduced CE-SDS)"),
 ]
 
 # Anion Exchange polishing (Step 8) controlled-document subsets. Placeholders;
@@ -228,6 +240,7 @@ AEX_AMV_REFS = [
     ("AMV-3017", "XMuLV Infectivity Titre (TCID50)"),
     ("AMV-3018", "MVM Infectivity Titre (TCID50/qPCR)"),
     ("AMV-3013", "Charge Variants (icIEF)"),
+    ("AMV-3020", "Purity (non-reduced CE-SDS)"),
 ]
 
 # Small-Virus Retentive Filtration (Step 9) controlled-document subsets. Placeholders;
@@ -245,6 +258,7 @@ VIRUS_FILT_SOP_REFS = [
 VIRUS_FILT_AMV_REFS = [
     ("AMV-3018", "MVM Infectivity Titre (TCID50/qPCR)"),
     ("AMV-3017", "XMuLV Infectivity Titre (TCID50)"),
+    ("AMV-3020", "Purity (non-reduced CE-SDS)"),
 ]
 
 # Ultrafiltration / Diafiltration (Step 10) controlled-document subsets. Placeholders;
@@ -323,13 +337,16 @@ def _rng_str(lo, hi):
 
 
 def plan_params(key):
-    """Parameters to be studied (no post-hoc classification) — for a Plan. The NOR is the one the
-    studies were planned against (``nor_char_*``), never a NOR a Version 2.0 report narrowed."""
+    """Parameters to be studied (no post-hoc classification) — for a Plan. The NOR and set-point
+    are the ones the studies were planned against (``nor_char_*``, ``setpoint_char``), never values
+    a Version 2.0 report moved."""
     uo = CFG.unit_op(key)
     d = param_reg[param_reg.unit_operation == uo.name].copy()
     d["Range studied"] = d.apply(lambda r: _rng_str(r.par_low, r.par_high), axis=1)
     lo_, hi_ = ("nor_char_low", "nor_char_high") if "nor_char_low" in d else ("nor_low", "nor_high")
     d["NOR"] = d.apply(lambda r: _rng_str(r[lo_], r[hi_]), axis=1)
+    if "setpoint_char" in d:
+        d["setpoint"] = d["setpoint_char"]
     d = d.rename(columns={"parameter": "Parameter", "unit": "Unit", "setpoint": "Set-point",
                           "study": "Study type"})
     return d[["Parameter", "Unit", "Set-point", "Range studied", "NOR", "Study type"]]

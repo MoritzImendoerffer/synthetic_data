@@ -163,8 +163,9 @@ def main() -> None:
                           "nor_low": p.nor[0], "nor_high": p.nor[1],
                           "par_low": p.par[0], "par_high": p.par[1],
                           "classification": p.classification, "study": p.study,
-                          # the NOR as characterized, where a Version 2.0 report narrowed it
-                          "nor_char_low": p.nor_characterized[0], "nor_char_high": p.nor_characterized[1]})
+                          # the NOR and set-point as characterized, where a Version 2.0 report moved them
+                          "nor_char_low": p.nor_characterized[0], "nor_char_high": p.nor_characterized[1],
+                          "setpoint_char": p.setpoint_characterized})
     preg = pd.DataFrame(prows)
     save(preg, "parameter_classification.csv")
     cls_counts = preg["classification"].value_counts().to_dict()
@@ -228,6 +229,14 @@ def main() -> None:
                           vi_feed_acidic=feeds["viral_inactivation"].cqas["acidic_variants"])
     save(ver.round(4), "iac_verification.csv")
     save(ia.final(cfg, ver), "iac.csv")
+    # the same verification on the full quadratic models the plans prescribe: the criteria as they
+    # would have been without INV-002 corrective action CA3 (adopted before INV-001 closed, so the
+    # criteria in force rest on the selected models); INV-002 compares the two
+    ver_full = ia.verification(cfg, rsm_data, ps, an.nominal_train(cfg),
+                               vi_feed_acidic=feeds["viral_inactivation"].cqas["acidic_variants"],
+                               form="full")
+    save(ver_full.round(4), "iac_verification_full.csv")
+    save(ia.final(cfg, ver_full), "iac_full.csv")
     save(ia.p_oos(cfg, mc), "p_oos.csv")
     save(ia.p_oos(cfg, mc1), "p_oos_rev1.csv")        # the simulation at the NOR as characterized
 

@@ -178,6 +178,32 @@ def check_pdf_glyphs(qmd: str) -> int:
     return 0
 
 
+def check_unresolved_refs(qmd: str) -> int:
+    """Fail if the rendered PDF shows an unresolved cross-reference. Quarto prints one it cannot
+    resolve as "?@sec-x", and a reference inside an inline expression is not resolved at all:
+    citeproc then reads "@sec" as a citation and prints "(sec?)-x". PCMP-001 Version 2.0 shipped
+    two of them (§7.3, found by the PCP-006 author on 2026-10-09)."""
+    pdf = os.path.splitext(os.path.abspath(qmd))[0] + ".pdf"
+    if not os.path.exists(pdf):
+        return 0
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        print("WARN  PyMuPDF not available; skipping the cross-reference check")
+        return 0
+    doc = fitz.open(pdf)
+    text = " ".join(page.get_text() for page in doc)
+    doc.close()
+    hits = re.findall(r"\?@[\w-]+|\((?:sec|tbl|fig|apx|eq)\?\)[\w-]*", text)
+    if hits:
+        print(f"FAIL  {os.path.basename(pdf)}: {len(hits)} unresolved cross-reference(s): "
+              + ", ".join(sorted(set(hits))[:8]))
+        print("      Never put @sec-/@tbl- inside an inline expression; write it in the text.")
+        return 1
+    print(f"OK    {os.path.basename(pdf)}: every cross-reference resolved")
+    return 0
+
+
 def check_tables_fit(qmd: str) -> int:
     """Fail if a complex table is cut off in the rendered PDF.
 
@@ -336,20 +362,24 @@ def check_table_merges(qmd: str) -> int:
 
 
 def run_quarto(qmd: str) -> int:
+    """Render the docx and then the pdf. The checks that follow read the PDF, so it must be the
+    one just rendered: with the docx alone they read whatever PDF an earlier run left, and passed or
+    failed on a stale file (2026-10-09)."""
     if not shutil.which("quarto"):
         print("WARN  --render requested but quarto not on PATH; skipping real render")
         return 0
-    print(f"\n=== quarto render {os.path.basename(qmd)} --to docx ===")
-    r = subprocess.run(["quarto", "render", os.path.basename(qmd), "--to", "docx"],
-                       cwd=os.path.dirname(os.path.abspath(qmd)),
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        sys.stdout.write(r.stdout[-4000:])
-        sys.stderr.write(r.stderr[-4000:])
-        print("FAIL  quarto render errored")
-    else:
-        print("OK    quarto render succeeded")
-    return r.returncode
+    for fmt in ("docx", "pdf"):
+        print(f"\n=== quarto render {os.path.basename(qmd)} --to {fmt} ===")
+        r = subprocess.run(["quarto", "render", os.path.basename(qmd), "--to", fmt],
+                           cwd=os.path.dirname(os.path.abspath(qmd)),
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.stdout.write(r.stdout[-4000:])
+            sys.stderr.write(r.stderr[-4000:])
+            print(f"FAIL  quarto render --to {fmt} errored")
+            return r.returncode
+        print(f"OK    quarto render --to {fmt} succeeded")
+    return 0
 
 
 def check(qmd: str, do_render: bool, strict_numerals: bool, lax_style: bool) -> int:
@@ -395,6 +425,8 @@ def check(qmd: str, do_render: bool, strict_numerals: bool, lax_style: bool) -> 
     render_rc = run_quarto(qmd) if do_render else 0
     if render_rc == 0:
         render_rc = check_pdf_glyphs(qmd)
+    if render_rc == 0:
+        render_rc = check_unresolved_refs(qmd)
     if render_rc == 0:
         render_rc = check_tables_fit(qmd)
     if render_rc == 0:

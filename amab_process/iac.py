@@ -118,18 +118,26 @@ def cumulative_claims(cfg: Config) -> pd.DataFrame:
 # --------------------------------------------------------------------------------------
 # Verification: did this campaign's studies show the worst case the criteria assumed?
 # --------------------------------------------------------------------------------------
-def _nor_worst(cfg: Config, step: str, df: pd.DataFrame, col: str, feed: float, mode: str):
+def _nor_worst(cfg: Config, step: str, df: pd.DataFrame, col: str, feed: float, mode: str,
+               form: str = "selected"):
     """Worst predicted fold (mode 'fold') or increase (mode 'add') over the NOR box of the step's
     response-surface factors, from the model INV-002 corrective action CA3 selects for the output
     (``adequacy.select_model``: Box-Cox scale, AICc over the hierarchical submodels of the full
     quadratic), evaluated at every combination of NOR low, set-point and NOR high, and the same
-    worst case at its one-sided 95 % confidence bound. Returns (worst, bound, adequacy)."""
+    worst case at its one-sided 95 % confidence bound. ``form="full"`` uses the full quadratic on
+    the raw scale instead, the model the plans prescribe: the verification as it would have been
+    without CA3, which INV-002 compares with the one in force (CA3 was adopted before INV-001
+    closed, so the criteria fixed at that closure rest on the selected models). Returns (worst,
+    bound, adequacy)."""
     import itertools
     from . import adequacy as ad
     from .studies import RSM_TOP, DOE_FACTORS
     fac = [f for f in RSM_TOP.get(step, DOE_FACTORS[step][:4]) if f"coded_{f}" in df]
     th = {k: float(v) for k, v in cfg.raw()["campaign"]["thresholds"].items()}
-    sel = ad.select_model(df, col, fac, th)
+    if form == "full":
+        sel = {**ad.adequacy(df, col, fac, ad.full_terms(fac), th), "scale": "raw"}
+    else:
+        sel = ad.select_model(df, col, fac, th)
     uo = cfg.unit_op(step)
     pts = []
     # the NOR as characterized: the criteria were fixed at INV-001 closure, before any report
@@ -138,7 +146,13 @@ def _nor_worst(cfg: Config, step: str, df: pd.DataFrame, col: str, feed: float, 
                                       uo.param(f).nor_characterized[1]] for f in fac]):
         pts.append({"coded_" + f: (v - sum(uo.param(f).prange) / 2) / ((uo.param(f).prange[1] - uo.param(f).prange[0]) / 2)
                     for f, v in zip(fac, combo)})
-    X = ad.matrix(pd.DataFrame(pts), sel["terms"]).to_numpy()
+    # a design with an augmentation block is predicted at block 0, the average of the two blocks
+    P = pd.DataFrame(pts)
+    blk = bool(sel.get("block", False))
+    X = ad.matrix(P.assign(**{ad.BLOCK: 1}) if blk else P, sel["terms"], blk)
+    if blk:
+        X[ad.BLOCK] = 0.0
+    X = X.to_numpy()
     back = np.exp if sel["scale"] == "log" else (lambda v: v)
     # the upper confidence limit of the output where a high output is bad (a fold computed from it
     # is a lower bound on the clearance), or the upper limit of the increase; one-sided 95 %: the
@@ -177,7 +191,8 @@ def _adequacy(cfg: Config, model, df: pd.DataFrame, col: str) -> Dict[str, float
 
 
 def verification(cfg: Config, data: Dict[str, pd.DataFrame], ps: pd.DataFrame,
-                 frag_nominal: Dict[str, float], vi_feed_acidic: float) -> pd.DataFrame:
+                 frag_nominal: Dict[str, float], vi_feed_acidic: float,
+                 form: str = "selected") -> pd.DataFrame:
     """For every platform worst case the IACs rely on, what THIS campaign showed for that step.
 
     Two numbers. ``observed_edge`` is the worst value among the response-surface runs, which sit
@@ -185,7 +200,10 @@ def verification(cfg: Config, data: Dict[str, pd.DataFrame], ps: pd.DataFrame,
     fitted response-surface model predicts anywhere in the NOR box, which is the region routine
     manufacture runs in and so the one the criteria have to hold for. ``met`` is judged on
     ``predicted_nor``. A platform worst case that is not met is replaced, in :func:`final`, by
-    the A-Mab value, which can only tighten the criterion."""
+    the A-Mab value, which can only tighten the criterion. ``form`` is passed to
+    :func:`_nor_worst`: the selected models by default, ``"full"`` for the verification on the full
+    quadratic models the plans prescribe, as it would have been without INV-002 corrective action
+    CA3."""
     pss = ps.set_index("step")
     vi_in_agg = float(pss.loc[6, "aggregate_out_pct"] - pss.loc[6, "aggregate_delta_pct"])
     feeds = {
@@ -209,7 +227,7 @@ def verification(cfg: Config, data: Dict[str, pd.DataFrame], ps: pd.DataFrame,
                 df = data[step]
                 if col in df and df[col].notna().all():
                     edge = float((feed / df[col]).min()) if mode == "fold" else float((df[col] - feed).max())
-                    nor, nor_bound, adq = _nor_worst(cfg, step, df, col, feed, mode)
+                    nor, nor_bound, adq = _nor_worst(cfg, step, df, col, feed, mode, form)
             met = None if nor is None else (nor >= assumed if kind == "fold_min" else nor <= assumed)
             # widening (owner's decision 2026-10-08): allowed only where the A-Mab worst case beats
             # the platform value even at its 95 % confidence bound

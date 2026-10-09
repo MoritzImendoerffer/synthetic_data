@@ -46,9 +46,22 @@ import doe_report as D
 import tables as T          # complex tables: merged cells, footnotes (T.<builder>(...).show())
 import matplotlib.pyplot as plt
 import scipy.stats as sstat
+import itertools
 
 DOC = "INV-001"
 UO = None
+# The investigation judged every NOR as it stood when it closed: the characterized NOR, before
+# PCR-006 Version 2.0 moved the NOR and the set-points of low-pH viral inactivation (no Protein A NOR
+# changes). Every NOR-based value below is computed inside this context; it is closed at the end of
+# the setup chunk, where the Version 2.0 NOR and set-point changes are classified.
+_CN = D.characterized_nor()
+_CN.__enter__()
+# Every model value below is the full quadratic model of the planned runs, the model Version 1.0
+# fitted, so that each comparison shows what the change of criteria moved and nothing else. INV-002
+# later changed the models of some outputs (augmentation runs, refits); the reports give the final
+# ranges. Closed with the NOR context at the end of the setup chunk.
+_PF = D.planned_full_models()
+_PF.__enter__()
 UO_TITLE = "A-Mab Drug Substance"
 
 # --- doc-local derived scalars (pulled from config -> model -> outputs; nothing typed) ---
@@ -67,24 +80,70 @@ def md(df, widths=None):
     print("\n".join(out))
 def f2(x): return f"{x:.2f}"
 def big(x): return f"{x:,.0f}"
+def lc(s): return s if (len(s) > 1 and s[1].isupper()) or s.startswith("Protein A") else s[0].lower() + s[1:]
+def attr(c): return T.ATTR_NAME[c].split(" (")[0]
+def aname(c):
+    """An attribute as prose names it: 'host cell protein', 'fragments', 'XMuLV clearance'."""
+    return lc(attr(c).split(",")[0])
+def sname(k): return lc(T.STEP_NAME[k])
+_NW = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
+def nw(n): return _NW[n] if 0 <= n < len(_NW) else str(n)
+def unit(c): return T.ATTR_NAME[c].split("(")[-1].rstrip(")")
+def _in(v, lo, hi, st):
+    return (v >= lo) if st == "lower" else (v <= hi) if st == "upper" else (lo <= v <= hi)
 
 OPENED, CLOSED = INV["opened"], INV["closed"]
 REV1_DATE, REV2_DATE = REV1["effective"], REV2["effective"]
 DOC_V, DOC_EFF = doc_version(DOC)
+n_docs_v1 = len([d for d in DOC_REGISTRY if d not in INVESTIGATIONS])
+# the investigation closed before PCMP-001 Version 2.0 took effect
+assert CLOSED < REV2_DATE
 
-# chronology
+# chronology: the studies Version 1.0 reported are every study in the chronology except those that
+# produced only fragment results, which Version 1.0 did not report (the comparability study and the
+# retests of retained samples), and those that ran after Version 1.0 took effect (the further
+# Protein A scale-down runs of the plan discrepancy PD-005-01, made during the investigation)
 chron = csv("study_chronology.csv")
-chron_v1 = chron[chron["end"] < REV1_DATE]
-n_studies_v1 = len(chron_v1)
-all_v1_before = bool((chron_v1["end"] < REV1_DATE).all())
-first_start, last_end = chron_v1["start"].min(), chron_v1["end"].max()
-sdm2_start, sdm2_end = chron.set_index("id").loc["S-PA-SDM2", ["start", "end"]]
-n_sdm_planned, n_sdm_sup = dev_005_03_n_planned, dev_005_03_n_supplementary
+# the augmentation studies of INV-002 belong to that investigation, and studies that started after this
+# investigation closed are not part of its record
+chron = chron[(chron["kind"] != "augmentation") & (chron["start"] <= CLOSED)].reset_index(drop=True)
 _st = chron.set_index("id")
+_pd = [d for d in PLAN_DISCREPANCIES.get("PCR-005", []) if d.get("studies")]
+assert len(_pd) == 1
+pd_id, pd_studies = _pd[0]["id"], list(_pd[0]["studies"])
+assert len(pd_studies) == 1
+sdm2_id = pd_studies[0]
+_late = chron[chron["start"] > REV1_DATE]
+assert list(_late["id"]) == pd_studies                     # only those runs started after Version 1.0
+cmp_ids = list(chron[chron["kind"] == "comparability"]["id"])
+ret_ids = list(chron[chron["kind"] == "retest"]["id"])
+assert cmp_ids == ["S-CEX-FRC"] and len(ret_ids) == 2
+chron_v1 = chron[~chron["id"].isin(cmp_ids + ret_ids + pd_studies)]
+n_studies_v1 = len(chron_v1)
+n_studies_excl = len(chron) - n_studies_v1
+assert n_studies_excl == len(cmp_ids) + len(ret_ids) + len(pd_studies)
+assert bool((chron_v1["end"] < REV1_DATE).all())          # every Version 1.0 study closed before approval
+assert bool((chron[chron["id"].isin(cmp_ids + ret_ids)]["end"] < REV1_DATE).all())
+first_start, last_end = chron_v1["start"].min(), chron_v1["end"].max()
+sdm2_start, sdm2_end = _st.loc[sdm2_id, ["start", "end"]]
+assert OPENED <= sdm2_start and sdm2_end <= CLOSED          # S-PA-SDM2 ran during the investigation
+
+# the supplementary scale-down runs: a discrepancy from the plan, not a deviation
+_sdmq = csv("sdm_qualification.csv")
+_sdmq = _sdmq[(_sdmq["step"] == "protein_a") & (_sdmq["scale"] == "scale-down")]
+_sdm_planned_ids = [s for s in _sdmq["study"].unique() if s != sdm2_id]
+n_sdm_planned = int(_sdmq["study"].isin(_sdm_planned_ids).sum())
+n_sdm_sup = int((_sdmq["study"] == sdm2_id).sum())
+sdm1_id = _sdm_planned_ids[0]
+OFF_CI = int(round(100 * CFG.raw()["analytics"]["sdm"]["offset_ci"]))
+# the offsets and the qualification themselves are computed at the end of this chunk, on the models
+# that INV-002 corrective action CA3 selects (the models PCR-005 Version 2.0 uses)
+
 frc_start, frc_end = _st.loc["S-CEX-FRC", "start"], _st.loc["S-CEX-FRC", "end"]
 ret_start, ret_end = _st.loc["S-PA-RET", "start"], _st.loc["S-PA-RET", "end"]
 aexr_start = _st.loc["S-AEX-SCR", "start"]
 cexr_start, cexr_end = _st.loc["S-CEX-RSM", "start"], _st.loc["S-CEX-RSM", "end"]
+assert cexr_start < AMD["date"] < cexr_end and aexr_start > AMD["date"] and ret_start > AMD["date"]
 
 # Version 1.0 criteria
 r1 = D.rev1_criteria()
@@ -97,6 +156,7 @@ _mg = r1.dropna(subset=["margin"])
 n_margin = len(_mg)
 m_lo, m_hi = _mg["margin"].min(), _mg["margin"].max()
 n_capbased = int((r1["rule"] == "mean + 2.5 sd of capability").sum())
+assert set(r1[r1["rule"] == "mean + 2.5 sd of capability"]["step_key"]) == {"bioreactor"}
 n_viral_r1 = int(r1["cqa"].str.startswith("lrv").sum())
 n_viral_req = int((r1["rule"] == "requirement - nominal of other steps").sum())
 n_viral_claim = int(r1["rule"].str.startswith("nominal claim").sum())
@@ -116,6 +176,41 @@ ds_agg = _ds("aggregates_hmw", "ds_high")
 ds_acid_lo, ds_acid_hi = _ds("acidic_variants", "ds_low"), _ds("acidic_variants", "ds_high")
 ds_frag = _ds("fragments_lmw", "ds_high")
 
+# the Version 1.0 viral clearance criteria. At low-pH viral inactivation and anion exchange: the
+# cumulative requirement less the single set-point values of the other two steps in the Version 1.0
+# viral clearance summary (viral_clearance.csv). At virus filtration: the step's own value less the
+# assay allowance. Neither uses the response surface models of Table 6.5.
+_vcs = csv("viral_clearance.csv").set_index("step")
+_VCOL = {"lrv_xmulv": "XMuLV", "lrv_mvm": "MVM"}
+_VK = list(D.VIRAL_STEP_ROW)
+assert _VK == ["viral_inactivation", "aex", "virus_filtration"]
+vcs = {(k, c): float(_vcs.loc[D.VIRAL_STEP_ROW[k], col]) for k in _VK for c, col in _VCOL.items()}
+vreq = {c: float(_ds(c, "ds_low")) for c in _VCOL}
+for _, r in r1[r1["cqa"].isin(list(_VCOL))].iterrows():
+    _own = vcs[(r["step_key"], r["cqa"])]
+    _oth = sum(v for (k, c), v in vcs.items() if c == r["cqa"] and k != r["step_key"])
+    _want = (vreq[r["cqa"]] - _oth) if r["rule"] == "requirement - nominal of other steps" else _own - v_allow
+    assert abs(_want - r["low"]) < 0.005, (r["step_key"], r["cqa"], _want, r["low"])
+assert vcs[("viral_inactivation", "lrv_mvm")] == 0 and vcs[("aex", "lrv_mvm")] > 0
+vi_xm_r1 = _r1("viral_inactivation", "xmulv_lrf")["low"]
+vcs_xm_txt = (f"{f2(vcs[('viral_inactivation', 'lrv_xmulv')])} log10 for low-pH viral inactivation, "
+              f"{f2(vcs[('aex', 'lrv_xmulv')])} for anion exchange and "
+              f"{f2(vcs[('virus_filtration', 'lrv_xmulv')])} for virus filtration")
+vcs_mvm_txt = (f"{f2(vcs[('aex', 'lrv_mvm')])} log10 for anion exchange and "
+               f"{f2(vcs[('virus_filtration', 'lrv_mvm')])} for virus filtration, and no clearance "
+               "for low-pH viral inactivation")
+vcs_example = (f"the cumulative requirement of {vreq['lrv_xmulv']:g} log10 less "
+               f"{f2(vcs[('aex', 'lrv_xmulv')])} and {f2(vcs[('virus_filtration', 'lrv_xmulv')])}, "
+               f"which is {f2(vi_xm_r1)} log10")
+
+# §3.2: no part of the Protein A characterization range meets the drug-substance HCP criterion
+_uo_pa = CFG.unit_op("protein_a")
+_fpa = D.fit("protein_a", "rsm", "pool_hcp_ng_mg")["factors"]
+_gpa = list(itertools.product(*[[_uo_pa.param(f).prange[0], _uo_pa.param(f).setpoint,
+                                 _uo_pa.param(f).prange[1]] for f in _fpa]))
+_ypa = D.predict("protein_a", "pool_hcp_ng_mg", natural={f: [g[i] for g in _gpa] for i, f in enumerate(_fpa)})
+assert float(np.min(_ypa)) - D.sdm_offset("protein_a", "pool_hcp_ng_mg")["offset"] > ds_hcp
+
 # F2: what each safety factor did at the set-point of its own step
 def _setpoint_pred(key, resp):
     fs = D.rsm_factors(key)
@@ -130,25 +225,37 @@ for _, r in _mg.iterrows():
                       pred=pred, ceiling=ceiling, maxf=ceiling / pred))
 margin_df = pd.DataFrame(_rows)
 n_pass_sp = int((margin_df["pred"] <= margin_df["crit"]).sum())
+assert n_pass_sp == n_margin                                  # the summary says every step passed
 n_fail_uniform = int((margin_df["maxf"] < m_hi).sum())
 margin_show = pd.DataFrame({
     "Step": [T.STEP_NAME[s] for s in margin_df["step"]],
     "Attribute": [T.ATTR_NAME[c] for c in margin_df["cqa"]],
-    "Highest level downstream steps bring to specification": [T.num(x) for x in margin_df["ceiling"]],
+    "Highest pool level": [T.num(x) for x in margin_df["ceiling"]],
     "Safety factor": [f1(x) for x in margin_df["margin"]],
     "Version 1.0 criterion": [f"≤ {T.num(x)}" for x in margin_df["crit"]],
     "Predicted at set-point": [T.num(x) for x in margin_df["pred"]],
     "Largest factor met at set-point": [f2(x) for x in margin_df["maxf"]],
 })
+# two-line headers; the first column's meaning goes in its note
+margin_header = {"Highest pool level": "Highest pool\nlevel^a)^",
+                 "Safety factor": "Safety\nfactor",
+                 "Version 1.0 criterion": "Version 1.0\ncriterion",
+                 "Predicted at set-point": "Predicted at\nset-point",
+                 "Largest factor met at set-point": "Largest factor\nmet at set-point"}
+margin_notes = [("a)", "The highest pool level that the nominal clearance of the downstream steps brings "
+                       "within the drug-substance criterion. Nominal clearance is the clearance each "
+                       "downstream step showed at its set-point in this campaign.")]
 
 # F3: capability-based limits
-capdf = csv("capability.csv").set_index("key")
+# the simulation at the NOR as characterized, which Version 1.0 reported and this investigation judged
+capdf = csv("capability_rev1.csv").set_index("key")
 _cap_rows = []
 for _, r in r1[r1["rule"] == "mean + 2.5 sd of capability"].iterrows():
     c = capdf.loc[r["cqa"]]
     _cap_rows.append([T.ATTR_NAME[r["cqa"]], f"{c['mean']:.2f}", f"{c['sd']:.3f}",
                       f"{c['mean'] + sigma * c['sd']:.2f}", f"{r['high']:.2f}",
                       T.crit(c["acc_low"], c["acc_high"], "two_sided")])
+    assert f"{c['mean'] + sigma * c['sd']:.2f}" == f"{r['high']:.2f}"
 cap_show = pd.DataFrame(_cap_rows, columns=[
     "Attribute", "Capability mean", "Capability SD", f"Mean + {sigma:g} SD",
     "Version 1.0 upper criterion", "Drug-substance criterion"])
@@ -158,57 +265,150 @@ exceed_pct = 100 * sstat.norm.sf(sigma)
 acid = capdf.loc["acidic_variants"]
 acid_cpu, acid_cpl, acid_cpk = acid["Cpu"], acid["Cpl"], acid["Cpk"]
 acid_mean, acid_sd = acid["mean"], acid["sd"]
+assert acid_cpl < acid_cpu and acid_cpk == acid_cpl          # the lower end governs
 _v1keys = [k for k in capdf.index if k != "fragments_lmw"]
 _v1cpk = pd.Series({k: (capdf.loc[k, "Cpu"] if k == "acidic_variants" else capdf.loc[k, "Cpk"])
                     for k in _v1keys})
 v1_min_cpk, v1_min_key = _v1cpk.min(), _v1cpk.idxmin()
-v1_min_name = T.ATTR_NAME[v1_min_key]
-v2_min_cpk = V["min_cpk"]
-poos = D.p_oos().set_index("key")
+v1_min_name = aname(v1_min_key)
+v2_min_cpk = float(capdf["Cpk"].min())
+assert capdf["Cpk"].idxmin() == "acidic_variants"
+poos = csv("p_oos_rev1.csv").set_index("key")
 acid_noos, n_mc = int(poos.loc["acidic_variants", "n_oos"]), int(poos.loc["acidic_variants", "n"])
 acid_ppm = poos.loc["acidic_variants", "ppm_normal"]
 n_noos_other = int(poos.drop(index="acidic_variants")["n_oos"].sum())
+assert acid_noos > 0
+noos_phrase = (f"one batch in {n_mc:,}" if acid_noos == 1 else f"{acid_noos} batches in {n_mc:,}")
+other_oos_phrase = ("No simulated batch falls outside the criterion of any other attribute."
+                    if n_noos_other == 0 else
+                    f"For the other attributes together, {n_noos_other} simulated batches fall outside their criteria.")
 
-# F5: equipment calibration against the execution windows
+# F5: plan approval dates and equipment calibration against the execution windows
+PCP_OF = {"PCP-003": "bioreactor", "PCP-004": "harvest", "PCP-005": "protein_a",
+          "PCP-006": "viral_inactivation", "PCP-007": "cex", "PCP-008": "aex",
+          "PCP-009": "virus_filtration", "PCP-010": "ufdf"}
+_pl = []
+for pid, key in PCP_OF.items():
+    first = chron[chron["step"] == key]["start"].min()
+    _pl.append([pid, T.STEP_NAME[key], PLAN_APPROVAL[pid], first, REV1_DATE])
+assert all(r[2] < r[3] for r in _pl)                          # every plan approved before its studies
+assert all(r[3] < r[4] for r in _pl)                          # every title-block date after the first study
+# the title-block date is the same for every plan, so the table states it once, in its caption
+assert len({r[4] for r in _pl}) == 1
+plan_show = pd.DataFrame([r[:4] for r in _pl], columns=["Plan", "Step", "Approved", "First study started"])
+pa_appr, pa_first = PLAN_APPROVAL["PCP-005"], chron[chron["step"] == "protein_a"]["start"].min()
+pcmp_appr = PLAN_APPROVAL["PCMP-001"]
+
 eq = equipment_df()
-_eq_rows = []
-for _, e in eq.iterrows():
-    s = chron[chron["equipment"] == e["Equipment"]]
-    for _, srow in s.iterrows():
-        _eq_rows.append([e["Equipment"], srow["id"], srow["start"], srow["end"],
-                         e["Next calibration due"], REV1_DATE])
 n_eq = len(eq)
 n_eq_before_rev1 = int((eq["Next calibration due"] < REV1_DATE).sum())
-all_windows_before_due = all(r[3] < r[4] for r in _eq_rows)
-tff_due = eq.set_index("Equipment").loc["EQ-TFF-142", "Next calibration due"]
-ufdf_end = _st.loc["S-UFDF-UNI", "end"]
+due_phrase = ("Every one of these due dates precedes the date in the title blocks."
+              if n_eq_before_rev1 == n_eq else
+              f"Of these due dates, {n_eq_before_rev1} precede the date in the title blocks.")
+cw = T.calibration_windows_data()
+n_cw_studies, n_cw_eq = len(cw), cw["Equipment"].nunique()
+assert bool((cw["Execution end"] < cw["Next calibration due"]).all())   # no study ran out of calibration
+_cwm = (pd.to_datetime(cw["Next calibration due"]) - pd.to_datetime(cw["Execution end"])).dt.days
+_cwn = cw.loc[_cwm.idxmin()]
+cw_near_study, cw_near_end, cw_near_due = _cwn["Study"], _cwn["Execution end"], _cwn["Next calibration due"]
+cw_near_eq, cw_near_desc = _cwn["Equipment"], lc(_cwn["Description"])
+cw_near_step = sname(_st.loc[cw_near_study, "step"])
+cw_near_days = int(_cwm.min())
 
 # F6: SEC against nrCE-SDS (S-CEX-FRC), sample means
 cmp = csv("cex_fraction_comparability.csv").groupby("sample", sort=False)[
     ["lmw_sec_pct", "lmw_cesds_pct", "difference"]].mean()
 d_pa, d_vi, d_load = (cmp.loc[s, "difference"] for s in ["Protein A pool", "VI pool", "CEX load"])
-d_cexpool, d_aexpool = cmp.loc["CEX pool", "difference"], cmp.loc["AEX pool", "difference"]
 sec_pa, ce_pa = cmp.loc["Protein A pool", "lmw_sec_pct"], cmp.loc["Protein A pool", "lmw_cesds_pct"]
 d_up_lo = min(d_pa, d_vi, d_load); d_up_hi = max(d_pa, d_vi, d_load)
 d_dn_abs = cmp.loc[["CEX pool", "AEX pool"], "difference"].abs().max()
+assert d_up_lo > 0 and d_dn_abs < d_up_lo
+d_pa_share = 100 * d_pa / ce_pa
 
 # Version 2.0 criteria and the verification
 n_iac = len(_iac)
 n_iac_ds = int((_iac["basis"] == "drug substance").sum())
 n_iac_claim = int((_iac["basis"] == "platform claim").sum())
 n_iac_back = n_iac - n_iac_ds - n_iac_claim
-n_tight = int(_iac["tightened"].astype(str).eq("True").sum())
-_tt = _iac[_iac["tightened"].astype(str).eq("True")]
-tight_steps = " and ".join(T.STEP_NAME[s][0].lower() + T.STEP_NAME[s][1:] for s in _tt["step_key"])
+_is_t = _iac["tightened"].astype(str).eq("True")
+_is_w = _iac["widened"].astype(str).eq("True")
+n_tight, n_wid = int(_is_t.sum()), int(_is_w.sum())
+_tt = _iac[_is_t]
+tight_steps = " and ".join(sname(s) for s in _tt["step_key"])
+assert set(_tt["cqa"]) == {"aggregates_hmw"}
+_ww = _iac[_is_w]
+_wl = [f"{aname(c)} at the {sname(s)} step" for s, c in zip(_ww["step_key"], _ww["cqa"])]
+wid_list = ", ".join(_wl[:-1]) + " and " + _wl[-1] if len(_wl) > 1 else "".join(_wl)
 ver = D.iac_verification()
-n_ver = int(ver["met"].notna().sum())
-n_ver_met = int((ver["met"] == 1).sum())
+_vt = ver[ver["met"].notna()]
+n_ver = len(_vt)
+n_ver_met = int((_vt["met"] == 1).sum())
+n_ver_wsup = int(((_vt["met"] == 1) & (_vt["widening_supported"] == 1)).sum())
+n_ver_nt = int(ver["met"].isna().sum())
+assert n_ver - n_ver_met == 1                                 # "One assumption was not confirmed"
 _vx = ver[ver["met"] == 0].iloc[0]
+assert (_vx["step_key"], _vx["cqa"]) == ("cex", "aggregates_hmw")
 cex_agg_assumed, cex_agg_nor, cex_agg_edge = _vx["assumed"], _vx["predicted_nor"], _vx["observed_edge"]
+# a changed criterion moves only on the data of a step downstream of the one it judges
+for _, r in _iac[_is_t | _is_w].iterrows():
+    _dn = ver[(ver["step"] > r["step"]) & (ver["cqa"] == r["cqa"])
+              & ((ver["met"] == 0) | (ver["widening_supported"] == 1))]
+    assert len(_dn) > 0, (r["step_key"], r["cqa"])
 vc = csv("iac_viral_cumulative.csv").set_index("cqa")
 xm_sum, xm_req = vc.loc["lrv_xmulv", "claimed_sum"], vc.loc["lrv_xmulv", "required"]
 mvm_sum, mvm_req = vc.loc["lrv_mvm", "claimed_sum"], vc.loc["lrv_mvm", "required"]
+assert xm_sum >= xm_req and mvm_sum >= mvm_req
 cex_ds_agg_v2 = D.iac_limit("cex", "aggregate_out_pct")[1]
+
+# host cell protein at cation exchange and anion exchange, and the Protein A criterion they set
+_vh = ver[(ver["step_key"] == "cex") & (ver["cqa"] == "hcp")].iloc[0]
+_va = ver[(ver["step_key"] == "aex") & (ver["cqa"] == "hcp")].iloc[0]
+cex_hcp_assumed, cex_hcp_edge, cex_hcp_nor = _vh["assumed"], _vh["observed_edge"], _vh["predicted_nor"]
+cex_hcp_bound = _vh["predicted_nor_bound95"]
+aex_hcp_assumed, aex_hcp_bound = _va["assumed"], _va["predicted_nor_bound95"]
+assert cex_hcp_edge < cex_hcp_assumed <= cex_hcp_bound <= cex_hcp_nor
+assert str(_vh["widening_supported"]) == "True" and str(_vh["model_adequate"]) == "True"
+assert aex_hcp_bound > aex_hcp_assumed
+MAX_GAP, LOF_ALPHA = THRESHOLDS["max_r2_minus_pred_r2"], THRESHOLDS["lof_alpha"]
+# the anion exchange bound is better; whether it replaced the platform value depends on its model passing
+# the adequacy tests (on the models INV-002 corrective action CA3 selects)
+aex_hcp_widened = str(_va["widening_supported"]) == "True"
+assert aex_hcp_widened or str(_va["model_adequate"]) == "False"
+aex_hcp_gap = float(_va["r2_minus_pred_r2"])
+_better = ((_vt["assumption"] == "fold_min") & (_vt["predicted_nor_bound95"] > _vt["assumed"])) | \
+          ((_vt["assumption"] == "add_max") & (_vt["predicted_nor_bound95"] < _vt["assumed"]))
+n_ver_better_inadequate = int((_better & (_vt["met"] == 1) & ~_vt["widening_supported"].astype(bool)).sum())
+_pah = _iac[(_iac["step_key"] == "protein_a") & (_iac["cqa"] == "hcp")].iloc[0]
+pa_hcp_apriori, pa_hcp_v2 = _pah["iac_high_apriori"], _pah["iac_high"]
+assert str(_pah["widened"]) == "True" and pa_hcp_v2 > pa_hcp_apriori > pa_hcp_crit
+# the Protein A criterion is the drug-substance criterion carried back through cation exchange at its
+# 95 % bound and anion exchange at its bound or its platform value
+assert abs(float(_pah["downstream_fold"]) - cex_hcp_bound * (aex_hcp_bound if aex_hcp_widened else aex_hcp_assumed)) < 1e-3
+# the cation exchange criterion for host cell protein: carried back through anion exchange alone
+_ch = _iac[(_iac["step_key"] == "cex") & (_iac["cqa"] == "hcp")].iloc[0]
+cex_hcp_apriori, cex_hcp_v2 = _ch["iac_high_apriori"], _ch["iac_high"]
+assert abs(float(_ch["downstream_fold"]) - (aex_hcp_bound if aex_hcp_widened else aex_hcp_assumed)) < 1e-3
+assert (str(_ch["widened"]) == "True") == aex_hcp_widened
+_pa_hcp_wider = (f"The Protein A criterion is also wider than the Version 1.0 limit of {big(pa_hcp_crit)} ng/mg, "
+                 "which was never an approved criterion (finding F1).")
+if aex_hcp_widened:
+    assert str(_va["model_adequate"]) == "True"                 # "also passes the adequacy tests"
+    hcp_aex_text = (f"At anion exchange, the 95 % bound for host cell protein is {T.num(aex_hcp_bound)}-fold, which "
+                    f"is better than the platform value of {T.num(aex_hcp_assumed)}-fold. The anion exchange model "
+                    "also passes the adequacy tests, so this bound replaced the platform value as well. The anion "
+                    "exchange bound widened the cation exchange criterion for host cell protein from "
+                    f"{T.num(cex_hcp_apriori)} to {T.num(cex_hcp_v2)} ng/mg. Carried back through both bounds, the "
+                    f"Protein A criterion for host cell protein was widened from {big(pa_hcp_apriori)} to "
+                    f"{big(pa_hcp_v2)} ng/mg. " + _pa_hcp_wider)
+else:
+    assert aex_hcp_gap > MAX_GAP and float(_va["p_lack_of_fit"]) > LOF_ALPHA    # it fails the gap test only
+    hcp_aex_text = (f"At anion exchange, the 95 % bound for host cell protein is {T.num(aex_hcp_bound)}-fold, which "
+                    f"is also better than the platform value of {T.num(aex_hcp_assumed)}-fold. However, the anion "
+                    f"exchange model fails the adequacy test on R² less predicted R², at {f2(aex_hcp_gap)} against "
+                    f"a limit of {MAX_GAP:g}. The platform value therefore stands for anion exchange. Carried back "
+                    "through the cation exchange bound alone, the Protein A criterion for host cell protein was "
+                    f"widened from {big(pa_hcp_apriori)} to {big(pa_hcp_v2)} ng/mg. " + _pa_hcp_wider)
+assert abs(pa_hcp_v2 - ds_hcp * float(_pah["downstream_fold"])) < 1e-6 * pa_hcp_v2
 
 # PAR (NOR) entries, Version 1.0 against Version 2.0, per report
 PCR_OF = {"bioreactor": "PCR-003", "protein_a": "PCR-005", "viral_inactivation": "PCR-006",
@@ -221,41 +421,99 @@ def _span(s):
     except ValueError:
         return None
 
-def par_shift(key):
+def _par_changes(key):
     a, b = D.par_table_rev1(key), D.par_table(key)
     m = b.merge(a[["CQA", "Parameter", "PAR (NOR)"]], on=["CQA", "Parameter"], how="left",
                 suffixes=("", "_v1"))
-    out = dict(total=len(b), new=0, same=0, wider=0, narrower=0, shifted=0)
-    for _, r in m.iterrows():
-        old, new = r["PAR (NOR)_v1"], r["PAR (NOR)"]
-        if pd.isna(old):
-            out["new"] += 1
-        elif str(old) == str(new):
-            out["same"] += 1
-        else:
-            o, n = _span(old), _span(new)
-            if o and n and n[0] <= o[0] and n[1] >= o[1]:
-                out["wider"] += 1
-            elif o and n and n[0] >= o[0] and n[1] <= o[1]:
-                out["narrower"] += 1
-            else:
-                out["shifted"] += 1
-    return out
+    return m
 
-_ps = {k: par_shift(k) for k in PCR_OF}
-par_show = pd.DataFrame([[PCR_OF[k], T.STEP_NAME[k], v["total"] - v["new"], v["same"],
-                          v["wider"], v["narrower"], v["shifted"], v["new"]]
+def _kind(old, new):
+    if pd.isna(old):
+        return "new"
+    if str(new).startswith("none"):
+        return "none"
+    if str(old) == str(new):
+        return "same"
+    o, n = _span(old), _span(new)
+    if o and n and n[0] <= o[0] and n[1] >= o[1]:
+        return "wider"
+    if o and n and n[0] >= o[0] and n[1] <= o[1]:
+        return "narrower"
+    return "shifted"
+
+_allpar = []
+for k in PCR_OF:
+    m = _par_changes(k)
+    m["step"] = k
+    m["kind"] = [_kind(o, n) for o, n in zip(m["PAR (NOR)_v1"], m["PAR (NOR)"])]
+    _allpar.append(m)
+allpar = pd.concat(_allpar, ignore_index=True)
+_ps = {k: {c: int((allpar[allpar["step"] == k]["kind"] == c).sum())
+           for c in ["new", "same", "wider", "narrower", "shifted", "none"]} for k in PCR_OF}
+par_show = pd.DataFrame([[PCR_OF[k], T.STEP_NAME[k], sum(v.values()) - v["new"], v["same"],
+                          v["wider"], v["narrower"], v["shifted"], v["none"], v["new"]]
                          for k, v in _ps.items()],
-                        columns=["Report", "Step", "Entries in Version 1.0", "Unchanged",
-                                 "Wider", "Narrower", "Moved", "New in Version 2.0"])
-if par_show["Moved"].sum() == 0:
-    par_show = par_show.drop(columns="Moved")
-n_par_same = int(sum(v["same"] for v in _ps.values()))
-n_par_wider = int(sum(v["wider"] for v in _ps.values()))
-n_par_narrow = int(sum(v["narrower"] for v in _ps.values()))
-n_par_new = int(sum(v["new"] for v in _ps.values()))
-n_par_moved = int(sum(v["shifted"] for v in _ps.values()))
-n_par_v1 = int(sum(v["total"] - v["new"] for v in _ps.values()))
+                        columns=["Report", "Step", "In Version 1.0", "Unchanged",
+                                 "Wider", "Narrower", "Moved", "No range", "New"])
+for _c in ["Moved", "No range"]:
+    if par_show[_c].sum() == 0:
+        par_show = par_show.drop(columns=_c)
+n_par_same = int((allpar["kind"] == "same").sum())
+n_par_wider = int((allpar["kind"] == "wider").sum())
+n_par_narrow = int((allpar["kind"] == "narrower").sum())
+n_par_moved = int((allpar["kind"] == "shifted").sum())
+n_par_none = int((allpar["kind"] == "none").sum())
+n_par_new = int((allpar["kind"] == "new").sum())
+n_par_v1 = int((allpar["kind"] != "new").sum())
+n_par_changed = n_par_wider + n_par_narrow + n_par_moved + n_par_none
+assert n_par_wider > n_par_changed / 2
+for _o, _n in zip(*[allpar[allpar["kind"] == "shifted"][c] for c in ["PAR (NOR)_v1", "PAR (NOR)"]]):
+    _a, _b = _span(_o), _span(_n)           # "moved": one end inward, the other outward
+    assert (_b[0] < _a[0] and _b[1] < _a[1]) or (_b[0] > _a[0] and _b[1] > _a[1])
+assert bool(allpar[allpar["kind"] == "none"]["PAR (NOR)"].str.contains("set-point").all())                         # "most of the changed ranges widened"
+par_counts_phrase = (f"{n_par_wider} are wider in the re-analysis"
+                     + f", {n_par_narrow} are narrower"
+                     + (f", {n_par_moved} have moved" if n_par_moved else "")
+                     + (f", {n_par_none} no longer give a range" if n_par_none else "")
+                     + f" and {n_par_same} are unchanged")
+
+# which Version 1.0 rule each wider range was judged against
+_LBL2RESP = {}
+for _, r in r1.iterrows():
+    _LBL2RESP[(r["step_key"], D.RESP_LABEL[r["response"]])] = r["rule"]
+def _v1rule(step, lbl):
+    r = _LBL2RESP.get((step, lbl))
+    return "DS" if r is None else T._rule_code(r)
+_wd = allpar[allpar["kind"] == "wider"].copy()
+_wd["rule"] = [_v1rule(s, l) for s, l in zip(_wd["step"], _wd["CQA"])]
+_wb = _wd[_wd["step"] == "bioreactor"]
+brx_wider = len(_wb)
+brx_wider_glycan = int((_wb["rule"] == "R2").sum())
+assert set(_wb[_wb["rule"] == "R2"]["CQA"]) <= {"Afucosylation", "Galactosylation", "High mannose"}
+brx_wider_agg = int(((_wb["rule"] == "R1") & _wb["CQA"].str.startswith("Aggregates")).sum())
+assert brx_wider == brx_wider_glycan + brx_wider_agg
+_wo = _wd[_wd["step"] != "bioreactor"]
+n_wider_other = len(_wo)
+n_wider_other_r1 = int((_wo["rule"] == "R1").sum())
+_wo4 = _wo[_wo["rule"] == "R4"]
+n_wider_other_r4 = len(_wo4)
+_wods = _wo[_wo["rule"] == "DS"]
+n_wider_other_ds = len(_wods)
+assert n_wider_other == n_wider_other_r1 + n_wider_other_r4 + n_wider_other_ds
+assert n_wider_other_r1 > n_wider_other / 2
+assert set(_wo4["step"]) <= {"virus_filtration"}
+assert set(zip(_wods["step"], _wods["CQA"])) <= {("protein_a", "Leached Protein A (ppm)")}
+def _n_ranges(n): return f"{nw(n)} range" + ("" if n == 1 else "s")
+_rest = []
+if n_wider_other_ds:
+    _rest.append(f"{_n_ranges(n_wider_other_ds)} for leached Protein A at the Protein A step, which "
+                 "Version 1.0 judged against the drug-substance criterion itself,")
+if n_wider_other_r4:
+    _rest.append(f"{_n_ranges(n_wider_other_r4)} at virus filtration, where the Version 1.0 criterion "
+                 "(the fourth rule in §3.3) lay above the platform claim that replaced it")
+wider_rest_phrase = ("The remaining wider ranges are " + " and ".join(_rest) + ".") if _rest else ""
+for _, r in r1[r1["step_key"] == "virus_filtration"].iterrows():
+    assert r["low"] > D.iac_limit("virus_filtration", r["response"])[0]
 
 def par_cell(key, cqa, param, rev):
     t = D.par_table_rev1(key) if rev == 1 else D.par_table(key)
@@ -264,146 +522,451 @@ def par_cell(key, cqa, param, rev):
 cex_load_v1 = par_cell("cex", "Aggregates (HMW, %)", "Protein load", 1)
 cex_load_v2 = par_cell("cex", "Aggregates (HMW, %)", "Protein load", 2)
 cex_load_nor = CFG.unit_op("cex").param("load").nor
-vi_ph_v1 = par_cell("viral_inactivation", "XMuLV LRF (log₁₀)", "Inactivation pH", 1)
-vi_ph_v2 = par_cell("viral_inactivation", "XMuLV LRF (log₁₀)", "Inactivation pH", 2)
-vi_xm_v1 = _r1("viral_inactivation", "xmulv_lrf")["low"]
-vi_xm_v2 = D.iac_limit("viral_inactivation", "xmulv_lrf")[0]
+assert _span(cex_load_v1)[1] < cex_load_nor[1] <= _span(cex_load_v2)[1]
 brx_gal_v1 = par_cell("bioreactor", "Galactosylation", "Dissolved CO2 (pCO2)", 1)
 brx_co2_nor = CFG.unit_op("bioreactor").param("co2").nor
 brx_gal_v2 = par_cell("bioreactor", "Galactosylation", "Dissolved CO2 (pCO2)", 2)
+assert _span(brx_gal_v1)[0] > brx_co2_nor[0] >= _span(brx_gal_v2)[0]
+
+# acidic variants at the bioreactor: the ranges that changed, and what constrains them
+_ba = allpar[(allpar["step"] == "bioreactor") & (allpar["CQA"] == "Acidic variants")]
+brx_acid_changed = int(_ba["kind"].isin(["wider", "narrower", "shifted", "none"]).sum())
+brx_acid_wider = int((_ba["kind"] == "wider").sum())
+brx_acid_narrow = int((_ba["kind"] == "narrower").sum())
+brx_acid_moved = int((_ba["kind"] == "shifted").sum())
+assert brx_acid_changed == _ps["bioreactor"]["narrower"] + _ps["bioreactor"]["shifted"]
+_brx_r1 = r1[r1["step_key"] == "bioreactor"].set_index("response")
+_brx_v2 = _iac[_iac["step_key"] == "bioreactor"].set_index("response")
+_brx_tighter = [x for x in _brx_r1.index if _brx_v2.loc[x, "iac_high"] < _brx_r1.loc[x, "high"]
+                or _brx_v2.loc[x, "iac_low"] > _brx_r1.loc[x, "low"]]
+# the only stricter bioreactor limit is the acidic variant floor, which Version 1.0 did not apply
+assert _brx_tighter == ["acidic_variants"]
+assert _brx_r1.loc["acidic_variants", "low"] == 0 and _brx_v2.loc["acidic_variants", "iac_high"] >= _brx_r1.loc["acidic_variants", "high"]
+# judged against the upper limit alone, every acidic variant range would span the whole range
+_ea = D.effective_acceptance
+try:
+    D.effective_acceptance = lambda k, r: ((lambda a: (a[0], a[1], "upper"))(_ea(k, r))
+                                           if (k, r) == ("bioreactor", "acidic_variants") else _ea(k, r))
+    for _f in D.rsm_factors("bioreactor"):
+        _p = D.par_nor_propagated("bioreactor", "acidic_variants", _f)["par_nat"]
+        _pr = CFG.unit_op("bioreactor").param(_f).prange
+        assert _p is not None and abs(_p[0] - _pr[0]) < 1e-9 and abs(_p[1] - _pr[1]) < 1e-9
+finally:
+    D.effective_acceptance = _ea
+brx_acid_phrase = (f"{nw(brx_acid_narrow)} narrowed, {nw(brx_acid_moved)} moved and "
+                   + ("none widened" if brx_acid_wider == 0 else f"{nw(brx_acid_wider)} widened"))
+_nw = allpar[allpar["kind"].isin(["narrower", "shifted", "none"])]
+assert set(_nw["step"]) == {"bioreactor", "viral_inactivation", "aex"}
+assert set(_nw[_nw["step"] == "bioreactor"]["CQA"]) == {"Acidic variants"}
+assert set(_nw[_nw["step"] == "viral_inactivation"]["CQA"]) == {"XMuLV LRF (log₁₀)"}
+
+# viral clearance ranges at low-pH viral inactivation and anion exchange
+_vi = allpar[allpar["step"] == "viral_inactivation"]
+_vix = _vi[_vi["CQA"].str.startswith("XMuLV")]
+n_vi_factors = len(_vix)
+n_vi_none = int((_vix["kind"] == "none").sum())
+assert n_vi_none == _ps["viral_inactivation"]["none"]
+vi_none_phrase = (f"for any of its {nw(n_vi_factors)} parameters" if n_vi_none == n_vi_factors
+                  else f"for {nw(n_vi_none)} of its {nw(n_vi_factors)} parameters")
+vi_ph_v1 = par_cell("viral_inactivation", "XMuLV LRF (log₁₀)", "Inactivation pH", 1)
+vi_xm_v1 = _r1("viral_inactivation", "xmulv_lrf")["low"]
+vi_xm_v2 = D.iac_limit("viral_inactivation", "xmulv_lrf")[0]
+assert vi_xm_v2 > vi_xm_v1
+_an = allpar[(allpar["step"] == "aex") & (allpar["kind"] == "narrower")]
+assert len(_an) == _ps["aex"]["narrower"] and bool(_an["CQA"].str.contains("LRF").all())
+assert set(_an["Parameter"]) == {"Load pH"}
+aex_narrow_txt = " and ".join(f"{l.split(' ')[0]} from {o} to {n}" for l, o, n in
+                              zip(_an["CQA"], _an["PAR (NOR)_v1"], _an["PAR (NOR)"]))
+assert all(_r1("aex", r)["low"] < D.iac_limit("aex", r)[0] for r in ["xmulv_lrf", "mvm_lrf"])
 
 # CAPA and effectiveness check, from config campaign.capa
-capa_md = CAPA.rename(columns={"id": "No.", "action": "Action", "owner": "Owner function",
-                               "due": "Due", "status": "Status"})
+# every action has the same status at closure, so the table states it once, in its caption
+assert CAPA["status"].nunique() == 1
+capa_status = CAPA["status"].iloc[0]
+capa_md = CAPA.drop(columns=["status"]).rename(columns={"id": "No.", "action": "Action",
+                                                        "owner": "Owner function", "due": "Due"})
 _ca = CAPA[CAPA["id"].str.startswith("CA")]
 _pa = CAPA[CAPA["id"].str.startswith("PA")]
-ca_ids = f"{_ca['id'].iloc[0]} to {_ca['id'].iloc[-1]}"
-pa_ids = f"{_pa['id'].iloc[0]} to {_pa['id'].iloc[-1]}"
 ca_open_due = _ca["due"].max()
-all_capa_open = bool((CAPA["status"] == "open at closure").all())
+assert ca_open_due == REV2_DATE
+n_capa = len(CAPA)
+assert capa_status == "open at closure"
 pa_due_max = _pa["due"].max()
+# of the preventive actions, only PA1 revises SOP-1002 (the Summary names it)
+assert list(_pa[_pa["action"].str.contains("SOP-1002")]["id"]) == ["PA1"]
 eff_due, eff_crit = EFFECTIVENESS["due"], EFFECTIVENESS["criterion"]
-
-# plan approval dates against the first study of each step
-PCP_OF = {"PCP-003": "bioreactor", "PCP-004": "harvest", "PCP-005": "protein_a",
-          "PCP-006": "viral_inactivation", "PCP-007": "cex", "PCP-008": "aex",
-          "PCP-009": "virus_filtration", "PCP-010": "ufdf"}
-_pl = []
-for pid, key in PCP_OF.items():
-    first = chron[chron["step"] == key]["start"].min()
-    _pl.append([pid, T.STEP_NAME[key], PLAN_APPROVAL[pid], first, REV1_DATE])
-plan_show = pd.DataFrame(_pl, columns=["Plan", "Step", "Approved", "First study started",
-                                       "Date in Version 1.0 title block"])
-all_plans_before = all(r[2] < r[3] for r in _pl)
-pa_appr, pa_first = PLAN_APPROVAL["PCP-005"], chron[chron["step"] == "protein_a"]["start"].min()
-pcmp_appr = PLAN_APPROVAL["PCMP-001"]
 
 # capability thresholds stated in PCMP-001 Version 2.0
 _below = capdf[capdf["Cpk"] < CPK_TARGET]
-below_names = " and ".join(T.ATTR_NAME[k].split(" (")[0].lower() for k in _below.index)
 n_below_target = len(_below)
 all_meet_min = bool((capdf["Cpk"] >= CPK_MIN).all())
-sp_phrase = ("Every step output meets its criterion at its own set-point." if n_pass_sp == n_margin
-             else f"Only {n_pass_sp} of these step outputs meet their criterion at the set-point.")
-due_phrase = ("Every one of these due dates precedes the date in the title blocks."
-              if n_eq_before_rev1 == n_eq else
-              f"Of these due dates, {n_eq_before_rev1} precede the date in the title blocks.")
-noos_phrase = (f"one batch in {n_mc:,}" if acid_noos == 1 else f"{acid_noos} batches in {n_mc:,}")
-brx_wider = _ps["bioreactor"]["wider"]
-_vh = ver[(ver["step_key"] == "cex") & (ver["cqa"] == "hcp")].iloc[0]
-cex_hcp_assumed, cex_hcp_edge, cex_hcp_nor = _vh["assumed"], _vh["observed_edge"], _vh["predicted_nor"]
-d_pa_share = 100 * d_pa / ce_pa
+_below_names = " and ".join(aname(k) for k in _below.index)
+thr_sentence = ((f"Only the capability index of {_below_names} falls below the target" if n_below_target == 1
+                 else f"The capability indices of {_below_names} fall below the target") if n_below_target
+                else "Every attribute meets the target") + (
+    ", and every attribute meets the minimum." if all_meet_min else
+    ", and at least one attribute falls below the minimum.")
 
-# wider ranges at the bioreactor, by attribute
-def _par_changes(key):
-    a, b = D.par_table_rev1(key), D.par_table(key)
-    m = b.merge(a[["CQA", "Parameter", "PAR (NOR)"]], on=["CQA", "Parameter"], how="left",
-                suffixes=("", "_v1"))
-    return m[m["PAR (NOR)_v1"].notna() & (m["PAR (NOR)"] != m["PAR (NOR)_v1"])]
-_bc = _par_changes("bioreactor")
-def _is_wider(r):
-    o, n = _span(r["PAR (NOR)_v1"]), _span(r["PAR (NOR)"])
-    return bool(o and n and n[0] <= o[0] and n[1] >= o[1])
-_bw = _bc[_bc.apply(_is_wider, axis=1)]
-brx_wider_glycan = int(_bw["CQA"].isin(["Afucosylation", "Galactosylation", "High mannose"]).sum())
-brx_wider_agg = int(_bw["CQA"].str.startswith("Aggregates").sum())
-brx_acid_changed = int((_bc["CQA"] == "Acidic variants").sum())
-brx_acid_wider = int((_bw["CQA"] == "Acidic variants").sum())
+# each re-analysed pool attribute and clearance result against its Version 2.0 criterion over the
+# NOR, at manufacturing scale, on the response-surface model (one basis for Tables 6.4 and 6.5)
+def _lf_txt(k, combo):
+    """The least favourable NOR combination, written out: 'inactivation pH at its NOR high (3.6)'."""
+    uo = CFG.unit_op(k)
+    parts = []
+    for f, v in combo.items():
+        p = uo.param(f)
+        where = "NOR low" if v == p.nor[0] else "NOR high" if v == p.nor[1] else "set-point"
+        u = "" if p.unit == "pH" else f" {p.unit}"
+        parts.append(f"{lc(p.name)} at its {where} ({v:g}{u})")
+    return ", ".join(parts[:-1]) + " and " + parts[-1] if len(parts) > 1 else parts[0]
 
-# each re-analysed step output against its Version 2.0 criterion, over the NOR box
-import itertools
 _res = []
 for _, r in _iac.iterrows():
     k, resp = r["step_key"], r["response"]
     uo = CFG.unit_op(k)
     fac = D.fit(k, "rsm", resp)["factors"]
     grid = list(itertools.product(*[[uo.param(f).nor[0], uo.param(f).setpoint, uo.param(f).nor[1]] for f in fac]))
-    y = D.predict(k, resp, natural={f: [g[i] for g in grid] for i, f in enumerate(fac)})
-    sp = float(D.predict(k, resp, natural={f: uo.param(f).setpoint for f in fac})[0])
-    ok = bool(np.all(D.meets_acceptance(k, resp, y)))
-    _res.append(dict(step=k, cqa=r["cqa"], crit=T.crit(r["iac_low"], r["iac_high"], r["spec_type"]),
-                     sp=sp, lo=float(np.min(y)), hi=float(np.max(y)), ok=ok))
+    nat = {f: [g[i] for g in grid] for i, f in enumerate(fac)}
+    spn = {f: [uo.param(f).setpoint] for f in fac}
+    _o = D.sdm_offset(k, resp)
+    off = 0.0 if _o is None else _o["offset"]
+    stat = D.decision_statistic(resp)
+    mean = np.asarray(D.predict(k, resp, natural=nat), float) - off
+    sp = float(D.predict(k, resp, natural=spn)[0]) - off
+    lo_c, hi_c, st = r["iac_low"], r["iac_high"], r["spec_type"]
+    if stat == "batch":
+        _, plo, phi = D.prediction_interval(k, resp, nat)
+        lo_v, hi_v = float(plo.min()) - off, float(phi.max()) - off
+        _, splo, sphi = D.prediction_interval(k, resp, spn)
+        sp_ok = _in(float(splo[0]) - off, lo_c, hi_c, st) and _in(float(sphi[0]) - off, lo_c, hi_c, st)
+        i_bad = int(np.argmin(plo)) if not _in(lo_v, lo_c, hi_c, st) else int(np.argmax(phi))
+    else:
+        assert st == "lower"
+        lo_v, hi_v = float(mean.min()), float(mean.max())
+        sp_ok = _in(sp, lo_c, hi_c, st)
+        i_bad = int(np.argmin(mean))
+    ok = D.nor_met(k, resp)
+    assert ok == (_in(lo_v, lo_c, hi_c, st) and _in(hi_v, lo_c, hi_c, st)), (k, resp)
+    _res.append(dict(step=k, cqa=r["cqa"], resp=resp, crit=T.crit(lo_c, hi_c, st), stat=stat,
+                     sp=sp, lo=lo_v, hi=hi_v, ok=ok, sp_ok=sp_ok, off=off,
+                     lo_c=lo_c, hi_c=hi_c, st=st, corner=dict(zip(fac, grid[i_bad]))))
 res_df = pd.DataFrame(_res)
+qa_df = res_df[res_df["stat"] == "batch"].reset_index(drop=True)
+vir_df = res_df[res_df["stat"] == "worst_case"].reset_index(drop=True)
+assert set(vir_df["cqa"]) <= {"lrv_xmulv", "lrv_mvm"} and len(vir_df) == n_iac_claim
 res_show = pd.DataFrame({
-    "Step": [T.STEP_NAME[s] for s in res_df["step"]],
-    "Attribute": [T.ATTR_NAME[c] for c in res_df["cqa"]],
-    "Version 2.0 criterion": res_df["crit"],
-    "At set-point": [T.num(x) for x in res_df["sp"]],
-    "Range over the NOR": [f"{T.num(a)} to {T.num(b)}" for a, b in zip(res_df["lo"], res_df["hi"])],
-    "Met across the NOR": ["Met" if o else "Not met" for o in res_df["ok"]],
+    "Step": [T.STEP_NAME[s] for s in qa_df["step"]],
+    "Attribute": [T.ATTR_NAME[c] for c in qa_df["cqa"]],
+    "Criterion": qa_df["crit"],
+    "Mean at set-points": [T.num(x) for x in qa_df["sp"]],
+    "95 % prediction interval over the NOR": [f"{T.num(a)} to {T.num(b)}" for a, b in zip(qa_df["lo"], qa_df["hi"])],
+    "Met": ["Met" if o else "Not met" for o in qa_df["ok"]],
 })
-n_res = len(res_df)
-n_res_met = int(res_df["ok"].sum())
+viral_show = pd.DataFrame({
+    "Step": [T.STEP_NAME[s] for s in vir_df["step"]],
+    "Virus": ["XMuLV" if c == "lrv_xmulv" else "MVM" for c in vir_df["cqa"]],
+    "Claim": [T.crit(lo, hi, st) for lo, hi, st in zip(vir_df["lo_c"], vir_df["hi_c"], vir_df["st"])],
+    "At set-points": [f2(x) for x in vir_df["sp"]],
+    "At the LFC": [f2(x) for x in vir_df["lo"]],
+    "Met": ["Met" if o else "Not met" for o in vir_df["ok"]],
+})
+n_qa, n_qa_met = len(qa_df), int(qa_df["ok"].sum())
+n_vir, n_vir_met = len(vir_df), int(vir_df["ok"].sum())
+n_vir_sp_met = int(vir_df["sp_ok"].sum())
+n_res, n_res_met = len(res_df), int(res_df["ok"].sum())
+n_res_not = n_res - n_res_met
 _nm = res_df[~res_df["ok"]]
-notmet_phrase = " and ".join(
-    f"{T.ATTR_NAME[c].split(' (')[0].lower()} at {T.STEP_NAME[k][0].lower() + T.STEP_NAME[k][1:]}"
-    for k, c in zip(_nm["step"], _nm["cqa"]))
-_ra = res_df[(res_df["step"] == "bioreactor") & (res_df["cqa"] == "acidic_variants")].iloc[0]
-acid_nor_lo = _ra["lo"]
-_rx = res_df[(res_df["step"] == "viral_inactivation") & (res_df["cqa"] == "lrv_xmulv")].iloc[0]
-vi_xm_nor_lo = _rx["lo"]
-def _nm_desc(r):
-    name = T.ATTR_NAME[r["cqa"]].split(" (")[0]
-    name = name if name.isupper() or name[:2].isupper() else name.lower()
-    step = T.STEP_NAME[r["step"]][0].lower() + T.STEP_NAME[r["step"]][1:]
-    lo_f = not np.all(D.meets_acceptance(r["step"], _iac[(_iac["step_key"] == r["step"]) & (_iac["cqa"] == r["cqa"])].iloc[0]["response"], np.array([r["lo"]])))
-    edge = f"down to {T.num(r['lo'])}" if lo_f else f"up to {T.num(r['hi'])}"
-    return f"{name} at the {step} step (predicted {edge} at a corner of the NOR)"
-_nm_list = [_nm_desc(r) for _, r in _nm.iterrows()]
-_all_sp_ok = bool(np.all([D.meets_acceptance(r["step"], _iac[(_iac["step_key"] == r["step"]) & (_iac["cqa"] == r["cqa"])].iloc[0]["response"], np.array([r["sp"]]))[0] for _, r in _nm.iterrows()]))
-res_phrase = (f"Every one of the {n_res} outputs meets its criterion across the NOR." if n_res_met == n_res else
-              f"Of the {n_res} outputs, {n_res_met} meet their criterion across the NOR. The exceptions are "
-              + " and ".join(_nm_list) + "."
-              + (" Each is met at the set-point, and the affected report states the consequence for its ranges."
-                 if _all_sp_ok else ""))
+assert bool(_nm["sp_ok"].all())                      # each not-met result is met with every parameter at its set-point
+def _nm_name(r): return f"{aname(r['cqa'])} at the {sname(r['step'])} step"
+nm_list = " and ".join(_nm_name(r) for _, r in _nm.iterrows())
+_qnm = qa_df[~qa_df["ok"]]
+qa_phrase = (f"Every one of the {n_qa} pool attributes meets its criterion across the NOR." if len(_qnm) == 0 else
+             f"Of the {n_qa} pool attributes, {n_qa_met} meet their criterion across the NOR.")
 
-# viral claims against the step results of this campaign
-vcl = csv("viral_clearance.csv").set_index("step")
-_vrow = {"viral_inactivation": "Low-pH Viral Inactivation", "aex": "Anion Exchange (AEX)",
-         "virus_filtration": "Virus Filtration"}
-_vv = []
-for _, r in _iac[_iac["basis"] == "platform claim"].iterrows():
-    col = "XMuLV" if r["cqa"] == "lrv_xmulv" else "MVM"
-    val = vcl.loc[_vrow[r["step_key"]], col]
-    _vv.append([T.STEP_NAME[r["step_key"]], col, f"≥ {r['iac_low']:g}", f"{val:.2f}",
-                "Met" if val >= r["iac_low"] else "Not met"])
-viral_show = pd.DataFrame(_vv, columns=["Step", "Virus", "Platform claim (log10)",
-                                        "Step result (log10)", "Claim"])
-n_viral_met = int((viral_show["Claim"] == "Met").sum())
-n_viral_all = len(viral_show)
-viral_phrase = ("every claim is met." if n_viral_met == n_viral_all else
-                f"{n_viral_met} of the {n_viral_all} claims are met.")
+# acidic variants at the bioreactor, the one pool attribute not met: the corner of the NOR where its
+# lower prediction limit is lowest, and the direction of each effect in this campaign's model and in
+# the scaled estimates of the published A-Mab case study (Table 3.16), which the config carries as
+# the coefficients of the bioreactor model
+assert list(zip(_qnm["step"], _qnm["cqa"])) == [("bioreactor", "acidic_variants")]
+_qa_r = _qnm.iloc[0]
+assert not _in(_qa_r["lo"], _qa_r["lo_c"], _qa_r["hi_c"], _qa_r["st"]) and _qa_r["sp_ok"]
+acid_lpl, acid_lo_c = _qa_r["lo"], _qa_r["lo_c"]
+_ac = D.rsm_coeff_df("bioreactor", "acidic_variants").set_index("Term")
+_al = D.factor_letters("bioreactor")
+_pub = CFG.raw()["process"]["bioreactor"]["rsm"]["linear"]["acidic_variants"]
+_ALPHA = THRESHOLDS["effect_alpha"]
+_bu = CFG.unit_op("bioreactor")
+def _terms(f): return [t for t in _ac.index if t != "Intercept" and _al[f] in t]
+_corner = _qa_r["corner"]
+acid_sig = [f for f in _corner if any(_ac.loc[t, "p-value"] < _ALPHA for t in _terms(f))]
+acid_nsig = [f for f in _corner if f not in acid_sig]
+for f in acid_sig:
+    _c = float(_ac.loc[_al[f], "Coef."])
+    assert _ac.loc[_al[f], "p-value"] < _ALPHA and _c * _pub[f] > 0     # same direction as the case study
+    assert _corner[f] == (_bu.param(f).nor[1] if _c < 0 else _bu.param(f).nor[0])   # the end that lowers them
+def _pn(f): return lc(_bu.param(f).name)
+def _pv(f): return f"{_corner[f]:g}" + ("" if _bu.param(f).unit == "pH" else f" {_bu.param(f).unit}")
+def _and(xs): return ", ".join(xs[:-1]) + " and " + xs[-1] if len(xs) > 1 else xs[0]
+def _end(f):
+    p = _bu.param(f)
+    return "upper end" if _corner[f] == p.nor[1] else "lower end" if _corner[f] == p.nor[0] else "set-point"
+def _at(fs, end):
+    if len(fs) == 1:
+        return f"{_pn(fs[0])} is at its {end} ({_pv(fs[0])})"
+    return f"{_and([_pn(f) for f in fs])} are at their {end}s ({_and([_pv(f) for f in fs])})"
+_ups = [f for f in acid_sig if _end(f) == "upper end"]
+_los = [f for f in acid_sig if _end(f) == "lower end"]
+assert sorted(_ups + _los) == sorted(acid_sig) and _ups and _los
+acid_corner_txt = _at(_ups, "upper end") + " and " + _at(_los, "lower end")
+_fall = [f for f in acid_sig if _ac.loc[_al[f], "Coef."] < 0]
+_rise = [f for f in acid_sig if _ac.loc[_al[f], "Coef."] > 0]
+assert _fall and _rise
+acid_dir_txt = (_and(["higher " + _pn(f) for f in _fall]) + " lower acidic variants, and "
+                + _and(["higher " + _pn(f) for f in _rise]) + (" raises" if len(_rise) == 1 else " raise") + " them")
+assert acid_nsig and all(_end(f) != "set-point" for f in acid_nsig)
+acid_nsig_txt = " ".join(f"{_pn(f)[0].upper() + _pn(f)[1:]} is at its {_end(f)} ({_pv(f)}) at that corner, but it "
+                         "has no significant effect on acidic variants in the model." for f in acid_nsig)
 
-# leached Protein A at the capture step
-_rl = res_df[(res_df["step"] == "protein_a") & (res_df["cqa"] == "leached_protein_a")].iloc[0]
-lpa_sp, lpa_hi = _rl["sp"], _rl["hi"]
-lpa_crit = D.iac_limit("protein_a", "leached_protein_a_ppm")[1]
+# acidic variants at the bioreactor: which proven acceptable range no longer covers its NOR, and why
+_bpt = D.par_table("bioreactor")
+_bpa = _bpt[_bpt["CQA"] == "Acidic variants"]
+_unc = []
+for _, r in _bpa.iterrows():
+    f = [x for x in D.rsm_factors("bioreactor") if CFG.unit_op("bioreactor").param(x).name == r["Parameter"]][0]
+    p = CFG.unit_op("bioreactor").param(f)
+    a, b = _span(r["PAR (NOR)"])
+    if a > p.nor[0] or b < p.nor[1]:
+        _unc.append((f, p, a, b, r["Unit"]))
+assert len(_unc) == 1
+_uf, _up, _ua, _ub, _uu = _unc[0]
+acid_unc_name, acid_unc_par = lc(_up.name), f"{_ua:g}–{_ub:g}"
+acid_unc_unit, acid_unc_nor_hi = _uu, _up.nor[1]
+assert _ub < _up.nor[1] and _ua <= _up.nor[0]           # the range stops short of the upper NOR edge
+_acoef = D.rsm_coeff_df("bioreactor", "acidic_variants").set_index("Term")["Coef."]
+acid_unc_coef = float(_acoef[D.factor_letters("bioreactor")[_uf]])
+assert acid_unc_coef < 0 and _pub[_uf] < 0              # acidic variants fall as this parameter rises, as in the case study
+assert _uf in acid_sig
+
+# XMuLV clearance of low-pH viral inactivation at the least favourable combination
+_rx = vir_df[(vir_df["step"] == "viral_inactivation") & (vir_df["cqa"] == "lrv_xmulv")].iloc[0]
+vi_xm_worst, vi_xm_sp, vi_xm_ok = _rx["lo"], _rx["sp"], bool(_rx["ok"])
+assert not vi_xm_ok and _rx["sp_ok"]
+vi_corner_txt = _lf_txt("viral_inactivation", _rx["corner"])
+vir_phrase = ((f"With every parameter at its set-point, every one of the {n_vir} claims is met."
+               if n_vir_sp_met == n_vir else
+               f"With every parameter at its set-point, {n_vir_sp_met} of the {n_vir} claims are met.")
+              + (f" At the least favourable combination, every claim is met." if n_vir_met == n_vir else
+                 f" At the least favourable combination, {n_vir_met} of the {n_vir} claims are met."))
+
+# leached Protein A at the capture step, judged per batch at manufacturing scale
+_rl = qa_df[(qa_df["step"] == "protein_a") & (qa_df["cqa"] == "leached_protein_a")].iloc[0]
+lpa_sp, lpa_hi, lpa_crit = _rl["sp"], _rl["hi"], _rl["hi_c"]
 ds_lpa = _ds("leached_protein_a", "ds_high")
-_verb = "falls" if n_below_target == 1 else "fall"
-thr_sentence = (f"Only {below_names} {_verb} below the target" if n_below_target else
-                "Every attribute meets the target") + (
-    ", and every attribute meets the minimum." if all_meet_min else
-    ", and at least one attribute falls below the minimum.")
+assert bool(_rl["ok"]) and lpa_hi > ds_lpa
+lpa_need = lpa_hi / ds_lpa                               # downstream clearance the batch needs
+lpa_assumed = float(_iac[(_iac["step_key"] == "protein_a") & (_iac["cqa"] == "leached_protein_a")].iloc[0]["downstream_fold"])
+assert lpa_need < lpa_assumed
+_lv = ver[ver["cqa"] == "leached_protein_a"]
+assert len(_lv) == 2 and bool(_lv["met"].isna().all())
+assert bool(_lv["predicted_nor"].isna().all())          # "not a response" in the verification table
+
+# (Protein A pool host cell protein, the pool attribute nearest its criterion, is stated at the end of
+# this chunk on the log-scale model that PCR-005 Version 2.0 uses)
+
+# the tightened aggregate criteria: did any proven acceptable range at those steps stop short?
+def _full(key, lbl_prefix):
+    t = D.par_table(key)
+    t = t[t["CQA"].str.startswith(lbl_prefix)]
+    return all(_span(a) == _span(b) for a, b in zip(t["PAR (NOR)"], t["Char. range"]))
+tight_full = all(_full(k, "Aggregates") for k in _tt["step_key"])
+tight_phrase = ("Against the tightened criteria, every aggregate proven acceptable range at these two steps "
+                "still spans the whole characterization range, so the tightening moved no range."
+                if tight_full else
+                "Against the tightened criteria, at least one aggregate proven acceptable range at these steps "
+                "no longer spans the whole characterization range.")
+
+# the bioreactor aggregate criterion, both tightened and widened
+_both = _iac[_is_t & _is_w]
+n_both = len(_both)
+both_txt = " and ".join(f"{aname(c)} at the {sname(s)} step" for s, c in zip(_both["step_key"], _both["cqa"]))
+assert n_both == 1 and _both.iloc[0]["step_key"] == "bioreactor" and _both.iloc[0]["cqa"] == "aggregates_hmw"
+_vagg = ver[(ver["step_key"] == "viral_inactivation") & (ver["cqa"] == "aggregates_hmw")].iloc[0]
+assert bool(_vagg["widening_supported"])
+vi_agg_assumed, vi_agg_bound = _vagg["assumed"], _vagg["predicted_nor_bound95"]
+cex_agg_bound = _vx["predicted_nor_bound95"]
+assert cex_agg_bound < cex_agg_assumed
+
+# "No range" rows are all viral clearance, judged at the least favourable combination
+assert bool(allpar[allpar["kind"] == "none"]["CQA"].str.contains("LRF").all())
+
+# the SEC excess against the Protein A fragment criterion
+pa_frag_crit = D.iac_limit("protein_a", "lmw_cesds_pct")[1]
+sec_share_crit = 100 * d_pa / pa_frag_crit
+
+# acidic variants capability: distance of the mean from each limit, in SD
+acid_z_lo, acid_z_hi = (acid_mean - ds_acid_lo) / acid_sd, (ds_acid_hi - acid_mean) / acid_sd
+assert acid_z_lo < acid_z_hi
+
+# data the re-analysis adds to those Version 1.0 reported: the fragment results by nrCE-SDS of the
+# designed experiments, measured in the design itself or in a retest of its retained samples
+_retest_ids = list(ret_ids)
+retest_txt = " and ".join(_retest_ids)
+_mp = csv("method_plan.csv")
+_ce = _mp[_mp["lmw_cesds"].astype(bool) & _mp["kind"].isin(["screening", "rsm"])]
+assert bool((_ce["end"] < REV1_DATE).all())                 # measured before Version 1.0 was approved
+_ret_steps = list(chron[chron["kind"] == "retest"]["step"])
+_sup_steps = set(chron[chron["kind"] == "superseded"]["step"])
+_ce_where = []
+for _k, _g in _ce.groupby("step", sort=False):
+    if _k in _ret_steps:
+        assert list(_g["kind"]) == ["rsm"]                  # the retests cover the response surface samples
+        continue
+    _kinds = set(_g["kind"])
+    _ce_where.append(("the re-executed " if _k in _sup_steps else "the ") + sname(_k)
+                     + (" design" if _kinds == {"screening", "rsm"} else
+                        " response surface study" if _kinds == {"rsm"} else " screening study"))
+assert set(_ret_steps) <= set(_ce["step"])
+ce_where_txt = "in " + ", in ".join(_ce_where) + f" and in the retests of retained samples ({retest_txt})"
+# the steps with a fragment criterion, each judged on nrCE-SDS results of its response surface study
+_fs = _iac[_iac["cqa"] == "fragments_lmw"].sort_values("step")
+assert set(_fs["step_key"]) == set(_ce[_ce["kind"] == "rsm"]["step"])
+_fn = [sname(k) for k in _fs["step_key"]]
+frag_steps_txt = ", ".join(_fn[:-1]) + " and " + _fn[-1]
+
+# Version 1.0 alert-limit ranges at the bioreactor that stopped short of the NOR (finding F3)
+_r2 = allpar[(allpar["step"] == "bioreactor") & allpar["CQA"].isin(["Afucosylation", "Galactosylation", "High mannose"])]
+_short = 0
+for _, r in _r2.iterrows():
+    f = [x for x in D.rsm_factors("bioreactor") if CFG.unit_op("bioreactor").param(x).name == r["Parameter"]][0]
+    p = CFG.unit_op("bioreactor").param(f); a, b = _span(r["PAR (NOR)_v1"])
+    _short += int(a > p.nor[0] or b < p.nor[1])
+assert _short >= 2                                       # "several" stopped short of the NOR
+par_align = ["l", "P{3.4cm}"] + ["r"] * (par_show.shape[1] - 2)
+par_notes = [n for n, c in [(("a)", "One end of the range moved inward and the other outward."), "Moved"),
+                            (("b)", "With the other parameters at their least favourable combination of NOR low, set-point and NOR high, the viral clearance claim is not met even with the scanned parameter at its set-point."), "No range"),
+                            (("c)", "Fragment ranges measured by nrCE-SDS, which Version 1.0 did not report."), "New")]
+             if c in par_show.columns]
+# close the Version 1.0 models; assigned, so the cell does not echo the return value
+_pf_closed = _PF.__exit__(None, None, None)
+
+# --- On the models INV-002 corrective action CA3 selects (the models of PCR-005 and PCR-006 Version 2.0,
+# and of the verification behind the criteria), still at the NOR as characterized ---
+# The Protein A scale-down model (plan discrepancy PD-005-01): offset and qualification of each output with
+# a criterion, on the planned runs alone and on all runs
+_sdm_sets = {"planned": _sdm_planned_ids, "all": None}
+_q = {s: T.sdm_offsets_data(["protein_a"], studies=ids).set_index("output") for s, ids in _sdm_sets.items()}
+_qj = _q["planned"].index[_q["planned"]["judged"].astype(bool)].tolist()
+assert _qj == _q["all"].index[_q["all"]["judged"].astype(bool)].tolist() and "pool_hcp_ng_mg" in _qj
+def _oname(o):
+    n = T.SDM_OUTPUT[o][0]
+    return n.replace("Leached", "leached") if n.startswith("Leached") else lc(n)
+# what the data say: on either set of runs, every output with a criterion meets it over the NOR with the
+# offset at its estimate and at either end of its interval. The model is therefore qualified on the planned
+# runs alone as well, and the further runs did not change the conclusion.
+for _s in _q:
+    for _o in _qj:
+        _r = _q[_s].loc[_o]
+        assert all(bool(_r[c]) for c in ["qualified", "met_point", "met_lo", "met_hi"]), (_s, _o)
+sdm_q_outputs = _and([_oname(o) for o in _qj])
+# pool host cell protein is modelled on the log scale, so its offset is a ratio of geometric means
+assert D.fit("protein_a", "rsm", "pool_hcp_ng_mg")["transform"] == "log"
+_hq = {s: D.offset_qualification("protein_a", "pool_hcp_ng_mg", studies=ids) for s, ids in _sdm_sets.items()}
+assert all(q["scale"] == "ratio" for q in _hq.values())
+assert _hq["all"]["half"] < _hq["planned"]["half"]            # the further runs narrowed the interval
+def f3(x): return f"{x:.3f}"
+pa_r_plan, pa_r_plan_lo, pa_r_plan_hi = (f3(_hq["planned"][c]) for c in ["offset", "lo", "hi"])
+pa_r_all, pa_r_all_lo, pa_r_all_hi = (f3(_hq["all"][c]) for c in ["offset", "lo", "hi"])
+# how near each Protein A pool attribute comes to its criterion: the upper 95 % prediction limit over the
+# NOR at manufacturing scale (divided by the ratio offset on the log-scale model), against the criterion
+_pa_use = {}
+for _, r in _iac[_iac["step_key"] == "protein_a"].iterrows():
+    assert r["spec_type"] == "upper" and D.decision_statistic(r["response"]) == "batch"
+    assert D.model_status("protein_a", r["response"]) == "selected"
+    _pa_use[r["cqa"]] = D.nor_prediction_limit("protein_a", r["response"]) / float(r["iac_high"])
+assert max(_pa_use, key=_pa_use.get) == "hcp"                 # host cell protein comes nearest its criterion
+pa_hcp_use = 100 * _pa_use["hcp"]
+_hc = D.rsm_coeff_df("protein_a", "pool_hcp_ng_mg").set_index("Term")["Coef."]
+_hl = D.factor_letters("protein_a")
+_mains = sorted(((abs(float(_hc[_hl[f]])), f, float(_hc[_hl[f]])) for f in D.rsm_factors("protein_a")
+                 if _hl[f] in _hc.index), reverse=True)[:2]
+assert len(_mains) == 2
+pa_hcp_drivers = " and ".join(("higher " if c > 0 else "lower ") + lc(CFG.unit_op("protein_a").param(f).name)
+                              for _, f, c in _mains)
+# XMuLV clearance of low-pH viral inactivation on its selected model: the claim is not met at the least
+# favourable combination of the NOR as characterized
+assert D.model_status("viral_inactivation", "xmulv_lrf") == "selected"
+vi_sel_met_char = D.nor_met("viral_inactivation", "xmulv_lrf")
+assert vi_sel_met_char is False
+
+# close the characterized-NOR context: from here on, the NOR and set-points in force at Version 2.0
+_cn_closed = _CN.__exit__(None, None, None)
+vi_sel_met_force = D.nor_met("viral_inactivation", "xmulv_lrf")
+assert vi_sel_met_force is True                               # met across the NOR in force
+
+# the Version 2.0 NOR and set-point decisions (config nor_v2 and setpoint_v2), classified per parameter
+def _nor_change(p):
+    a, b = [float(x) for x in p.nor_characterized], [float(x) for x in p.nor]
+    s0, s1 = float(p.setpoint_characterized), float(p.setpoint)
+    eq = lambda x, y: abs(x - y) < 1e-9
+    if eq(a[0], b[0]) and eq(a[1], b[1]):
+        nor = None
+    elif eq(b[1] - b[0], a[1] - a[0]):
+        nor = "moved lower" if b[0] < a[0] else "moved higher"
+    elif b[0] >= a[0] - 1e-9 and b[1] <= a[1] + 1e-9:
+        nor = ("narrowed at its low end" if eq(b[1], a[1]) else
+               "narrowed at its high end" if eq(b[0], a[0]) else "narrowed at both ends")
+    else:
+        nor = "widened"
+    if eq(s0, s1):
+        sp = None
+    elif nor and nor.startswith("moved") and eq(s1 - s0, b[0] - a[0]):
+        sp = "with the NOR"
+    elif eq(s1, (b[0] + b[1]) / 2):
+        sp = "to the middle of the new NOR"
+    else:
+        sp = "within the NOR"
+    return dict(key=p.key, name=lc(p.name), unit=p.unit, old=a, new=b, s0=s0, s1=s1, nor=nor, sp=sp)
+def _nor_changes(k):
+    return [c for c in (_nor_change(p) for p in CFG.unit_op(k).parameters) if c["nor"] or c["sp"]]
+assert not _nor_changes("protein_a")                          # no Protein A NOR or set-point changes
+# "the process is unchanged except at low-pH viral inactivation" (§6.6)
+assert [k for k in CFG.train_order if _nor_changes(k)] == ["viral_inactivation"]
+_vi_ch = _nor_changes("viral_inactivation")
+assert _vi_ch and all(c["nor"] and c["nor"] != "widened" for c in _vi_ch)
+# every changed parameter acts on XMuLV clearance in its selected model
+assert {c["key"] for c in _vi_ch} <= set(D.fit("viral_inactivation", "rsm", "xmulv_lrf")["names"])
+def _vval(v, unit): return f"{v:g}" + ("" if unit == "pH" else f" {unit}")
+def _vrng(lo, hi, unit): return f"{lo:g}–{hi:g}" + ("" if unit == "pH" else f" {unit}")
+_vs = []
+for c in _vi_ch:
+    _from = f"from {_vrng(*c['old'], c['unit'])} to {_vrng(*c['new'], c['unit'])}"
+    if c["nor"].startswith("moved"):
+        _vs.append(f"The NOR of {c['name']} is moved {c['nor'].split()[1]}, {_from}, and keeps its width.")
+    else:
+        _vs.append(f"The NOR of {c['name']} is {c['nor']}, {_from}.")
+    if c["sp"]:
+        _vs.append(f"The {c['name']} set-point is moved {c['sp']}, from {c['s0']:g} to {_vval(c['s1'], c['unit'])}.")
+vi_nor_detail = " ".join(_vs)
+n_vi_nor = len(_vi_ch)                                        # each changed parameter has a NOR change
+vi_nor_count = f"{nw(n_vi_nor)} NOR" + ("" if n_vi_nor == 1 else "s")
+assert any(c["sp"] for c in _vi_ch)                           # "the new set-points"
+_mv = [c for c in _vi_ch if c["nor"].startswith("moved")]
+_nr = [c for c in _vi_ch if c["nor"].startswith("narrowed")]
+_parts = []
+if _mv:
+    assert len({c["nor"] for c in _mv}) == 1
+    _parts.append(f"moves the NOR{'s' if len(_mv) > 1 else ''} of {_and([c['name'] for c in _mv])} "
+                  + _mv[0]["nor"].split()[1])
+if _nr:
+    _parts.append(f"narrows the NOR{'s' if len(_nr) > 1 else ''} of {_and([c['name'] for c in _nr])}")
+vi_nor_summary = " and ".join(_parts)
+
+inv2_id, inv2_opened = INV2["id"], INV2["opened"]
+assert OPENED < inv2_opened < CLOSED                       # INV-002 was opened during this investigation
+# INV-002 corrective action CA3 (model selection) was adopted before this investigation closed, so the
+# verification behind the criteria fixed at closure used the selected models
+sel_adopted = CFG.raw()["campaign"]["model_adequacy"]["selection_adopted"]
+assert inv2_opened < sel_adopted < CLOSED
 ```
 
 {{< pagebreak >}}
@@ -425,7 +988,7 @@ print(SYN_BANNER)
 | Reviewer | Statistics | — | — | — |
 | Approver | Head of Quality | — | — | — |
 
-: Approval record (synthetic; signatures not applied). {#tbl-appr}
+Synthetic record. Signatures are not applied.
 
 {{< pagebreak >}}
 
@@ -445,12 +1008,17 @@ print(abbreviations_table([
     ('BLA', 'Biologics License Application'),
     ('CAPA', 'corrective and preventive action'),
     ('CEX', 'cation exchange chromatography'),
-    ('Cpk', 'process capability index'),
+    ('CI', 'confidence interval'),
     ('CQA', 'critical quality attribute'),
     ('DoE', 'design of experiments'),
+    ('DS', 'drug substance'),
+    ('GMP', 'good manufacturing practice'),
     ('HCP', 'host cell protein'),
     ('HMW', 'high molecular weight species'),
+    ('IAC', 'intermediate acceptance criterion'),
+    ('LFC', 'least favourable combination of the other parameters'),
     ('LMW', 'low molecular weight species'),
+    ('LRF', 'log reduction factor'),
     ('MSAT', 'Manufacturing Science & Technology'),
     ('MVM', 'minute virus of mice'),
     ('NOR', 'normal operating range'),
@@ -460,6 +1028,8 @@ print(abbreviations_table([
     ('SD', 'standard deviation'),
     ('SEC', 'size-exclusion chromatography'),
     ('SOP', 'standard operating procedure'),
+    ('TFF', 'tangential flow filtration'),
+    ('UF/DF', 'ultrafiltration and diafiltration'),
     ('VI', 'viral inactivation'),
     ('XMuLV', 'xenotropic murine leukemia virus'),
 ]))
@@ -469,21 +1039,21 @@ print(abbreviations_table([
 
 # Summary {.unnumbered}
 
-On `{python} OPENED`, Quality Assurance opened `{python} DOC` during the review of PCMR-001 Version 1.0 for BLA readiness. The review found that the acceptance criteria against which each step was judged in the proven acceptable range analysis were not in any protocol approved before the studies ran. They had been set at analysis time, after the data were known. The investigation was classified as `{python} INV["classification"]`.
+On `{python} OPENED`, Quality Assurance opened this investigation, `{python} DOC`, during the review of the Process Characterization Master Report PCMR-001 Version 1.0 for BLA readiness. The review found that the acceptance criteria against which each step was judged in the proven acceptable range analysis were not in any protocol approved before the studies ran. They had been set at analysis time, after the data were known. The investigation was classified as `{python} INV["classification"]`.
 
-Six findings are numbered F1 to F6 in §4. Four concern the criteria themselves. They were defined after the data were seen (F1), the safety factors that divided them differed by step and let every step pass at its own set-point (F2), the bioreactor limits were computed from the capability data they were then used to judge (F3), and acidic variants were assessed for capability against one end of a two-sided range (F4). F5 concerns the records, whose title blocks misstated the dates on which the plans were approved and which gave no execution dates. F6 concerns the method for fragments, where SEC read high in the capture matrices and the method decision `{python} AMD["id"]` was not carried into the documents.
+The investigation makes six findings, numbered F1 to F6 in §4. Four concern the criteria themselves. The criteria were defined after the data were seen (F1). For impurities that downstream steps clear, each criterion was divided by a safety factor that differed by step, and the factors were such that every step passed at its own set-point (F2). The glycan and acidic variant limits at the bioreactor were computed from the capability data they were then used to judge (F3). Acidic variants were assessed against the upper end of their two-sided range only (F4). Finding F5 concerns the records. Their title blocks misstated the dates on which the plans were approved, and they gave no execution dates. Finding F6 concerns the method for fragments. SEC read fragments high in the Protein A pool and the low-pH viral inactivation pool, and the decision `{python} AMD["id"]` to measure fragments by nrCE-SDS instead was not carried into the documents.
 
-The root cause is that PCMP-001 Version 1.0 required a criterion for each step but gave no rule for deriving one. The criteria were therefore derived during the analysis, by the people analysing the data (§5).
+The root cause is that the Process Characterization Master Plan PCMP-001 Version 1.0 required a criterion for each step but gave no rule for deriving one. The criteria were therefore derived during the analysis, by the people analysing the data (§5).
 
-The investigation derived intermediate acceptance criteria a priori, carried back from the drug-substance criteria through the platform worst case of each downstream step, with no margin, and re-analysed the same models against them. The corrective actions reissue PCMP-001 at Version 2.0 with these criteria and reissue every other document in the package against them, with fragments measured by nrCE-SDS under `{python} AMD["id"]`. They are due on `{python} ca_open_due` and were open at closure. The preventive actions revise SOP-1002 so that a characterization protocol cannot be approved without its criteria (§7).
+Under corrective action CA1, the investigation defined intermediate acceptance criteria by a rule written before any report applied it. Each criterion is carried back from the drug-substance criterion through the platform worst case of each downstream step, with no margin. This campaign's data can move a criterion only through the 95 % confidence bound of a downstream step's worst case within its normal operating range (NOR). The same rule set fixes how a scale-down model whose mean differs from manufacturing scale is qualified, and that viral clearance is judged at the least favourable combination of the other parameters. Corrective action CA1 issues all of this in PCMP-001 Version 2.0. Corrective actions CA2 and CA3 reissue the step plans and every other document of the package against it, with fragments measured by nrCE-SDS. They are due on `{python} ca_open_due` and were open at closure. Preventive action PA1 revises SOP-1002 so that a characterization protocol cannot be approved without its criteria (§7).
 
-Of the `{python} n_par_v1` proven acceptable ranges that Version 1.0 reported with the other parameters varying within their NORs, `{python} n_par_wider` are wider in the re-analysis, `{python} n_par_narrow` are narrower, `{python} n_par_moved` have moved and `{python} n_par_same` are unchanged. In the re-analysis, the lowest capability index of the drug substance is that of acidic variants, at `{python} f2(v2_min_cpk)`, against its lower limit. No GMP batch was dispositioned on these documents, and there is no product impact (§6).
+Of the `{python} n_par_v1` proven acceptable ranges that Version 1.0 reported with the other parameters varying within their NORs, `{python} par_counts_phrase`. In the re-analysis, `{python} nm_list` do not meet their Version 2.0 criterion across the whole NOR, although each meets it with every parameter at its set-point (§6.3). At Version 2.0, the low-pH viral inactivation report PCR-006 `{python} vi_nor_summary`, because XMuLV clearance does not meet its claim at the least favourable combination of the NOR as it was characterized (§6.3). The lowest capability index of the drug substance is now that of acidic variants, at `{python} f2(v2_min_cpk)`, against its lower limit. No GMP batch was dispositioned on these documents, and there is no product impact (§6.6).
 
 # Event description
 
-PCMR-001 Version 1.0 and the reports it consolidates were approved on `{python} REV1_DATE`. On `{python} OPENED`, QA reviewed PCMR-001 for use in the BLA. The review traced the in-process criteria in the control strategy of PCMR-001 back to the step plans and step reports. It found that none of the criteria could be traced to a plan as it was approved before execution, and that the master plan gave no rule from which the criteria could have been derived in advance. QA opened `{python} DOC` the same day.
+PCMR-001 Version 1.0, the Process Characterization Master Report, and the step reports it consolidates were approved on `{python} REV1_DATE`. On `{python} OPENED`, QA reviewed PCMR-001 for use in the BLA. The review traced the in-process criteria in the control strategy of PCMR-001 back to the step plans and step reports. It found that none of the criteria could be traced to a plan as it was approved before execution. It also found that the master plan, PCMP-001, gave no rule from which the criteria could have been derived in advance. QA opened `{python} DOC` the same day.
 
-The `{python} n_studies_v1` studies that Version 1.0 reported were executed between `{python} first_start` and `{python} last_end`, and each of them closed before the Version 1.0 reports were approved.
+Version 1.0 reported `{python} n_studies_v1` studies, executed between `{python} first_start` and `{python} last_end`. Each of them closed before the Version 1.0 reports were approved. The count covers every study in the campaign chronology except `{python} nw(n_studies_excl)`. The comparability study `{python} cmp_ids[0]` and the retests of retained samples by nrCE-SDS (`{python} retest_txt`) produced only fragment results, which Version 1.0 did not report (§4.7). The further Protein A scale-down runs, study `{python} sdm2_id`, were made during the investigation (§2).
 
 Two immediate actions were taken on the day the investigation was opened.
 
@@ -494,7 +1064,9 @@ The investigation was closed on `{python} CLOSED`.
 
 # Scope
 
-The investigation covers the twenty Version 1.0 documents of the A-Mab characterization package, listed in @tbl-docs. Within them it covers four subjects. These are the step acceptance criteria used in the proven acceptable range analyses, with their derivation and their place in the protocols, the method used for fragments, the capability assessment of the drug substance, and the execution records of the studies.
+The investigation covers the `{python} n_docs_v1` Version 1.0 documents of the A-Mab characterization package, listed in @tbl-docs. Within them it covers four subjects. These are the step acceptance criteria used in the proven acceptable range analyses, with their derivation and their place in the protocols, the method used for fragments, the capability assessment of the drug substance, and the execution records of the studies.
+
+The adequacy of the response-surface models is outside this investigation. During it, the re-analysis found response-surface models that do not meet the model-adequacy criteria of PCMP-001 Version 2.0, and QA opened `{python} inv2_id` on `{python} inv2_opened` to investigate that finding. Under `{python} inv2_id` corrective action CA3, adopted on `{python} sel_adopted`, before this investigation closed, every response-surface output is analysed by model selection, and `{python} inv2_id` gives the procedure. The verification of the platform worst cases in §6.2, on which the Version 2.0 criteria rest, used these selected models. Every comparison of ranges in this report uses the models Version 1.0 fitted, so that it shows what the change of criteria moved. The step reports give the ranges on the selected models.
 
 ```{python}
 #| output: asis
@@ -503,13 +1075,17 @@ print()
 print(": Documents in the scope of the investigation, all at Version 1.0 when it was opened. {#tbl-docs}")
 ```
 
-Three things are outside the scope. The computation of a proven acceptable range itself, which is how the other parameters are held or varied while one parameter is scanned, is not reviewed here. The experiments are not reviewed either. Every study that Version 1.0 reported closed before the Version 1.0 reports were approved, so the re-analysis in §6 uses the same characterization data as Version 1.0. One further study ran during the investigation. The re-analysis of the Protein A scale-down qualification found that the `{python} n_sdm_planned` planned set-point runs could never demonstrate equivalence against the margin of PCP-005, because the confidence interval alone was wider than the margin (DEV-005-03). For this reason, `{python} n_sdm_sup` supplementary set-point runs (study S-PA-SDM2) were made from `{python} sdm2_start` to `{python} sdm2_end`, and the margin was not changed. These runs add scale-down data only and change no characterization data that Version 1.0 analysed. They are a further action that the re-analysis needed, recorded in PCR-005, and not a corrective action of this investigation. Finally, the study deviations recorded in the step reports keep the disposition those reports give them.
+Three things are outside the scope. The computation of a proven acceptable range itself, which is how the other parameters are held or varied while one parameter is scanned, is not reviewed here. The experiments themselves are not reviewed either. Finally, the study deviations recorded in the step reports keep the disposition those reports give them.
+
+The re-analysis in §6 uses the same designed experiments and the same results as Version 1.0, with two additions. The first is the fragment results by nrCE-SDS of the designed experiments. They were measured before Version 1.0 was approved (§4.7), `{python} ce_where_txt`, but Version 1.0 did not report them. The second is `{python} n_sdm_sup` further set-point runs of the Protein A scale-down model (study `{python} sdm2_id`), made from `{python} sdm2_start` to `{python} sdm2_end`, during the investigation.
+
+The Protein A plan, PCP-005, had planned `{python} n_sdm_planned` set-point runs for the qualification of that model (study `{python} sdm1_id`). The further runs were made during the re-analysis, to narrow the confidence interval of the offset of the model for pool host cell protein. Of the Protein A pool attributes, host cell protein comes nearest its criterion. On the model that PCR-005 Version 2.0 uses, its upper 95 % prediction limit over the NOR is `{python} f"{pa_hcp_use:.0f}"` % of the criterion, and it rises with `{python} pa_hcp_drivers`. That model is fitted on the log scale, so the offset is a difference of mean logarithms. It is stated as a ratio, the geometric mean of the scale-down runs divided by that of the manufacturing-scale batches. On the planned runs alone, the ratio is `{python} pa_r_plan`, with a `{python} OFF_CI` % confidence interval of `{python} pa_r_plan_lo` to `{python} pa_r_plan_hi`. On all runs it is `{python} pa_r_all`, with an interval of `{python} pa_r_all_lo` to `{python} pa_r_all_hi`. A scale-down model is qualified for an output when the conclusion against its criterion over the NOR is the same with the offset at either end of that interval (§6.1). On the planned runs alone and on all runs, `{python} sdm_q_outputs` each meet their criterion over the NOR with the offset at either end of its interval. The model is therefore qualified on the planned runs alone as well. The further runs narrowed the interval and did not change the conclusion. The plan did not foresee the further runs, so the Protein A report PCR-005 Version 2.0 records them as `{python} pd_id`, a discrepancy from the plan. They are not a deviation, because no approved procedure or GMP requirement was departed from.
 
 # Background
 
 ## The master plan
 
-PCMP-001 Version 1.0 required that each step be judged against a criterion that applies to it. It did not say how that criterion was to be obtained. Its §7 left the threshold to the step plans.
+PCMP-001 Version 1.0, the master plan, required that each step be judged against a criterion that applies to it. It did not say how that criterion was to be obtained. Its §7 left the threshold to the step plans.
 
 > Where a threshold depends on the step, on the attribute or on the precision of the method, the criterion is defined in the plan of that step and the reason is given there.
 
@@ -517,99 +1093,107 @@ The same section stated that the criterion for a response is the in-process limi
 
 ## The Protein A analysis
 
-The need for step criteria became apparent during the analysis of the Protein A study. The capture pool carries host cell protein at a level far above the drug-substance criterion of `{python} big(ds_hcp)` ng/mg. Protein A capture removes most of the host cell protein of the harvest, and part of the remainder is carried into the eluate bound to the antibody. That level is acceptable in an intermediate, because cation exchange and anion exchange remove most of it afterwards. Judged against the drug-substance criterion, no part of the Protein A operating region would have been acceptable. PCMR-001 Version 1.0 put the argument in one sentence.
+The need for step criteria became apparent during the analysis of the Protein A study. The capture pool carries host cell protein at a level far above the drug-substance criterion of `{python} big(ds_hcp)` ng/mg. Protein A capture removes most of the host cell protein of the harvest, and part of the remainder is carried into the eluate bound to the antibody. That level is acceptable in an intermediate, because cation exchange and anion exchange remove most of it afterwards. Judged against the drug-substance criterion, no part of the Protein A characterization range would have been acceptable. PCMR-001 Version 1.0 put the argument in one sentence.
 
 > The drug substance limit is the wrong yardstick for an intermediate, and the campaign uses a criterion for each step that applies to that step.
 
-What the investigation examined is how the step criteria were then set, and when.
-
 ## The Version 1.0 criteria
 
-Version 1.0 set `{python} n_r1` step criteria at `{python} n_r1_steps` steps, by four rules. @tbl-criteria-change gives each criterion with its rule, beside the Version 2.0 criterion that replaced it. The Version 2.0 columns are discussed in §6.
+Version 1.0 set `{python} n_r1` step criteria at `{python} n_r1_steps` steps, by four rules. @tbl-criteria-change gives each criterion with its rule code, beside the Version 2.0 criterion that replaced it. The Version 2.0 columns are discussed in §6.
 
-1. For an impurity that downstream steps clear, the drug-substance criterion was carried back through the clearance the downstream steps delivered at their set-points in this campaign, and the result was divided by a safety factor. This rule (R1) set `{python} n_margin` criteria.
-2. For an attribute that no downstream step changes, the criterion was an alert limit at the capability mean plus `{python} f"{sigma:g}"` SD. This rule (R2) set `{python} n_capbased` criteria, all at the bioreactor.
-3. For viral clearance at low-pH viral inactivation and anion exchange, the criterion was the cumulative requirement less the nominal clearance of the other credited steps. This rule (R3) set `{python} n_viral_req` criteria.
-4. For viral clearance at virus filtration, the criterion was the nominal clearance claimed for the step less `{python} f"{v_allow:g}"` log10 for assay variability. This rule (R4) set `{python} n_viral_claim` criteria.
+1. For an impurity that downstream steps clear, the drug-substance criterion was carried back through the clearance the downstream steps delivered at their set-points in this campaign. The result was divided by a safety factor (R1, `{python} n_margin` criteria).
+2. For an attribute that no downstream step changes, the criterion was an alert limit at the capability mean plus `{python} f"{sigma:g}"` SD (R2, `{python} n_capbased` criteria, all at the bioreactor).
+3. For viral clearance at low-pH viral inactivation and anion exchange, the criterion was the cumulative requirement less the nominal clearance of the other credited steps (R3, `{python} n_viral_req` criteria).
+4. For viral clearance at virus filtration, the criterion was the nominal clearance claimed for the step less `{python} f"{v_allow:g}"` log10 for assay variability (R4, `{python} n_viral_claim` criteria).
 
 ```{python}
 #| output: asis
 T.criteria_change().show()
 ```
 
-R1, R3 and R4 use the nominal results of this campaign, and R2 uses its capability data. Every Version 1.0 criterion therefore depends on data from the studies it was used to judge.
+The back-calculation through nominal downstream clearance, the viral criteria less the other steps' nominal clearance and the virus filtration criterion less the assay allowance all rest on the nominal results of this campaign. The alert limits rest on its capability data. Every Version 1.0 criterion was therefore set after the data were seen, from this campaign's nominal performance or capability, and where a safety factor was used its size was chosen step by step.
 
 # Investigation
 
 ## Approach
 
-The sequence in which the criteria were set was reconstructed from the analysis records, from the study chronology and from the authors of the Version 1.0 reports. Each criterion in @tbl-criteria-change was recomputed from its stated rule and compared with the value printed in the documents. The capability assessment was repeated against the drug-substance criteria as the register prints them. The execution windows of the studies were compared with the calibration records of the equipment they used. The method record for fragments was reviewed against the method decision `{python} AMD["id"]` and the comparability study S-CEX-FRC. Every recomputed criterion agreed with the printed value.
+The sequence in which the criteria were set was reconstructed from the analysis records, from the study chronology and from the authors of the Version 1.0 reports. Each criterion in @tbl-criteria-change was recomputed from its stated rule and compared with the value printed in the documents. The capability assessment was repeated against the drug-substance criteria as the register prints them. The execution windows of the studies were compared with the calibration records of the equipment they used. The record of the fragment method was reviewed against the decision `{python} AMD["id"]` to measure fragments by nrCE-SDS and against the comparability study S-CEX-FRC. Every recomputed criterion agreed with the printed value.
 
 ## F1. Criteria defined after the data were seen
 
 The step criteria were defined after the data were seen and outside the approved protocols.
 
-Each step plan was approved before its studies began, as @tbl-plan-dates in §4.6 shows. The plan for Protein A, for example, was approved on `{python} pa_appr`, and its first study started on `{python} pa_first`. None of the step criteria was in a plan as approved. The criteria were introduced later, while the Protein A data were being analysed, when it became clear that the capture pool could not be judged against the drug-substance criterion (§3.2). They were then written into the text of every step plan when the Version 1.0 package was compiled, and the approved plans were not revised to carry them. The Version 1.0 plans therefore read as if the criteria had been approved before execution, which they had not.
+Each step plan was approved before its studies began, as @tbl-plan-dates in §4.6 shows. The Protein A plan PCP-005, for example, was approved on `{python} pa_appr`, and its first study started on `{python} pa_first`. None of the step criteria was in a plan as approved. The criteria were introduced later, while the Protein A data were being analysed, when it became clear that the capture pool could not be judged against the drug-substance criterion (§3.2). They were then written into the text of every step plan when the Version 1.0 package was compiled. The approved plans were not revised to carry them. The Version 1.0 plans therefore read as if the criteria had been approved before execution.
 
-The master plan, approved on `{python} pcmp_appr`, did not prevent this. As §3.1 shows, it required a step criterion without fixing one. The record therefore holds no protocol, approved before execution, that contains a step criterion. A criterion added to a protocol after its data are known does not meet the purpose of a protocol [@fda2011].
+The master plan PCMP-001, approved on `{python} pcmp_appr`, did not prevent this. As §3.1 shows, it required a step criterion without fixing one. The record therefore holds no protocol, approved before execution, that contains a step criterion. A criterion added to a protocol after its data are known does not meet the purpose of a protocol [@fda2011].
 
 ## F2. Safety factors chosen so that each step passed at its set-point
 
-Each criterion set by R1 was the drug-substance criterion carried back through the nominal downstream clearance of this campaign, then divided by a safety factor. The factors ranged from `{python} f1(m_lo)` to `{python} f1(m_hi)`, and no document records why they differ.
+For an impurity that downstream steps clear, Version 1.0 carried each drug-substance criterion back through the nominal downstream clearance of this campaign and then divided it by a safety factor (R1 in @tbl-criteria-change). The factors ranged from `{python} f1(m_lo)` to `{python} f1(m_hi)`, and no document records why they differ.
 
-@tbl-margins sets each factor against the value the step's own response surface model predicts at its set-point. The last column gives the largest factor at which that set-point value would still have met the criterion. `{python} sp_phrase` Had the largest factor used, `{python} f1(m_hi)`, been applied to every step, the set-point value would have failed its criterion for `{python} n_fail_uniform` of the outputs in @tbl-margins. The analysis records show that a factor was reduced where the limit would otherwise have fallen below the value the step produces at its set-point. The factors were therefore chosen with the result in view.
+@tbl-margins sets each factor against the value that the response surface model of the step predicts at its set-point. The last column gives the largest factor at which that set-point value would still have met the criterion. Every step meets its Version 1.0 criterion at its own set-point. Had the largest factor used, `{python} f1(m_hi)`, been applied to every step, the set-point value would have failed its criterion for `{python} n_fail_uniform` of the attributes in @tbl-margins. The analysis records show that a factor was reduced where the limit would otherwise have fallen below the value the step produces at its set-point.
 
 ```{python}
 #| output: asis
-md(margin_show, widths=[13, 14, 19, 8, 13, 11, 12])
-print()
-print(": Safety factors of the Version 1.0 step criteria against the value each step produces at its set-point. The third column is the concentration above which the downstream steps, at the nominal clearance of this campaign, can no longer bring the batch to specification. {#tbl-margins}")
+T.frame(margin_show,
+        caption="Safety factors of the Version 1.0 step criteria against the value each step produces at its set-point.",
+        label="tbl-margins", merge=["Step"], header=margin_header, notes=margin_notes,
+        align=["P{2.4cm}", "P{3.0cm}", "r", "r", "r", "r", "r"]).show()
 ```
 
-That level itself rests on nominal clearance. A criterion carried back through the clearance each downstream step delivers at its set-point assumes that every downstream step performs at its set-point. The safety factor stood in for the worst case of downstream performance without being derived from it. The viral clearance criteria of R3 have the same weakness. Each was the cumulative requirement less the nominal clearance of the other steps in this campaign.
+The highest pool level in @tbl-margins assumes that every downstream step clears as much as it does at its set-point. A downstream step that runs elsewhere in its NOR may clear less, and the downstream steps can then bring a lower pool level within the drug-substance criterion. Version 1.0 divided each criterion by a safety factor to cover this. The factor was chosen. It was not calculated from how much less the downstream steps clear within their NORs.
+
+The Version 1.0 viral clearance criteria for low-pH viral inactivation and anion exchange rest on nominal clearance in the same way. Each was the cumulative requirement less the clearance of the other two steps in the viral clearance summary of Version 1.0. That summary gives a single value for each step and virus, at the set-points. For XMuLV it gives `{python} vcs_xm_txt`. For MVM it gives `{python} vcs_mvm_txt`. The Version 1.0 XMuLV criterion for low-pH viral inactivation, for example, was `{python} vcs_example`. The Version 1.0 virus filtration criteria were the virus filtration values of the same summary less `{python} f"{v_allow:g}"` log10. None of these summary values is a mean of the response surface models in @tbl-viral.
 
 ## F3. Capability limits judged against the data they came from
 
-The four bioreactor criteria set by R2 were the mean plus `{python} f"{sigma:g}"` SD of the commercial-scale capability simulation. @tbl-cap-limits recomputes each one. The recomputed value and the printed criterion agree to the second decimal place.
+For the glycans and acidic variants, Version 1.0 set `{python} n_capbased` bioreactor criteria at the mean plus `{python} f"{sigma:g}"` SD of the commercial-scale capability simulation (R2 in @tbl-criteria-change). @tbl-cap-limits recomputes each one. The recomputed value and the printed criterion agree to the second decimal place.
 
 ```{python}
 #| output: asis
-md(cap_show, widths=[18, 11, 11, 11, 13, 13])
-print()
-print(f": Version 1.0 bioreactor criteria recomputed from the capability data. Mean and SD are those of the simulated drug substance at commercial scale. {{#tbl-cap-limits}}")
+T.frame(cap_show,
+        caption="Version 1.0 bioreactor criteria recomputed from the capability data. Mean and SD are those of the simulated drug substance at commercial scale.",
+        label="tbl-cap-limits",
+        header={"Capability mean": "Capability\nmean", "Capability SD": "Capability\nSD",
+                f"Mean + {sigma:g} SD": f"Mean +\n{sigma:g} SD",
+                "Version 1.0 upper criterion": "Version 1.0\nupper criterion",
+                "Drug-substance criterion": "Drug-substance\ncriterion"},
+        align=["P{3.2cm}", "r", "r", "r", "r", "r"]).show()
 ```
 
-The capability simulation draws every parameter inside its NOR. The proven acceptable range analysis with the other parameters in their NORs then asked whether the predictive bound stayed within the alert limit while the other parameters varied inside the same NOR. For a normal distribution, about `{python} f2(exceed_pct)` % of the batches lie above a one-sided limit at the mean plus `{python} f"{sigma:g}"` SD, whatever the process. A limit of this kind is an alert limit for trending. It is not an acceptance criterion, because it carries no information about what the product needs.
+The capability simulation draws every parameter inside its NOR. The proven acceptable range analysis then asked whether the upper 95 % prediction limit stayed within the alert limit while the other parameters varied inside the same NOR. For a normal distribution, about `{python} f2(exceed_pct)` % of the batches lie above a one-sided limit at the mean plus `{python} f"{sigma:g}"` SD, whatever the process. A limit of this kind is an alert limit for trending. It is not an acceptance criterion, because it carries no information about what the product needs.
 
-The consequence is visible in PCR-003 Version 1.0. It reported a corner of the NOR at which predicted afucosylation exceeded its alert limit while meeting the drug-substance criterion by a wide margin. Several proven acceptable ranges at the bioreactor did not cover the whole NOR for the same reason (§6.3).
+An alert limit of this kind can be reached inside the NOR by a batch that is well within the drug-substance criterion. The bioreactor report PCR-003 Version 1.0 reported such a case, a corner of the NOR at which predicted afucosylation exceeded its alert limit while meeting the drug-substance criterion by a wide margin. For the same reason, several proven acceptable ranges at the bioreactor stopped short of the NOR because they reached an alert limit, not the drug-substance criterion (§6.3).
 
 ## F4. Acidic variants assessed against one end of a two-sided range
 
-The register gives acidic variants a two-sided criterion of `{python} f"{ds_acid_lo:g}"` % to `{python} f"{ds_acid_hi:g}"` %, and the Version 1.0 capability table printed that range. The capability index beside it was computed against the upper end alone and printed as `{python} f1(acid_cpu)`. The simulated drug substance has a mean of `{python} f1(acid_mean)` % and an SD of `{python} f2(acid_sd)` %, so the lower end of the range is much nearer the distribution than the upper end. Computed against both ends, the index is `{python} f2(acid_cpk)`, and the lower end governs it.
+The register gives acidic variants a two-sided criterion of `{python} f"{ds_acid_lo:g}"` % to `{python} f"{ds_acid_hi:g}"` %, and the Version 1.0 capability table printed that range. The capability index beside it was computed against the upper end alone and printed as `{python} f1(acid_cpu)`. The simulated drug substance has a mean of `{python} f1(acid_mean)` % and an SD of `{python} f2(acid_sd)` %. Computed against both ends, the index is `{python} f2(acid_cpk)`, because the mean lies `{python} f1(acid_z_lo)` SD above the lower limit and `{python} f1(acid_z_hi)` SD below the upper limit. The same one-sided treatment was used in the proven acceptable range analysis. @tbl-criteria-change records the Version 1.0 alert limit for acidic variants as an upper limit only, and PCR-003 Version 1.0 judged its acidic variant ranges against that upper limit alone.
 
-Two statements in Version 1.0 rested on the one-sided value. PCMR-001 reported the lowest capability index of the drug substance as `{python} f2(v1_min_cpk)`, for MVM clearance. It also reported that no simulated batch fell outside an acceptance criterion. Against both ends of the acidic variant range, the simulation puts `{python} noos_phrase` outside it.
+Two statements in PCMR-001 Version 1.0 rested on the one-sided capability index. It reported the lowest capability index of the drug substance as `{python} f2(v1_min_cpk)`, for `{python} v1_min_name`. A capability index for a validated clearance claim, computed per batch, has no clear meaning, and it is quoted here only as PCMR-001 printed it. PCMR-001 also reported that no simulated batch fell outside an acceptance criterion. Against both ends of the acidic variant range, the simulation puts `{python} noos_phrase` outside it.
 
 ## F5. Approval and execution dates missing from the records
 
-The Version 1.0 records misstated when the plans were approved and did not state when the studies ran. Every Version 1.0 title block carried the date `{python} REV1_DATE`. That was the approval date of the reports and the date on which the package was compiled. For the plans, it replaced the date of approval. @tbl-plan-dates sets the approval date of each plan against the start of its first study and against the date its title block printed. Every plan was approved before its first study began. Read from the title blocks, every plan appeared to have been approved after its studies had run.
+The Version 1.0 records misstated when the plans were approved and did not state when the studies ran. Every Version 1.0 title block carried the date `{python} REV1_DATE`. That was the approval date of the reports and the date on which the package was compiled. For the plans, it replaced the date of approval. @tbl-plan-dates sets the approval date of each plan against the start of its first study. Every plan was approved before its first study began. Read from the title blocks, every plan appeared to have been approved after its studies had started.
 
 ```{python}
 #| output: asis
-md(plan_show, widths=[9, 20, 12, 12, 14])
-print()
-print(": Approval date of each step plan, against the start of its first study and the date printed in its Version 1.0 title block. {#tbl-plan-dates}")
+T.frame(plan_show,
+        caption=f"Approval date of each step plan, against the start of its first study. The Version 1.0 title block of every plan printed {REV1_DATE} instead of the approval date.",
+        label="tbl-plan-dates",
+        header={"First study started": "First study\nstarted"},
+        align=["l", "P{4.0cm}", "l", "l"]).show()
 ```
 
-The Version 1.0 reports gave no execution date for any study. Their equipment tables recorded each system as in calibration at execution and gave the next calibration due date. `{python} due_phrase` A reader of the record could not confirm calibration at the time of use, and the tables appeared to cite expired calibrations.
+The Version 1.0 reports gave no execution date for any study. Their equipment tables recorded each instrumented system as in calibration at execution and gave the next calibration due date. `{python} due_phrase` A reader of the record could not confirm calibration at the time of use, and the tables appeared to cite expired calibrations.
 
-The execution windows were recovered from the study records and are given in @tbl-calibration. Each study in @tbl-calibration closed before the calibration of the equipment it used fell due. The narrowest margin is at the UF/DF study, which closed on `{python} ufdf_end` against a calibration due on `{python} tff_due`. No plan was approved after its studies, and none of these studies was run on equipment out of calibration.
+The execution windows were recovered from the study records. @tbl-calibration gives them for the `{python} n_cw_studies` studies that ran on the `{python} n_cw_eq` instrumented systems. Every one of these studies closed before the calibration of its system fell due. The smallest margin is at study `{python} cw_near_study` at the `{python} cw_near_step` step, on the `{python} cw_near_desc` `{python} cw_near_eq`. It closed on `{python} cw_near_end`, `{python} cw_near_days` days before the calibration due on `{python} cw_near_due`.
 
 ```{python}
 #| output: asis
 T.calibration_windows().show()
 ```
 
-## F6. Fragments by SEC in the capture matrices
+## F6. Fragments by SEC in the Protein A and low-pH viral inactivation pools
 
 In the comparability study S-CEX-FRC at cation exchange, executed from `{python} frc_start` to `{python} frc_end`, fragments were measured by SEC and by nrCE-SDS on the same samples. @tbl-sec-cesds gives every replicate.
 
@@ -618,127 +1202,158 @@ In the comparability study S-CEX-FRC at cation exchange, executed from `{python}
 T.method_comparability().show()
 ```
 
-On average, SEC read fragments higher than nrCE-SDS by `{python} f1(d_up_lo)` to `{python} f1(d_up_hi)` percentage points in the Protein A pool, the VI pool and the CEX load. From the CEX pool onward, the mean difference between the two methods was no more than `{python} f1(d_dn_abs)` percentage points. The difference follows the host cell protein content of the sample. Part of the host cell protein elutes in the low molecular weight window of SEC, where it is counted with the clipped antibody species. The excess can therefore be no larger than the host cell protein in the sample. Cation exchange removes most of the host cell protein, and from its pool onward the excess is close to zero. In the Protein A pool, SEC reported a mean of `{python} f1(sec_pa)` % fragments, where nrCE-SDS reported `{python} f1(ce_pa)` %. The excess there is about `{python} f"{d_pa_share:.0f}"` % of the fragment level that nrCE-SDS measures. SEC fragment results from the capture matrices are therefore biased high by an amount that matters for a fragment criterion.
+On average, SEC read fragments higher than nrCE-SDS by `{python} f2(d_up_lo)` to `{python} f2(d_up_hi)` percentage points in the Protein A pool, the VI pool and the CEX load. From the CEX pool onward, the mean difference between the two methods was no more than `{python} f2(d_dn_abs)` percentage points. The difference follows the host cell protein content of the sample. Part of the host cell protein elutes in the low molecular weight window of SEC, where it is counted with the clipped antibody species. The excess can therefore be no larger than the host cell protein in the sample. Cation exchange removes most of the host cell protein, and from its pool onward the excess is close to zero. In the Protein A pool, SEC reported a mean of `{python} f2(sec_pa)` % fragments, where nrCE-SDS reported `{python} f2(ce_pa)` %. The excess there is about `{python} f"{d_pa_share:.0f}"` % of the fragment level that nrCE-SDS measures, and about `{python} f"{sec_share_crit:.0f}"` % of the Protein A fragment criterion of `{python} f2(pa_frag_crit)` % (@tbl-iac). SEC fragment results from the Protein A pool and the low-pH viral inactivation pool are therefore biased high by an amount that would use a large part of a fragment criterion.
 
-The method decision `{python} AMD["id"]` was taken on `{python} AMD["date"]` on these data. From that date, fragments were measured by nrCE-SDS in every study, at every step, so that one method spans the train. The CEX response surface study, which ran from `{python} cexr_start` to `{python} cexr_end` and so spanned the decision, measured fragments by both methods in parallel. The retained response surface samples of Protein A and viral inactivation were retested by nrCE-SDS from `{python} ret_start` to `{python} ret_end`. The screening samples had not been retained. Their SEC results are kept and marked as not used. The re-executed anion exchange design (DEV-008-01) started on `{python} aexr_start`, after the decision, and measured fragments by nrCE-SDS. Its invalidated first execution had used SEC. Fragments were not in the scope of the bioreactor design. @tbl-methods-by-study shows which method ran in which study.
+The decision `{python} AMD["id"]` to measure fragments by nrCE-SDS was taken on `{python} AMD["date"]` on these data. From that date, fragments were measured by nrCE-SDS in every study, at every step, so that one method spans the train. The CEX response surface study, which ran from `{python} cexr_start` to `{python} cexr_end` and so spanned the decision, measured fragments by both methods in parallel. The retained response surface samples of Protein A and viral inactivation were retested by nrCE-SDS from `{python} ret_start` to `{python} ret_end`. The screening samples had not been retained. Their SEC results are kept and marked as not used. The re-executed anion exchange design (DEV-008-01) started on `{python} aexr_start`, after the decision, and measured fragments by nrCE-SDS. Its invalidated first execution had used SEC. Fragments were not in the scope of the bioreactor design. @tbl-methods-by-study shows which method ran in which study.
 
 ```{python}
 #| output: asis
 T.methods_by_study().show()
 ```
 
-The decision and the retests predate Version 1.0. However, the Version 1.0 documents did not report fragments, their register carried no fragment attribute, and none of them cited `{python} AMD["id"]`. No procedure required that a method decision taken during a campaign be assessed against the approved plans and, where it changed them, be put into effect by a plan amendment. AMD-001 therefore never reached the documents.
+The decision `{python} AMD["id"]` and the nrCE-SDS retests predate Version 1.0. However, the Version 1.0 documents did not report fragments, their register carried no fragment attribute, and none of them cited `{python} AMD["id"]`. No procedure required that a method decision taken during a campaign be assessed against the approved plans and, where it changed them, be put into effect by a plan amendment. The decision to measure fragments by nrCE-SDS therefore never reached the documents.
 
 # Root cause
 
-The root cause is that PCMP-001 Version 1.0 required a criterion for each step but gave no rule for deriving one (F1). When the Protein A analysis showed that an intermediate cannot be judged against a drug-substance criterion, the criteria were derived during the analysis, by the people analysing the data, with the results in view. Every rule they chose drew on data from the studies being judged (§3.3).
+The root cause is that PCMP-001 Version 1.0, the master plan, required a criterion for each step but gave no rule for deriving one (finding F1). When the Protein A analysis showed that an intermediate cannot be judged against a drug-substance criterion, the criteria were derived during the analysis, by the people analysing the data, with the results in view. Every rule they chose drew on the nominal results or the capability data of the studies being judged (§3.3).
 
 Four causes contributed.
 
-1. SOP-1002 did not require that the acceptance criteria and their basis be approved in the protocol before execution. Criteria set after execution could therefore be added to the plan text when the package was compiled, without a revision of the approved plan (F1).
-2. Neither the plans nor the master plan defined the downstream performance that a step criterion protects against. A safety factor was used in place of a worst case, and its size was set step by step (F2). Capability data were used where no downstream step changes the attribute (F3).
-3. No second review checked the specification type used in the capability calculation against the register (F4), or the dates in the title blocks and study records against the approval and equipment records (F5).
-4. No procedure required that a method decision be assessed against the approved plans and put into effect by plan amendment (F6).
+1. SOP-1002 did not require that the acceptance criteria and their basis be approved in the protocol before execution. Criteria set after execution could therefore be added to the plan text when the package was compiled, without a revision of the approved plan (finding F1, criteria defined after the data were seen).
+2. Neither the plans nor the master plan defined how much less a downstream step may clear within its NOR, which is what a step criterion has to allow for. A chosen safety factor was used instead, and its size was set step by step (finding F2). Capability data were used where no downstream step changes the attribute (finding F3).
+3. No second review checked whether a capability calculation used a one-sided or a two-sided criterion as the register gives it (finding F4, acidic variants). No second review checked the dates in the title blocks and study records against the approval and equipment records (finding F5).
+4. No procedure required that a method decision be assessed against the approved plans and put into effect by plan amendment (finding F6, fragments by SEC).
 
 # Impact assessment
 
 ## The Version 2.0 criteria
 
-The intermediate acceptance criteria were derived a priori by the investigation, by one rule, and CA1 issues them in PCMP-001 Version 2.0. Each drug-substance criterion is carried backward through the train, using the worst case each downstream step showed on the platform (X-Mab, Y-Mab and Z-Mab). That is the lowest fold clearance and the largest increase. No margin is applied. The glycans keep their drug-substance criterion, because no downstream step changes them. Each viral clearance step is held to its platform claim, and the claims sum to the cumulative requirement, `{python} f"{xm_sum:.2f}"` against `{python} f"{xm_req:g}"` log10 for XMuLV and `{python} f"{mvm_sum:.2f}"` against `{python} f"{mvm_req:g}"` log10 for MVM.
+Under corrective action CA1, the investigation defined the intermediate acceptance criteria and the rules for judging against them. Corrective action CA1 then issues them in PCMP-001 Version 2.0, the master plan, effective `{python} REV2_DATE`. The investigation closed on `{python} CLOSED`, before that date, and the re-analysis in this section applied the rules as CA1 defined them.
 
-@tbl-iac gives the `{python} n_iac` criteria with their derivation. Of these, `{python} n_iac_ds` are the drug-substance criterion applied directly, `{python} n_iac_back` are carried back through the platform worst case, and `{python} n_iac_claim` are platform viral clearance claims.
+Each drug-substance criterion is carried backward through the train, using the worst case each downstream step showed on the platform (X-Mab, Y-Mab and Z-Mab). The platform worst case is the lowest fold clearance or the largest increase seen on those products. No margin is applied. The glycans keep their drug-substance criterion, because no downstream step changes them. Each viral clearance step is held to its platform claim. The claims sum to the cumulative clearance that the CQA register requires of the process, taken from the A-Mab case study [@amab2009]. The sums are `{python} f"{xm_sum:.2f}"` against a requirement of `{python} f"{xm_req:g}"` log10 for XMuLV and `{python} f"{mvm_sum:.2f}"` against `{python} f"{mvm_req:g}"` log10 for MVM.
+
+Corrective action CA1 also defined three rules that the re-analysis applies.
+
+1. Verification against the A-Mab data replaces a platform worst case with the 95 % confidence bound of the A-Mab worst case within the NOR of the downstream step, in either direction. Where the bound is worse than the platform value, the criteria upstream tighten. Where it is better, they widen, but only if the model passes the adequacy tests of PCMP-001 Version 2.0 (R² less predicted R² at most `{python} f"{MAX_GAP:g}"`, and no lack of fit at the `{python} f"{LOF_ALPHA:g}"` level). The point prediction is never used to move a criterion.
+2. A scale-down model is qualified for an output when its offset (the mean of the scale-down set-point runs less the mean of the manufacturing-scale batches) is known precisely enough that the conclusion over the NOR is the same at either end of the `{python} OFF_CI` % confidence interval of the offset. A qualified model may differ in mean from manufacturing scale. Every Version 2.0 judgement subtracts the offset, so results are stated at manufacturing scale.
+3. A quality attribute is judged per batch, on the 95 % prediction interval of a single batch. Viral clearance is judged on the mean predicted log reduction factor (LRF) at the least favourable combination of NOR low, set-point and NOR high of the other parameters.
+
+@tbl-iac gives the `{python} n_iac` criteria with their derivation. Of these, `{python} n_iac_ds` are the drug-substance criterion applied directly, `{python} n_iac_back` are carried back through the downstream steps, and `{python} n_iac_claim` are platform viral clearance claims. When the platform worst cases were verified (§6.2), `{python} n_tight` of the back-calculated criteria were tightened and `{python} n_wid` were widened. The criterion for `{python} both_txt` is counted in both, because one downstream step tightened it and another widened it.
 
 ```{python}
 #| output: asis
 T.iac_derivation().show()
 ```
 
-Applying these criteria to studies already executed is acceptable because their derivation uses no data from those studies. The drug-substance criteria come from the register and the worst cases from the platform products.
+This campaign's data enter the Version 2.0 criteria, as they entered the Version 1.0 criteria. The difference lies in how they enter. Version 1.0 set its criteria after the data were seen, from the nominal performance of the downstream steps, with a safety factor chosen step by step. Version 2.0 starts from the platform worst case, by a rule written before any report applied it. This campaign's data can then move a criterion only through the 95 % confidence bound of a downstream step's worst case within its NOR, in either direction. The data of a step never set its own criterion.
 
 ## Verification of the platform worst cases
 
-The platform worst cases are assumptions about A-Mab, and each was checked against the data of the step it describes. The test is the value the response surface model predicts within the NOR. The value observed at the edges of the characterization range is shown for information. For host cell protein at cation exchange, the edge value of `{python} f1(cex_hcp_edge)` falls short of the platform fold clearance of `{python} f1(cex_hcp_assumed)`, but the value predicted within the NOR, `{python} f1(cex_hcp_nor)`, meets it. @tbl-iac-verification gives the result. Of the `{python} n_ver` assumptions that could be tested, `{python} n_ver_met` were confirmed.
+The platform worst cases are assumptions about A-Mab. Each was checked against the data of the downstream step it describes, under the first rule of CA1 in §6.1 (the 95 % confidence bound of the A-Mab worst case within the NOR replaces the platform value). The value observed at the edges of the characterization range is shown for information. @tbl-iac-verification gives the result. Of the `{python} n_ver` assumptions that could be tested, `{python} n_ver_met` were confirmed. For `{python} n_ver_wsup` of them the 95 % bound was better than the platform value on an adequate model, and the criteria upstream were recalculated with the bound. For `{python} n_ver_better_inadequate` more the bound was also better, but the model failed an adequacy test, so the platform value stands.
 
 ```{python}
 #| output: asis
 T.worst_case_verification().show()
 ```
 
-One assumption was not confirmed. The platform worst case for aggregate at cation exchange is a fold clearance of `{python} f1(cex_agg_assumed)`. Within its NOR, the response surface model of this campaign predicts a fold clearance of `{python} f2(cex_agg_nor)`. The criteria upstream of cation exchange were recalculated with the A-Mab value, and `{python} n_tight` aggregate criteria were tightened, at the `{python} tight_steps` steps. Whether any proven acceptable range moved because of this is stated in the affected reports, from their own analysis.
+At the edges of the characterization range, cation exchange cleared host cell protein `{python} f1(cex_hcp_edge)`-fold, short of the platform worst case of `{python} f1(cex_hcp_assumed)`-fold. Within the NOR, the model predicts `{python} f1(cex_hcp_nor)`-fold, with a 95 % confidence bound of `{python} f1(cex_hcp_bound)`-fold. The edges of the characterization range lie outside the NOR, so the edge value does not decide the criterion. The verification used the models that `{python} INV2["id"]` corrective action CA3 selects for each output (§2). The cation exchange model passes the adequacy tests, so the bound of `{python} f1(cex_hcp_bound)`-fold replaced the platform value. `{python} hcp_aex_text` In all, `{python} n_wid` criteria were widened, for `{python} wid_list`. @tbl-par-change in §6.3 gives the ranges that widened as a result.
 
-The criterion for leached Protein A at the Protein A step rests on two platform worst cases, for cation exchange and anion exchange, that no response of this campaign could test (n.t. in @tbl-iac-verification). This is acceptable. The model predicts `{python} f2(lpa_sp)` ppm at the set-point and at most `{python} f2(lpa_hi)` ppm over the NOR (@tbl-results). That is below the drug-substance criterion of `{python} f"{ds_lpa:g}"` ppm itself, so the pool would meet the drug-substance criterion even if no downstream step cleared any leached Protein A.
+One assumption was not confirmed. The platform worst case for aggregate at cation exchange is a fold clearance of `{python} f1(cex_agg_assumed)`. Within its NOR, the response surface model of this campaign predicts a fold clearance of `{python} f2(cex_agg_nor)`, with a 95 % confidence bound of `{python} f2(cex_agg_bound)`. The aggregate criteria upstream of cation exchange were recalculated with the bound, and the `{python} n_tight` aggregate criteria at the `{python} tight_steps` steps were tightened. At the bioreactor the same criterion was also widened, because the 95 % bound of the aggregate increase at low-pH viral inactivation, `{python} f2(vi_agg_bound)` percentage points, is smaller than the platform value of `{python} f2(vi_agg_assumed)`. `{python} tight_phrase`
+
+The criterion of `{python} T.num(lpa_crit)` ppm for leached Protein A at the Protein A step rests on two platform worst cases, for cation exchange and anion exchange, that no response of this campaign could test (not a response in @tbl-iac-verification). Together they assume a clearance of `{python} f1(lpa_assumed)`-fold. Judged per batch at manufacturing scale, the upper 95 % prediction limit for the Protein A pool is at most `{python} f2(lpa_hi)` ppm over the NOR (@tbl-results). It meets the step criterion. For a batch at that level to meet the drug-substance criterion of `{python} f"{ds_lpa:g}"` ppm, the downstream steps need to clear only `{python} f2(lpa_need)`-fold. The untested platform worst cases therefore carry little of the weight of this criterion.
 
 ## Impact by document
 
-All twenty documents in @tbl-docs are to be reissued at Version 2.0, effective `{python} REV2_DATE` (CA1 to CA3). PCMP-001 will define the criteria of §6.1. The step plans PCP-003 to PCP-010 will state them with their basis. The step reports will judge the same models against them, and PCMR-001 will consolidate the result. PTP-001 and RA-001 are reissued with the package. Each Version 2.0 document will say what changed in it under "Changes in this revision" and refer to the findings by number.
+All `{python} n_docs_v1` documents in @tbl-docs are to be reissued at Version 2.0, effective `{python} REV2_DATE`. Corrective action CA1 reissues the master plan PCMP-001 with the criteria and rules of §6.1. Corrective action CA2 amends the step plans PCP-003 to PCP-010 to state the criteria with their basis. Corrective action CA3 reissues the step reports, the master report PCMR-001, the Process Transfer Plan PTP-001 and the Pre-Characterization Risk Assessment RA-001. The step reports judge each step against the criteria, on the models selected under `{python} inv2_id` (§2), and PCMR-001 consolidates the result. Each Version 2.0 document will say what changed in it under "Changes in this revision" and refer to the findings by number.
 
-@tbl-par-change compares the proven acceptable ranges, with the other parameters varying within their NORs, in each report with a DoE, as Version 1.0 reported them and as the re-analysis gives them. The reports without a DoE, PCR-004 and PCR-010, contain no such ranges. Their revision will record the execution windows (F5).
+@tbl-par-change compares the proven acceptable ranges in each report with a DoE, as Version 1.0 reported them and as the re-analysis gives them. These are the ranges computed with the other parameters varying within their NORs. The reports without a DoE, the harvest report PCR-004 and the UF/DF report PCR-010, contain no such ranges. Their revision will record the execution windows (finding F5).
 
 ```{python}
 #| output: asis
-md(par_show, widths=[9, 18, 10, 13, 8, 12, 9, 11])
-print()
-print(": Proven acceptable ranges with the other parameters varying within their NORs, in Version 1.0 and in the re-analysis, by report. New entries are the fragment ranges measured by nrCE-SDS. {#tbl-par-change}")
+T.frame(par_show,
+        caption="Proven acceptable ranges with the other parameters varying within their NORs, in Version 1.0 and in the re-analysis, by report.",
+        label="tbl-par-change",
+        header={"In Version 1.0": "In\nVersion 1.0", "No range": "No\nrange^b)^", "Moved": "Moved^a)^",
+                "New": "New^c)^"},
+        align=par_align, notes=par_notes, notes_per_row=True).show()
 ```
 
-Where a range changed, it widened far more often than it narrowed. Of the `{python} n_par_wider` wider ranges, `{python} brx_wider` are at the bioreactor. There, `{python} brx_wider_glycan` glycan ranges widened because the R2 capability limits (F3) gave way to the drug-substance criteria, and `{python} brx_wider_agg` aggregate ranges widened because an R1 limit with a safety factor (F2) gave way to a back-calculated criterion. Most of the wider ranges at the other steps follow from the R1 safety factors. At cation exchange, the Version 1.0 criterion of `{python} T.num(cex_agg_crit)` % HMW was the drug-substance criterion divided by a safety factor of `{python} f1(cex_agg_margin)`. Against it, the proven acceptable range for protein load, with the other parameters varying within their NORs, was `{python} cex_load_v1` g/L resin, which did not reach the upper end of the protein load NOR at `{python} f"{cex_load_nor[1]:g}"` g/L resin. Against the Version 2.0 criterion of `{python} f"{cex_ds_agg_v2:g}"` %, the range is `{python} cex_load_v2` g/L resin. The upper load NOR is supported. At the bioreactor, the range for dissolved CO2 judged on galactosylation, computed the same way, was `{python} brx_gal_v1` mmHg at Version 1.0, which did not reach the lower end of the NOR at `{python} f"{brx_co2_nor[0]:g}"` mmHg. Judged against the drug-substance criterion, it is `{python} brx_gal_v2` mmHg.
+Of the `{python} n_par_changed` ranges that changed, `{python} n_par_wider` widened. Of these, `{python} brx_wider` are at the bioreactor. There, `{python} brx_wider_glycan` glycan ranges widened because the capability alert limits of Version 1.0 (finding F3) gave way to the drug-substance criteria. A further `{python} nw(brx_wider_agg)` aggregate ranges widened because the Version 1.0 aggregate limit, divided by a safety factor (finding F2), gave way to a back-calculated criterion with no margin. At the other steps, `{python} n_wider_other_r1` of the `{python} n_wider_other` wider ranges belong to criteria that Version 1.0 had divided by a safety factor. `{python} wider_rest_phrase`
 
-Of the `{python} n_par_narrow` ranges that narrowed, `{python} _ps['viral_inactivation']['narrower']` at low-pH viral inactivation and `{python} _ps['aex']['narrower']` at anion exchange narrowed because a viral clearance criterion rose to its platform claim, and `{python} _ps['bioreactor']['narrower']` at the bioreactor narrowed although no criterion there became tighter, because acidic variants are now judged against both ends of their range (F4). At low-pH viral inactivation the XMuLV criterion rose from `{python} f2(vi_xm_v1)` to the platform claim of `{python} f"{vi_xm_v2:g}"` log10, and the inactivation pH range narrowed from `{python} vi_ph_v1` to `{python} vi_ph_v2` as a result. At the bioreactor no criterion became tighter, yet `{python} brx_acid_changed` of the acidic variant ranges changed and none widened. Acidic variants are now judged against both ends of their range (F4), and the lower limit of `{python} f"{ds_acid_lo:g}"` % constrains them.
+At cation exchange, the Version 1.0 aggregate criterion of `{python} T.num(cex_agg_crit)` % HMW was the drug-substance criterion divided by a safety factor of `{python} f1(cex_agg_margin)`. Against it, the proven acceptable range for protein load, with the other parameters varying within their NORs, was `{python} cex_load_v1` g/L resin. That range did not reach the upper end of the protein load NOR at `{python} f"{cex_load_nor[1]:g}"` g/L resin. Against the Version 2.0 criterion of `{python} f"{cex_ds_agg_v2:g}"` %, the range is `{python} cex_load_v2` g/L resin, and it covers the upper end of the NOR. At the bioreactor, the range for dissolved CO2 judged on galactosylation, computed the same way, was `{python} brx_gal_v1` mmHg at Version 1.0. It did not reach the lower end of the NOR at `{python} f"{brx_co2_nor[0]:g}"` mmHg. Judged against the drug-substance criterion, it is `{python} brx_gal_v2` mmHg.
 
-@tbl-results gives each re-analysed step output against its Version 2.0 criterion, from the response surface model over the NOR. `{python} res_phrase` @tbl-viral sets the viral clearance claims against the step results of this campaign, and `{python} viral_phrase`
+The ranges that did not widen have three causes. At the bioreactor, the only Version 2.0 limit stricter than its Version 1.0 counterpart is the lower limit for acidic variants, which Version 1.0 did not apply (finding F4, §4.5). As a result, `{python} nw(brx_acid_changed)` of the acidic variant ranges there changed. Of these, `{python} brx_acid_phrase`. Judged against the upper limit alone, every one of them would span the whole characterization range, so the lower limit of `{python} f"{ds_acid_lo:g}"` % now sets them. Acidic variants fall as `{python} acid_unc_name` rises, in this campaign's response surface model and in the response surface estimates of the published A-Mab case study [@amab2009, Table 3.16]. For `{python} acid_unc_name`, the range is therefore `{python} acid_unc_par` `{python} acid_unc_unit`, and it no longer reaches the upper end of the NOR at `{python} f"{acid_unc_nor_hi:g}"` `{python} acid_unc_unit`.
+
+At low-pH viral inactivation, the XMuLV criterion rose from the Version 1.0 value of `{python} f2(vi_xm_v1)` log10 to the platform claim of `{python} f"{vi_xm_v2:g}"` log10, and XMuLV clearance is now judged at the least favourable combination of the other parameters. The XMuLV clearance of low-pH viral inactivation therefore no longer gives a proven acceptable range `{python} vi_none_phrase`. For inactivation pH, Version 1.0 had reported `{python} vi_ph_v1`. At anion exchange, the viral clearance criteria also rose to the platform claims and are also judged at the least favourable combination. The load pH ranges there narrowed slightly, for `{python} aex_narrow_txt`.
+
+@tbl-results gives each pool attribute of each step against its Version 2.0 criterion over the NOR as characterized, at manufacturing scale. Each is judged on the 95 % prediction interval for a single batch, from the response surface model that Version 1.0 fitted (§2). `{python} qa_phrase`
+
+For acidic variants at the production bioreactor step, the lower 95 % prediction limit for a single batch falls to `{python} T.num(acid_lpl)` %, against the lower limit of `{python} T.num(acid_lo_c)` %. In this campaign's response surface model, `{python} acid_dir_txt`. The published A-Mab case study reports the same directions [@amab2009, Table 3.16]. The limit is therefore lowest at the corner of the NOR where `{python} acid_corner_txt`. `{python} acid_nsig_txt` With every parameter at its set-point the batch interval meets the criterion. The bioreactor report PCR-003 Version 2.0 reports the resulting range for `{python} acid_unc_name`, `{python} acid_unc_par` `{python} acid_unc_unit`.
 
 ```{python}
 #| output: asis
-md(res_show, widths=[14, 15, 12, 9, 13, 10])
-print()
-print(": Re-analysed step outputs against their Version 2.0 criteria. The range is that predicted by the response surface model over the corners and centre of the NOR. {#tbl-results}")
+T.frame(res_show,
+        caption="Pool attributes of each step against their Version 2.0 criteria, at manufacturing scale (the offset of the scale-down model is subtracted where one was determined). The mean and the 95 % prediction interval for a single batch come from the response surface model. The interval is taken over every combination of NOR low, set-point and NOR high of the parameters in the model.",
+        label="tbl-results", merge=["Step"],
+        header={"Mean at set-points": "Mean at\nset-points",
+                "95 % prediction interval over the NOR": "95 % prediction\ninterval over the NOR"},
+        align=["P{2.4cm}", "P{3.4cm}", "l", "r", "r", "l"]).show()
 ```
 
+@tbl-viral gives the viral clearance of each step against its platform claim, on the same response surface models as @tbl-results and at the NOR and set-points as characterized. `{python} vir_phrase` With every parameter at its set-point, the mean predicted XMuLV clearance of low-pH viral inactivation is `{python} f2(vi_xm_sp)` log10, which meets the claim of `{python} f"{vi_xm_v2:g}"` log10. At the least favourable combination, with `{python} vi_corner_txt`, it is `{python} f2(vi_xm_worst)` log10, which is below the claim. On the model that `{python} inv2_id` corrective action CA3 selects for XMuLV clearance, the claim is also not met at the least favourable combination of the NOR as characterized. On that model it is met across the NOR in force at Version 2.0. For this reason, the low-pH viral inactivation report PCR-006 Version 2.0 changes `{python} vi_nor_count` of the step. `{python} vi_nor_detail` PCR-006 gives the reason for the new set-points, which rests on how closely pH can be controlled at large scale.
+
 ```{python}
 #| output: asis
-md(viral_show, widths=[20, 8, 14, 14, 8])
-print()
-print(": Viral clearance claims against the step results of this campaign. {#tbl-viral}")
+T.frame(viral_show,
+        caption="Viral clearance of each step against its platform claim (log10). Mean predicted LRF from the response surface model, with every parameter at its set-point and at the LFC.",
+        label="tbl-viral", merge=["Step"],
+        header={"At set-points": "Mean LRF at\nset-points",
+                "At the LFC": "Mean LRF\nat the LFC"},
+        notes=[("", "LFC, least favourable combination of NOR low, set-point and NOR high of the "
+                    "other parameters. LRF, log reduction factor.")],
+        align=["P{3.0cm}", "l", "l", "r", "r", "l"]).show()
 ```
 
 ## Capability
 
-In the re-analysis, the capability of acidic variants was assessed against both ends of its range (F4). The lowest capability index of the drug substance moves from `{python} f2(v1_min_cpk)` for MVM clearance to `{python} f2(v2_min_cpk)` for acidic variants, against the lower limit of `{python} f"{ds_acid_lo:g}"` %. PCMP-001 Version 2.0 sets a capability target of `{python} f2(CPK_TARGET)`, which is common industry practice for a capable process, and a minimum of `{python} f2(CPK_MIN)`, the point at which a spread of three standard deviations reaches the criterion. `{python} thr_sentence` The re-analysis also gives the probability of a drug substance batch outside specification for each attribute, from the same simulation. For acidic variants the simulation puts `{python} noos_phrase` outside the range, and a normal fit gives `{python} big(acid_ppm)` per million. No simulated batch falls outside the range of any other attribute.
+In the re-analysis, the capability of acidic variants was assessed against both ends of its range (finding F4). The re-analysis uses the capability simulation that Version 1.0 reported, at the NOR as characterized. The lowest capability index of the drug substance moves from `{python} f2(v1_min_cpk)` for `{python} v1_min_name`, as PCMR-001 Version 1.0 printed it, to `{python} f2(v2_min_cpk)` for acidic variants, against the lower limit of `{python} f"{ds_acid_lo:g}"` %. PCMP-001 Version 2.0 sets a capability target of `{python} f2(CPK_TARGET)`, which is common industry practice for a capable process. It sets a minimum of `{python} f2(CPK_MIN)`, the point at which a spread of three standard deviations reaches the criterion. `{python} thr_sentence` The re-analysis also gives the probability of a drug substance batch outside specification for each attribute, from the same simulation. For acidic variants the simulation puts `{python} noos_phrase` outside the range, and a normal fit gives `{python} big(acid_ppm)` per million. `{python} other_oos_phrase`
 
 ## Fragments
 
-In the re-analysis, every study in scope for fragments is judged on nrCE-SDS, against the fragment criteria in @tbl-iac. SEC fragment results from the Protein A and viral inactivation matrices will be reported for information only and not used to judge a step. They could not have supported a fragment criterion at those steps, because they include host cell protein (F6).
+In the re-analysis, fragments are judged on nrCE-SDS results only, against the fragment criteria at the `{python} frag_steps_txt` steps in @tbl-iac. SEC fragment results from the Protein A pool and the low-pH viral inactivation pool will be reported for information only and not used to judge a step. They could not have supported a fragment criterion at those steps, because they include host cell protein (finding F6).
 
 ## Product impact
 
-No GMP batch of A-Mab was manufactured or dispositioned on the basis of these documents, and Version 1.0 was not used in a regulatory submission. The findings concern how the characterization data were judged. The experiments, the process and the drug-substance criteria that existed in Version 1.0 are unchanged. Version 2.0 adds one drug-substance criterion, for fragments, at `{python} T.crit(0, ds_frag, "upper")` %. There is no product impact.
+No GMP batch of A-Mab was manufactured or dispositioned on the basis of these documents, and Version 1.0 was not used in a regulatory submission. The findings concern how the characterization data were judged. The experiments and the drug-substance criteria that existed in Version 1.0 are unchanged. The process is unchanged except at low-pH viral inactivation, where PCR-006 Version 2.0 moves the NOR and the set-points (§6.3). Version 2.0 adds one drug-substance criterion, for fragments, at `{python} T.crit(0, ds_frag, "upper")` %. There is no product impact.
 
 # Corrective and preventive actions
 
-The actions in @tbl-capa follow from the root cause and the contributing causes in §5. All six actions were open at closure and are tracked to their due dates in the CAPA system [@ichq10]. The retest of retained samples by nrCE-SDS, which finished on `{python} ret_end` under `{python} AMD["id"]`, is not an action of this investigation. It is a prior action that F6 relies on.
+The actions in @tbl-capa follow from the root cause and the contributing causes in §5. All `{python} n_capa` actions were open at closure and are tracked to their due dates in the CAPA system [@ichq10].
 
 ```{python}
 #| output: asis
-md(capa_md, widths=[6, 46, 16, 15, 14])
-print()
-print(": Corrective (CA) and preventive (PA) actions. {#tbl-capa}")
+T.frame(capa_md,
+        caption=f"Corrective (CA) and preventive (PA) actions. Every action was {capa_status}.",
+        label="tbl-capa",
+        header={"Owner function": "Owner\nfunction"},
+        align=["l", "P{8.4cm}", "P{2.6cm}", "l"]).show()
 ```
 
-CA1 removes the root cause for this campaign, and it also answers contributing cause 2. The rule in PCMP-001 Version 2.0 fixes every step criterion before any study is judged against it, defines the downstream worst case each criterion protects against, and uses no data from the studies it judges. CA2 amends the step plans with the criteria and the fragment method, which brings `{python} AMD["id"]` into the plans (F6). CA3 reissues the reports, which judge the same models against the new criteria and assess acidic variants against both ends of their range (F4).
+Corrective action CA1, the reissue of the master plan PCMP-001 with a priori criteria, removes the root cause for this campaign. It also answers the contributing cause that no document defined how much less a downstream step may clear within its NOR. PCMP-001 Version 2.0 fixes every step criterion before any study is judged against it, defines the downstream worst case each criterion protects against, and lets no step's data set its own criterion. Corrective action CA2, the amendment of the step plans with the criteria and the fragment method, brings the decision `{python} AMD["id"]` to measure fragments by nrCE-SDS into the plans (finding F6). Corrective action CA3 reissues the reports. They judge each step against the new criteria, on the models selected under `{python} inv2_id` (§2), and assess the capability of acidic variants against both ends of their range (finding F4).
 
-PA1 removes the root cause, and contributing cause 1, for future campaigns. PA2 checks at report review that every acceptance criterion can be traced to the approved protocol, which would have detected the criteria added after approval in F1. PA3 records execution dates and calibration status in every study record, which answers the dates part of contributing cause 3 (F5).
+Preventive action PA1, the revision of SOP-1002 so that acceptance criteria are approved in the protocol before execution, removes the root cause for future campaigns. It also removes the contributing cause that SOP-1002 did not require this. Preventive action PA2 adds to the report review checklist a check that every acceptance criterion can be traced to the approved protocol. That check would have detected the criteria added after approval (finding F1). Preventive action PA3 records execution dates and calibration status in every study record. It answers the contributing cause that no second review checked the dates in the title blocks and study records (finding F5).
 
-Two causes have no preventive action. No action adds a second review of the specification type used in a capability calculation, so F4 is corrected by CA3 for this campaign only. For this product, the two-sided assessment is fixed in PCMP-001 Version 2.0, so the error cannot recur in this campaign. No action creates the procedural step named in contributing cause 4 either. CA2 brings AMD-001 into the plans, but a future method decision would again depend on the people involved to reach the documents.
+Two causes have no preventive action. No action adds a second review of whether a capability calculation uses the one-sided or two-sided criterion that the register gives. Corrective action CA3, which reissues the reports with a two-sided assessment of acidic variants, corrects finding F4 for this campaign only. For this product, the two-sided assessment is fixed in PCMP-001 Version 2.0, so the error cannot recur in this campaign. No action creates a procedure that would require a method decision to be assessed against the approved plans and put into effect by plan amendment either. Corrective action CA2 brings the decision `{python} AMD["id"]` into the plans, but a future method decision would again depend on the people involved to reach the documents.
 
 # Effectiveness check
 
-The corrective actions are verified effective when the Version 2.0 package is effective and QA has repeated the review that triggered this investigation, on PCMR-001 Version 2.0. That review checks three things. Every step criterion used in a proven acceptable range analysis must appear in PCMP-001 Version 2.0 with its basis, and no criterion may draw on data from the studies it judges. Every fragment result used to judge a step must be by nrCE-SDS. Every study must carry its execution window.
+The corrective actions are verified effective when the Version 2.0 package is effective and QA has repeated the review that triggered this investigation, on PCMR-001 Version 2.0, the master report. That review checks three things. Every step criterion used in a proven acceptable range analysis must appear in PCMP-001 Version 2.0 with its basis, and no criterion may be set by data from the step it judges. Every fragment result used to judge a step must be by nrCE-SDS. Every study must carry its execution window.
 
 QA verifies the preventive actions by `{python} eff_due`. The check requires `{python} eff_crit`. QA owns both checks.
 
 # Conclusion and closure
 
-The investigation confirmed the classification as `{python} INV["classification"]`. The criteria used to support the operating ranges in a BLA were not defined before the data were seen, and the analyses that rested on them could not be relied on as approved. The investigation found no product impact (§6.6).
+The investigation confirmed the classification as `{python} INV["classification"]`. The criteria used to support the operating ranges in a BLA were not defined before the data were seen. The analyses that rested on them could therefore not be relied on as approved. The investigation found no product impact (§6.6).
 
 The corrective actions are due with Version 2.0 on `{python} ca_open_due`, and the preventive actions by `{python} pa_due_max`. `{python} DOC` was closed on `{python} CLOSED`, with its remaining actions open and tracked to completion under the effectiveness check in §8.
 

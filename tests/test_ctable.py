@@ -105,3 +105,21 @@ def test_cross_reference_in_a_cell_or_note_is_refused():
     with pytest.raises(ValueError):
         CTable(header=[["A"]], body=[["1"]], caption="x", label="tbl-x", notes=[("", "As in @tbl-y.")])
     CTable(header=[["A"]], body=[["1"]], caption="As in @tbl-y.", label="tbl-x")
+
+
+def test_merged_text_too_long_for_its_rows_is_not_a_multirow():
+    """A \\multirow cannot grow its rows: a merged text that needs more lines than the rows it spans
+    would run through the rule below it (INV-001 Tables 4.4 and 6.1). It is set in the first row of
+    the span instead, which grows to hold it; a text that fits stays a centred \\multirow."""
+    long_ = CTable(header=[["A", "B"]], body=[[C("one two three four five six seven", rs=2), "x"], ["y"]],
+                   caption="c.", label="tbl-mr1", align=["P{1.5cm}", "l"])
+    assert r"\multirow" not in long_.latex() and "one two three" in long_.latex()
+    short = CTable(header=[["A", "B"]], body=[[C("one", rs=2), "x"], ["y"]],
+                   caption="c.", label="tbl-mr2", align=["P{1.5cm}", "l"])
+    assert r"\multirow{2}{=}{one}" in short.latex()
+    # the rows a span offers count the lines of their own wrapped cells
+    tall = CTable(header=[["A", "B"]],
+                  body=[[C("one two three four", rs=2), "alpha beta gamma delta epsilon zeta"], ["y"]],
+                  caption="c.", label="tbl-mr3", align=["P{1.5cm}", "P{1.5cm}"])
+    assert r"\multirow{2}{=}{one two three four}" in tall.latex()
+    assert long_.html().count('rowspan="2"') == 1        # the DOCX twin keeps the merge

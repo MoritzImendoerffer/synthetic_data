@@ -454,15 +454,21 @@ def _model_adequacy_section(doc_id, key, is_report) -> str:
     rows = []
     for resp in [r for r in m["response"]]:
         r = D.fit(key, "rsm", resp)
-        rows.append({"response": resp, "status": r["status"], "runs": r["n"], "block": r["block"],
+        rows.append({"response": resp, "status": r["status"], "scale": r.get("transform") or "raw",
+                     "runs": r["n"], "block": r["block"],
                      "terms": " ".join(r["names"]) or "(none)", "R2": round(r["R2"], 3),
                      "predR2": round(r["predR2"], 3), "gap": round(r["gap"], 3),
                      "nor_met": D.nor_met(key, resp)})
-    w("The model each output ENDS UP WITH (`D.fit(UO, \"rsm\", resp)`; `D.model_status`): "
-      "\"full\" = the full quadratic is adequate; \"refit\" = the hierarchical refit is; "
-      "\"none\" = no adequate model, the output is judged on its measured results "
-      "(`D.measured_met`). Every prediction, PAR and NOR judgement in the report uses this "
-      "model:\n\n" + _pd.DataFrame(rows).to_markdown(index=False) + "\n\n")
+    w("The model each output ENDS UP WITH (`D.fit(UO, \"rsm\", resp)`; `D.model_status`), by the model "
+      "selection of INV-002 corrective action CA3 (Box-Cox scale, lowest AICc over all hierarchical "
+      "submodels of the full quadratic, block kept; `amab_process/adequacy.select_model`): "
+      "\"selected\" = the selected model meets PCMP-001 §7.2; \"none\" = it does not, and the output is "
+      "judged on its measured results (`D.measured_met`) and sets no range. `transform` \"log\" = the "
+      "output is modelled on the log scale (a prediction is a median; a scale-down offset is a ratio). "
+      "Every prediction, PAR and NOR judgement in the report uses this model. The model selection is a "
+      "discrepancy from the plan, in `discrepancy_register(DOC)` (PCMP-001 is not changed); describe the "
+      "procedure in the statistical methods and the discrepancy section:\n\n"
+      + _pd.DataFrame(rows).to_markdown(index=False) + "\n\n")
     if D.has_augmentation(key):
         pds = [d for d in P.PLAN_DISCREPANCIES.get(doc_id, []) if "Augmentation" in d["subject"]]
         a = P.csv(f"doe_{key}_aug.csv")
@@ -493,8 +499,39 @@ def _inv2_section() -> str:
       f"{ma['reps']} simulated data sets per size; sizes in steps of {ma['step']}; no augmentation "
       "larger than the planned design; viral clearance is not a drug substance test "
       f"({', '.join(ma['not_specification'])}), so its models are refitted and no virus is spiked.\n")
-    w(f"- **Criteria:** fixed at the closure of {P.INV['id']} ({P.INV['closed']}) from the planned "
-      "designs; no criterion changes.\n")
+    w(f"- **Root cause and CA3** (config `selection_adopted`, {ma.get('selection_adopted')}): the plans "
+      "prescribed the full quadratic as the predictive model and no model selection. Corrective action CA3 "
+      "analyses every response-surface output by model selection: the Box-Cox scale (log where the 95 % "
+      "interval contains 0 and excludes 1), the lowest AICc over all hierarchical submodels of the full "
+      "quadratic by exhaustive search (stepwise can stop at a worse model), a block term kept, the "
+      "selected model judged against PCMP-001 §7.2 (and a significant F-test when it has terms), an output "
+      "with no adequate model judged on its measured results, a scale-down offset on the scale of the "
+      "model (`amab_process/adequacy.select_model`). PCMP-001 is not changed: each DoE report records it "
+      "as a discrepancy from its plan. INV-002 describes every procedure it applied, including this one.\n")
+    w(f"- **Criteria:** fixed at the closure of {P.INV['id']} ({P.INV['closed']}) from the planned designs, "
+      "with the verification of platform worst cases on the models CA3 selects (adopted before that "
+      "date). The augmentations, which ended after that date, move none. `csv(\"iac_full.csv\")` and "
+      "`csv(\"iac_verification_full.csv\")` give the same verification on the full quadratic models, "
+      "the planned analysis: the criteria as they would have been without CA3. CA3 changed these:\n\n")
+    a, f_ = P.csv("iac.csv"), P.csv("iac_full.csv")
+    mm = f_.merge(a, on=["step_key", "response"], suffixes=("_full", "_in_force"))
+    ch = mm[(mm["iac_high_full"].round(6) != mm["iac_high_in_force"].round(6))
+            | (mm["iac_low_full"].round(6) != mm["iac_low_in_force"].round(6))]
+    w(ch[["step_key", "response", "iac_high_apriori_in_force", "iac_high_full", "basis_full",
+          "iac_high_in_force", "basis_in_force"]].round(3).to_markdown(index=False) + "\n\n")
+    vf, vs = P.csv("iac_verification_full.csv"), P.csv("iac_verification.csv")
+    vv = vf.merge(vs, on=["step_key", "cqa"], suffixes=("_full", "_selected"))
+    w("  The verification rows behind them (full quadratic against selected model):\n\n")
+    w(vv[["step_key", "cqa", "assumed_full", "predicted_nor_bound95_full", "model_adequate_full",
+          "widening_supported_full", "predicted_nor_bound95_selected", "model_adequate_selected",
+          "widening_supported_selected"]].dropna(subset=["predicted_nor_bound95_full"])
+       .round(4).to_markdown(index=False) + "\n\n")
+    w("- **The augmentations, honestly** (owner's option a, 2026-10-09): sized and made under the plan's "
+      "model (the planned full quadratic failed §7.2). Once models are selected, the models they were "
+      "made for are adequate on the planned runs alone (the status table below, column `status` with the "
+      "planned runs: compare `model_adequacy.csv` with `D.fit(step, \"rsm\", resp, runs=\"planned\")`), so "
+      "they were not needed for adequacy; they sharpen the estimates. Say so; the step reports give the "
+      "results of the new runs.\n")
     w("- **Owner's instruction (2026-10-08):** \"calculate the required sample size to resolve these "
       "effects by additional runs for DoEs on unit operations which affect the drug substance "
       "specification, for the others, reduce the model.\"\n\n")
@@ -526,6 +563,93 @@ def _inv2_section() -> str:
     return b.getvalue()
 
 
+def _setpoint_section(doc_id, key, is_report, is_plan) -> str:
+    """Version 2.0 NOR and set-point decisions of a step (config ``nor_v2``/``setpoint_v2``) and the
+    evidence behind them: the PAR margins in force and as characterized, and for low-pH inactivation
+    and the production bioreactor the studies and judgements the owner's decisions rest on."""
+    import pandas as _pd
+    b = io.StringIO()
+    w = b.write
+    uo = P.CFG.unit_op(key)
+    moved = [p for p in uo.parameters
+             if list(p.nor) != list(p.nor_characterized) or p.setpoint != p.setpoint_characterized]
+    if not moved and key not in ("viral_inactivation", "bioreactor"):
+        return ""
+    w("### Version 2.0 NOR and set-points, and the evidence (STORY_BIBLE §9b)\n\n")
+    if moved:
+        rows = []
+        for p in moved:
+            nc, nf = list(p.nor_characterized), list(p.nor)
+            kind = ("moved" if (nf[1] - nf[0]) == (nc[1] - nc[0]) and nf != nc else
+                    "narrowed" if nf != nc else "unchanged")
+            rows.append({"parameter": p.name, "unit": p.unit,
+                         "set-point as characterized": p.setpoint_characterized,
+                         "NOR as characterized": f"{nc[0]:g}–{nc[1]:g}", "set-point in force": p.setpoint,
+                         "NOR in force": f"{nf[0]:g}–{nf[1]:g}", "NOR change": kind,
+                         "set-point change": "moved" if p.setpoint != p.setpoint_characterized else "unchanged"})
+        w(_pd.DataFrame(rows).to_markdown(index=False) + "\n\n")
+        w("The studies were planned and run around the values as characterized; the nominal batch and "
+          "the verification of platform worst cases use them too. Monte Carlo, PPQ and every judgement "
+          "across the NOR use the values in force (`Parameter.nor`, `.setpoint`); "
+          "`with D.characterized_nor():` switches back. "
+          + ("A plan states the values as characterized, the values its studies were planned against, "
+             "and a footnote names the change the report made (`T.parameters_by_step` does this)."
+             if is_plan else "") + "\n\n")
+    if is_report:
+        w("NOR-propagated PAR margins in force — `D.par_margins(UO)` (margins in the unit of the "
+          "parameter; None where the PAR edge is the end of the range studied):\n\n")
+        w(D.par_margins(key).round(3).to_markdown(index=False) + "\n\n")
+        if moved:
+            with D.characterized_nor():
+                m0 = D.par_margins(key)
+            w("The same as characterized — inside `D.characterized_nor()`:\n\n"
+              + m0.round(3).to_markdown(index=False) + "\n\n")
+    if key == "viral_inactivation" and is_report:
+        with D.characterized_nor():
+            met0 = D.nor_met(key, "xmulv_lrf")
+        w(f"- XMuLV claim across the NOR (`D.nor_met(UO, \"xmulv_lrf\")`): as characterized {met0}, in force "
+          f"{D.nor_met(key, 'xmulv_lrf')}. Owner, 2026-10-09: \"0.04 pH units is not controllable. 0.1 is "
+          "already very tight for large scale production\" (the set-point had sat 0.04 pH units from the "
+          "PAR edge of the NOR first decided). The set-points are re-centred in the NOR in force.\n")
+        a = D.ofat_analysis()
+        w("- **S-VI-OFAT (PD-006-01)** — `D.ofat_analysis()`, tables `T.vi_ofat()` (every result) and "
+          "`T.ofat_effects()` (the analysis). An analysis of covariance per attribute (pH as a two-level "
+          "factor, hold time), the pH p-values adjusted by Holm's method over the three attributes, the "
+          "interaction tested separately, the difference at time 0 (`diff_t0`, the pH-adjusted load before "
+          "any hold, where a hold effect cannot yet have acted):\n\n")
+        w(a.drop(columns=["unit"]).round(4).to_markdown(index=False) + "\n\n")
+        w("  Read it as a process scientist would. Aggregate and fragments rise with hold time and show no "
+          "pH effect. An apparent pH difference in an attribute whose low-pH model has no pH term "
+          "(`D.fit(UO, \"rsm\", resp)[\"names\"]`) that is already present at time 0 and does not grow with "
+          "hold time (interaction) is not an effect of the hold pH: say so, with the method repeatability, "
+          "and state the multiplicity. Every result is judged against the step's criterion (`met_nor`).\n\n")
+        c = D.cex_verification_summary()
+        w("- **S-CEX-VER (PD-006-02)** — `D.cex_verification_summary()`, tables `T.cex_verification_n()` "
+          "(the simulation that set the number of runs) and `T.cex_verification_runs()` (the runs and the "
+          "decision). The number of runs is the larger of the two attributes' needs; the decision is the "
+          "one-sided 95 % lower confidence bound of the mean log fold against the fold the criteria rely on "
+          "(`amab_process/adequacy.verification_runs`):\n\n")
+        w(c.drop(columns=["folds"]).round(4).to_markdown(index=False) + "\n\n")
+        w("- **Downstream clearance is sufficient** (owner): show it with the cation exchange model and the "
+          "criteria (the worst-case verification of `T.worst_case_verification`, the folds the criteria rely "
+          "on) and with the verification runs (`pool_max` against `pool_crit`, the cation exchange criteria). "
+          "D-001 (the set-point PAR analysis at the design centre) stays as registered.\n\n")
+    if key == "bioreactor" and is_report:
+        wc = D.nor_worst_corner(key, "acidic_variants")
+        po = P.csv("p_oos.csv").set_index("key").loc["acidic_variants"]
+        w(f"- **Acidic variants (owner: option a).** Across the NOR (`D.nor_met`): "
+          f"{D.nor_met(key, 'acidic_variants')}. Worst corner (`D.nor_worst_corner(UO, \"acidic_variants\")`, "
+          f"manufacturing scale): {wc}. Drug substance probability out of specification "
+          f"(`csv(\"p_oos.csv\")`): {int(po['n_oos'])} of {int(po['n'])} simulated batches outside, normal "
+          f"approximation {po['p_oos_normal']:.3g} ({po['ppm_normal']:.0f} ppm). The risk is mainly the "
+          "producer's: acidic variants have very low criticality and 18 % is a range-of-experience limit. "
+          "Accepted on the plan's PAR method (the Monte Carlo PAR contains the NOR, with almost no margin in "
+          "pH and pCO2; the corner is the worst case and is stated), with risk mitigation: acidic variants "
+          "monitored at harvest (early detection, acceptable but weak), and alarm limits on pH and pCO2 "
+          "inside the NOR on the side that lowers acidic variants.\n\n")
+    return b.getvalue()
+
+
 def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
     """Version 2.0: the revision, the investigation, the criteria old and new, the methods, the
     chronology and the complex tables this document should carry. Facts only, all pulled."""
@@ -545,7 +669,10 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
       f"closed {P.INV2['closed']}; trigger: {P.INV2['trigger']}; classification "
       f"{P.INV2['classification']} (`INV2`, `CAPA2`, `EFFECTIVENESS2`). It applied the model-adequacy "
       "criteria of PCMP-001 §7.2 to every response-surface model with a criterion, augmented the "
-      "designs its rule names and refitted every other failing model. It changed no criterion.\n")
+      "designs its rule names and refitted every other failing model. Its corrective action CA3 (model "
+      f"selection), adopted on {P.CFG.raw()['campaign']['model_adequacy'].get('selection_adopted')}, before "
+      f"{P.INV['id']} closed, is the analysis behind the criteria in force; the augmentation runs moved no "
+      "criterion.\n")
     w(f"- **Method decision:** {P.AMD['id']}, {P.AMD['date']}: {P.AMD['title']} (`AMD`).\n")
     w("- **Revision history:** `revision_history(DOC)` under an unnumbered heading after the "
       "approvals. The story is STORY_BIBLE §9b; the findings are numbered there.\n")
@@ -593,6 +720,7 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
             w(v.to_markdown(index=False) + "\n\n")
         if key in D.st.DOE_FACTORS and (is_report or is_plan):
             w(_model_adequacy_section(doc_id, key, is_report))
+        w(_setpoint_section(doc_id, key, is_report, is_plan))
         if key in ("harvest", "ufdf"):
             uni = P.csv("univariate_studies.csv")
             uni = uni[uni["step"] == key].dropna(axis=1, how="all")
@@ -679,10 +807,14 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
                 calls.append(f'T.doe_results("{key}", "aug")')
         if is_report and has_sdm:
             calls.append(f'T.sdm_offsets(["{key}"])')
+            sdm_st = list(P.csv("sdm_qualification.csv").query("step == @key")["study"].unique())
             for d in P.PLAN_DISCREPANCIES.get(doc_id, []):
-                planned = [s_ for s_ in P.csv("sdm_qualification.csv").query("step == @key")["study"].unique()
-                           if s_ not in d.get("studies", [])]
-                calls.append(f'T.sdm_offsets(["{key}"], studies={planned!r}, label="tbl-sdm-offsets-planned")')
+                extra = [s_ for s_ in d.get("studies", []) if s_ in sdm_st]
+                if extra:                       # a discrepancy that added scale-down runs
+                    planned = [s_ for s_ in sdm_st if s_ not in extra]
+                    calls.append(f'T.sdm_offsets(["{key}"], studies={planned!r}, label="tbl-sdm-offsets-planned")')
+        if is_report and key == "viral_inactivation":
+            calls += ["T.vi_ofat()", "T.ofat_effects()", "T.cex_verification_n()", "T.cex_verification_runs()"]
     else:
         calls += {"INV-001": ["T.criteria_change()", "T.method_comparability()", "T.methods_by_study()",
                               "T.iac_derivation()", "T.worst_case_verification()", "T.calibration_windows()"],

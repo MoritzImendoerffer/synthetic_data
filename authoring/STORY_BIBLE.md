@@ -154,6 +154,11 @@ Cite **only** existing `references.bib` keys. The standard basis, and what each 
 - `@ichq10` — quality system / technology-transfer framing (transfer docs).
 - `@ichq5a` — the viral-safety evaluation framework, for the viral steps (6, 8, 9) and
   their modular clearance claims.
+- Statistical methods, for the documents that describe them (INV-002, the statistical methods of
+  a DoE report, PCMP-001 only if it already names the method): `@montgomery2017` (response surface
+  designs, lack of fit, PRESS and predicted R²), `@boxcox1964` (the Box-Cox transformation),
+  `@hurvich1989` (AICc, the small-sample information criterion), `@burnham2002` (model selection by
+  information criteria), `@fedorov1972` (D-optimal design and the exchange algorithm).
 
 ## 9. The characterization campaign storyline (the "messy campaign")
 
@@ -294,13 +299,15 @@ set-point runs (S-PA-SDM). During the Version 2.0 re-analysis six further set-po
 lies close to its criterion. The plan did not foresee them, so PCR-005 records them as a
 discrepancy from the plan (`discrepancy_register(DOC)`, config `campaign.plan_discrepancies`). It
 is not a deviation: no procedure or GMP requirement was departed from. What the extra runs changed
-is a computed result, and the report states it openly: on the three planned runs alone the
-interval is wide enough that the conclusion fails at its unfavourable end, so the model would not
-have been qualified for pool host cell protein; on all nine runs it is
-(`T.sdm_offsets(["protein_a"], studies=["S-PA-SDM"])` against `T.sdm_offsets(["protein_a"])`). The
-qualification rule and the criterion were not changed after the three-run result was seen. Only
-the number of replicates grew, and the report says that the decision to add runs was taken after
-that result.
+is a computed result, and the report states it openly, whatever it is
+(`T.sdm_offsets(["protein_a"], studies=["S-PA-SDM"])` against `T.sdm_offsets(["protein_a"])`,
+`D.offset_qualification(..., studies=...)`). Under the final analysis (the log-scale model, a ratio
+offset, the criteria in force) the model is qualified for pool host cell protein on the three planned
+runs alone as well, so the further runs did not change the conclusion: they narrowed the interval of
+the ratio. Never claim that the three-run result would have failed; the data no longer say so. The
+qualification rule and the criterion were not changed because of the further runs. Only the number of
+replicates grew, and the report says that the decision to add runs was taken during the re-analysis,
+after the three-run result was seen.
 
 **How every DoE is analysed: model selection (owner, 2026-10-09: "all DoEs should be analyzed
 correctly").** INV-002 corrective action CA3 (adopted 2026-09-15, before the criteria were fixed at
@@ -315,6 +322,45 @@ cases (`iac.py`) alike.
    model with no term says the output does not depend on the parameters within the range studied. An
    output with no adequate model is judged on its measured results and sets no range.
 4. A scale-down offset on the scale of the model: a ratio of geometric means for a log-scale model.
+**Explaining the log scale and the search to a reader (owner, 2026-10-09: "Do not expect that a reader
+will understand this reasoning").** A document that uses either must give the reader all of this, with
+numbers from the data, in plain sentences:
+- *The model on each scale.* On the log scale, ln(y) = b0 + b1·x1 + … + e. Transformed back,
+  y = e^b0 · e^(b1·x1) · … · e^e: each parameter multiplies the output by a fixed factor e^b per coded
+  unit, e^(2b) from the low to the high end of its range, and the run-to-run error multiplies it too,
+  so its size in ng/mg grows with the level. Give the fold changes of the main effects.
+- *Why an output behaves so* (only what the data and the methods support): a purification step removes
+  a share of what is present, so a parameter changes the share, not a fixed amount; the precision of
+  the method is a percentage of the level (`deviations.methods` precision_pct; ELISA for host cell
+  protein), so the scatter of results grows with the level.
+- *The assumption, named.* Least squares, and the t-tests, F-tests and prediction intervals built on it,
+  assumes residuals that are independent and normally distributed, with mean zero and the same variance
+  over the whole range studied. On the raw scale the residual scatter of such an output grows with the
+  predicted value (show it, e.g. the residual SD in the lower and the upper half of the predictions);
+  on the log scale it is about constant. The evidence is the Box-Cox profile (λ and its 95 % interval,
+  which contains 0 and excludes 1) and the residual plot.
+- *The implications, plainly.* The criterion stays in its own unit (ng/mg). Effects are fold changes.
+  The scale-down offset is a ratio of geometric means, and a scale-down prediction is divided by it. A
+  prediction interval is calculated on the log scale and transformed back. It keeps its 95 % coverage
+  (the probability that ln y lies between two values is the probability that y lies between their
+  antilogs), so it is suitable, and on the log scale the least-squares assumption holds, which on the
+  raw scale it does not. It is asymmetric, further above the predicted value than below it (give one
+  example). The predicted value is the median of the output (its geometric mean), not its arithmetic
+  mean; the upper prediction limit, which decides against an upper criterion, is not affected by that.
+  Near an upper criterion, where the level is high, a raw-scale model understates the scatter, because
+  its residual SD is pooled over all levels; the interval from the log scale is correctly wider there.
+- *The search, in this order.* The goal: among all hierarchical submodels of the full quadratic, the
+  one with the lowest AICc. What AICc is: an estimate of how well a model would predict new runs, which
+  penalises every estimated term; its small-sample correction raises the penalty when the runs are few
+  for the number of terms, as in these designs, so that the criterion does not favour too many terms.
+  The method: every candidate is fitted (1,337 for four factors) and the lowest AICc is taken. Why not
+  stepwise: a stepwise search changes one term at a time and stops when no single change lowers AICc,
+  so it stops where only a combination of changes would lower it further; on this campaign's data a
+  stepwise search by AICc would have stopped at a worse model for many outputs
+  (`D.selection_comparison()`, count computed). CA2's backward elimination differed in three ways:
+  stepwise, by p-value (a test of each term against zero, not a comparison of models) and on the raw
+  scale only.
+
 PCMP-001 is not changed (owner): each DoE report records the model selection as a discrepancy from its
 plan (computed, `PLAN_DISCREPANCIES`). Version 1.0 and INV-001's comparison use the full quadratic on
 the planned runs (`D.planned_full_models()`, `rev1_criteria_in_force`). Consequence for the criteria:
@@ -366,17 +412,19 @@ so no NOR or set-point decision moves a criterion or a Version 1.0 number.
   (PD-005-03); on that data the pool host cell protein model is on the log scale (Box-Cox) with a ratio
   offset, as for every output.
 - **PCR-003, bioreactor acidic variants (owner: option a).** At the worst corner of the NOR (high pH, high
-  pCO2, low temperature, long culture) the median acidic-variant level is below the 18 % lower limit; the
-  plan's NOR-propagated PAR (Monte Carlo) still contains the NOR, with almost no margin in pH and pCO2. The
-  corner, not the Monte Carlo, is the worst case. Accepted on the plan's PAR method, with risk mitigation:
+  pCO2, low temperature, long culture) the 95 % prediction interval of a single batch reaches below the
+  18 % lower limit, while the predicted median, at manufacturing scale, stays just above it
+  (`D.nor_worst_corner("bioreactor", "acidic_variants")`; never quote the scale-down value). The plan's
+  NOR-propagated PAR (Monte Carlo) still contains the NOR, with almost no margin in pH and pCO2
+  (`D.par_margins("bioreactor")`). The corner, not the Monte Carlo, is the worst case. Accepted on the plan's PAR method, with risk mitigation:
   the risk is mainly the producer's (a very-low-criticality attribute; 18 % is a range-of-experience limit),
   quantified by the drug substance probability out of specification (`p_oos.csv`); monitoring acidic
   variants at harvest (early detection, acceptable but weak) and alarm limits on pH and pCO2 inside the
   NOR on the side that lowers acidic variants.
 
-**Harvest and UF/DF univariate studies (owner's decision 2026-10-08, option A).** Version 1.0 had
-no parameter data for the two steps without a design. Version 2.0 reports S-HAR-UNI and
-S-UFDF-UNI (`univariate_studies.csv`; config `analytics.univariate_nodoe`): each parameter at five
+**Harvest and UF/DF univariate studies (owner's decision 2026-10-08, option A).** Version 1.0
+described a univariate study of each of the two steps without a design and narrated its outcome,
+but gave no result for any parameter effect. Version 2.0 reports S-HAR-UNI and S-UFDF-UNI (`univariate_studies.csv`; config `analytics.univariate_nodoe`): each parameter at five
 levels (low, low-mid, set-point, mid-high, high) in duplicate, the others at set-point. They are
 not designed experiments, and no document calls them one.
 - Harvest: centrate turbidity falls with centrifuge rcf and levels off. Clarified turbidity is flat
@@ -394,7 +442,8 @@ not designed experiments, and no document calls them one.
 
 
 **Hold-study fragment results.** The hold studies ran before AMD-001. Their first and last time
-points were retained and tested by nrCE-SDS together with the retained response-surface samples,
+points (and day 3 of the low-pH inactivation pool, config `analytics.holds` `cesds_days`) were
+retained and tested by nrCE-SDS together with the retained response-surface samples,
 and the intermediate time points have SEC only. A hold criterion for fragments is judged on the
 nrCE-SDS time points.
 

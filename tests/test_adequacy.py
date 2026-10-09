@@ -94,3 +94,38 @@ def test_engine_uses_the_adequate_model_and_reproduces_version_1():
             with D.rev1_criteria_in_force():
                 v1 = D.fit(key, "rsm", resp)
             assert v1["runs"] == "planned" and len(v1["names"]) == len(ad.full_terms(D.rsm_factors(key)))
+
+
+def test_exhaustive_search_is_never_beaten_by_a_stepwise_search():
+    """CA3 searches every hierarchical submodel because a stepwise search changes one term at a
+    time and can stop where no single change lowers AICc although another combination of terms
+    has a lower AICc. The exhaustive optimum is never worse, and on this campaign's data a
+    stepwise search does stop at a worse model for some outputs (INV-002 gives the count)."""
+    sys.path.insert(0, os.path.join(ROOT, "pc_package"))
+    import doe_report as D
+    c = D.selection_comparison()
+    x = c[~c["exact"]]
+    for d in ("backward", "forward"):
+        assert (x[f"{d}_aicc"] >= x["aicc"] - 1e-6).all()
+    assert bool((x["backward_worse"] | x["forward_worse"]).any())
+
+
+def test_ca3_criteria_sensitivity_and_the_independent_checks():
+    """INV-002: the criteria CA3 moved are those that differ between iac.csv and iac_full.csv; the
+    sensitivity of every conclusion to them is computed, the planned-run models are checked on the
+    augmentation runs they have not seen, and the verification is repeated on all runs."""
+    sys.path.insert(0, os.path.join(ROOT, "pc_package"))
+    import doe_report as D
+    import pandas as pd
+    s = D.ca3_criteria_sensitivity()
+    a, f = D.csv("iac.csv"), D.csv("iac_full.csv")
+    mm = a.merge(f, on=["step_key", "response"], suffixes=("", "_f"))
+    moved = mm[(mm["iac_high"].round(6) != mm["iac_high_f"].round(6)) | (mm["iac_low"].round(6) != mm["iac_low_f"].round(6))]
+    in_scope = set(zip(s["step_key"], s["response"]))
+    assert set(zip(s[s["criterion_moved"]]["step_key"], s[s["criterion_moved"]]["response"])) == \
+        {k for k in zip(moved["step_key"], moved["response"]) if k in in_scope}
+    c = D.augmentation_prediction_check()
+    assert set(c["step_key"]) == {k for k in D.st.DOE_FACTORS if D.has_augmentation(k)}
+    assert bool((c["inside_pi"] <= c["n_new"]).all())
+    v = D.verification_all_runs()
+    assert set(v.dropna(subset=["predicted_nor"])["step_key"]) <= set(c["step_key"])

@@ -6681,7 +6681,8 @@ def build_plan_protein_a():
        "The NOR-propagated PAR is the one that supports a claim.")
     st("A PAR is never claimed beyond the range studied.", "Factors, ranges and study type",
        "A PAR is never claimed beyond the range studied (PCMP-001, proven acceptable ranges).")
-    narrowed, notes = list(ns["NARROWED"]), pt.notes_text().split(CELL_SEP)
+    narrowed = list(ns["NARROWED"])
+    notes = [n for n in pt.notes_text().split(CELL_SEP) if n]     # no note when no NOR moved
     if len(narrowed) != len(notes):
         raise ValueError(f"{pt.label}: {len(notes)} notes for {len(narrowed)} narrowed NORs")
     for p, note in zip(narrowed, notes):
@@ -7663,12 +7664,14 @@ def build_master_plan():
        "Intermediate acceptance criteria",
        "Each drug substance criterion is carried backward through the train, step by step, using "
        "the worst case that each downstream step showed on the platform.")
+    _hcp_by = P.join_and({"cex": "cation exchange", "aex": "anion exchange"}[k] for k in ns["_hcp_rep"])
     st(f"For host cell protein the Protein A pool criterion is {ns['pa_hcp_iac']} ng/mg, widened "
-       f"from {ns['pa_hcp_apriori']} ng/mg a priori by the cation exchange bound, and the cation "
-       f"exchange pool criterion stays at {ns['cex_hcp_iac']} ng/mg.",
+       f"from {ns['pa_hcp_apriori']} ng/mg a priori by the {_hcp_by} "
+       f"bound{'s' if len(ns['_hcp_rep']) > 1 else ''}, and the cation exchange pool criterion "
+       f"{ns['cex_hcp_verb']} {ns['cex_hcp_iac']} ng/mg.",
        "Intermediate acceptance criteria",
        f"The Protein A pool criterion is therefore {ns['pa_hcp_iac']} ng/mg, and the cation "
-       f"exchange pool criterion stays at {ns['cex_hcp_iac']} ng/mg.")
+       f"exchange pool criterion {ns['cex_hcp_verb']} {ns['cex_hcp_iac']} ng/mg.")
     st(f"Of the {ns['n_iac']} intermediate acceptance criteria, {ns['n_apriori']} are in force at "
        f"their a priori value and verification changed {ns['n_moved']}.",
        "Intermediate acceptance criteria",
@@ -7790,397 +7793,968 @@ def build_master_plan():
 # INV-001 — Investigation Report, Version 1.0 (new in the Version 2.0 package). #
 # --------------------------------------------------------------------------- #
 INV_FILE = "INV-001_investigation.docx"
+INV_QMD = "INV-001_investigation.qmd"
+
+#: Section titles of INV-001 as it renders them. ``build_investigation`` checks each one against the
+#: headings of the .qmd, so a renamed section fails loudly instead of mislabelling every reference.
+INV_SEC = {
+    "abbr": "Abbreviations", "summary": "Summary", "event": "Event description", "scope": "Scope",
+    "plan": "The master plan", "pa": "The Protein A analysis", "crit": "The Version 1.0 criteria",
+    "approach": "Approach",
+    "f1": "F1. Criteria defined after the data were seen",
+    "f2": "F2. Safety factors chosen so that each step passed at its set-point",
+    "f3": "F3. Capability limits judged against the data they came from",
+    "f4": "F4. Acidic variants assessed against one end of a two-sided range",
+    "f5": "F5. Approval and execution dates missing from the records",
+    "f6": "F6. Fragments by SEC in the Protein A and low-pH viral inactivation pools",
+    "root": "Root cause", "iac": "The Version 2.0 criteria",
+    "verif": "Verification of the platform worst cases", "impact": "Impact by document",
+    "cap": "Capability", "frag": "Fragments", "product": "Product impact",
+    "capa": "Corrective and preventive actions", "eff": "Effectiveness check",
+    "close": "Conclusion and closure",
+}
+#: The two size-variant methods the investigation names by abbreviation: token -> (name as the
+#: abbreviation table spells it out, method type, attributes it measures in this document).
+INV_METHODS = {
+    "SEC": ("size-exclusion chromatography", "chromatography", ["aggregates_hmw", "fragments_lmw"]),
+    "nrCE-SDS": ("non-reduced capillary electrophoresis with sodium dodecyl sulfate",
+                 "capillary electrophoresis", ["fragments_lmw"]),
+}
+
+
+def _inv_verification_keys():
+    """(step key, attribute key) of every row of ``T.worst_case_verification()``, in its order:
+    the rows of ``iac_verification.csv`` grouped by step, as the builder groups them."""
+    v = P.csv("iac_verification.csv")
+    return [(sk, c) for sk, g in v.groupby("step_key", sort=False) for c in g["cqa"]]
 
 
 def build_investigation():
-    """INV-001: the investigation that reissued the package at Version 2.0."""
+    """INV-001: the investigation that reissued the package at Version 2.0.
+
+    Fitted to the document as revised on 2026-10-09. The supplementary Protein A scale-down runs
+    (S-PA-SDM2) are now plan discrepancy PD-005-01 of PCR-005 and not a deviation; at Version 2.0
+    PCR-006 moves the NOR and set-points of low-pH viral inactivation; and the verification of the
+    platform worst cases and the reissued reports use the models of INV-002 corrective action CA3.
+
+    Every table is a complex table (``T.frame`` or a ``T.`` builder), read back through
+    :func:`qmd_ctables` from the object the document printed, so each row quote comes from the call
+    that rendered the row; the documents in scope are a markdown string (``corpus_docs_md``). Every
+    value is read from the namespace of the document's own chunks or from the CSV its table read.
+    """
+    import pandas as pd
     import tables as T
     from annex_contract.assertions import AssertionStore
     from annex_contract.concepts import Concept, ConceptStore
     from annex_contract.discourse import DocumentRelationship, ExplicitNonClaim
     from annex_contract.results import Deviation, ModularContribution, ProcessCapability
     from annex_contract.summaries import ReportSection
+    from check_grounding import normalize
     doc, f = P.INV["id"], INV_FILE
-    ns, tabs = qmd_namespace("INV-001_investigation.qmd")
+    ns, _ = qmd_namespace(INV_QMD)
+    ct = qmd_ctables(INV_QMD)
     A, add, ST, st = _adders(doc, f)
-    cap = {k: v[3] for k, v in tabs.items()}
-    by_label = _attr_key_by_label()
+    text = _document_text(f)
+    f1, f2, big, unit = ns["f1"], ns["f2"], ns["big"], ns["unit"]
+    SEC = INV_SEC
+    src = open(os.path.join(HERE, INV_QMD), encoding="utf-8").read()
+    heads = set(re.findall(r"^#+ (.+?)(?: \{[^}]*\})?\s*$", src, flags=re.M))
+    if [t for t in SEC.values() if t not in heads]:
+        raise ValueError(f"{doc}: section titles not in the document: "
+                         f"{[t for t in SEC.values() if t not in heads]}")
 
     def sid(s):
         return f"{doc}_sec_{s}"
-    md = ns["margin_df"]
-    mrow = captured_rows(tabs["tbl-margins"], zip(md["step"], md["cqa"]))
-    capdf = tabs["tbl-cap-limits"][1]
-    crow = captured_rows(tabs["tbl-cap-limits"], [by_label[a] for a in capdf["Attribute"]])
-    pldf = tabs["tbl-plan-dates"][1]
-    plrow = captured_rows(tabs["tbl-plan-dates"], pldf["Plan"])
-    eq_t = T.calibration_windows()
-    eqdf = T.calibration_windows_data()
-    eqrow = ctable_rows(eq_t)
-    cap["tbl-calibration"] = eq_t.caption
-    psdf = tabs["tbl-par-change"][1]
-    psrow = captured_rows(tabs["tbl-par-change"], psdf["Report"])
-    rd = ns["res_df"]
-    rrow = captured_rows(tabs["tbl-results"], zip(rd["step"], rd["cqa"]))
-    rsdf = tabs["tbl-results"][1]
-    vdf = tabs["tbl-viral"][1]
-    vrow = captured_rows(tabs["tbl-viral"])
-    cadf = tabs["tbl-capa"][1]
-    carow = captured_rows(tabs["tbl-capa"], cadf["No."])
-    docs = md_string_rows(P.corpus_docs_md(doc))
-    f1, f2 = ns["f1"], ns["f2"]
+
+    def r_(sec, quote, t=None, rows=None):
+        """A reference in section ``sec`` (an INV_SEC key); a row of the CTable ``t`` if given."""
+        return ref(doc, f, sid(sec), SEC[sec], quote, table_title=t.caption if t else None,
+                   table_id=t.label if t else None, table_header=rows.header if rows else None)
+
+    def rowadd(subj, pred, obj, txt, sec, t, rows, key):
+        add(subj, pred, obj, txt, SEC[sec], rows[key], rows.header, t.caption, t.label)
+
+    def rowst(txt, sec, t, rows, key):
+        st(txt, SEC[sec], rows[key], rows.header, t.caption)
+
+    # ---- the rendered tables, from the objects the document printed ------------------------------
+    by_label = _attr_key_by_label()
+    cc_t = ct["tbl-criteria-change"][0]                           # T.criteria_change()
+    m_t, m_df = ct["tbl-margins"]                                 # T.frame(margin_show)
+    mdf = ns["margin_df"]                                         # row i of margin_show
+    mrow = ctable_rows(m_t, list(zip(mdf["step"], mdf["cqa"])))
+    cl_t, cl_df = ct["tbl-cap-limits"]                            # T.frame(cap_show)
+    clrow = ctable_rows(cl_t, [by_label[a] for a in cl_df["Attribute"]])
+    pl_t, pl_df = ct["tbl-plan-dates"]                            # T.frame(plan_show)
+    plrow = ctable_rows(pl_t, pl_df["Plan"])
+    eq_t = ct["tbl-calibration"][0]                               # T.calibration_windows()
+    eqdf = ns["cw"]                                               # its data; row i is body row i
+    eqrow = ctable_rows(eq_t, eqdf["Study"])
+    sv_t = ct["tbl-methods-by-study"][0]                          # T.methods_by_study()
+    svrow = ctable_rows(sv_t)
+    iac_t = ct["tbl-iac"][0]                                      # T.iac_derivation()
+    iacrow = ctable_rows(iac_t, _iac_ctable_keys(iac_t))
+    vr_t = ct["tbl-iac-verification"][0]                          # T.worst_case_verification()
+    vrow = ctable_rows(vr_t, _inv_verification_keys())
+    pc_t, pc_df = ct["tbl-par-change"]                            # T.frame(par_show)
+    pcrow = ctable_rows(pc_t, pc_df["Report"])
+    rs_t, rs_df = ct["tbl-results"]                               # T.frame(res_show)
+    qa = ns["qa_df"]                                              # row i of res_show
+    rsrow = ctable_rows(rs_t, list(zip(qa["step"], qa["cqa"])))
+    vi_t, vi_df = ct["tbl-viral"]                                 # T.frame(viral_show)
+    vd = ns["vir_df"]                                             # row i of viral_show
+    virow = ctable_rows(vi_t, list(zip(vd["step"], vd["cqa"])))
+    ca_t, ca_df = ct["tbl-capa"]                                  # T.frame(capa_md)
+    carow = ctable_rows(ca_t, ca_df["No."])
+    docs = md_string_rows(P.corpus_docs_md(doc))                  # @tbl-docs, a markdown string
+    docs_cap = re.search(r'print\(": (.*?) \{#tbl-docs\}"\)', src).group(1)
+    # every keyed row must name its own record (a mis-keyed row grounds and attests the wrong thing)
+    vcsv = P.csv("iac_verification.csv")
+    for rows, name in [(mrow, lambda k: T.ATTR_NAME[k[1]]), (clrow, lambda k: T.ATTR_NAME[k]),
+                       (rsrow, lambda k: T.ATTR_NAME[k[1]]), (iacrow, lambda k: T.STEP_NAME[k[0]]),
+                       (vrow, lambda k: T.ATTR_NAME[k[1]].split(" (")[0]),
+                       (virow, lambda k: {"lrv_xmulv": "XMuLV", "lrv_mvm": "MVM"}[k[1]]),
+                       (plrow, str), (pcrow, str), (carow, str), (eqrow, str)]:
+        bad = [k for k, row in rows.items() if name(k) not in row]
+        if bad:
+            raise ValueError(f"{doc}: rows keyed to records they do not name: {bad}")
 
     # ---- entities --------------------------------------------------------------------------
-    step_of_study = dict(zip(ns["chron"]["id"], ns["chron"]["step"]))
-    eq_ids = list(dict.fromkeys(eqdf["Equipment"]))
-    equipment = [S.Equipment(
-        equipment_id=f"equip:{e}", equipment_name=e, site_name=P.SENDING_SITE,
-        source_references=[ref(doc, f, sid("f5"), "F5. Approval and execution dates missing from "
-                               "the records", eqrow[i], table_title=cap["tbl-calibration"],
-                               table_id=f"{doc}_tab_calibration", table_header=eqrow.header)
-                           for i in eqdf.index[eqdf["Equipment"] == e][:1]],
-        metadata=meta()) for e in eq_ids]
-    acid = ns["acid"]
-    capdesc = "F4. Acidic variants assessed against one end of a two-sided range"
-    capab = [
-        ProcessCapability(
-            capability_id=f"{doc}-CAP01", quality_attribute="attr:acidic_variants",
-            index_name="Cpk (both ends)", index_value=round(float(ns["acid_cpk"]), 2),
-            specification_side="two_sided",
-            acceptance_range=f"{ns['ds_acid_lo']:g}–{ns['ds_acid_hi']:g} %",
-            mean=f1(ns["acid_mean"]), standard_deviation=f2(ns["acid_sd"]), unit="%",
-            basis="simulated", n_batches=int(acid["n"]), claimed_process_minimum=True,
-            source_references=[
-                ref(doc, f, sid("f4"), capdesc,
-                    f"Computed against both ends, the index is {f2(ns['acid_cpk'])}, and the lower "
-                    f"end governs it."),
-                ref(doc, f, sid("summary"), "Summary",
-                    f"the lowest capability index of the drug substance is that of acidic variants, "
-                    f"at {f2(ns['v2_min_cpk'])}, against its lower limit")],
-            metadata=meta()),
-        ProcessCapability(
-            capability_id=f"{doc}-CAP02", quality_attribute="attr:acidic_variants",
-            index_name="Cpk as printed in Version 1.0 (upper end only)",
-            index_value=round(float(ns["acid_cpu"]), 1), specification_side="upper",
-            acceptance_range=f"{ns['ds_acid_lo']:g}–{ns['ds_acid_hi']:g} %", unit="%",
-            basis="simulated", n_batches=int(acid["n"]),
-            source_references=[ref(doc, f, sid("f4"), capdesc,
-                                   f"The capability index beside it was computed against the upper "
-                                   f"end alone and printed as {f1(ns['acid_cpu'])}.")],
-            metadata=meta()),
-        ProcessCapability(
-            capability_id=f"{doc}-CAP03", quality_attribute=f"attr:{ns['v1_min_key']}",
-            index_name="Cpk (lowest of the drug substance as reported in PCMR-001 Version 1.0)",
-            index_value=round(float(ns["v1_min_cpk"]), 2), unit="log10", basis="simulated",
-            n_batches=int(acid["n"]), claimed_process_minimum=True,
-            source_references=[ref(doc, f, sid("f4"), capdesc,
-                                   f"PCMR-001 reported the lowest capability index of the drug "
-                                   f"substance as {f2(ns['v1_min_cpk'])}, for MVM clearance.")],
-            metadata=meta()),
-    ]
-    vrows = ns["_vv"]
-    vcum = P.csv("iac_viral_cumulative.csv").set_index("cqa")
-    contributions = []
-    for (i, row), v in zip(vrow.items(), vrows):
-        cqa = "lrv_xmulv" if v[1] == "XMuLV" else "lrv_mvm"
-        contributions.append(ModularContribution(
-            contribution_id=f"{doc}-VC{i + 1:02d}", quantity=f"Viral clearance — {v[1]}",
-            unit_operation=v[0], step_value=v[3], requirement=v[2],
-            cumulative_value=f"{vcum.loc[cqa, 'claimed_sum']:.2f}", unit="log10",
-            source_references=[ref(doc, f, sid("impact"), "Impact by document", row,
-                                   table_title=cap["tbl-viral"], table_id=f"{doc}_tab_viral",
-                                   table_header=vrow.header)],
-            metadata=meta()))
-    from check_grounding import normalize as _normalize
-    sdm2_q = (f"For this reason, {ns['n_sdm_sup']} supplementary set-point runs (study S-PA-SDM2) "
-              f"were made from {ns['sdm2_start']} to {ns['sdm2_end']}, and the margin was not "
-              f"changed.")
-    text = _document_text(f)
-    sv_t = T.methods_by_study()
-    sv_rows = ctable_rows(sv_t)
-    sv_methods = [S.AnalyticalMethod(
-        method_id=tok, method_name=name, method_type=mtype,
-        associated_attributes=[f"attr:{a}" for a in attrs_], validation_status="validated",
-        source_references=size_variant_refs(doc, f, "F6. Fragments by SEC in the capture matrices",
-                                             None, tok, text)
-        + [ref(doc, f, sid("abbr"), "Abbreviations", abbr)],
-        metadata=meta()) for tok, name, mtype, attrs_, abbr in [
-        ("SEC", "size-exclusion chromatography", "chromatography",
-         ["aggregates_hmw", "fragments_lmw"], CELL_SEP.join(["SEC", "size-exclusion chromatography"])),
-        ("nrCE-SDS", "non-reduced capillary electrophoresis with sodium dodecyl sulfate",
-         "capillary electrophoresis", ["fragments_lmw"],
-         CELL_SEP.join(["nrCE-SDS", "non-reduced capillary electrophoresis with sodium dodecyl sulfate"]))]]
-    dev = [
+    cls, inv2, pd_id = P.INV["classification"], ns["inv2_id"], ns["pd_id"]
+    devs = [
         Deviation(
             deviation_id=doc,
             summary="The acceptance criteria against which each step was judged in the proven "
                     "acceptable range analysis were not in any protocol approved before the studies "
-                    "ran; they were set at analysis time, after the data were known.",
+                    "ran. They had been set at analysis time, after the data were known.",
             detected_during="QA review of PCMR-001 Version 1.0 for BLA readiness",
-            disposition=f"Classified {P.INV['classification']}; closed with the corrective and "
-                        f"preventive actions open and tracked",
-            impact_statement="No GMP batch was dispositioned on these documents; no product impact.",
+            disposition=f"Classified {cls}; closed on {ns['CLOSED']} with the corrective and "
+                        f"preventive actions open and tracked to completion",
+            impact_statement="No GMP batch was manufactured or dispositioned on these documents, and "
+                             "Version 1.0 was not used in a regulatory submission; no product impact.",
             no_impact_on_conclusions=False,
             source_references=[
-                ref(doc, f, sid("summary"), "Summary",
-                    "They had been set at analysis time, after the data were known."),
-                ref(doc, f, sid("summary"), "Summary",
-                    f"The investigation was classified as {P.INV['classification']}.")],
+                r_("summary", "They had been set at analysis time, after the data were known."),
+                r_("summary", f"The investigation was classified as {cls}."),
+                r_("close", f"The investigation confirmed the classification as {cls}.")],
             metadata=meta()),
         Deviation(
             deviation_id="DEV-008-01", unit_operation=P.UNIT_OP_TITLES["aex"],
-            summary="The first execution of the anion exchange design was invalidated and the "
-                    "design was re-executed; the invalidated execution had measured fragments by "
-                    "SEC.", disposition="re-executed",
-            source_references=[ref(doc, f, sid("f6"), "F6. Fragments by SEC in the capture matrices",
-                                   "Its invalidated first execution had used SEC.")],
-            metadata=meta()),
-        Deviation(
-            deviation_id="DEV-005-03", unit_operation=P.UNIT_OP_TITLES["protein_a"],
-            summary=f"The {ns['n_sdm_planned']} planned set-point runs of the Protein A scale-down "
-                    f"qualification could never demonstrate equivalence against the margin of "
-                    f"PCP-005, because the confidence interval alone was wider than the margin.",
-            detected_during="Version 2.0 re-analysis of the Protein A scale-down qualification",
-            disposition=f"{ns['n_sdm_sup']} supplementary set-point runs made (study S-PA-SDM2); "
-                        f"margin not changed",
-            impact_statement="The runs add scale-down data only and change no characterization "
-                             "data that Version 1.0 analysed.",
-            no_impact_on_conclusions=True,
+            summary="The first execution of the anion exchange design was invalidated and the design "
+                    "was re-executed. The invalidated execution had measured fragments by SEC; the "
+                    "re-executed design, started after the decision to use nrCE-SDS, measured them by "
+                    "nrCE-SDS.",
+            disposition="re-executed",
             source_references=[
-                ref(doc, f, sid("scope"), "Scope",
-                    "because the confidence interval alone was wider than the margin (DEV-005-03)"),
-                ref(doc, f, sid("scope"), "Scope", sdm2_q)],
+                r_("f6", f"The re-executed anion exchange design (DEV-008-01) started on "
+                         f"{ns['aexr_start']}, after the decision, and measured fragments by "
+                         f"nrCE-SDS."),
+                r_("f6", "Its invalidated first execution had used SEC.")],
             metadata=meta()),
     ]
     nc = [
         ExplicitNonClaim(
             non_claim_id=f"{doc}-NC01", subject="computation of a proven acceptable range",
-            statement="How the other parameters are held or varied while one parameter is scanned "
-                      "is not reviewed by the investigation.",
-            source_references=[ref(doc, f, sid("scope"), "Scope",
-                                   "The computation of a proven acceptable range itself")],
+            statement="How the other parameters are held or varied while one parameter is scanned is "
+                      "not reviewed by the investigation.",
+            source_references=[r_("scope", "The computation of a proven acceptable range itself, "
+                                           "which is how the other parameters are held or varied "
+                                           "while one parameter is scanned, is not reviewed here.")],
             metadata=meta()),
         ExplicitNonClaim(
             non_claim_id=f"{doc}-NC02", subject="the experiments",
-            statement="The experiments are not reviewed; the re-analysis uses the same experimental "
-                      "data as Version 1.0 and no experiment was run for it.",
-            source_references=[ref(doc, f, sid("scope"), "Scope",
-                                   "The experiments are not reviewed either.")],
+            statement="The experiments themselves are not reviewed by the investigation.",
+            source_references=[r_("scope", "The experiments themselves are not reviewed either.")],
             metadata=meta()),
         ExplicitNonClaim(
             non_claim_id=f"{doc}-NC03", subject="study deviation dispositions",
             statement="The study deviations recorded in the step reports keep the disposition those "
                       "reports give them.", handled_elsewhere="the step reports PCR-003 to PCR-010",
-            source_references=[ref(doc, f, sid("scope"), "Scope",
-                                   "the study deviations recorded in the step reports keep the "
-                                   "disposition those reports give them")],
+            source_references=[r_("scope", "Finally, the study deviations recorded in the step "
+                                           "reports keep the disposition those reports give them.")],
+            metadata=meta()),
+        ExplicitNonClaim(
+            non_claim_id=f"{doc}-NC06", subject="adequacy of the response-surface models",
+            statement="The adequacy of the response-surface models is outside the investigation.",
+            handled_elsewhere=f"{inv2}, opened on {ns['inv2_opened']}; under its corrective action "
+                              f"CA3 every response-surface output is analysed by model selection",
+            source_references=[r_("scope", "The adequacy of the response-surface models is outside "
+                                           "this investigation.")],
+            metadata=meta()),
+        ExplicitNonClaim(
+            non_claim_id=f"{doc}-NC07", subject=f"the further Protein A scale-down runs "
+                                                f"({ns['sdm2_id']}) as a deviation",
+            unit_operation=P.UNIT_OP_TITLES["protein_a"],
+            statement=f"The {ns['n_sdm_sup']} further set-point runs of the Protein A scale-down "
+                      f"model (study {ns['sdm2_id']}) are not a deviation.",
+            rationale="No approved procedure or GMP requirement was departed from.",
+            handled_elsewhere=f"PCR-005 Version 2.0, which records the runs as {pd_id}, a "
+                              f"discrepancy from the plan PCP-005",
+            source_references=[
+                r_("scope", "They are not a deviation, because no approved procedure or GMP "
+                            "requirement was departed from."),
+                r_("scope", f"The plan did not foresee the further runs, so the Protein A report "
+                            f"PCR-005 Version 2.0 records them as {pd_id}, a discrepancy from the "
+                            f"plan.")],
             metadata=meta()),
         ExplicitNonClaim(
             non_claim_id=f"{doc}-NC04", subject="product impact",
-            statement="There is no product impact: no GMP batch was manufactured or dispositioned "
-                      "on these documents and Version 1.0 was not used in a submission.",
-            source_references=[ref(doc, f, sid("product"), "Product impact",
-                                   "No GMP batch of A-Mab was manufactured or dispositioned on the "
-                                   "basis of these documents")],
+            statement="There is no product impact: no GMP batch of A-Mab was manufactured or "
+                      "dispositioned on these documents, and Version 1.0 was not used in a "
+                      "regulatory submission.",
+            source_references=[r_("product", "No GMP batch of A-Mab was manufactured or "
+                                             "dispositioned on the basis of these documents, and "
+                                             "Version 1.0 was not used in a regulatory submission.")],
             metadata=meta()),
         ExplicitNonClaim(
             non_claim_id=f"{doc}-NC05", subject="preventive action for contributing causes 3 and 4",
-            statement="No preventive action adds a second review of the specification type used in "
-                      "a capability calculation, and none creates the procedural step for method "
-                      "decisions.",
-            source_references=[ref(doc, f, sid("capa"), "Corrective and preventive actions",
-                                   "Two causes have no preventive action.")],
+            statement="No preventive action adds a second review of whether a capability calculation "
+                      "uses the one-sided or two-sided criterion that the register gives, and none "
+                      "creates a procedure requiring a method decision to be assessed against the "
+                      "approved plans and put into effect by plan amendment.",
+            rationale=f"Corrective action CA3 corrects finding F4 for this campaign only, and "
+                      f"corrective action CA2 brings {ns['AMD']['id']} into the plans.",
+            source_references=[r_("capa", "Two causes have no preventive action.")],
             metadata=meta()),
     ]
-    rels = []
-    for target, row in docs.items():
-        rels.append(DocumentRelationship(
-            relationship_id=f"{doc}-R{len(rels) + 1:02d}", kind="references",
-            source_document_id=doc, target_document_ref=target,
-            statement=f"{target} is in the scope of the investigation, at Version 1.0.",
-            source_references=[ref(doc, f, sid("scope"), "Scope", row,
-                                   table_title="Documents in the scope of the investigation, all "
-                                               "at Version 1.0 when it was opened.",
-                                   table_header=docs.header)],
+    rels = [DocumentRelationship(
+        relationship_id=f"{doc}-R{i + 1:02d}", kind="references", source_document_id=doc,
+        target_document_ref=target,
+        statement=f"{target} is in the scope of the investigation, at Version 1.0.",
+        source_references=[ref(doc, f, sid("scope"), SEC["scope"], row, table_title=docs_cap,
+                               table_id="tbl-docs", table_header=docs.header)],
+        metadata=meta()) for i, (target, row) in enumerate(docs.items())]
+    ca3_q = (f"Under {inv2} corrective action CA3, adopted on {ns['sel_adopted']}, before this "
+             f"investigation closed, every response-surface output is analysed by model selection, "
+             f"and {inv2} gives the procedure.")
+    rels.append(DocumentRelationship(
+        relationship_id=f"{doc}-R{len(rels) + 1:02d}", kind="references", source_document_id=doc,
+        target_document_ref=inv2,
+        statement=f"{inv2} was opened on {ns['inv2_opened']}, during this investigation, to "
+                  f"investigate the response-surface models that do not meet the model-adequacy "
+                  f"criteria of PCMP-001 Version 2.0. Its corrective action CA3, adopted on "
+                  f"{ns['sel_adopted']}, analyses every response-surface output by model selection.",
+        source_references=[
+            r_("scope", f"During it, the re-analysis found response-surface models that do not meet "
+                        f"the model-adequacy criteria of PCMP-001 Version 2.0, and QA opened {inv2} "
+                        f"on {ns['inv2_opened']} to investigate that finding."),
+            r_("scope", ca3_q)],
+        metadata=meta()))
+
+    acid, au = ns["acid"], unit("acidic_variants")
+    acc = f"{ns['ds_acid_lo']:g}–{ns['ds_acid_hi']:g} {au}"
+    v1k = ns["v1_min_key"]
+    capab = [
+        ProcessCapability(
+            capability_id=f"{doc}-CAP01", quality_attribute="attr:acidic_variants",
+            index_name="Cpk (both ends)", index_value=round(float(ns["acid_cpk"]), 2),
+            specification_side="two_sided", acceptance_range=acc, mean=f1(ns["acid_mean"]),
+            standard_deviation=f2(ns["acid_sd"]), unit=au, basis="simulated",
+            n_batches=int(acid["n"]), claimed_process_minimum=True,
+            source_references=[
+                r_("f4", f"The simulated drug substance has a mean of {f1(ns['acid_mean'])} % and "
+                         f"an SD of {f2(ns['acid_sd'])} %."),
+                r_("f4", f"Computed against both ends, the index is {f2(ns['acid_cpk'])}, because "
+                         f"the mean lies {f1(ns['acid_z_lo'])} SD above the lower limit and "
+                         f"{f1(ns['acid_z_hi'])} SD below the upper limit."),
+                r_("summary", f"The lowest capability index of the drug substance is now that of "
+                              f"acidic variants, at {f2(ns['v2_min_cpk'])}, against its lower "
+                              f"limit."),
+                r_("cap", f"to {f2(ns['v2_min_cpk'])} for acidic variants, against the lower limit "
+                          f"of {ns['ds_acid_lo']:g} %")],
+            metadata=meta()),
+        ProcessCapability(
+            capability_id=f"{doc}-CAP02", quality_attribute="attr:acidic_variants",
+            index_name="Cpk as printed in Version 1.0 (upper end only)",
+            index_value=round(float(ns["acid_cpu"]), 1), specification_side="upper",
+            acceptance_range=acc, unit=au, basis="simulated", n_batches=int(acid["n"]),
+            source_references=[r_("f4", f"The capability index beside it was computed against the "
+                                        f"upper end alone and printed as {f1(ns['acid_cpu'])}.")],
+            metadata=meta()),
+        ProcessCapability(
+            capability_id=f"{doc}-CAP03", quality_attribute=f"attr:{v1k}",
+            index_name="Cpk (lowest of the drug substance as reported in PCMR-001 Version 1.0)",
+            index_value=round(float(ns["v1_min_cpk"]), 2), unit=unit(v1k), basis="simulated",
+            n_batches=int(acid["n"]), claimed_process_minimum=True,
+            source_references=[
+                r_("f4", f"It reported the lowest capability index of the drug substance as "
+                         f"{f2(ns['v1_min_cpk'])}, for {ns['v1_min_name']}."),
+                r_("cap", f"The lowest capability index of the drug substance moves from "
+                          f"{f2(ns['v1_min_cpk'])} for {ns['v1_min_name']}, as PCMR-001 Version 1.0 "
+                          f"printed it")],
+            metadata=meta()),
+    ]
+
+    # viral clearance: the claim of each step against the cumulative requirement (PCMP-001's ledger)
+    vc = ns["vc"]
+    vsum_q = {"lrv_xmulv": f"{ns['xm_sum']:.2f} against a requirement of {ns['xm_req']:g} log10 "
+                           f"for XMuLV",
+              "lrv_mvm": f"{ns['mvm_sum']:.2f} against {ns['mvm_req']:g} log10 for MVM"}
+    contributions = []
+    for i, ((sk, cqa), row) in enumerate(virow.items()):
+        r = vd.iloc[i]
+        contributions.append(ModularContribution(
+            contribution_id=f"{doc}-VC{i + 1:02d}",
+            quantity=f"Viral clearance — {vi_df['Virus'].iloc[i]}",
+            unit_operation=P.UNIT_OP_TITLES[sk], step_value=T.num(r["lo_c"]),
+            cumulative_value=f"{vc.loc[cqa, 'claimed_sum']:.2f}",
+            requirement=f"{vc.loc[cqa, 'required']:g}", unit=unit(cqa),
+            contributing_steps=[P.UNIT_OP_TITLES[s] for s in vd.loc[vd["cqa"] == cqa, "step"]
+                                if s != sk],
+            source_references=[r_("impact", row, vi_t, virow), r_("iac", vsum_q[cqa])],
             metadata=meta()))
+
+    eq_ids = list(dict.fromkeys(eqdf["Equipment"]))
+    first = {e: eqdf.index[eqdf["Equipment"] == e][0] for e in eq_ids}
+    near_q = (f"The smallest margin is at study {ns['cw_near_study']} at the {ns['cw_near_step']} "
+              f"step, on the {ns['cw_near_desc']} {ns['cw_near_eq']}.")
+    equipment = [S.Equipment(
+        equipment_id=f"equip:{e}", equipment_name=e,
+        equipment_type=eqdf.loc[first[e], "Description"], site_name=P.SENDING_SITE,
+        # the first row of each system names it; the rows below continue its merged cells
+        source_references=[r_("f5", eqrow[eqdf.loc[first[e], "Study"]], eq_t, eqrow)]
+        + ([r_("f5", near_q)] if e == ns["cw_near_eq"] else []),
+        metadata=meta()) for e in eq_ids]
+
+    methods = [S.AnalyticalMethod(
+        method_id=tok, method_name=name, method_type=mtype,
+        associated_attributes=[f"attr:{a}" for a in keys],
+        source_references=size_variant_refs(doc, f, SEC["f6"], None, tok, text)
+        + [r_("abbr", _join_cells([tok, name]))],
+        metadata=meta()) for tok, (name, mtype, keys) in INV_METHODS.items()]
+
+    chron = ns["chron"].set_index("id")
+
+    # n_runs is a DoE design count in this corpus (tests/test_config.py), so the run count of a
+    # scale-down qualification goes in its design name, as the previous annex had it
+    def study(s, design, refs):
+        r = chron.loc[s]
+        return S.StudyDesign(study_id=f"study:{s}", study_type=STUDY_TYPE[r["kind"]],
+                             design_name=design, unit_operation=P.UNIT_OP_TITLES[r["step"]],
+                             scale_down_model="Protein A scale-down model",
+                             source_references=refs, metadata=meta())
+    studies = [
+        study(ns["sdm1_id"], f"{ns['n_sdm_planned']} set-point runs at scale-down, planned in "
+                             f"PCP-005",
+              [r_("scope", f"The Protein A plan, PCP-005, had planned {ns['n_sdm_planned']} "
+                           f"set-point runs for the qualification of that model (study "
+                           f"{ns['sdm1_id']}).")]),
+        study(ns["sdm2_id"],
+              f"{ns['n_sdm_sup']} further set-point runs at scale-down, not foreseen by PCP-005 "
+              f"(plan discrepancy {pd_id})",
+              [r_("scope", f"The second is {ns['n_sdm_sup']} further set-point runs of the Protein A "
+                           f"scale-down model (study {ns['sdm2_id']}), made from {ns['sdm2_start']} "
+                           f"to {ns['sdm2_end']}, during the investigation."),
+               r_("event", f"The further Protein A scale-down runs, study {ns['sdm2_id']}, were made "
+                           f"during the investigation (§2).")]),
+    ]
+
     entities = [
-        S.SectionEntityExtraction(document_id=doc, section_id=sid("summary"), deviations=[dev[0]]),
+        S.SectionEntityExtraction(document_id=doc, section_id=sid("summary"), deviations=[devs[0]]),
         S.SectionEntityExtraction(document_id=doc, section_id=sid("scope"),
-                                  document_relationships=rels, non_claims=nc[:3]),
+                                  document_relationships=rels, non_claims=nc[:5]),
         S.SectionEntityExtraction(document_id=doc, section_id=sid("f4"), capabilities=capab),
         S.SectionEntityExtraction(document_id=doc, section_id=sid("f5"), equipment=equipment),
-        S.SectionEntityExtraction(document_id=doc, section_id=sid("f6"), deviations=[dev[1]],
-                                  analytical_methods=sv_methods),
-        S.SectionEntityExtraction(document_id=doc, section_id=sid("scope_sdm2"),
-                                  deviations=[dev[2]]),
+        S.SectionEntityExtraction(document_id=doc, section_id=sid("f6"), deviations=[devs[1]],
+                                  analytical_methods=methods),
         S.SectionEntityExtraction(document_id=doc, section_id=sid("impact"),
-                                  contributions=contributions, non_claims=[nc[3]]),
-        S.SectionEntityExtraction(document_id=doc, section_id=sid("capa"), non_claims=[nc[4]]),
+                                  contributions=contributions),
+        S.SectionEntityExtraction(document_id=doc, section_id=sid("product"), non_claims=[nc[5]]),
+        S.SectionEntityExtraction(document_id=doc, section_id=sid("capa"), non_claims=[nc[6]]),
     ]
 
     # ---- assertions ------------------------------------------------------------------------
-    for (sk, cqa), row in mrow.items():
-        r = md[(md["step"] == sk) & (md["cqa"] == cqa)].iloc[0]
-        add(f"attr:{cqa}", "attribute_has_acceptance_criterion", f"lit:{sk}_{cqa}_v1",
-            f"Version 1.0 judged the {T.STEP_NAME[sk]} output for {T.ATTR_NAME[cqa]} against "
-            f"≤ {T.num(r['crit'])}, the nominal back-calculation divided by a safety factor of "
-            f"{f1(r['margin'])} (superseded).", "F2. Safety factors chosen so that each step passed "
-            "at its set-point", row, mrow.header, cap["tbl-margins"])
-    for cqa, row in crow.items():
-        c = capdf[capdf["Attribute"] == T.ATTR_NAME[cqa]].iloc[0]
-        add(f"attr:{cqa}", "attribute_has_acceptance_criterion", f"lit:bioreactor_{cqa}_v1",
-            f"Version 1.0 judged the production bioreactor output for {T.ATTR_NAME[cqa]} against "
-            f"an upper alert limit of {c['Version 1.0 upper criterion']}, the capability mean plus "
-            f"{ns['sigma']:g} SD (superseded).",
-            "F3. Capability limits judged against the data they came from", row, crow.header,
-            cap["tbl-cap-limits"])
-    for (sk, cqa), row in rrow.items():
-        r = rsdf[(rsdf["Step"] == T.STEP_NAME[sk]) & (rsdf["Attribute"] == T.ATTR_NAME[cqa])].iloc[0]
-        add(f"attr:{cqa}", "attribute_has_acceptance_criterion", f"lit:{sk}_{cqa}_iac",
-            f"Under Version 2.0 the {T.STEP_NAME[sk]} output for {T.ATTR_NAME[cqa]} is judged "
-            f"against {r['Version 2.0 criterion']}; over the NOR the model predicts "
-            f"{r['Range over the NOR']} ({r['Met across the NOR'].lower()}).",
-            "Impact by document", row, rrow.header, cap["tbl-results"])
+    for i, ((sk, cqa), _) in enumerate(mrow.items()):
+        c = m_df.iloc[i]
+        rowadd(f"attr:{cqa}", "attribute_has_acceptance_criterion", f"lit:{sk}_{cqa}_v1",
+               f"Version 1.0 judged the {T.STEP_NAME[sk]} output for {T.ATTR_NAME[cqa]} against "
+               f"{c['Version 1.0 criterion']}: the highest pool level the nominal downstream "
+               f"clearance brings within the drug-substance criterion, {c['Highest pool level']}, "
+               f"divided by a safety factor of {c['Safety factor']} (superseded). At its set-point "
+               f"the step's response surface model predicts {c['Predicted at set-point']}, which "
+               f"meets that criterion; the largest safety factor at which the set-point value would "
+               f"still have met it is {c['Largest factor met at set-point']}.",
+               "f2", m_t, mrow, (sk, cqa))
+    sig = f"{ns['sigma']:g}"
+    for i, (cqa, _) in enumerate(clrow.items()):
+        c = cl_df.iloc[i]
+        rowadd(f"attr:{cqa}", "attribute_has_acceptance_criterion", f"lit:bioreactor_{cqa}_v1",
+               f"Version 1.0 judged the {T.STEP_NAME['bioreactor']} output for {T.ATTR_NAME[cqa]} "
+               f"against an upper alert limit of {c['Version 1.0 upper criterion']}: the capability "
+               f"mean, {c['Capability mean']}, plus {sig} times the capability SD, "
+               f"{c['Capability SD']} (superseded). The drug-substance criterion is "
+               f"{c['Drug-substance criterion']}.",
+               "f3", cl_t, clrow, cqa)
+    for i, ((sk, cqa), _) in enumerate(rsrow.items()):
+        c = rs_df.iloc[i]
+        rowadd(f"attr:{cqa}", "attribute_has_acceptance_criterion", f"lit:{sk}_{cqa}_iac",
+               f"Under Version 2.0 the {T.STEP_NAME[sk]} output for {T.ATTR_NAME[cqa]} is judged "
+               f"against {c['Criterion']}, per batch. On the response surface model that Version 1.0 "
+               f"fitted, over the NOR as characterized and at manufacturing scale, the mean at the "
+               f"set-points is {c['Mean at set-points']} and the 95 % prediction interval for a "
+               f"single batch is {c['95 % prediction interval over the NOR']} "
+               f"({c['Met'].lower()}).", "impact", rs_t, rsrow, (sk, cqa))
+    for i, ((sk, cqa), _) in enumerate(virow.items()):
+        c = vi_df.iloc[i]
+        rowadd(f"attr:{cqa}", "attribute_has_acceptance_criterion", f"lit:{sk}_{cqa}_iac",
+               f"Under Version 2.0 the {T.STEP_NAME[sk]} output for {T.ATTR_NAME[cqa]} is judged "
+               f"against the platform claim {c['Claim']}, on the mean predicted LRF at the least "
+               f"favourable combination of the other parameters. On the response surface model that "
+               f"Version 1.0 fitted, at the NOR and set-points as characterized, the mean predicted "
+               f"LRF is {c['At set-points']} with every parameter at its set-point and "
+               f"{c['At the LFC']} at the least favourable combination ({c['Met'].lower()}).",
+               "impact", vi_t, virow, (sk, cqa))
+    step_of_study = dict(zip(ns["chron"]["id"], ns["chron"]["step"]))
     for e in eq_ids:
-        i = list(eqdf.index[eqdf["Equipment"] == e])[0]
-        k = step_of_study[eqdf.loc[i, "Study"]]
-        add(f"step:{k}", "step_uses_equipment", f"equip:{e}",
-            f"Study {eqdf.loc[i, 'Study']} of {P.UNIT_OP_TITLES[k]} used {e}.",
-            "F5. Approval and execution dates missing from the records", eqrow[i], eqrow.header,
-            cap["tbl-calibration"])
-    agg_row = next(r for r in sv_rows.values()
-                   if r.split(CELL_SEP)[1] == "Aggregates, HMW" and "SEC" in r.split(CELL_SEP)[2:]
-                   and text.count(_normalize(r)) == 1)
-    add("attr:aggregates_hmw", "attribute_measured_by_method", "method:SEC",
-        "Aggregate (HMW) is measured by SEC.", "F6. Fragments by SEC in the capture matrices",
-        agg_row, sv_rows.header, sv_t.caption)
+        s = eqdf.loc[first[e], "Study"]
+        rowadd(f"step:{step_of_study[s]}", "step_uses_equipment", f"equip:{e}",
+               f"Study {s} of {P.UNIT_OP_TITLES[step_of_study[s]]} used {e} "
+               f"({eqdf.loc[first[e], 'Description']}).", "f5", eq_t, eqrow, s)
+    agg = next(i for i, row in svrow.items()
+               if row.split(CELL_SEP)[1] == "Aggregates, HMW" and "SEC" in row.split(CELL_SEP)[2:]
+               and text.count(normalize(row)) == 1)
+    rowadd("attr:aggregates_hmw", "attribute_measured_by_method", "method:SEC",
+           f"In the designed studies of the {svrow[agg].split(CELL_SEP)[0]} step, aggregate (HMW) "
+           f"was measured by SEC.", "f6", sv_t, svrow, agg)
     add("attr:fragments_lmw", "attribute_measured_by_method", "method:nrCE-SDS",
-        f"From {P.AMD['date']} fragments are measured by nrCE-SDS in every study at every step.",
-        "F6. Fragments by SEC in the capture matrices",
+        f"From {ns['AMD']['date']} ({ns['AMD']['id']}), fragments were measured by nrCE-SDS in every "
+        f"study at every step.", SEC["f6"],
         "From that date, fragments were measured by nrCE-SDS in every study, at every step, so "
         "that one method spans the train.")
+    # the parameter effects the investigation states, each on the span that names it
+    bu, pa, vi = (P.CFG.unit_op(k) for k in ("bioreactor", "protein_a", "viral_inactivation"))
+    adt = ns["acid_dir_txt"]
+    cut = adt.index(" lower acidic variants")
+    fall_q, rise_q = adt[:cut] + " lower acidic variants", adt[cut + 1:]
+    pn = ns["_pn"]
+    for k in ns["_fall"]:
+        add(f"param:bioreactor_{k}", "parameter_impacts_attribute", "attr:acidic_variants",
+            f"In this campaign's response surface model of the production bioreactor, higher {pn(k)} "
+            f"lowers acidic variants.", SEC["impact"], fall_q)
+    for k in ns["_rise"]:
+        add(f"param:bioreactor_{k}", "parameter_impacts_attribute", "attr:acidic_variants",
+            f"In this campaign's response surface model of the production bioreactor, higher {pn(k)} "
+            f"raises acidic variants.", SEC["impact"], rise_q)
+    nsig_q = [p.strip() + " in the model." for p in ns["acid_nsig_txt"].split(" in the model.")
+              if p.strip()]
+    if len(nsig_q) != len(ns["acid_nsig"]):
+        raise ValueError(f"{doc}: {len(nsig_q)} sentences for {len(ns['acid_nsig'])} parameters")
+    for k, q in zip(ns["acid_nsig"], nsig_q):
+        add(f"param:bioreactor_{k}", "parameter_does_not_significantly_impact_attribute",
+            "attr:acidic_variants",
+            f"{bu.param(k).name} has no significant effect on acidic variants in this campaign's "
+            f"response surface model of the production bioreactor.", SEC["impact"], q)
+    hcp_q = f"it rises with {ns['pa_hcp_drivers']}"
+    for _, k, coef in ns["_mains"]:
+        add(f"param:protein_a_{k}", "parameter_impacts_attribute", "attr:hcp",
+            f"On the model PCR-005 Version 2.0 uses, Protein A pool host cell protein rises with "
+            f"{'higher' if coef > 0 else 'lower'} {pa.param(k).name[0].lower()}"
+            f"{pa.param(k).name[1:]}.", SEC["scope"], hcp_q)
+    # the low-pH NORs and set-points PCR-006 Version 2.0 changes, each on its own sentence
+    vs, j, vi_q = list(ns["_vs"]), 0, {}
+    for c in ns["_vi_ch"]:
+        vi_q[c["key"]] = [vs[j]] + ([vs[j + 1]] if c["sp"] else [])
+        j += len(vi_q[c["key"]])
+    if j != len(vs):
+        raise ValueError(f"{doc}: {len(vs)} NOR sentences for {j} changes")
+    for c in ns["_vi_ch"]:
+        add("step:viral_inactivation", "step_has_parameter", f"param:viral_inactivation_{c['key']}",
+            f"{P.UNIT_OP_TITLES['viral_inactivation']} has process parameter "
+            f"{vi.param(c['key']).name}, whose NOR PCR-006 Version 2.0 changes.",
+            SEC["impact"], vi_q[c["key"]][0])
 
-    # ---- report sections: summary, findings, root cause, impact, actions, closure ----------
-    sec_sum, sec_inv = "Summary", "Investigation"
-    st(f"QA opened {doc} on {P.INV['opened']} during the review of PCMR-001 Version 1.0 for BLA "
-       f"readiness.", sec_sum,
-       f"On {P.INV['opened']}, Quality Assurance opened {doc} during the review of PCMR-001 "
-       f"Version 1.0 for BLA readiness.")
-    st("The root cause is that PCMP-001 Version 1.0 required a criterion for each step but gave no "
-       "rule for deriving one, so the criteria were derived during the analysis.", "Root cause",
-       "The root cause is that PCMP-001 Version 1.0 required a criterion for each step but gave "
-       "no rule for deriving one (F1).")
-    st("F1: the step criteria were defined after the data were seen and outside the approved "
-       "protocols.", "F1. Criteria defined after the data were seen",
-       "The step criteria were defined after the data were seen and outside the approved protocols.")
-    st(f"F2: the R1 safety factors ranged from {f1(ns['m_lo'])} to {f1(ns['m_hi'])}, with no "
-       f"recorded reason, and were chosen with the result in view.",
-       "F2. Safety factors chosen so that each step passed at its set-point",
-       "The factors were therefore chosen with the result in view.")
-    st("F3: the bioreactor limits were alert limits at the capability mean plus a multiple of the "
-       "SD, computed from the capability data they were then used to judge.",
-       "F3. Capability limits judged against the data they came from",
-       "A limit of this kind is an alert limit for trending.")
-    st("F4: acidic variants were assessed for capability against one end of a two-sided range.",
-       capdesc, "Computed against both ends, the index is")
-    st("F5: the Version 1.0 title blocks misstated the plan approval dates and the reports gave "
-       "no execution dates; every plan was approved before its first study and no study ran on "
-       "equipment out of calibration.", "F5. Approval and execution dates missing from the records",
-       "No plan was approved after its studies, and none of these studies was run on equipment "
-       "out of calibration.")
-    st("F6: SEC fragment results from the capture matrices are biased high by an amount that "
-       "matters for a fragment criterion, and the method decision never reached the documents.",
-       "F6. Fragments by SEC in the capture matrices",
-       "SEC fragment results from the capture matrices are therefore biased high by an amount "
-       "that matters for a fragment criterion.")
-    st("Every Version 1.0 criterion depends on data from the studies it was used to judge.",
-       "The Version 1.0 criteria",
-       "Every Version 1.0 criterion therefore depends on data from the studies it was used to judge.")
-    st("Applying the Version 2.0 criteria to studies already executed is acceptable because their "
-       "derivation uses no data from those studies.", "The Version 2.0 criteria",
-       "Applying these criteria to studies already executed is acceptable because their derivation "
-       "uses no data from those studies.")
-    st(f"Of the {ns['n_ver']} platform worst cases that could be tested, {ns['n_ver_met']} were "
-       f"confirmed; aggregate at cation exchange was not, and {ns['n_tight']} aggregate criteria "
-       f"upstream of it were tightened.", "Verification of the platform worst cases",
-       "One assumption was not confirmed.")
-    for rep, row in psrow.items():
-        r = psdf[psdf["Report"] == rep].iloc[0]
-        st(f"In {rep}, of the {r['Entries in Version 1.0']} NOR-propagated proven acceptable ranges "
-           f"of Version 1.0, {r['Unchanged']} are unchanged, {r['Wider']} wider and "
-           f"{r['Narrower']} narrower in the re-analysis, and {r['New in Version 2.0']} are new.",
-           "Impact by document", row, psrow.header, cap["tbl-par-change"])
-    st("Where a proven acceptable range changed, it widened far more often than it narrowed.",
-       "Impact by document",
-       "Where a range changed, it widened far more often than it narrowed.")
-    st("There is no product impact.", "Product impact", "There is no product impact.")
-    for no, row in carow.items():
-        r = cadf[cadf["No."] == no].iloc[0]
-        st(f"{no}: {r['Action']} (owner {r['Owner function']}, due {r['Due']}, {r['Status']}).",
-           "Corrective and preventive actions", row, carow.header, cap["tbl-capa"])
-    for plan, row in plrow.items():
-        r = pldf[pldf["Plan"] == plan].iloc[0]
-        st(f"{plan} was approved on {r['Approved']}, before its first study started on "
-           f"{r['First study started']}; its Version 1.0 title block printed "
-           f"{r['Date in Version 1.0 title block']}.",
-           "F5. Approval and execution dates missing from the records", row, plrow.header,
-           cap["tbl-plan-dates"])
-    st("The corrective actions are verified effective when QA repeats the review that triggered "
-       "the investigation on PCMR-001 Version 2.0.", "Effectiveness check",
-       "That review checks three things.")
-    st(f"{doc} was closed on {P.INV['closed']} with its remaining actions open and tracked to "
-       f"completion.", "Conclusion and closure",
-       f"{doc} was closed on {P.INV['closed']}, with its remaining actions open and tracked to "
-       f"completion under the effectiveness check in §8.")
+    # ---- report sections: one statement per sentence of the document it cites -------------------
+    sname, aname = ns["sname"], ns["aname"]
+    amd = ns["AMD"]
+    S_ = [   # (statement text, section key, verbatim quote)
+        (f"QA opened {doc} on {ns['OPENED']} during the review of PCMR-001 Version 1.0 for BLA "
+         f"readiness.", "summary",
+         f"On {ns['OPENED']}, Quality Assurance opened this investigation, {doc}, during the review "
+         f"of the Process Characterization Master Report PCMR-001 Version 1.0 for BLA readiness."),
+        ("Under corrective action CA1 the investigation defined intermediate acceptance criteria by a "
+         "rule written before any report applied it.", "summary",
+         "Under corrective action CA1, the investigation defined intermediate acceptance criteria by "
+         "a rule written before any report applied it."),
+        ("Each Version 2.0 criterion is carried back from the drug-substance criterion through the "
+         "platform worst case of each downstream step, with no margin.", "summary",
+         "Each criterion is carried back from the drug-substance criterion through the platform "
+         "worst case of each downstream step, with no margin."),
+        (f"Of the {ns['n_par_v1']} proven acceptable ranges that Version 1.0 reported with the other "
+         f"parameters varying within their NORs, {ns['par_counts_phrase']}.", "summary",
+         f"Of the {ns['n_par_v1']} proven acceptable ranges that Version 1.0 reported with the other "
+         f"parameters varying within their NORs, {ns['par_counts_phrase']}."),
+        (f"In the re-analysis, {ns['nm_list']} do not meet their Version 2.0 criterion across the "
+         f"whole NOR, although each meets it with every parameter at its set-point.", "summary",
+         f"In the re-analysis, {ns['nm_list']} do not meet their Version 2.0 criterion across the "
+         f"whole NOR, although each meets it with every parameter at its set-point (§6.3)."),
+        (f"At Version 2.0 the low-pH viral inactivation report PCR-006 {ns['vi_nor_summary']}, "
+         f"because XMuLV clearance does not meet its claim at the least favourable combination of the "
+         f"NOR as characterized.", "summary",
+         f"At Version 2.0, the low-pH viral inactivation report PCR-006 {ns['vi_nor_summary']}, "
+         f"because XMuLV clearance does not meet its claim at the least favourable combination of "
+         f"the NOR as it was characterized (§6.3)."),
+        ("The review found that none of the step criteria could be traced to a plan as approved "
+         "before execution.", "event",
+         "It found that none of the criteria could be traced to a plan as it was approved before "
+         "execution."),
+        ("On the day the investigation was opened, the Version 1.0 documents were placed on hold for "
+         "BLA use.", "event", "The Version 1.0 documents were placed on hold for BLA use."),
+        (f"Under {inv2} corrective action CA3, adopted on {ns['sel_adopted']} before this "
+         f"investigation closed, every response-surface output is analysed by model selection.",
+         "scope", ca3_q),
+        ("Every comparison of ranges in the investigation uses the models Version 1.0 fitted, so that "
+         "it shows what the change of criteria moved.", "scope",
+         "Every comparison of ranges in this report uses the models Version 1.0 fitted, so that it "
+         "shows what the change of criteria moved."),
+        ("The further Protein A scale-down runs were made during the re-analysis, to narrow the "
+         "confidence interval of the offset of the model for pool host cell protein.", "scope",
+         "The further runs were made during the re-analysis, to narrow the confidence interval of the "
+         "offset of the model for pool host cell protein."),
+        (f"On the model PCR-005 Version 2.0 uses, the upper 95 % prediction limit of Protein A pool "
+         f"host cell protein over the NOR is {ns['pa_hcp_use']:.0f} % of its criterion.", "scope",
+         f"On the model that PCR-005 Version 2.0 uses, its upper 95 % prediction limit over the NOR "
+         f"is {ns['pa_hcp_use']:.0f} % of the criterion"),
+        (f"On the planned runs alone, the scale-down offset for pool host cell protein, a ratio of "
+         f"geometric means, is {ns['pa_r_plan']}, with a {ns['OFF_CI']} % confidence interval of "
+         f"{ns['pa_r_plan_lo']} to {ns['pa_r_plan_hi']}.", "scope",
+         f"On the planned runs alone, the ratio is {ns['pa_r_plan']}, with a {ns['OFF_CI']} % "
+         f"confidence interval of {ns['pa_r_plan_lo']} to {ns['pa_r_plan_hi']}."),
+        (f"On all runs the offset ratio is {ns['pa_r_all']}, with an interval of {ns['pa_r_all_lo']} "
+         f"to {ns['pa_r_all_hi']}.", "scope",
+         f"On all runs it is {ns['pa_r_all']}, with an interval of {ns['pa_r_all_lo']} to "
+         f"{ns['pa_r_all_hi']}."),
+        ("The Protein A scale-down model is therefore qualified on the planned runs alone as well.",
+         "scope", "The model is therefore qualified on the planned runs alone as well."),
+        ("The further runs narrowed the interval and did not change the conclusion.", "scope",
+         "The further runs narrowed the interval and did not change the conclusion."),
+        (f"PCR-005 Version 2.0 records the further runs as {pd_id}, a discrepancy from the plan "
+         f"PCP-005, which did not foresee them.", "scope",
+         f"The plan did not foresee the further runs, so the Protein A report PCR-005 Version 2.0 "
+         f"records them as {pd_id}, a discrepancy from the plan."),
+        ("PCMP-001 Version 1.0 required a criterion for each step but did not say how it was to be "
+         "obtained.", "plan", "It did not say how that criterion was to be obtained."),
+        ("Judged against the drug-substance criterion, no part of the Protein A characterization "
+         "range would have been acceptable.", "pa",
+         "Judged against the drug-substance criterion, no part of the Protein A characterization "
+         "range would have been acceptable."),
+        ("Every Version 1.0 criterion was set after the data were seen, from the campaign's nominal "
+         "performance or capability, and where a safety factor was used its size was chosen step by "
+         "step.", "crit",
+         "Every Version 1.0 criterion was therefore set after the data were seen, from this "
+         "campaign’s nominal performance or capability, and where a safety factor was used its size "
+         "was chosen step by step."),
+        ("F1: the step criteria were defined after the data were seen and outside the approved "
+         "protocols.", "f1",
+         "The step criteria were defined after the data were seen and outside the approved "
+         "protocols."),
+        (f"F2: the Version 1.0 safety factors ranged from {f1(ns['m_lo'])} to {f1(ns['m_hi'])}, and "
+         f"no document records why they differ.", "f2",
+         f"The factors ranged from {f1(ns['m_lo'])} to {f1(ns['m_hi'])}, and no document records why "
+         f"they differ."),
+        (f"Had the largest factor, {f1(ns['m_hi'])}, been applied to every step, the set-point value "
+         f"would have failed its criterion for {ns['n_fail_uniform']} of the attributes.", "f2",
+         f"Had the largest factor used, {f1(ns['m_hi'])}, been applied to every step, the set-point "
+         f"value would have failed its criterion for {ns['n_fail_uniform']} of the attributes"),
+        ("The analysis records show that a factor was reduced where the limit would otherwise have "
+         "fallen below the value the step produces at its set-point.", "f2",
+         "The analysis records show that a factor was reduced where the limit would otherwise have "
+         "fallen below the value the step produces at its set-point."),
+        (f"F3: for the glycans and acidic variants, Version 1.0 set {ns['n_capbased']} bioreactor "
+         f"criteria at the mean plus {sig} SD of the commercial-scale capability simulation.", "f3",
+         f"For the glycans and acidic variants, Version 1.0 set {ns['n_capbased']} bioreactor "
+         f"criteria at the mean plus {sig} SD of the commercial-scale capability simulation"),
+        ("An alert limit is not an acceptance criterion, because it carries no information about "
+         "what the product needs.", "f3",
+         "It is not an acceptance criterion, because it carries no information about what the "
+         "product needs."),
+        ("F4: acidic variants were assessed against the upper end of their two-sided range only.",
+         "summary", "Acidic variants were assessed against the upper end of their two-sided range "
+                    "only (F4)."),
+        ("The same one-sided treatment of acidic variants was used in the Version 1.0 proven "
+         "acceptable range analysis.", "f4",
+         "The same one-sided treatment was used in the proven acceptable range analysis."),
+        (f"F5: every Version 1.0 title block carried the date {ns['REV1_DATE']}.", "f5",
+         f"Every Version 1.0 title block carried the date {ns['REV1_DATE']}."),
+        ("Every plan was approved before its first study began.", "f5",
+         "Every plan was approved before its first study began."),
+        ("The Version 1.0 reports gave no execution date for any study.", "f5",
+         "The Version 1.0 reports gave no execution date for any study."),
+        ("Every study on an instrumented system closed before the calibration of its system fell "
+         "due.", "f5", "Every one of these studies closed before the calibration of its system fell "
+                       "due."),
+        (f"In the comparability study S-CEX-FRC, SEC read fragments higher than nrCE-SDS by "
+         f"{f2(ns['d_up_lo'])} to {f2(ns['d_up_hi'])} percentage points on average in the Protein A "
+         f"pool, the VI pool and the CEX load.", "f6",
+         f"On average, SEC read fragments higher than nrCE-SDS by {f2(ns['d_up_lo'])} to "
+         f"{f2(ns['d_up_hi'])} percentage points in the Protein A pool, the VI pool and the CEX "
+         f"load."),
+        ("F6: SEC fragment results from the Protein A pool and the low-pH viral inactivation pool are "
+         "biased high by an amount that would use a large part of a fragment criterion.", "f6",
+         "SEC fragment results from the Protein A pool and the low-pH viral inactivation pool are "
+         "therefore biased high by an amount that would use a large part of a fragment criterion."),
+        (f"The decision {amd['id']} to measure fragments by nrCE-SDS was taken on {amd['date']}.",
+         "f6", f"The decision {amd['id']} to measure fragments by nrCE-SDS was taken on "
+               f"{amd['date']} on these data."),
+        ("The decision to measure fragments by nrCE-SDS never reached the Version 1.0 documents.",
+         "f6", "The decision to measure fragments by nrCE-SDS therefore never reached the "
+               "documents."),
+        ("The root cause is that PCMP-001 Version 1.0 required a criterion for each step but gave no "
+         "rule for deriving one.", "root",
+         "The root cause is that PCMP-001 Version 1.0, the master plan, required a criterion for "
+         "each step but gave no rule for deriving one (finding F1)."),
+        ("Contributing cause: SOP-1002 did not require that the acceptance criteria and their basis "
+         "be approved in the protocol before execution.", "root",
+         "SOP-1002 did not require that the acceptance criteria and their basis be approved in the "
+         "protocol before execution."),
+        ("Contributing cause: neither the plans nor the master plan defined how much less a "
+         "downstream step may clear within its NOR.", "root",
+         "Neither the plans nor the master plan defined how much less a downstream step may clear "
+         "within its NOR, which is what a step criterion has to allow for."),
+        ("Contributing cause: no second review checked whether a capability calculation used a "
+         "one-sided or a two-sided criterion as the register gives it.", "root",
+         "No second review checked whether a capability calculation used a one-sided or a two-sided "
+         "criterion as the register gives it (finding F4, acidic variants)."),
+        ("Contributing cause: no second review checked the dates in the title blocks and study "
+         "records against the approval and equipment records.", "root",
+         "No second review checked the dates in the title blocks and study records against the "
+         "approval and equipment records (finding F5)."),
+        ("Contributing cause: no procedure required that a method decision be assessed against the "
+         "approved plans and put into effect by plan amendment.", "root",
+         "No procedure required that a method decision be assessed against the approved plans and "
+         "put into effect by plan amendment (finding F6, fragments by SEC)."),
+        (f"Corrective action CA1 issues the criteria in PCMP-001 Version 2.0, effective "
+         f"{ns['REV2_DATE']}.", "iac",
+         f"Corrective action CA1 then issues them in PCMP-001 Version 2.0, the master plan, effective "
+         f"{ns['REV2_DATE']}."),
+        (f"The viral clearance claims sum to {ns['xm_sum']:.2f} against a requirement of "
+         f"{ns['xm_req']:g} log10 for XMuLV and {ns['mvm_sum']:.2f} against {ns['mvm_req']:g} log10 "
+         f"for MVM.", "iac",
+         f"The sums are {ns['xm_sum']:.2f} against a requirement of {ns['xm_req']:g} log10 for XMuLV "
+         f"and {ns['mvm_sum']:.2f} against {ns['mvm_req']:g} log10 for MVM."),
+        ("Verification replaces a platform worst case with the 95 % confidence bound of the A-Mab "
+         "worst case within the NOR of the downstream step, in either direction.", "iac",
+         "Verification against the A-Mab data replaces a platform worst case with the 95 % "
+         "confidence bound of the A-Mab worst case within the NOR of the downstream step, in either "
+         "direction."),
+        (f"Where the bound is better than the platform value, the criteria upstream widen only if the "
+         f"model passes the adequacy tests of PCMP-001 Version 2.0 (R² less predicted R² at most "
+         f"{ns['MAX_GAP']:g}, no lack of fit at the {ns['LOF_ALPHA']:g} level).", "iac",
+         f"Where it is better, they widen, but only if the model passes the adequacy tests of PCMP-001 "
+         f"Version 2.0 (R² less predicted R² at most {ns['MAX_GAP']:g}, and no lack of fit at the "
+         f"{ns['LOF_ALPHA']:g} level)."),
+        (f"A scale-down model is qualified for an output when the conclusion over the NOR is the same "
+         f"at either end of the {ns['OFF_CI']} % confidence interval of its offset.", "iac",
+         f"A scale-down model is qualified for an output when its offset (the mean of the scale-down "
+         f"set-point runs less the mean of the manufacturing-scale batches) is known precisely enough "
+         f"that the conclusion over the NOR is the same at either end of the {ns['OFF_CI']} % "
+         f"confidence interval of the offset."),
+        ("A quality attribute is judged per batch, on the 95 % prediction interval of a single "
+         "batch.", "iac",
+         "A quality attribute is judged per batch, on the 95 % prediction interval of a single "
+         "batch."),
+        ("Viral clearance is judged on the mean predicted LRF at the least favourable combination of "
+         "NOR low, set-point and NOR high of the other parameters.", "iac",
+         "Viral clearance is judged on the mean predicted log reduction factor (LRF) at the least "
+         "favourable combination of NOR low, set-point and NOR high of the other parameters."),
+        (f"Of the {ns['n_iac']} Version 2.0 criteria, {ns['n_iac_ds']} are the drug-substance "
+         f"criterion applied directly, {ns['n_iac_back']} are carried back and {ns['n_iac_claim']} "
+         f"are platform viral clearance claims.", "iac",
+         f"Of these, {ns['n_iac_ds']} are the drug-substance criterion applied directly, "
+         f"{ns['n_iac_back']} are carried back through the downstream steps, and "
+         f"{ns['n_iac_claim']} are platform viral clearance claims."),
+        ("The data of a step never set its own Version 2.0 criterion.", "iac",
+         "The data of a step never set its own criterion."),
+        (f"Of the {ns['n_ver']} platform worst cases that could be tested, {ns['n_ver_met']} were "
+         f"confirmed.", "verif",
+         f"Of the {ns['n_ver']} assumptions that could be tested, {ns['n_ver_met']} were confirmed."),
+        (f"For {ns['n_ver_wsup']} of them the 95 % bound was better than the platform value on an "
+         f"adequate model, and the criteria upstream were recalculated with the bound.", "verif",
+         f"For {ns['n_ver_wsup']} of them the 95 % bound was better than the platform value on an "
+         f"adequate model, and the criteria upstream were recalculated with the bound."),
+        (f"For {ns['n_ver_better_inadequate']} more the bound was also better, but the model failed "
+         f"an adequacy test, so the platform value stands.", "verif",
+         f"For {ns['n_ver_better_inadequate']} more the bound was also better, but the model failed "
+         f"an adequacy test, so the platform value stands."),
+        (f"The verification used the models that {inv2} corrective action CA3 selects for each "
+         f"output.", "verif",
+         f"The verification used the models that {inv2} corrective action CA3 selects for each "
+         f"output (§2)."),
+        (f"Verification widened the Protein A criterion for host cell protein from "
+         f"{big(ns['pa_hcp_apriori'])} to {big(ns['pa_hcp_v2'])} ng/mg.", "verif",
+         f"the Protein A criterion for host cell protein was widened from "
+         f"{big(ns['pa_hcp_apriori'])} to {big(ns['pa_hcp_v2'])} ng/mg."),
+    ] + ([   # only when the anion exchange bound replaced its platform value (hcp_aex_text)
+        (f"The anion exchange bound widened the cation exchange criterion for host cell protein "
+         f"from {T.num(ns['cex_hcp_apriori'])} to {T.num(ns['cex_hcp_v2'])} ng/mg.", "verif",
+         f"The anion exchange bound widened the cation exchange criterion for host cell protein "
+         f"from {T.num(ns['cex_hcp_apriori'])} to {T.num(ns['cex_hcp_v2'])} ng/mg."),
+    ] if ns["aex_hcp_widened"] else []) + [
+        (f"In all, {ns['n_wid']} criteria were widened, for {ns['wid_list']}.", "verif",
+         f"In all, {ns['n_wid']} criteria were widened, for {ns['wid_list']}."),
+        (f"The aggregate criteria upstream of cation exchange were recalculated with the 95 % "
+         f"confidence bound of its aggregate clearance, and the {ns['n_tight']} aggregate criteria "
+         f"at the {ns['tight_steps']} steps were tightened.",
+         "verif",
+         f"The aggregate criteria upstream of cation exchange were recalculated with the bound, and "
+         f"the {ns['n_tight']} aggregate criteria at the {ns['tight_steps']} steps were tightened."),
+        (ns["tight_phrase"], "verif", ns["tight_phrase"]),
+        (f"A Protein A pool batch at the upper 95 % prediction limit for leached Protein A needs only "
+         f"{f2(ns['lpa_need'])}-fold downstream clearance to meet the drug-substance criterion of "
+         f"{ns['ds_lpa']:g} ppm.", "verif",
+         f"For a batch at that level to meet the drug-substance criterion of {ns['ds_lpa']:g} ppm, "
+         f"the downstream steps need to clear only {f2(ns['lpa_need'])}-fold."),
+        (f"The step reports judge each step against the Version 2.0 criteria on the models selected "
+         f"under {inv2}, and PCMR-001 consolidates the result.", "impact",
+         f"The step reports judge each step against the criteria, on the models selected under "
+         f"{inv2} (§2), and PCMR-001 consolidates the result."),
+        (f"Of the {ns['n_par_changed']} proven acceptable ranges that changed, {ns['n_par_wider']} "
+         f"widened.", "impact",
+         f"Of the {ns['n_par_changed']} ranges that changed, {ns['n_par_wider']} widened."),
+        (f"At cation exchange, against the Version 2.0 aggregate criterion of "
+         f"{ns['cex_ds_agg_v2']:g} %, the proven acceptable range for protein load is "
+         f"{ns['cex_load_v2']} g/L resin and covers the upper end of the NOR.", "impact",
+         f"Against the Version 2.0 criterion of {ns['cex_ds_agg_v2']:g} %, the range is "
+         f"{ns['cex_load_v2']} g/L resin, and it covers the upper end of the NOR."),
+        (f"Judged against the upper limit alone, every acidic variant range at the bioreactor would "
+         f"span the whole characterization range, so the lower limit of {ns['ds_acid_lo']:g} % now "
+         f"sets them.", "impact",
+         f"Judged against the upper limit alone, every one of them would span the whole "
+         f"characterization range, so the lower limit of {ns['ds_acid_lo']:g} % now sets them."),
+        (f"For {ns['acid_unc_name']}, the acidic variant range is {ns['acid_unc_par']} "
+         f"{ns['acid_unc_unit']} and no longer reaches the upper end of the NOR at "
+         f"{ns['acid_unc_nor_hi']:g} {ns['acid_unc_unit']}.", "impact",
+         f"For {ns['acid_unc_name']}, the range is therefore {ns['acid_unc_par']} "
+         f"{ns['acid_unc_unit']}, and it no longer reaches the upper end of the NOR at "
+         f"{ns['acid_unc_nor_hi']:g} {ns['acid_unc_unit']}."),
+        (f"The XMuLV clearance of low-pH viral inactivation no longer gives a proven acceptable range "
+         f"{ns['vi_none_phrase']}.", "impact",
+         f"The XMuLV clearance of low-pH viral inactivation therefore no longer gives a proven "
+         f"acceptable range {ns['vi_none_phrase']}."),
+        (f"At anion exchange the load pH ranges narrowed slightly, for {ns['aex_narrow_txt']}.",
+         "impact", f"The load pH ranges there narrowed slightly, for {ns['aex_narrow_txt']}."),
+        (ns["qa_phrase"], "impact", ns["qa_phrase"]),
+        (f"For acidic variants at the production bioreactor step, the lower 95 % prediction limit "
+         f"for a single batch falls to {T.num(ns['acid_lpl'])} %, below the lower limit of "
+         f"{T.num(ns['acid_lo_c'])} %.", "impact",
+         f"For acidic variants at the production bioreactor step, the lower 95 % prediction limit "
+         f"for a single batch falls to {T.num(ns['acid_lpl'])} %, against the lower limit of "
+         f"{T.num(ns['acid_lo_c'])} %."),
+        (f"The lower prediction limit of acidic variants is lowest at the corner of the NOR where "
+         f"{ns['acid_corner_txt']}.", "impact",
+         f"The limit is therefore lowest at the corner of the NOR where {ns['acid_corner_txt']}."),
+        (f"At the least favourable combination, with {ns['vi_corner_txt']}, the mean predicted XMuLV "
+         f"clearance of low-pH viral inactivation is {f2(ns['vi_xm_worst'])} log10, below the "
+         f"claim.", "impact",
+         f"At the least favourable combination, with {ns['vi_corner_txt']}, it is "
+         f"{f2(ns['vi_xm_worst'])} log10, which is below the claim."),
+        (f"On the model that {inv2} corrective action CA3 selects for XMuLV clearance, the claim is "
+         f"also not met at the least favourable combination of the NOR as characterized.", "impact",
+         f"On the model that {inv2} corrective action CA3 selects for XMuLV clearance, the claim is "
+         f"also not met at the least favourable combination of the NOR as characterized."),
+        ("On the selected model, the XMuLV claim of low-pH viral inactivation is met across the NOR "
+         "in force at Version 2.0.", "impact",
+         "On that model it is met across the NOR in force at Version 2.0."),
+        (f"For this reason PCR-006 Version 2.0 changes {ns['vi_nor_count']} of low-pH viral "
+         f"inactivation.", "impact",
+         f"For this reason, the low-pH viral inactivation report PCR-006 Version 2.0 changes "
+         f"{ns['vi_nor_count']} of the step."),
+    ]
+    # the NOR and set-point changes, one statement per sentence (the document's own strings)
+    S_ += [(q, "impact", q) for c in ns["_vi_ch"] for q in vi_q[c["key"]]]
+    S_ += [
+        ("PCR-006 gives the reason for the new set-points, which rests on how closely pH can be "
+         "controlled at large scale.", "impact",
+         "PCR-006 gives the reason for the new set-points, which rests on how closely pH can be "
+         "controlled at large scale."),
+        (f"PCMP-001 Version 2.0 sets a capability target of {f2(ns['CPK_TARGET'])}.", "cap",
+         f"PCMP-001 Version 2.0 sets a capability target of {f2(ns['CPK_TARGET'])}, which is common "
+         f"industry practice for a capable process."),
+        (f"PCMP-001 Version 2.0 sets a capability minimum of {f2(ns['CPK_MIN'])}.", "cap",
+         f"It sets a minimum of {f2(ns['CPK_MIN'])}, the point at which a spread of three standard "
+         f"deviations reaches the criterion."),
+        (ns["thr_sentence"], "cap", ns["thr_sentence"]),
+        (f"For acidic variants the simulation puts {ns['noos_phrase']} outside the range, and a "
+         f"normal fit gives {big(ns['acid_ppm'])} per million.", "cap",
+         f"For acidic variants the simulation puts {ns['noos_phrase']} outside the range, and a "
+         f"normal fit gives {big(ns['acid_ppm'])} per million."),
+        (ns["other_oos_phrase"], "cap", ns["other_oos_phrase"]),
+        ("SEC fragment results from the Protein A pool and the low-pH viral inactivation pool will be "
+         "reported for information only and not used to judge a step.", "frag",
+         "SEC fragment results from the Protein A pool and the low-pH viral inactivation pool will "
+         "be reported for information only and not used to judge a step."),
+        ("The process is unchanged except at low-pH viral inactivation, where PCR-006 Version 2.0 "
+         "moves the NOR and the set-points.", "product",
+         "The process is unchanged except at low-pH viral inactivation, where PCR-006 Version 2.0 "
+         "moves the NOR and the set-points (§6.3)."),
+        (f"Version 2.0 adds one drug-substance criterion, for fragments, at "
+         f"{T.crit(0, ns['ds_frag'], 'upper')} %.", "product",
+         f"Version 2.0 adds one drug-substance criterion, for fragments, at "
+         f"{T.crit(0, ns['ds_frag'], 'upper')} %."),
+        ("There is no product impact.", "product", "There is no product impact."),
+        (f"All {ns['n_capa']} corrective and preventive actions were open at closure and are tracked "
+         f"to their due dates in the CAPA system.", "capa",
+         f"All {ns['n_capa']} actions were open at closure and are tracked to their due dates in the "
+         f"CAPA system"),
+        ("Corrective action CA1 removes the root cause for this campaign.", "capa",
+         "Corrective action CA1, the reissue of the master plan PCMP-001 with a priori criteria, "
+         "removes the root cause for this campaign."),
+        (f"Corrective action CA2 brings the decision {amd['id']} to measure fragments by nrCE-SDS "
+         f"into the plans.", "capa",
+         f"Corrective action CA2, the amendment of the step plans with the criteria and the fragment "
+         f"method, brings the decision {amd['id']} to measure fragments by nrCE-SDS into the plans "
+         f"(finding F6)."),
+        (f"The reports reissued under corrective action CA3 judge each step against the new criteria "
+         f"on the models selected under {inv2}, and assess the capability of acidic variants against "
+         f"both ends of their range.", "capa",
+         f"They judge each step against the new criteria, on the models selected under {inv2} (§2), "
+         f"and assess the capability of acidic variants against both ends of their range (finding "
+         f"F4)."),
+        ("Preventive action PA1 removes the root cause for future campaigns.", "capa",
+         "Preventive action PA1, the revision of SOP-1002 so that acceptance criteria are approved "
+         "in the protocol before execution, removes the root cause for future campaigns."),
+        ("The corrective actions are verified effective when QA repeats, on PCMR-001 Version 2.0, the "
+         "review that triggered the investigation.", "eff",
+         "The corrective actions are verified effective when the Version 2.0 package is effective "
+         "and QA has repeated the review that triggered this investigation, on PCMR-001 Version "
+         "2.0, the master report."),
+        (f"QA verifies the preventive actions by {ns['eff_due']}.", "eff",
+         f"QA verifies the preventive actions by {ns['eff_due']}."),
+        (f"The effectiveness check of the preventive actions requires {ns['eff_crit']}.", "eff",
+         f"The check requires {ns['eff_crit']}."),
+        (f"The corrective actions are due with Version 2.0 on {ns['ca_open_due']}, and the "
+         f"preventive actions by {ns['pa_due_max']}.", "close",
+         f"The corrective actions are due with Version 2.0 on {ns['ca_open_due']}, and the "
+         f"preventive actions by {ns['pa_due_max']}."),
+        (f"{doc} was closed on {ns['CLOSED']} with its remaining actions open and tracked to "
+         f"completion.", "close",
+         f"{doc} was closed on {ns['CLOSED']}, with its remaining actions open and tracked to "
+         f"completion under the effectiveness check in §8."),
+    ]
+    for txt, sec, q in S_:
+        st(txt, SEC[sec], q)
 
-    keys = list(dict.fromkeys(list(rd["cqa"]) + list(md["cqa"])))
+    # per-row statements: each on its own row of the table that states it
+    for i, (plan, _) in enumerate(plrow.items()):
+        c = pl_df.iloc[i]
+        rowst(f"{plan} ({c['Step']}) was approved on {c['Approved']}, before its first study started "
+              f"on {c['First study started']}.", "f5", pl_t, plrow, plan)
+    for i, (rep, _) in enumerate(pcrow.items()):
+        c = pc_df.iloc[i]
+        counts = ", ".join(f"{what} {c[col]}" for col, what in
+                           [("Unchanged", "unchanged"), ("Wider", "wider"), ("Narrower", "narrower"),
+                            ("Moved", "moved"), ("No range", "no range")] if col in c)
+        rowst(f"In {rep} ({c['Step']}), the re-analysis of the {c['In Version 1.0']} proven "
+              f"acceptable ranges that Version 1.0 reported with the other parameters varying within "
+              f"their NORs counts {counts}; new in the re-analysis: {c['New']}.", "impact", pc_t,
+              pcrow, rep)
+    for i, (no, _) in enumerate(carow.items()):
+        c = ca_df.iloc[i]
+        rowst(f"{no}: {c['Action']} (owner {c['Owner function']}, due {c['Due']}).", "capa", ca_t,
+              carow, no)
+    for (sk, cqa), row in vrow.items():
+        r = vcsv[(vcsv["step_key"] == sk) & (vcsv["cqa"] == cqa)].iloc[0]
+        kind = ("lowest fold clearance" if r["assumption"] == "fold_min" else
+                "largest increase" + (", in percentage points" if unit(cqa) == "%" else ""))
+        outcome = re.sub(r"\s+[a-z]\)$", "", row.split(CELL_SEP)[-1].strip())
+        if pd.isna(r["predicted_nor"]):
+            found = ("it is not a response of the response-surface study at this step, so the "
+                     "platform value stands unverified")
+        else:
+            found = (f"this campaign gives {T.num(r['observed_edge'])} at the edges of the "
+                     f"characterization range, {T.num(r['predicted_nor'])} within the NOR and "
+                     f"{T.num(r['predicted_nor_bound95'])} at the 95 % confidence bound. Outcome: "
+                     f"{outcome[0].lower()}{outcome[1:]}")
+        rowst(f"At {sname(sk)}, the platform worst case for {aname(cqa)} ({kind}) is "
+              f"{T.num(r['assumed'])}; {found}.", "verif", vr_t, vrow, (sk, cqa))
+
+    # ---- concepts --------------------------------------------------------------------------
+    keys = list(dict.fromkeys([c for _, c in iacrow] + [v1k]))
+    params_used = ([("bioreactor", k) for k in list(ns["_fall"]) + list(ns["_rise"])
+                    + list(ns["acid_nsig"])]
+                   + [("protein_a", k) for _, k, _ in ns["_mains"]]
+                   + [("viral_inactivation", c["key"]) for c in ns["_vi_ch"]])
     concepts = [Concept(concept_id="process:amab_ds", concept_type="PROCESS",
                         canonical_name="A-Mab drug-substance process", review_status="human_verified")]
     concepts += [Concept(concept_id=f"step:{k}", concept_type="PROCESS_STEP",
                          canonical_name=P.UNIT_OP_TITLES[k], aliases=[T.STEP_NAME[k]],
                          review_status="human_verified") for k in P.CFG.train_order]
     concepts += _attr_concepts(keys)
+    concepts += [Concept(concept_id=f"param:{k}_{p}", concept_type="PROCESS_PARAMETER",
+                         canonical_name=P.CFG.unit_op(k).param(p).name,
+                         aliases=[f"{P.CFG.unit_op(k).param(p).name} ({T.STEP_NAME[k]})"],
+                         review_status="human_verified")
+                 for k, p in dict.fromkeys(params_used)]
     concepts += [Concept(concept_id=f"equip:{e}", concept_type="EQUIPMENT", canonical_name=e,
-                         review_status="human_verified") for e in eq_ids]
+                         aliases=[eqdf.loc[first[e], "Description"]], review_status="human_verified")
+                 for e in eq_ids]
+    concepts += [Concept(concept_id=f"method:{tok}", concept_type="ANALYTICAL_METHOD",
+                         canonical_name=name, aliases=[tok], review_status="human_verified")
+                 for tok, (name, _, _) in INV_METHODS.items()]
+
+    acrit = acceptance_criteria_layer(doc, f, SEC["crit"], cc_t)
+    bad = [(a.step, a.attribute) for a in acrit if T.ATTR_NAME[a.attribute] not in a.source.quote]
+    if bad:
+        raise ValueError(f"{doc}: criteria anchored on rows that do not name them: {bad}")
     return S.GroundTruthAnnex(
         document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
         document_class=P.DOC_REGISTRY[doc][0], **rev2_layer(doc, f),
         schema_extensions_used=COMMON_EXT + REV2_EXT + [
             "DocumentInventoryItem.predicted_document_type: investigation_report added"],
         out_of_schema_notes=[
-            "The six findings, the root cause, the contributing causes and the effectiveness check "
-            "have no schema model; they are report_sections statements. Each corrective and "
-            "preventive action and each plan approval date is a statement anchored on its own row.",
+            "The six findings, the root cause, the four contributing causes, the effectiveness "
+            "check and the closure have no schema model; they are report_sections statements. Each "
+            "corrective and preventive action, each plan approval date, each report's count of "
+            "changed proven acceptable ranges and each verified platform worst case is a statement "
+            "anchored on its own table row. The derivation table of §6.1 is not represented row by "
+            "row: its criteria are the in-force records of acceptance_criteria.",
             "acceptance_criteria holds the criteria-change table of §3.3: every Version 1.0 step "
             "criterion as superseded and every Version 2.0 criterion as in force. The Version 1.0 "
-            "rule (R1 to R4) and, for R1, its safety factor are in the record basis or the "
-            "assertions anchored on the safety-factor table.",
+            "rule (R1 to R4) is the record basis; the R1 safety factors and the R2 capability means "
+            "and SDs are in the assertions anchored on the safety-factor table and on the table of "
+            "recomputed alert limits.",
             "The capability records are simulated values the investigation reports: the Version 2.0 "
             "two-sided index for acidic variants, and two Version 1.0 values it corrects (the "
-            "one-sided acidic variant index and the MVM minimum PCMR-001 Version 1.0 reported).",
-            "The S-CEX-FRC method comparability replicates and the worst-case verification table "
-            "are not represented row by row; the verification is a statement. The size-variant "
-            "methods table anchors the SEC and nrCE-SDS method records on the rows that name each "
-            "method and occur once in the document.",
-            "The only study of a schema type is S-PA-SDM2, the supplementary qualification of "
-            "DEV-005-03 that ran during the investigation. No parameters and no CQA register "
-            "of its own. No rhetorical_spans (none were curated). weak_claims is empty.",
+            "one-sided acidic variant index and the MVM minimum that PCMR-001 Version 1.0 reported).",
+            "Each viral clearance contribution carries the platform claim of its step as the step "
+            "value, with the cumulative requirement and the sum of the claims (§6.1). The mean "
+            "predicted LRF at the set-points and at the least favourable combination are in the "
+            "assertion anchored on the same row of the viral clearance table.",
+            f"The supplementary Protein A scale-down runs ({ns['sdm2_id']}) are {pd_id}, a "
+            f"discrepancy from the plan PCP-005 that PCR-005 Version 2.0 records, and the "
+            f"investigation says they are not a deviation. The schema has no record for a plan "
+            f"discrepancy, so they are a StudyDesign (beside the planned qualification "
+            f"{ns['sdm1_id']}), an explicit non-claim and report statements. The deviation record "
+            f"DEV-005-03 of the previous annex is withdrawn.",
+            "The NOR and set-point changes at low-pH viral inactivation (PCR-006 Version 2.0) are "
+            "stated in prose only; no table of the investigation names those parameters. They are "
+            "report statements and step_has_parameter assertions, each on its own sentence, and not "
+            "ProcessParameter records, which anchor on a rendered row. The parameter effects the "
+            "investigation states (acidic variants at the bioreactor, host cell protein at Protein "
+            "A) are assertions on the clause that states each.",
+            f"The models of {inv2} corrective action CA3 (model selection) have no schema record. "
+            f"Their adoption, their use in the verification of the platform worst cases and in the "
+            f"reissued reports, and the XMuLV result on the selected model are report statements; "
+            f"{inv2} is a document relationship, and the adequacy of the models an explicit "
+            f"non-claim handled there.",
+            "The S-CEX-FRC method comparability replicates are not represented row by row; the "
+            "mean differences are statements. The size-variant methods table anchors the SEC and "
+            "nrCE-SDS method records on the rows that name each method and occur once in the "
+            "document. The studies of the calibration table appear as the rows that anchor the "
+            "equipment records.",
+            "No parameter or quality-attribute register of its own. No rhetorical_spans (none were "
+            "curated). weak_claims is empty.",
         ],
         inventory=rev2_inventory(doc, f, "investigation_report", "A-Mab drug substance",
                                  ["investigation", "acceptance criteria", "proven acceptable range",
-                                  "root cause", "CAPA", "fragments method", "capability"]),
-        entities=entities,
-        studies=[S.StudyDesign(
-            study_id="study:S-PA-SDM2", study_type="scale_down_qualification",
-            design_name=f"{ns['n_sdm_sup']} supplementary set-point runs",
-            unit_operation=P.UNIT_OP_TITLES["protein_a"],
-            source_references=[ref(doc, f, sid("scope"), "Scope", sdm2_q)], metadata=meta())],
+                                  "root cause", "CAPA", "fragments method", "capability",
+                                  "worst-case verification", "model selection",
+                                  "scale-down offset"]),
+        entities=entities, studies=studies,
         report_sections=[ReportSection(section_id=f"{doc}-summary", title="Investigation summary",
                                        statements=ST)],
         assertions=AssertionStore(run_id=f"gt-{doc}", assertions=A, rationales=[]),
         concepts=ConceptStore(run_id=f"gt-{doc}", concepts=concepts),
-        acceptance_criteria=acceptance_criteria_layer(doc, f, "The Version 1.0 criteria",
-                                                      T.criteria_change()))
+        acceptance_criteria=acrit)
 
 
 #: (document id, builder) for the whole corpus, in build order.

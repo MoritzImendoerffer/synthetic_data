@@ -403,6 +403,10 @@ def aicc(y: np.ndarray, X: np.ndarray) -> float:
     return float(m.aic + 2 * k * (k + 1) / (n - k - 1)) if n - k - 1 > 0 else float("inf")
 
 
+#: SSE / SST below which a fit is exact: the data carry no error at the precision reported
+EXACT_TOL = 1e-12
+
+
 def select_model(df: pd.DataFrame, resp: str, factors: Sequence[str], thresholds: Dict[str, float],
                  block: Optional[bool] = None, transform: bool = True) -> Dict[str, object]:
     """The model of one response-surface output, as INV-002 CA3 analyses it.
@@ -414,8 +418,10 @@ def select_model(df: pd.DataFrame, resp: str, factors: Sequence[str], thresholds
     3. The check: the selected model against PCMP-001 §7.2. ``adequate`` also requires a
        significant model F-test when the model has terms; a model with no term says the output
        does not depend on the parameters within the range studied.
+    An output that the data give without error is fitted exactly by several models; the smallest
+    of them is taken, ``exact`` is True and AICc is not defined (NaN).
     Returns the ``adequacy`` dict of the selected model with ``scale``, ``ycol``, ``boxcox``,
-    ``aicc``, ``aicc_full`` and the data (``data``) it was fitted to."""
+    ``aicc``, ``aicc_full``, ``exact`` and the data (``data``) it was fitted to."""
     d = df[df[resp].notna()].reset_index(drop=True)
     blk = has_blocks(d) if block is None else block
     scale, ycol, bc = "raw", resp, None
@@ -426,9 +432,23 @@ def select_model(df: pd.DataFrame, resp: str, factors: Sequence[str], thresholds
             d = d.assign(**{ycol: np.log(d[resp].to_numpy(float))})
     y = d[ycol].to_numpy(float)
     X = matrix(d, full_terms(factors), blk)
+    sst = float(((y - y.mean()) ** 2).sum())
+
+    def rel_sse(cols):
+        r = np.linalg.lstsq(X[cols].to_numpy(), y, rcond=None)[0]
+        return float(((y - X[cols].to_numpy() @ r) ** 2).sum()) / sst if sst > 0 else 0.0
+
+    # An output the data give without error (every replicate identical to the precision the method
+    # reports) is fitted exactly by more than one model, and AICc, whose log SSE is then rounding
+    # noise, cannot choose among them. The smallest model that fits exactly is taken instead.
+    exact = sst > 0 and rel_sse(list(X.columns)) < EXACT_TOL
     best = None
     for terms in hierarchical_subsets(factors):
         cols = ["const"] + terms + ([BLOCK] if blk else [])
+        if exact:
+            if rel_sse(cols) < EXACT_TOL and (best is None or len(terms) < len(best[1])):
+                best = (float("nan"), terms)
+            continue
         a = aicc(y, X[cols].to_numpy())
         if best is None or a < best[0] - 1e-9:
             best = (a, terms)
@@ -437,9 +457,44 @@ def select_model(df: pd.DataFrame, resp: str, factors: Sequence[str], thresholds
     fit = adequacy(d, ycol, factors, terms, thresholds, blk)
     if terms and not fit["f_ok"]:
         fit["adequate"] = False
-    fit.update(scale=scale, ycol=ycol, boxcox=bc, aicc=best[0],
-               aicc_full=aicc(y, X.to_numpy()), data=d)
+    fit.update(scale=scale, ycol=ycol, boxcox=bc, aicc=best[0], exact=exact,
+               aicc_full=float("nan") if exact else aicc(y, X.to_numpy()), data=d)
     return fit
+
+
+def stepwise_aicc(df: pd.DataFrame, ycol: str, factors: Sequence[str], block: bool,
+                  direction: str) -> Dict[str, object]:
+    """A stepwise search by AICc under strong hierarchy, for comparison with the exhaustive search
+    of :func:`select_model` (INV-002 explains why CA3 searches exhaustively). ``backward`` starts
+    from the full quadratic and removes, at each step, the removable term (one no remaining term
+    contains) whose removal lowers AICc most; ``forward`` starts from the mean and adds, at each step,
+    the term whose parents are all present and whose addition lowers AICc most. Each stops when no
+    single change lowers AICc. A block term is always kept. Returns {"aicc", "terms"}."""
+    full = full_terms(factors)
+    X = matrix(df, full, block)
+    y = df[ycol].to_numpy(float)
+
+    def score(terms):
+        return aicc(y, X[["const"] + list(terms) + ([BLOCK] if block else [])].to_numpy())
+
+    def hierarchical(terms):
+        return all(set(parents(t)) <= set(terms) for t in terms)
+    cur = list(full) if direction == "backward" else []
+    best = score(cur)
+    while True:
+        if direction == "backward":
+            cands = [[x for x in cur if x != t] for t in cur]
+        else:
+            cands = [cur + [t] for t in full if t not in cur]
+        moves = [(score(c), c) for c in cands if hierarchical(c)]
+        if not moves:
+            break
+        s, c = min(moves, key=lambda m: m[0])
+        if s < best - 1e-9:
+            best, cur = s, c
+        else:
+            break
+    return {"aicc": float(best), "terms": [t for t in full if t in cur]}
 
 
 # --------------------------------------------------------------------------------------

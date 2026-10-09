@@ -175,7 +175,8 @@ differ only in their `UO` key and unit-specific narrative:
 - **What a Version 2.0 plan may add (STORY_BIBLE §9b):** a plan is an amendment issued after its
   studies ran. It states what PCMP-001 Version 2.0 sets, plus generic tests applied identically in every
   plan, and lists each as a change. It never adds a step-specific rule or an execution detail written with
-  the data known (that is INV-001 finding 1 again), and it describes no study made after Version 1.0
+  the data known (that is INV-001 finding 1 again), never deletes or rewrites a Version 1.0 rule,
+  design or procedure (that hides a departure), and it describes no study made after Version 1.0
   (hold, augmentation, confirmation and support studies): each report records those as discrepancies
   from its plan (`campaign.plan_discrepancies`, `discrepancy_register(DOC)`).
 - **Framing rule:** the screening model identifies effects; the **response-surface

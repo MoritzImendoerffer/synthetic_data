@@ -68,7 +68,8 @@ sets: the a priori criteria, the fragment method, the scale-down offset rule, th
 judgement statistics, the verification rule and the execution windows. It lists each as a change. It
 must not add a step-specific decision rule, such as a refit procedure, a NOR rule for one parameter or a
 test chosen for one study. Such a rule is written with the data known, which is INV-001 finding 1 again.
-It never says a rule was "fixed before the data". It keeps the design, sampling and spiking as Version
-1.0 planned them, even where a study departed from them, and the report records the departure. Where
+It never says a rule was "fixed before the data". It keeps the design, sampling, spiking and every
+decision rule as Version 1.0 stated them, even where a study departed from them or the data broke a
+rule; the report records the departure. Deleting a Version 1.0 rule is as wrong as adding one. Where
 Version 1.0 had no rule that the report needs, the plan says it has none. The report then states its
 approach and records it as a discrepancy. STORY_BIBLE §9b has this as canon.

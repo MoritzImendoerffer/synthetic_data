@@ -61,8 +61,11 @@ went wrong when applying them.
    at α = 0.05 and Cook's distance above 4/n. It must not add a step-specific decision rule, such as a
    refit procedure, a NOR rule for one parameter or a test chosen for one study, and it never says a
    rule was "fixed before the data".
-   - It keeps the design, sampling and spiking as Version 1.0 planned them, even where a study departed
-     from them. The report records the departure.
+   - It keeps the design, sampling, spiking and every decision rule as Version 1.0 stated them, even
+     where a study departed from them or the data broke a rule. The report records the departure.
+     Deleting a Version 1.0 rule after the data hides the departure (PCP-003 factual check). A plan
+     author may read the frozen Version 1.0 plan (`pc_package/superseded/rev1/`) for its rules, design,
+     sampling and procedures, never for voice.
    - It describes no study made after Version 1.0: no hold study, augmentation, confirmation or support
      study. Each report records those as discrepancies from its plan.
 

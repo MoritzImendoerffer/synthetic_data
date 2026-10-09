@@ -2203,38 +2203,7 @@ def vi_inventory(doc_id, file_name, dtype):
         metadata=meta())
 
 
-def build_plan_viral_inactivation():
-    doc, f = "PCP-006", PCP6_FILE
-    entities = [
-        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_uo",
-                                  process_steps=[vi_step(doc, f, f"{doc}_sec_uo", report=False)],
-                                  equipment=vi_equipment(doc, f, f"{doc}_sec_uo", report=False),
-                                  sites=vi_sites(doc, f, f"{doc}_sec_uo")),
-        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_cqa",
-                                  quality_attributes=vi_cqas(doc, f, f"{doc}_sec_cqa", report=False)),
-        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_param",
-                                  parameters=vi_params(doc, f, f"{doc}_sec_param", classified=False)),
-        S.SectionEntityExtraction(document_id=doc, section_id=f"{doc}_sec_methods",
-                                  analytical_methods=vi_methods(doc, f, f"{doc}_sec_methods", report=False)),
-    ]
-    return S.GroundTruthAnnex(
-        document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
-        document_class=P.DOC_REGISTRY[doc][0], version=P.VERSION, effective_date=P.EFFECTIVE_DATE,
-        schema_extensions_used=COMMON_EXT,
-        out_of_schema_notes=[
-            "The XMuLV criterion for this step is a back-calculated step contribution (cumulative "
-            "requirement minus the clearance credited to AEX and virus filtration) under the "
-            "modular ICH Q5A(R2) approach; the claim is to be framed at the worst case of the "
-            "operating region, not at the set-point mean.",
-            "MVM is not inactivated at low pH; the step is credited with enveloped-virus clearance "
-            "only and no HCP clearance is claimed.",
-            "The Plan states classification is an OUTPUT; parameter_type left 'unclassified' here.",
-        ],
-        inventory=vi_inventory(doc, f, "process_characterization_plan"),
-        entities=entities,
-        studies=vi_studies(doc, f, report=False),
-        report_sections=vi_report_sections(doc, f, report=False),
-        assertions=vi_assertions(doc, f, report=False), concepts=vi_concepts())
+# build_plan_viral_inactivation() — PCP-006 Version 2.0 — is in the Version 2.0 section below.
 
 
 def build_report_viral_inactivation():
@@ -7301,6 +7270,688 @@ def build_report_protein_a():
 
 
 # --------------------------------------------------------------------------- #
+# PCP-006 — Process Characterization Plan, Low-pH Viral Inactivation (Step 6),  #
+# Version 2.0.                                                                  #
+# --------------------------------------------------------------------------- #
+#: Output cells of PCP-006 @tbl-methods -> attribute key. The row of the antibody concentration
+#: of the load names a parameter, not an attribute, and is handled on its own.
+VI2_METHOD_ATTR = {
+    "XMuLV log reduction factor": "lrv_xmulv", "Aggregate (HMW)": "aggregates_hmw",
+    "Fragments (LMW)": "fragments_lmw", "Acidic variants": "acidic_variants",
+}
+#: Relationship cell of @tbl-related -> DocumentRelationship.kind.
+VI2_REL_KIND = {"Rolls up into": "rolls_up_into", "Parent — master plan": "executed_under",
+                "Parent — risk basis for study scope": "scoped_by",
+                "Parent — transfer scope": "scoped_by"}
+
+
+def build_plan_viral_inactivation():
+    """PCP-006 Version 2.0: the protocol amendment issued under INV-001.
+
+    Fitted to the Version 2.0 text. Every table of the plan is a complex table (``T.frame`` or a
+    ``T.`` builder), read back through :func:`qmd_ctables` from the object the plan printed, and
+    every number in a quote or a record is read from the plan's own namespace. The parameter table
+    shows the set-points and NORs the studies were planned against (``sp_char``,
+    ``nor_char``), not the values PCR-006 Version 2.0 put in force, so the parameter records carry
+    the planned values and the changes are statements anchored on the notes of that table.
+    """
+    import doe_report as D
+    import tables as T
+    from annex_contract.assertions import AssertionStore
+    from annex_contract.concepts import Concept, ConceptStore
+    from annex_contract.discourse import DocumentRelationship, ExplicitNonClaim
+    from annex_contract.summaries import ReportSection
+    doc, f = "PCP-006", PCP6_FILE
+    qmd = "PCP-006_viral_inactivation.qmd"
+    ns, _ = qmd_namespace(qmd)
+    ct = qmd_ctables(qmd)
+    A, add, ST, st = _adders(doc, f)
+    text = _document_text(f)
+    PCR = ns["PCR"]
+    PN, w = ns["PN"], ns["w"]
+    prm = ns["P"]                                                   # the plan's {key -> Parameter}
+    studies_of = ns["sid"]                                          # {kind -> study id}
+
+    def sec_id(s):
+        return f"{doc}_sec_{s}"
+
+    def lc_name(name):
+        return ns["lc"](name)
+
+    # ---- the rendered tables, rebuilt from the objects the plan printed ---------------------
+    pt, pdf_ = ct["tbl-params"]                                     # T.frame, by parameter
+    prow = ctable_rows(pt, pdf_["Parameter"])
+    cq_t, cq_df = ct["tbl-cqas"]                                    # T.frame, by attribute key
+    by_label = _attr_key_by_label()
+    ckeys = [by_label[n] for n in cq_df["Attribute"]]
+    crow = ctable_rows(cq_t, ckeys)
+    mt, mdf = ct["tbl-methods"]                                     # T.frame, by row index
+    mrow = ctable_rows(mt)
+    sop_t, sop_df = ct["tbl-sops"]                                  # T.sop_references, by reference
+    soprow = ctable_rows(sop_t, sop_df["Reference"])
+    sch_t, sch_df = ct["tbl-schedule"]                              # T.frame, by study id
+    schrow = ctable_rows(sch_t, sch_df["Study"])
+    smp_t, smp_df = ct["tbl-sampling"]                              # T.frame, by row index
+    smprow = ctable_rows(smp_t)
+    iac_t = ct["tbl-iac"][0]                                        # T.iac_derivation([UO])
+    iac = ns["iac"]                                                 # D.iac_table(UO)
+    iacrow = ctable_rows(iac_t, [by_label[c.split(CELL_SEP)[0]] for c in iac_t.rows()])
+    wc_t = ct["tbl-worst-cases"][0]                                 # T.frame, by attribute key
+    ver = ns["_ver"]                                                # D.iac_verification(UO)
+    wcrow = ctable_rows(wc_t, list(ver["cqa"]))
+    rel = md_string_rows(P.related_docs_md(doc))                    # @tbl-related
+    rel_cap = "Documents related to this plan."                     # printed after related_docs_md
+    names = dict(zip(P.cqa_reg["key"], P.cqa_reg["cqa"]))
+    sdm_name = "temperature-controlled vessel at laboratory scale"
+
+    # ---- entities ------------------------------------------------------------------------
+    step = S.ProcessStep(
+        step_id="step:viral_inactivation", step_name=VIUO_NAME, step_number=str(VISTEP),
+        unit_operation=VIUO_NAME,
+        description="The Protein A eluate is adjusted to the inactivation pH, held for a set time "
+                    "at a set temperature, then neutralized with base and filtered. The hold "
+                    "inactivates enveloped viruses and contributes a log reduction of XMuLV to the "
+                    "modular viral clearance claim. The same acid conditions can raise aggregate, "
+                    "fragments and acidic variants in the pool.",
+        input_materials=["Protein A eluate"],
+        output_materials=["neutralized pool (cation exchange load)"],
+        equipment=[sdm_name],
+        source_references=[
+            ref(doc, f, sec_id("purpose"), "Purpose and scope",
+                "Low-pH viral inactivation holds the Protein A eluate at acid pH for a set time and "
+                "then neutralizes it."),
+            ref(doc, f, sec_id("uo"), "Unit-operation description and prior knowledge",
+                "Low-pH viral inactivation is the step after Protein A capture and before cation "
+                "exchange chromatography."),
+            ref(doc, f, sec_id("uo"), "Unit-operation description and prior knowledge",
+                "The neutralized pool is the load of cation exchange.")],
+        metadata=meta())
+    equipment = [S.Equipment(
+        equipment_id="equip:vi_sdm_vessel", equipment_name=sdm_name,
+        equipment_type="hold vessel (scale-down model)", site_name=P.SENDING_SITE,
+        source_references=[ref(doc, f, sec_id("sdm"), "Scale-down model and its qualification",
+                               "The scale-down model holds the Protein A eluate in a "
+                               "temperature-controlled vessel at laboratory scale.")],
+        metadata=meta())]
+    params = []
+    for name, row in prow.items():
+        p = next(q for q in prm.values() if q.name == name)
+        lo, hi = ns["nor_char"](p)
+        stype = pdf_.loc[pdf_["Parameter"] == name, "Study type"].iloc[0]
+        params.append(S.ProcessParameter(
+            parameter_id=VIPARAM_CONCEPT[name], parameter_name=name,
+            parameter_type="unclassified", unit=p.unit,
+            target_value=ns["with_unit"](ns["sp_char"](p), p.unit),
+            NOR=ns["rng_u"](lo, hi, p.unit),
+            PAR=ns["rng_u"](p.prange[0], p.prange[1], p.unit),
+            associated_step=VISTEP_LABEL, study_type=stype,
+            source_references=[ref(doc, f, sec_id("factors"), "Factors, ranges and study type", row,
+                                   table_title=pt.caption, table_id=f"{doc}_tab_params",
+                                   table_header=prow.header)],
+            metadata=meta()))
+    conc_name = ns["conc_txt_c"]
+    method_of = {}
+    for _, r in mdf.iterrows():
+        if r["Output"] in VI2_METHOD_ATTR:
+            method_of.setdefault(VI2_METHOD_ATTR[r["Output"]], r["Validation"])
+    cq = ns["_cq"]                                                  # cqas_by_keys, in table order
+    attrs = []
+    for i, key in enumerate(ckeys):
+        r = _vi_cqa_row(key)
+        why = (f"Very high by rule for viral clearance, whatever the Tool #1 score "
+               f"({r['tool1_score']})." if key.startswith("lrv")
+               else f"A-Mab Tool #1 Risk Score = Impact × Uncertainty = {r['tool1_score']}.")
+        attrs.append(S.QualityAttribute(
+            attribute_id=f"attr:{key}", attribute_name=r["cqa"], attribute_type="CQA",
+            unit=r["unit"], acceptance_criteria=[f"{cq['Acceptance'].iloc[i]} (drug substance)"],
+            analytical_method=method_of.get(key), associated_steps=[VISTEP_LABEL],
+            rationale_for_criticality=why, criticality_level=r["criticality"],
+            tool1_score=int(r["tool1_score"]), tool2_severity=int(r["tool2_severity"]),
+            source_references=[ref(doc, f, sec_id("cqas"), "Quality attributes in scope", crow[key],
+                                   table_title=cq_t.caption, table_id=f"{doc}_tab_cqas",
+                                   table_header=crow.header)],
+            metadata=meta()))
+    methods = []
+    for i, r in mdf.iterrows():
+        amv = r["Validation"]
+        key = VI2_METHOD_ATTR.get(r["Output"])
+        methods.append(S.AnalyticalMethod(
+            method_id=amv, method_name=r["Method"], method_type=METHOD_TYPE.get(amv),
+            analytes=[r["Output"]],
+            associated_attributes=[f"attr:{key}"] if key else [],
+            validation_status="validated",
+            source_references=[ref(doc, f, sec_id("methods"), "Analytical methods", mrow[i],
+                                   table_title=mt.caption, table_id=f"{doc}_tab_methods",
+                                   table_header=mrow.header),
+                               ref(doc, f, sec_id("related"), "Related documents", soprow[amv],
+                                   table_title=sop_t.caption, table_id=f"{doc}_tab_sops",
+                                   table_header=soprow.header)]
+            + (size_variant_refs(doc, f, "Analytical methods", [VIUO], SIZE_VARIANT_TOKEN[amv],
+                                 text, lead=1) if amv in SIZE_VARIANT_TOKEN else []),
+            metadata=meta()))
+    nc = [
+        ExplicitNonClaim(
+            non_claim_id=f"{doc}-NC01", subject="MVM clearance", unit_operation=VIUO_NAME,
+            statement="No clearance of the parvovirus minute virus of mice (MVM) is claimed for the "
+                      "low-pH step.",
+            rationale="A parvovirus has no envelope, so it has no envelope glycoproteins for low pH "
+                      "to denature.",
+            source_references=[ref(doc, f, sec_id("uo"), "Unit-operation description and prior knowledge",
+                                   "It makes no claim for the parvovirus minute virus of mice (MVM), "
+                                   "because a parvovirus has no envelope and so no envelope "
+                                   "glycoproteins for low pH to denature.")],
+            metadata=meta()),
+        ExplicitNonClaim(
+            non_claim_id=f"{doc}-NC02", subject="host cell protein clearance", unit_operation=VIUO_NAME,
+            statement="No clearance of host cell protein is claimed for the step, and the criteria "
+                      "assume no change in host cell protein across it.",
+            source_references=[ref(doc, f, sec_id("uo"), "Unit-operation description and prior knowledge",
+                                   "The criteria also assume no change in host cell protein across "
+                                   "the step, and no clearance of host cell protein is claimed for it.")],
+            metadata=meta()),
+        ExplicitNonClaim(
+            non_claim_id=f"{doc}-NC03", subject="glycan attributes and host cell protein",
+            unit_operation=VIUO_NAME,
+            statement="The step is assumed not to change the glycan attributes or host cell protein, "
+                      "and no credit is taken for either.",
+            source_references=[ref(doc, f, sec_id("risks"), "Risks and assumptions",
+                                   "The step does not change the glycan attributes or host cell "
+                                   "protein, and no credit is taken for either.")],
+            metadata=meta()),
+        ExplicitNonClaim(
+            non_claim_id=f"{doc}-NC04", subject="Version 2.0 set-points and NORs of PCR-006",
+            unit_operation=VIUO_NAME,
+            statement=f"The plan does not adopt the set-points and NORs that {PCR} Version 2.0 "
+                      f"changed; the notes to the parameter table give them.",
+            handled_elsewhere=PCR,
+            source_references=[ref(doc, f, sec_id("changes"), "Changes in this revision",
+                                   "This plan does not adopt those values.")],
+            metadata=meta()),
+        ExplicitNonClaim(
+            non_claim_id=f"{doc}-NC05", subject=f"range of {ns['conc_txt']} for fragments",
+            unit_operation=VIUO_NAME,
+            statement=f"The univariate study does not measure fragments, so it supports no range of "
+                      f"the {ns['conc_txt']} for fragments.",
+            rationale="The designs hold the concentration at its set-point and the univariate study "
+                      "does not measure fragments; the plan assumes the fraction of fragments does not "
+                      "depend on the antibody concentration.",
+            source_references=[ref(doc, f, sec_id("univariate"), "Univariate assessment",
+                                   "The study does not measure fragments, so it supports no range of "
+                                   "the concentration for that attribute")],
+            metadata=meta()),
+        ExplicitNonClaim(
+            non_claim_id=f"{doc}-NC06", subject="predictions from the screening model",
+            unit_operation=VIUO_NAME,
+            statement="No prediction will be made from the screening model, which identifies "
+                      "effects only.",
+            source_references=[ref(doc, f, sec_id("stats"), "Statistical methods",
+                                   "Its centre points can detect curvature but cannot attribute it "
+                                   "to a factor, and no prediction will be made from it.")],
+            metadata=meta()),
+        ExplicitNonClaim(
+            non_claim_id=f"{doc}-NC07", subject="SEC fragment results", unit_operation=VIUO_NAME,
+            statement="The SEC fragment results of the screening design are kept in the record and "
+                      "are not used for any decision.",
+            handled_elsewhere=f"re-test by nrCE-SDS of the retained response-surface samples "
+                              f"({studies_of['retest']})",
+            source_references=[ref(doc, f, sec_id("methods"), "Analytical methods",
+                                   "These results are kept in the record and are not used for any "
+                                   "decision.")],
+            metadata=meta()),
+        ExplicitNonClaim(
+            non_claim_id=f"{doc}-NC08", subject="PAR beyond the range studied", unit_operation=VIUO_NAME,
+            statement="A PAR that reaches the end of the range studied is reported as reaching it, "
+                      "and no claim is made beyond it.",
+            source_references=[ref(doc, f, sec_id("par"), "Proven acceptable ranges (planned analysis)",
+                                   "A PAR that reaches the end of the range studied is reported as "
+                                   "reaching it, and no claim is made beyond it.")],
+            metadata=meta()),
+        ExplicitNonClaim(
+            non_claim_id=f"{doc}-NC09", subject="inputs of the step", unit_operation=VIUO_NAME,
+            statement="The acid and base solutions and the other inputs of the step are prepared to "
+                      "their platform specifications and are not characterized in the plan.",
+            source_references=[ref(doc, f, sec_id("operation"), "Operation",
+                                   "They are controlled for identity and quality and are not "
+                                   "characterized in this plan.")],
+            metadata=meta()),
+    ]
+    rels = []
+
+    def relation(kind, target, statement, sec, title, quote, header=None, table_title=None):
+        rels.append(DocumentRelationship(
+            relationship_id=f"{doc}-R{len(rels) + 1:02d}", kind=kind, source_document_id=doc,
+            target_document_ref=target, statement=statement,
+            source_references=[ref(doc, f, sec_id(sec), title, quote, table_title=table_title,
+                                   table_header=header)],
+            metadata=meta()))
+    for target, row in rel.items():
+        txt = row.split(CELL_SEP)[-1]
+        relation(VI2_REL_KIND.get(txt, "references"), target, txt, "related", "Related documents",
+                 row, rel.header, rel_cap)
+    relation("references", ns["PCP_PA"], "The Protein A step that produces the load of this step "
+             "is characterized under its own plan.", "purpose", "Purpose and scope",
+             f"The Protein A step that produces the load of this step is characterized under "
+             f"{ns['PCP_PA']}.")
+    relation("references", ns["PCR_CEX"], "Cation exchange cleared less aggregate within its NOR "
+             "than its platform worst case, which tightened the aggregate criterion of this step.",
+             "iac", "Intermediate acceptance criteria",
+             f"Within its NOR, cation exchange cleared less aggregate than its platform worst case "
+             f"({ns['PCR_CEX']}).")
+    for target in (ns["PCP_AEX"], ns["PCP_VF"]):
+        relation("references", target, "Anion exchange and virus filtration, which also carry "
+                 "XMuLV claims, are characterized under their own plans.", "claim",
+                 "XMuLV clearance claim",
+                 f"Anion exchange and virus filtration are characterized under {ns['PCP_AEX']} and "
+                 f"{ns['PCP_VF']}, and PCMR-001 consolidates the cumulative claim.")
+    entities = [
+        S.SectionEntityExtraction(document_id=doc, section_id=sec_id("purpose"),
+                                  process_steps=[step], sites=_site_entities(doc, f, sec_id("purpose"))),
+        S.SectionEntityExtraction(document_id=doc, section_id=sec_id("changes"), non_claims=[nc[3]]),
+        S.SectionEntityExtraction(document_id=doc, section_id=sec_id("related"),
+                                  document_relationships=rels),
+        S.SectionEntityExtraction(document_id=doc, section_id=sec_id("uo"), non_claims=nc[0:2]),
+        S.SectionEntityExtraction(document_id=doc, section_id=sec_id("cqas"), quality_attributes=attrs),
+        S.SectionEntityExtraction(document_id=doc, section_id=sec_id("sdm"), equipment=equipment),
+        S.SectionEntityExtraction(document_id=doc, section_id=sec_id("operation"), non_claims=[nc[8]]),
+        S.SectionEntityExtraction(document_id=doc, section_id=sec_id("methods"),
+                                  analytical_methods=methods, non_claims=[nc[6]]),
+        S.SectionEntityExtraction(document_id=doc, section_id=sec_id("stats"), non_claims=[nc[5]]),
+        S.SectionEntityExtraction(document_id=doc, section_id=sec_id("factors"), parameters=params),
+        S.SectionEntityExtraction(document_id=doc, section_id=sec_id("univariate"), non_claims=[nc[4]]),
+        S.SectionEntityExtraction(document_id=doc, section_id=sec_id("par"), non_claims=[nc[7]]),
+        S.SectionEntityExtraction(document_id=doc, section_id=sec_id("risks"), non_claims=[nc[2]]),
+    ]
+
+    # ---- studies: each on its own row of the schedule table, its sampling rows and its design
+    mv_names = [p.name for p in ns["mv"]]
+    uv_names = [p.name for p in ns["uv"]]
+    resp = list(D.responses(VIUO))
+    resp_rsm = resp + [r for r in D.fragment_responses(VIUO, "rsm") if r == "lmw_cesds_pct"]
+    kind_name = ns["_kind_name"]
+
+    def prose(kind, s):
+        return {
+            "qualification": [("Scale-down model and its qualification",
+                               f"The qualification runs are made under SOP-1001 in study {s}, "
+                               f"before the first characterization run.")],
+            "screening": [("Screening design",
+                           f"The screening design ({s}) is a two-level full factorial design in the "
+                           f"{ns['mv_txt']}, with {w(ns['c_scr'])} centre points, in {ns['n_scr']} runs.")],
+            "rsm": [("Response-surface design",
+                     f"The response-surface design ({s}) is a face-centred central composite design "
+                     f"in the same {w(ns['k'])} factors"),
+                    ("Response-surface design",
+                     f"It has {w(ns['f_rsm'])} factorial runs, {w(ns['a_rsm'])} axial runs and "
+                     f"{w(ns['c_rsm'])} centre points, {ns['n_rsm']} runs in all.")],
+            "univariate": [("Univariate assessment",
+                            f"The {ns['conc_txt']} is assessed one factor at a time in the univariate "
+                            f"study ({s}).")],
+        }.get(kind, [])
+    design = {"screening": dict(design_name="two-level full factorial", factors=mv_names,
+                                responses=resp, n_runs=P.doe_runs(VIUO, "screening"),
+                                n_center_points=P.doe_centre_points(VIUO, "screening")),
+              "rsm": dict(design_name="face-centred central composite design", factors=mv_names,
+                          responses=resp_rsm, n_runs=P.doe_runs(VIUO, "rsm"),
+                          n_center_points=P.doe_centre_points(VIUO, "rsm")),
+              "univariate": dict(design_name="one factor at a time, settings across the range "
+                                             "studied, the other parameters at set-point",
+                                 factors=uv_names, responses=resp),
+              # no n_runs: the qualification compares scale-down runs with manufacturing batches,
+              # which is not a design (tests/test_config.py checks n_runs against the designs)
+              "qualification": dict(responses=sorted(ns["_q_out"]))}
+    studies, unrendered = [], []
+    for _, r in ns["mine"].iterrows():
+        stype = STUDY_TYPE.get(r["kind"])
+        if stype is None:
+            continue
+        if not _present(schrow[r["id"]], text):
+            unrendered.append(r["id"])
+            continue
+        d = design[r["kind"]]
+        refs = [ref(doc, f, sec_id("deliverables"), "Deliverables and schedule", schrow[r["id"]],
+                    table_title=sch_t.caption, table_id=f"{doc}_tab_schedule",
+                    table_header=schrow.header)]
+        lead = f"{kind_name[r['kind']]} ({r['id']})"
+        refs += [ref(doc, f, sec_id("sampling"), "Sampling plan", q, table_title=smp_t.caption,
+                     table_id=f"{doc}_tab_sampling", table_header=smprow.header)
+                 for q in smprow.values() if q.split(CELL_SEP)[0] == lead]
+        refs += [ref(doc, f, sec_id("design"), sec, q) for sec, q in prose(r["kind"], r["id"])]
+        studies.append(S.StudyDesign(
+            study_id=f"study:{r['id']}", study_type=stype, unit_operation=VIUO_NAME,
+            scale_down_model=sdm_name,
+            associated_parameters=[VIPARAM_CONCEPT[x] for x in d.get("factors", [])],
+            source_references=refs, metadata=meta(), **d))
+
+    # ---- assertions ------------------------------------------------------------------------
+    add("step:viral_inactivation", "step_uses_equipment", "equip:vi_sdm_vessel",
+        f"The scale-down model of {VIUO_NAME} is a {sdm_name}.",
+        "Scale-down model and its qualification",
+        "The scale-down model holds the Protein A eluate in a temperature-controlled vessel at "
+        "laboratory scale.")
+    for name, row in prow.items():
+        add("step:viral_inactivation", "step_has_parameter", VIPARAM_CONCEPT[name],
+            f"{VIUO_NAME} has process parameter {name}.", "Factors, ranges and study type", row,
+            prow.header, pt.caption)
+    role = {"lrv_xmulv": "sets {n}, and contributes its platform claim to the cumulative "
+                         "requirement",
+            "aggregates_hmw": "can add to {n}, which is formed in the production bioreactor",
+            "fragments_lmw": "can add to {n}, which the register assigns to harvest",
+            "acidic_variants": "can add to {n}, which are formed in the production bioreactor"}
+    for key in ckeys:
+        add("step:viral_inactivation", "step_has_quality_attribute", f"attr:{key}",
+            f"{VIUO_NAME} " + role[key].format(n=names[key]) + ".", "Quality attributes in scope",
+            crow[key], crow.header, cq_t.caption)
+    for i, r in mdf.iterrows():
+        key = VI2_METHOD_ATTR.get(r["Output"])
+        if key is None:                       # the antibody concentration of the load: a parameter
+            continue
+        add(f"attr:{key}", "attribute_measured_by_method", f"method:{r['Validation']}",
+            f"{r['Output']} is measured by {r['Validation']} ({r['Method']}) in: {r['Sample']}.",
+            "Analytical methods", mrow[i], mrow.header, mt.caption)
+    for key, row in iacrow.items():
+        x = iac[iac["cqa"] == key].iloc[0]
+        add(f"attr:{key}", "attribute_has_acceptance_criterion", f"lit:{VIUO}_{key}_iac",
+            f"At the low-pH viral inactivation step, {names[key]} is judged against the Version 2.0 "
+            f"intermediate acceptance criterion {T.crit(x['iac_low'], x['iac_high'], x['spec_type'])} "
+            f"({x['basis']}).", "Intermediate acceptance criteria", row, iacrow.header, iac_t.caption)
+    prior = "Unit-operation description and prior knowledge"
+    q_lrv = (f"The {PN['ph']} is expected to govern the step, because the envelope glycoproteins "
+             f"denature much faster with each small fall in pH near the operating range.")
+    add(VIPARAM_CONCEPT[prm["ph"].name], "parameter_impacts_attribute", "attr:lrv_xmulv",
+        "The inactivation pH is expected to govern XMuLV inactivation.", prior, q_lrv)
+    q_hold = ("A longer hold gives a larger log reduction at any pH and temperature, and a warmer "
+              "hold speeds the denaturation of the envelope glycoproteins.")
+    add(VIPARAM_CONCEPT[prm["hold_time"].name], "parameter_impacts_attribute", "attr:lrv_xmulv",
+        "A longer hold gives a larger log reduction of XMuLV.", prior, q_hold)
+    add(VIPARAM_CONCEPT[prm["temperature"].name], "parameter_impacts_attribute", "attr:lrv_xmulv",
+        "A warmer hold speeds the denaturation of the envelope glycoproteins, and so the "
+        "inactivation of XMuLV.", prior, q_hold)
+    q_agg = ("A lower pH, a longer hold and a higher temperature each raise the log reduction of "
+             "XMuLV, and each also raises the aggregate that forms in the hold.")
+    for key, how in (("ph", "A lower inactivation pH"), ("hold_time", "A longer hold"),
+                     ("temperature", "A higher temperature")):
+        add(VIPARAM_CONCEPT[prm[key].name], "parameter_impacts_attribute", "attr:aggregates_hmw",
+            f"{how} raises the aggregate that forms in the hold.",
+            "Risk-based prioritization of parameters", q_agg)
+    add(VIPARAM_CONCEPT[prm["protein_conc"].name], "parameter_impacts_attribute", "attr:aggregates_hmw",
+        "A higher antibody concentration is expected to make aggregate form faster in the hold.",
+        "Risk-based prioritization of parameters",
+        "A higher antibody concentration raises the rate at which partially unfolded molecules "
+        "meet, so aggregate forms faster in a more concentrated pool.")
+    add(VIPARAM_CONCEPT[prm["hold_time"].name], "parameter_impacts_attribute", "attr:acidic_variants",
+        "On the platform, time at low pH adds a small amount of acidic variants.", prior,
+        "On the platform, time at low pH adds a small amount of acidic variants.")
+
+    # ---- report sections -------------------------------------------------------------------
+    chg = "Changes in this revision"
+    sdm = "Scale-down model and its qualification"
+    risks = "Risks and assumptions"
+    st("PCP-006 sets out the Stage 1 characterization of the low-pH viral inactivation step, Step 6 "
+       "of the A-Mab drug substance process, and applies PCMP-001 to the step.", "Purpose and scope",
+       "This plan sets out the Stage 1 characterization of the low-pH viral inactivation step, Step 6 "
+       "of the A-Mab drug substance process")
+    st(f"The commercial process runs at the {ns['scale_l']} L scale.", "Purpose and scope",
+       f"The commercial process runs at the {ns['scale_l']} L scale.")
+    st("The step contributes a log reduction of XMuLV to the modular viral clearance claim of the "
+       "process.", "Purpose and scope",
+       "The step contributes a log reduction of xenotropic murine leukemia virus (XMuLV) to the "
+       "modular viral clearance claim of the process")
+    st("The acid conditions of the hold can raise the levels of aggregate, fragments and acidic "
+       "variants in the pool.", "Purpose and scope",
+       "The same conditions act on the antibody and can raise the levels of aggregate, fragments and "
+       "acidic variants in the pool.")
+    st(f"Version 1.0 of the plan was approved on {ns['v1_date']}, before the first study of the step "
+       f"started on {ns['first_start']}.", chg,
+       f"Version 1.0 of this plan was approved on {ns['v1_date']}, before the first study of the step "
+       f"started on {ns['first_start']}.")
+    st("Version 2.0 is a protocol amendment issued under the QA investigation INV-001.", chg,
+       "Version 2.0 is a protocol amendment issued under the QA investigation INV-001.")
+    st("INV-001 found that the criteria used to judge each step in the PAR analysis were in no "
+       "approved protocol and had been set after the data were seen.", chg,
+       "The investigation found that the criteria used to judge each step in the PAR analysis were in "
+       "no approved protocol and had been set after the data were seen (INV-001 finding 1).")
+    st("The derivation of the intermediate acceptance criteria uses no result of the studies in the "
+       "plan.", chg, "The derivation uses no result of the studies in this plan.")
+    st("Fragments are added as an output of the step and judged on nrCE-SDS results, because SEC reads "
+       "fragments high in the Protein A eluate and in the neutralized pool.", chg,
+       "Size exclusion chromatography (SEC) reads fragments high in the Protein A eluate and in the "
+       "neutralized pool (INV-001 finding 6).")
+    st(f"XMuLV clearance is judged at the least favourable combination of the {ns['mv_txt']} within "
+       f"their NORs; Version 1.0 judged it on a single batch.", chg,
+       "Version 1.0 judged XMuLV clearance on a single batch, as it judged the quality attributes.")
+    st(f"The Version 2.0 aggregate criterion is wider than the Version 1.0 analysis limit and stricter "
+       f"than its own a priori value of {ns['agg_apriori']} % HMW.", chg,
+       f"The Version 2.0 aggregate criterion is wider than that limit, and stricter than its own a "
+       f"priori value of {ns['agg_apriori']} % HMW")
+    st("The Version 1.0 aggregate limit was never an approved criterion; it was applied in the report "
+       "at analysis and appeared in no approved plan.", chg,
+       "The Version 1.0 limit was never an approved criterion, because it was applied in the report at "
+       "analysis and appeared in no approved plan.")
+    st("For XMuLV clearance, Version 2.0 holds the step to its platform claim, which is stricter than "
+       "the Version 1.0 criterion.", chg,
+       "Version 2.0 holds the step to its platform claim, which is the stricter criterion.")
+    st("The factors, ranges, NORs, set-points and designs are those of Version 1.0.", chg,
+       "The factors, ranges, NORs, set-points and designs are those of Version 1.0, against which the "
+       "studies were planned and around which they were run.")
+    st(f"{PCR} Version 2.0 {ns['changes_txt']}.", chg, f"{PCR} Version 2.0 {ns['changes_txt']}.")
+    # the notes of the parameter table, in the order the plan wrote them (one per changed value)
+    notes = [n for n in pt.notes_text().split(CELL_SEP) if n]
+    pnotes = iter(ns["_pnotes"])
+    for name in prow:
+        p = next(q for q in prm.values() if q.name == name)
+        fixed = [float(x) for x in p.prange] == [float(x) for x in ns["nor_char"](p)]
+        for what, hit in (("set-point", float(p.setpoint) != float(ns["sp_char"](p))),
+                          ("NOR", bool(ns["nor_change"](p))), ("fixed", fixed)):
+            if not hit:
+                continue
+            m, note = next(pnotes)
+            q = next(n for n in notes if n.startswith(f"{m} "))
+            if what == "fixed":
+                st(f"For the {lc_name(name)} the NOR equals the range studied, "
+                   f"{ns['rng_u'](p.prange[0], p.prange[1], p.unit)}.",
+                   "Factors, ranges and study type", q, table_title=pt.caption)
+                continue
+            planned = (ns["with_unit"](ns["sp_char"](p), p.unit) if what == "set-point"
+                       else ns["rng_u"](*ns["nor_char"](p), p.unit))
+            st(f"The {lc_name(name)} {what} in this plan, {planned}, is the one against which the "
+               f"studies were planned. " + note.replace(f"{PCR} Version 2.0 ",
+                                                                   f"{PCR} Version 2.0 then "),
+               "Factors, ranges and study type", q, table_title=pt.caption)
+    if next(pnotes, None) is not None:
+        raise ValueError(f"{pt.label}: more notes than changed values")
+    st("Inactivation of an enveloped virus at low pH follows first-order kinetics.", prior,
+       "Inactivation follows first-order kinetics.")
+    st("At acid pH partially unfolded antibody exposes hydrophobic surface, so aggregate forms for as "
+       "long as the pool is held at low pH.", prior,
+       "Molecules with exposed hydrophobic surface associate, so aggregate forms for as long as the "
+       "pool is held at low pH.")
+    st("Aggregate formed in the hold is carried into cation exchange, the step that removes it.", prior,
+       "Aggregate formed in the hold is carried into cation exchange, the step that removes it.")
+    st("The step sets one attribute, XMuLV clearance.", "Quality attributes in scope",
+       "The step sets one attribute, XMuLV clearance.")
+    st("XMuLV clearance has very high criticality by rule, whatever its Tool #1 score.",
+       "Quality attributes in scope",
+       "XMuLV clearance was assigned very high criticality by rule, because a viral contamination "
+       "would harm the patient directly, whatever its score")
+    st("Acidic variants are measured by icIEF throughout the campaign.", "Quality attributes in scope",
+       "Acidic variants are measured by icIEF throughout this campaign, under the charge-variant "
+       "procedure SOP-3013.")
+    st(f"The mechanism of the step gives no reason to expect an effect of the {ns['conc_txt']} on the "
+       f"inactivation of the virus; the univariate study tests that expectation.",
+       "Risk-based prioritization of parameters",
+       "The mechanism of the step gives no reason to expect an effect of the antibody concentration on "
+       "the inactivation of the virus, which acts on the viral envelope.")
+    st("The scale-down model is qualified for each output separately, by its offset from "
+       "manufacturing scale and not by a test of equivalence.", sdm,
+       "The model is qualified for each output separately, by its offset from manufacturing scale and "
+       "not by a test of equivalence (PCMP-001 §7.1).")
+    st(f"The qualification decision needs the response-surface model and is made at the analysis, in "
+       f"{PCR}.", sdm, f"The decision is therefore made at the analysis, in {PCR}.")
+    st("Fragments and XMuLV clearance are not compared at both scales, so their offsets are unknown "
+       "and they are judged as the model predicts them.", sdm,
+       "Fragments and XMuLV clearance are not compared at both scales, so their offsets are unknown, "
+       "not zero.")
+    st("XMuLV clearance is measured in a spiking model of the step, because virus cannot be "
+       "introduced into the manufacturing process.", sdm,
+       "Virus cannot be introduced into the manufacturing process, so XMuLV clearance is measured in a "
+       "spiking model of the step")
+    st("Each run of a design is made as a spiked run, which gives the two titres, and an unspiked run "
+       "at the same settings, which gives the quality attributes.", sdm,
+       "The spiked run gives the two titres, and an unspiked run at the same settings gives the "
+       "quality attributes.")
+    st(f"The retained samples of the response-surface design are tested by nrCE-SDS in the re-test "
+       f"study {studies_of['retest']}, and fragments are judged on those results.",
+       "Analytical methods",
+       f"The retained samples of the response-surface design are tested by nrCE-SDS in the re-test "
+       f"study {studies_of['retest']}, and fragments are judged on those results.")
+    st(f"The response-surface model is the predictive model; every prediction, every PAR and the "
+       f"verification of the platform worst cases in {PCR} will come from it.", "Statistical methods",
+       f"Every prediction, every PAR and the verification of the platform worst cases in {PCR} will "
+       f"come from it.")
+    st(f"Aggregate, fragments and acidic variants are judged through a {ns['pi_pct']} % prediction "
+       f"interval of a single batch wherever a judgement supports a claim.", "Statistical methods",
+       f"These three attributes are therefore judged through a {ns['pi_pct']} % prediction interval "
+       f"of a single batch wherever a judgement supports a claim.")
+    st(f"The centre of each design is the midpoint of the ranges studied, at {ns['centre_txt']}, and "
+       f"is not the set-point of any factor.", "Factors, ranges and study type",
+       f"The centre of each design is the midpoint of the ranges studied, at {ns['centre_txt']}.")
+    st(f"A response-surface model is adequate only if predicted R² falls short of R² by no more than "
+       f"{ns['gap_max']}.", "Scale-down model and model adequacy",
+       f"Predicted R² falls short of R² by no more than {ns['gap_max']}, the limit on overfitting of "
+       f"PCMP-001 §7.2.")
+    st(f"Lack of fit against pure error must not be significant at α = {ns['a_lof']}.",
+       "Scale-down model and model adequacy",
+       f"Lack of fit against pure error is not significant at α = {ns['a_lof']}.")
+    for key, row in iacrow.items():
+        x = iac[iac["cqa"] == key].iloc[0]
+        c = T.crit(x["iac_low"], x["iac_high"], x["spec_type"])
+        if x["basis"] == "platform claim":
+            how = f"is the platform claim of the step: {c}."
+        elif x["basis"] == "drug substance":
+            how = f"is the drug substance criterion, because no downstream step changes it: {c}."
+        else:
+            how = (f"is the drug substance criterion carried back through a downstream clearance "
+                   f"fold of {T.num(x['downstream_fold'])} and an increase of "
+                   f"{T.num(x['downstream_added'])}, with no margin: {c}.")
+        if bool(x["tightened"]):
+            how += (f" It was tightened from its a priori value of "
+                    f"{T.crit(x['iac_low_apriori'], x['iac_high_apriori'], x['spec_type'])}: the "
+                    f"one-sided {ns['vb_pct']} % prediction bound of a single cation exchange batch "
+                    f"replaced the platform worst case.")
+        st(f"The intermediate acceptance criterion for {names[key]} at the low-pH viral inactivation "
+           f"step " + how, "Intermediate acceptance criteria", row, iacrow.header, iac_t.caption)
+    st(f"Aggregate in the neutralized pool must not exceed {ns['agg_hi']} % HMW.",
+       "Intermediate acceptance criteria",
+       f"Aggregate in the neutralized pool must not exceed {ns['agg_hi']} % HMW.")
+    st(f"Fragments in the neutralized pool must not exceed {ns['frag_hi']} %, measured by nrCE-SDS.",
+       "Intermediate acceptance criteria",
+       f"Fragments in the neutralized pool must not exceed {ns['frag_hi']} %, measured by nrCE-SDS.")
+    st(f"Acidic variants must lie within {ns['acid_lo']}–{ns['acid_hi']} %, and both limits apply.",
+       "Intermediate acceptance criteria",
+       f"Acidic variants must lie within {ns['acid_lo']}–{ns['acid_hi']} %, the drug substance "
+       f"criterion, because no downstream step is credited with a change in them.")
+    st(f"The XMuLV claims of {ns['xm_steps_txt']} together exceed the cumulative requirement by only "
+       f"{ns['xm_margin']:.2f} log10, so a larger shortfall at this step cannot be made up by the "
+       f"other two steps.", "XMuLV clearance claim",
+       "A shortfall at this step larger than that surplus therefore cannot be made up by the claims of "
+       "the other two steps.")
+    st(f"The lowest mean predicted LRF among all combinations of NOR low, set-point and NOR high of "
+       f"the {ns['mv_txt']} must reach the claim of {ns['claim_txt']} log10.", "XMuLV clearance claim",
+       f"The lowest mean predicted LRF among all combinations of NOR low, set-point and NOR high of "
+       f"the {ns['mv_txt']} must reach {ns['claim_txt']}")
+    for key, row in wcrow.items():
+        v = ver[ver["cqa"] == key].iloc[0]
+        st(f"Criteria upstream of the step assume that low-pH viral inactivation adds at most "
+           f"{T.num(v['assumed'])} percentage points of {names[key]}, the platform worst case over a "
+           f"hold of {ns['platform_hold_min']} {ns['PU']['hold_time']}; {PCR} verifies it with the "
+           f"response-surface model.", "Verification of the platform worst cases", row,
+           wcrow.header, wc_t.caption)
+    st("A platform worst-case assumption is confirmed when the predicted largest increase within the "
+       "NOR is no larger than the platform worst case.", "Verification of the platform worst cases",
+       "An assumption is confirmed when the predicted largest increase is no larger than the platform "
+       "worst case.")
+    st("Routine manufacture never holds the pool longer than the upper end of the NOR, so a criterion "
+       "verified within the NOR stays right.", "Verification of the platform worst cases",
+       "The criterion that results is still right, because routine manufacture never holds the pool "
+       "longer than the upper end of the NOR.")
+    st("Neither PCMP-001 nor SOP-4001 sets a numerical threshold for a practically relevant effect or "
+       "for a PAR that is wide against its NOR.", "Parameter classification",
+       "Neither PCMP-001 nor SOP-4001 sets a numerical threshold for an effect that is practically "
+       "relevant, or for a PAR that is wide against its NOR, so neither decides a class on its own.")
+    st("The PAR of the NOR-propagated analysis is the one that supports a claim.",
+       "Proven acceptable ranges (planned analysis)",
+       "The PAR of the second analysis is the one that supports a claim.")
+    st("A parameter that affects several attributes has a PAR for each, and the range carried into "
+       "the control strategy is their intersection.", "Proven acceptable ranges (planned analysis)",
+       "A parameter that affects several attributes has a PAR for each attribute, and the range "
+       "carried into the control strategy is their intersection.")
+    st(f"The first study of the step started on {ns['first_start']}, after the plan was approved, and "
+       f"{ns['par_txt']} ran in parallel.", "Deliverables and schedule",
+       f"The first study of the step started on {ns['first_start']}, after this plan was approved, and "
+       f"{ns['par_txt']} ran in parallel.")
+    st("The verification of the cation exchange aggregate clearance has already changed the aggregate "
+       "criterion of this step.", risks,
+       "The verification of the cation exchange aggregate clearance has already changed the aggregate "
+       "criterion of this step.")
+    st("The scale-down model is assumed to form fragments at the rate of manufacture, because cleavage "
+       "in the hinge region depends on pH, time and temperature and not on scale.", risks,
+       "The scale-down model forms fragments at the rate of manufacture, because cleavage in the hinge "
+       "region depends on pH, time and temperature and not on scale")
+
+    concepts = [Concept(concept_id="step:viral_inactivation", concept_type="PROCESS_STEP",
+                        canonical_name=VIUO_NAME,
+                        aliases=["low-pH viral inactivation", "viral inactivation", "low-pH hold",
+                                 "low-pH step", "Step 6"],
+                        review_status="human_verified")]
+    concepts += [Concept(concept_id=cid, concept_type="PROCESS_PARAMETER", canonical_name=name,
+                         review_status="human_verified") for name, cid in VIPARAM_CONCEPT.items()]
+    concepts += _attr_concepts(ckeys)
+    concepts += _method_concepts(list(mdf["Validation"]), dict(zip(mdf["Validation"], mdf["Method"])))
+    return S.GroundTruthAnnex(
+        document_id=doc, document_title=f"{P.DOC_REGISTRY[doc][0]} — {P.DOC_REGISTRY[doc][1]}",
+        document_class=P.DOC_REGISTRY[doc][0], **rev2_layer(doc, f),
+        schema_extensions_used=COMMON_EXT + REV2_EXT,
+        out_of_schema_notes=[
+            "Classification is a result of the study, so every parameter_type is 'unclassified'. "
+            "ProcessParameter.target_value and NOR are the set-point and NOR the studies were planned "
+            "against, which the plan prints; the set-points and NORs that PCR-006 Version "
+            "2.0 put in force are statements anchored on the notes of the parameter table. "
+            "ProcessParameter.PAR carries the range studied, as everywhere in the corpus; the plan "
+            "claims no proven acceptable range.",
+            f"The nrCE-SDS re-test of retained samples {studies_of['retest']} has no "
+            "StudyDesign.study_type; it appears as rows of the schedule and sampling tables and as a "
+            "statement. Studies of the step that started after INV-001 opened (hold, confirmation and "
+            "support studies) are not studies of this plan; PCR-006 records each as a discrepancy.",
+            "acceptance_criteria holds the rows of the criteria-change table (Version 1.0 analysis "
+            "limits, superseded, and the Version 2.0 criteria, in force). XMuLV clearance is judged on "
+            "the mean predicted LRF at the least favourable NOR combination of the other factors, the "
+            "quality attributes per batch.",
+            f"The {ns['conc_txt']} is measured by absorbance at 280 nm (AMV-3019); it is a parameter, "
+            "so that AnalyticalMethod record has no associated attribute and no "
+            "attribute_measured_by_method assertion.",
+            "The procedures table ties each validation reference to its title; each AnalyticalMethod "
+            "record is anchored on both the methods-table row and the procedures-table row.",
+            "The platform worst cases the step verifies are statements anchored on the rows of the "
+            "worst-case table; they are assumptions of upstream criteria, not criteria of this step.",
+            "The planned design matrices (Appendices A and B), the roles table and the factor letter "
+            "codes are not represented row by row. No rhetorical_spans: none were curated for this "
+            "plan. weak_claims is empty.",
+        ] + _unrendered_note(unrendered),
+        inventory=rev2_inventory(doc, f, "process_characterization_plan", VIUO_NAME,
+                                 ["process characterization", "low-pH viral inactivation",
+                                  "viral clearance", "XMuLV log reduction", "protocol amendment",
+                                  "intermediate acceptance criteria", "scale-down offset",
+                                  "spiking model", "design of experiments"]),
+        entities=entities, studies=studies,
+        report_sections=[ReportSection(section_id=f"{doc}-summary", title="Plan summary",
+                                       statements=ST)],
+        assertions=AssertionStore(run_id=f"gt-{doc}", assertions=A, rationales=[]),
+        concepts=ConceptStore(run_id=f"gt-{doc}", concepts=concepts),
+        acceptance_criteria=acceptance_criteria_layer(doc, f, chg, T.criteria_change([VIUO]),
+                                                      [VIUO]))
+
+
+# --------------------------------------------------------------------------- #
 # PCMP-001 — Process Characterization Master Plan, Version 2.0.                 #
 # --------------------------------------------------------------------------- #
 def _iac_ctable_keys(table):
@@ -8904,7 +9555,7 @@ BUILDERS = [
 #: skipped and its annex kept as it is. This keeps check_grounding green at every step of the
 #: Rev 2.0 campaign (work unit 2026-10-08_01_rev2-campaign). When every document is in the set,
 #: delete this mechanism.
-REV2_READY: set = {"INV-001", "PCMP-001", "PCP-005", "PCR-005"}
+REV2_READY: set = {"INV-001", "PCMP-001", "PCP-005", "PCP-006", "PCR-005"}
 
 
 def main():

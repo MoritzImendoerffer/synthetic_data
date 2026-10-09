@@ -413,8 +413,10 @@ verification rule and the execution windows, as PCMP-001 Version 2.0 sets them, 
 change. It must not add a step-specific decision rule (a refit procedure, a NOR rule for one parameter, a
 test chosen for one study) or an execution detail the record does not hold, because such a rule is
 written with the data known: that is INV-001 finding 1 again. It never says a rule was "fixed before
-the data". It keeps the design, sampling and spiking as Version 1.0 planned them, even where a study
-departed from them; the report records the departure. Where Version 1.0 had no rule the report needs,
+the data". It keeps the design, sampling, spiking and **every decision rule** of Version 1.0 as Version 1.0
+stated them, even where a study departed from them or the data broke a rule; the report records the
+departure. Deleting a Version 1.0 rule after the data hides the departure and is as wrong as adding
+one (PCP-003 factual check, 2026-10-09). Where Version 1.0 had no rule the report needs,
 the plan says it has none, and the report states its approach and records it as a discrepancy.
 
 **The hold studies, the concentration study and the labels (owner, 2026-10-09).**

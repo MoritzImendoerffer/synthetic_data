@@ -1,8 +1,11 @@
 ---
 title: "Process Characterization Plan"
-subtitle: "A-Mab Drug Substance — Low-pH Viral Inactivation (Step 6) — PCP-006"
+subtitle: "A-Mab Drug Substance — Low-pH Viral Inactivation (Step 6) — PCP-006"   # instantiate as "A-Mab Drug Substance — <UO_TITLE> — <DOC>", or
+                          # as "A-Mab Drug Substance — <DOC>" for a corpus-level document,
+                          # whose UO_TITLE IS "A-Mab Drug Substance" and would otherwise
+                          # render twice (found 2026-08-21 across all four of batch B5).
 author: "Process Development / Manufacturing Science & Technology (MSAT)"
-date: 2026-07-24
+date: 2026-09-30            # Version 2.0 effective date (INV-001 is 2026-09-18)
 format:
   docx:
     reference-doc: reference.docx
@@ -25,6 +28,7 @@ format:
     fig-pos: 'H'
     fig-cap-location: bottom
     tbl-cap-location: top
+    include-in-header: _tables.tex   # multirow, booktabs, threeparttable for complex tables
 bibliography: references.bib
 execute:
   echo: false
@@ -39,88 +43,512 @@ import sys, os
 sys.path.insert(0, os.path.abspath("."))
 from _pcpkg import *  # noqa: F401,F403
 import doe_report as D
-import pandas as pd
+import tables as T          # complex tables: merged cells, footnotes (T.<builder>(...).show())
 import matplotlib.pyplot as plt
 import scipy.stats as sstat
+import inspect
+import re
+from math import comb
 
 DOC = "PCP-006"
 UO = "viral_inactivation"
 UO_TITLE = "Low-pH Viral Inactivation (Step 6)"
 
-# --- doc-local derived scalars (pulled from the model; never typed) -------------------
-uo_cfg = CFG.unit_op(UO)
-p_ph   = uo_cfg.param("ph")
-p_time = uo_cfg.param("hold_time")
-p_temp = uo_cfg.param("temperature")
-p_conc = uo_cfg.param("protein_conc")
+# --- doc-local derived scalars (pulled from the model; never typed) ---------------------
+_W = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+      "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
+      "eighteen", "nineteen", "twenty"]
 
-pp        = plan_params(UO)
-n_params  = len(pp)
-n_multi   = int((pp["Study type"] == "multivariate").sum())
-n_uni     = int((pp["Study type"] == "univariate").sum())
 
-resps     = D.responses(UO)
-n_resp    = len(resps)
-facs      = D.screening_factors(UO)
-n_fac     = len(facs)
+def w(n):
+    """A small count in words, for running text."""
+    n = int(n)
+    return _W[n] if 0 <= n < len(_W) else f"{n:,}"
 
-scr_plan  = D.planned_matrix_df(UO, "screening")
-rsm_plan  = D.planned_matrix_df(UO, "rsm")
-n_scr     = doe_runs(UO, "screening")
-n_rsm     = doe_runs(UO, "rsm")
-c_scr     = doe_centre_points(UO, "screening")
-c_rsm     = doe_centre_points(UO, "rsm")
-f_scr     = int((scr_plan["Type"] == "factorial").sum())
-f_rsm     = int((rsm_plan["Type"] == "factorial").sum())
-a_rsm     = int((rsm_plan["Type"] == "axial").sum())
-n_total   = n_scr + n_rsm
 
-# model sizes and the degrees of freedom the designs leave
-n_terms_scr = 1 + n_fac + n_fac * (n_fac - 1) // 2
-n_terms_rsm = n_terms_scr + n_fac
-df_res_scr  = n_scr - n_terms_scr
-df_res_rsm  = n_rsm - n_terms_rsm
-df_pe_rsm   = c_rsm - 1
-df_lof_rsm  = df_res_rsm - df_pe_rsm
+def g(v):
+    return f"{float(v):g}"
 
-# design-centre settings in natural units (coded 0)
-ctr_ph   = float(D.to_natural(UO, "ph", 0.0))
-ctr_time = float(D.to_natural(UO, "hold_time", 0.0))
-ctr_temp = float(D.to_natural(UO, "temperature", 0.0))
 
-# acceptance criteria the study will be judged against
-cum_xmulv = float(cqa_reg[cqa_reg["key"] == "lrv_xmulv"]["acc_low"].iloc[0])
-acc_xmulv = float(D.acceptance_for(UO, "xmulv_lrf")[0])
-lim_agg   = float(D.effective_acceptance(UO, "aggregate_out_pct")[1])
-ds_agg    = float(D.acceptance_for(UO, "aggregate_out_pct")[1])
-lim_acid  = float(D.effective_acceptance(UO, "acidic_variants")[1])
+def lc(name):
+    return name if name.startswith("A-Mab") else name[0].lower() + name[1:]
 
-_cqa_name = dict(zip(cqa_reg["key"], cqa_reg["cqa"]))
 
-def _crit_str(t):
-    lo, hi, stype = t
-    if stype == "lower":
-        return f"≥ {lo:.2f}"
-    if stype == "upper":
-        return f"≤ {hi:.3g}"
-    return f"{lo:g}–{hi:g}"
+def fv(v, unit):
+    """A parameter value as the tables print it: pH to one decimal, anything else as given."""
+    return f"{float(v):.1f}" if unit == "pH" else g(v)
 
-def _basis_str(r):
-    if r in D.VIRAL_COL:
-        return "back-calculated step contribution"
-    return ("in-process limit" if D.acceptance_basis(UO, r) == "in-process"
-            else "drug substance specification")
 
-acc_df = pd.DataFrame(
-    [[D.RESP_LABEL.get(r, r),
-      _cqa_name.get(D.RESP_TO_CQA.get(r, r), r),
-      _crit_str(D.effective_acceptance(UO, r)),
-      _basis_str(r)] for r in resps],
-    columns=["Response", "Quality attribute", "Acceptance criterion", "Criterion basis"])
+def with_unit(v, unit):
+    return f"pH {fv(v, unit)}" if unit == "pH" else f"{fv(v, unit)} {unit}"
 
-n_mc   = D.PAR_MC_N
-n_grid = D.PAR_GRID
+
+def rng_u(lo, hi, unit):
+    return f"pH {fv(lo, unit)}–{fv(hi, unit)}" if unit == "pH" else f"{fv(lo, unit)}–{fv(hi, unit)} {unit}"
+
+
+def step_lc(k):
+    n = T.STEP_NAME[k]
+    return n if n.startswith("Protein A") else n[0].lower() + n[1:]
+
+
+ver, eff = doc_version(DOC)
+v1_date = rev1_date(DOC)
+uo = CFG.unit_op(UO)
+PCR = f"PCR-{uo.step:03d}"
+PCP_PA = f"PCP-{CFG.unit_op('protein_a').step:03d}"
+PCR_CEX = f"PCR-{CFG.unit_op('cex').step:03d}"
+PCP_AEX = f"PCP-{CFG.unit_op('aex').step:03d}"
+PCP_VF = f"PCP-{CFG.unit_op('virus_filtration').step:03d}"
+scale_l = f"{V['commercial_scale_l']:,}"
+_order = list(CFG.train_order)
+assert _order[_order.index(UO) - 1] == "protein_a" and _order[_order.index(UO) + 1] == "cex"
+
+# --- parameters: the plan states the values its studies were planned against ------------
+params = list(uo.parameters)
+P = {p.key: p for p in params}
+assert [p.name for p in params] == ["Inactivation pH", "Hold time", "Temperature", "A-Mab concentration"]
+mv = [p for p in params if p.study == "multivariate"]
+uv = [p for p in params if p.study != "multivariate"]
+assert [p.key for p in mv] == list(D.rsm_factors(UO)) == list(D.screening_factors(UO)) == ["ph", "hold_time", "temperature"]
+assert [p.key for p in uv] == ["protein_conc"]
+n_par, k = len(params), len(mv)
+
+# every parameter name and every unit is read from the configuration, never typed (owner's
+# decision 2026-10-09): PN inside a sentence, PNC where a sentence opens on the name
+PN = {key: lc(p.name) for key, p in P.items()}
+PNC = {key: p.name for key, p in P.items()}
+PU = {key: p.unit for key, p in P.items()}
+mv_txt = join_and([PN[p.key] for p in mv])
+mv_txt_c = PNC[mv[0].key] + ", " + join_and([PN[p.key] for p in mv[1:]])
+conc_txt, conc_txt_c = PN["protein_conc"], PNC["protein_conc"]
+params_txt = join_and([PN[p.key] for p in params])
+
+
+def sp_char(p):
+    return p.setpoint if p.setpoint_characterized is None else p.setpoint_characterized
+
+
+def nor_char(p):
+    return list(p.nor_characterized)
+
+
+def nor_change(p):
+    """How PCR-006 Version 2.0 changed the NOR: None, 'narrowed' or 'moved'."""
+    a, b = [float(x) for x in nor_char(p)], [float(x) for x in p.nor]
+    if a == b:
+        return None
+    if (b[1] - b[0]) < (a[1] - a[0]) and b[0] >= a[0] and b[1] <= a[1]:
+        return "narrowed"
+    return "moved"
+
+
+sp_moved = [p for p in params if float(p.setpoint) != float(sp_char(p))]
+nor_moved = [p for p in params if nor_change(p) == "moved"]
+nor_narrowed = [p for p in params if nor_change(p) == "narrowed"]
+assert sp_moved and nor_moved and nor_narrowed
+changes_txt = (f"moved the set-point{'s' if len(sp_moved) > 1 else ''} of {join_and([lc(p.name) for p in sp_moved])}, "
+               f"moved the NOR{'s' if len(nor_moved) > 1 else ''} of {join_and([lc(p.name) for p in nor_moved])} "
+               f"and narrowed the NOR{'s' if len(nor_narrowed) > 1 else ''} of {join_and([lc(p.name) for p in nor_narrowed])}")
+
+# range studied against the NOR as characterized (the sentences of the study design name them)
+both_ends = [p.key for p in mv if p.prange[0] < nor_char(p)[0] and p.prange[1] > nor_char(p)[1]]
+low_equal = [p.key for p in mv if float(p.prange[0]) == float(nor_char(p)[0]) and p.prange[1] > nor_char(p)[1]]
+assert both_ends == ["ph", "temperature"] and low_equal == ["hold_time"]
+assert [float(x) for x in uv[0].prange] == [float(x) for x in nor_char(uv[0])]
+both_ends_txt = join_and([PN[key] for key in both_ends])
+low_equal_txt = join_and([PN[key] for key in low_equal])
+conc_range_txt = rng_u(uv[0].prange[0], uv[0].prange[1], uv[0].unit)
+
+# the design centre is the midpoint of each range studied, not the set-point
+centre = {p.key: (p.prange[0] + p.prange[1]) / 2 for p in mv}
+assert all(float(centre[p.key]) != float(sp_char(p)) for p in mv)
+centre_txt = join_and([with_unit(centre[p.key], p.unit) for p in mv])
+
+# the parameter table: the values of plan_params(UO), with a note on each value PCR-006 Version 2.0 changed
+_pp = plan_params(UO).reset_index(drop=True)
+_letters = iter("abcdefghijklmnopqrstuvwxyz")
+_pnotes, _prows = [], []
+_lmap = D.factor_letters(UO)
+for _, _r in _pp.iterrows():
+    _p = next(q for q in params if q.name == _r["Parameter"])
+    assert float(_r["Set-point"]) == float(sp_char(_p))
+    assert _r["Range studied"] == f"{g(_p.prange[0])}–{g(_p.prange[1])}"
+    assert _r["NOR"] == f"{g(nor_char(_p)[0])}–{g(nor_char(_p)[1])}"
+    _sp = fv(sp_char(_p), _p.unit)
+    _nor = f"{fv(nor_char(_p)[0], _p.unit)}–{fv(nor_char(_p)[1], _p.unit)}"
+    if float(_p.setpoint) != float(sp_char(_p)):
+        _m = next(_letters) + ")"
+        _sp += f" ^{_m}^"
+        _pnotes.append((_m, f"{PCR} Version 2.0 moved the set-point to {with_unit(_p.setpoint, _p.unit)}."))
+    if nor_change(_p):
+        _m = next(_letters) + ")"
+        _nor += f" ^{_m}^"
+        _pnotes.append((_m, f"{PCR} Version 2.0 {nor_change(_p)} the NOR to {rng_u(_p.nor[0], _p.nor[1], _p.unit)}."))
+    if [float(x) for x in _p.prange] == [float(x) for x in nor_char(_p)]:
+        _m = next(_letters) + ")"
+        _nor += f" ^{_m}^"
+        _pnotes.append((_m, "The NOR equals the range studied."))
+    _prows.append([_lmap.get(_p.key, "–"), _r["Parameter"], _r["Unit"], _sp,
+                   f"{fv(_p.prange[0], _p.unit)}–{fv(_p.prange[1], _p.unit)}", _nor, _r["Study type"]])
+tbl_params = T.frame(
+    pd.DataFrame(_prows, columns=["Code", "Parameter", "Unit", "Planned set-point", "Range studied", "Planned NOR", "Study type"]),
+    caption="Parameters of the low-pH viral inactivation step, with the set-points and NORs against which "
+            "the studies were planned.",
+    label="tbl-params",
+    notes=_pnotes + [("", "Code, the letter of the factor in the design matrices of Appendices A and B. "
+                          "A-Mab concentration is not a factor of the designs.")],
+    notes_per_row=True,
+    align=["l", "P{3.2cm}", "l", "r", "l", "l", "l"])
+
+# --- designs ----------------------------------------------------------------------------
+scr = csv(f"doe_{UO}_screening.csv")
+rsm = csv(f"doe_{UO}_rsm.csv")
+n_scr, n_rsm = doe_runs(UO, "screening"), doe_runs(UO, "rsm")
+c_scr, c_rsm = doe_centre_points(UO, "screening"), doe_centre_points(UO, "rsm")
+f_scr = int((scr.run_type == "factorial").sum())
+f_rsm = int((rsm.run_type == "factorial").sum())
+a_rsm = int((rsm.run_type == "axial").sum())
+assert f_scr == 2 ** k and f_rsm == 2 ** k and a_rsm == 2 * k
+assert f_scr + c_scr == n_scr and f_rsm + a_rsm + c_rsm == n_rsm
+assert rsm[[f"coded_{f}" for f in D.rsm_factors(UO)]].abs().max().max() == 1
+p_scr = 1 + k + comb(k, 2)
+p_rsm = 1 + 2 * k + comb(k, 2)
+dfr_scr, dfpe_scr = n_scr - p_scr, c_scr - 1
+dflof_scr = dfr_scr - dfpe_scr
+dfr_rsm, dfpe_rsm = n_rsm - p_rsm, c_rsm - 1
+dflof_rsm = dfr_rsm - dfpe_rsm
+assert dflof_scr > 0 and dflof_rsm > 0
+
+# --- campaign thresholds (PCMP-001 Version 2.0) ----------------------------------------------
+a_eff = g(THRESHOLDS["effect_alpha"])
+a_lof = g(THRESHOLDS["lof_alpha"])
+gap_max = g(THRESHOLDS["max_r2_minus_pred_r2"])
+ci_off_pct = g(100 * CFG.raw()["analytics"]["sdm"]["offset_ci"])
+cook_rsm = f"{4 / n_rsm:.2f}"         # the conventional Cook's distance cut-off 4/n, for the planned runs
+
+# --- the NOR-propagated draw, as the engine makes it (doe_report._mc_predictive) ----------------
+_nor_div = float(D.NOR_SD_DIVISOR)
+sd_frac = "one " + {2: "half", 4: "quarter", 6: "sixth", 8: "eighth"}[int(_nor_div)]
+n_sig = w(_nor_div / 2)
+assert D.PI_LEVEL == 0.95                       # the central interval of the NOR-propagated analysis
+mc_n = f"{D.PAR_MC_N:,}"
+pi_pct = g(100 * D.PI_LEVEL)                  # prediction intervals of a single run or batch
+vb_pct = g(100 * D.VERIFICATION_BOUND)        # the single-batch prediction bound of the verification of platform worst cases
+
+# --- criteria for the step outputs (iac.csv) --------------------------------------------------
+acc = {r: D.effective_acceptance(UO, r) for r in ["aggregate_out_pct", "xmulv_lrf", "acidic_variants", "lmw_cesds_pct"]}
+iac = D.iac_table(UO)
+_all_iac = D.iac_table()
+agg_hi = T.num(acc["aggregate_out_pct"][1])
+frag_hi = T.num(acc["lmw_cesds_pct"][1])
+acid_lo, acid_hi = T.num(acc["acidic_variants"][0], 1), T.num(acc["acidic_variants"][1], 1)
+assert acc["acidic_variants"][2] == "two_sided"
+claim = acc["xmulv_lrf"][0]
+claim_txt = g(claim)
+_agg = iac[iac.response == "aggregate_out_pct"].iloc[0]
+agg_apriori = T.num(_agg["iac_high_apriori"])
+assert bool(_agg["tightened"]) and not bool(_agg["widened"]) and _agg["iac_high"] < _agg["iac_high_apriori"]
+assert set(iac[iac["tightened"] | iac["widened"]]["response"]) == {"aggregate_out_pct"}
+_ver_all = D.iac_verification()
+_tight = _ver_all[(_ver_all.cqa == "aggregates_hmw") & (_ver_all.met == False)]  # noqa: E712
+assert list(_tight.step_key) == ["cex"]
+_down = _all_iac[(_all_iac.step > uo.step) & _all_iac.cqa.isin(["aggregates_hmw", "fragments_lmw"])]
+assert (_down[_down.step_key == "cex"].basis == "drug substance").all()   # nothing after cation exchange is credited
+_frag = iac[iac.response == "lmw_cesds_pct"].iloc[0]
+assert _frag["basis"] == "back-calculated"
+assert float(_frag["downstream_fold"]) == float(_ver_all[(_ver_all.step_key == "cex") & (_ver_all.cqa == "fragments_lmw")].assumed.iloc[0])
+assert iac[iac.response == "acidic_variants"].iloc[0]["basis"] == "drug substance"
+
+# XMuLV claims of the train (PCMP-001 §7.4)
+_xm = _all_iac[_all_iac.cqa == "lrv_xmulv"].sort_values("step")
+xm_claims = {r.step_key: r.iac_low for r in _xm.itertuples()}
+assert list(xm_claims) == ["viral_inactivation", "aex", "virus_filtration"]
+assert float(xm_claims[UO]) == float(claim)
+xm_sum = sum(xm_claims.values())
+xm_req = float(_xm.iloc[0]["ds_low"])
+# the surplus of the claims over the cumulative requirement, as the campaign records it
+_xmc = csv("iac_viral_cumulative.csv").set_index("cqa").loc["lrv_xmulv"]
+assert abs(float(_xmc["claimed_sum"]) - xm_sum) < 1e-9 and float(_xmc["required"]) == xm_req
+assert bool(_xmc["met"])
+xm_margin = float(_xmc["claimed_sum"]) - float(_xmc["required"])
+assert 0 <= xm_margin < min(xm_claims.values())
+xm_steps_txt = join_and([step_lc(s) for s in xm_claims])
+
+# Version 1.0 criteria for this step (INV-001)
+_r1 = D.rev1_criteria(UO)
+_r1_agg = _r1[_r1.response == "aggregate_out_pct"].iloc[0]
+_r1_xm = _r1[_r1.response == "xmulv_lrf"].iloc[0]
+agg_v1_margin = T.num(_r1_agg["margin"], 1)
+assert _agg["iac_high"] > _r1_agg["high"]            # the Version 2.0 aggregate criterion is wider
+assert claim > _r1_xm["low"]                           # the Version 2.0 XMuLV criterion is stricter
+assert _r1_agg["rule"].startswith("nominal back") and _r1_xm["rule"].startswith("requirement")
+assert set(_r1.response) == {"aggregate_out_pct", "xmulv_lrf"}
+
+# platform worst cases this step verifies (PCMP-001 §7.5): the source strings are read, never retyped
+_ver = D.iac_verification(UO)
+assert set(_ver.assumption) == {"add_max"}
+_short = {"aggregates_hmw": "Aggregate", "fragments_lmw": "Fragments", "acidic_variants": "Acidic variants"}
+_wc_rows, _wc_notes, _mins, _wl = [], [], set(), iter("abcdefgh")
+for _r in _ver.itertuples():
+    _s = re.fullmatch(r"X/Y/Z-Mab low-pH hold, (\d+) min(.*)", _r.source)
+    assert _s, _r.source
+    _mins.add(int(_s.group(1)))
+    _extra = _s.group(2).strip(" ;,")
+    _ups = _all_iac[(_all_iac.cqa == _r.cqa) & (_all_iac.step < uo.step) & (_all_iac.basis != "drug substance")]
+    assert len(_ups) >= 1
+    _attr = T.ATTR_NAME[_r.cqa]
+    if _extra:
+        _mk = next(_wl) + ")"
+        _attr += f"^{_mk}^"
+        if _extra == "nrCE-SDS":
+            _wc_notes.append((_mk, "Measured by nrCE-SDS."))
+        elif _extra.startswith("A-Mab Table "):
+            _wc_notes.append((_mk, f"The platform value also draws on {_extra.replace('A-Mab ', '')} of the A-Mab case study."))
+        else:
+            raise AssertionError(_extra)
+    _wc_rows.append([_attr, T.num(_r.assumed),
+                     join_and([f"{_short[_r.cqa]}, {step_lc(s)} output" for s in _ups.step_key])])
+assert len(_mins) == 1
+platform_hold_min = _mins.pop()
+hold_nor_hi = g(nor_char(P["hold_time"])[1])
+assert float(platform_hold_min) == float(P["hold_time"].prange[1]) > float(nor_char(P["hold_time"])[1])
+assert float(P["hold_time"].nor[1]) == float(nor_char(P["hold_time"])[1])   # routine holds never exceed it
+assert all(T.ATTR_NAME[c].endswith("(%)") for c in _ver.cqa)   # every increase is in %
+tbl_wc = T.frame(
+    pd.DataFrame(_wc_rows, columns=["Attribute", "Increase\n(percentage points)",
+                                    "Upstream criterion"]),
+    caption="Platform worst cases of the low-pH viral inactivation step that criteria upstream of it rely on.",
+    label="tbl-worst-cases", align=["P{4.4cm}", "r", "P{6.4cm}"],
+    notes=_wc_notes + [("", f"Increase, the largest increase in the attribute across the step for "
+                            f"X-Mab, Y-Mab and Z-Mab, over a hold of {platform_hold_min} "
+                            f"{PU['hold_time']}."),
+                       ("", "Upstream criterion, the criterion of a step before this one that "
+                            "relies on the platform worst case in the same row.")],
+    notes_per_row=True)
+
+# --- the attributes in scope ----------------------------------------------------------
+_cq_order = ["lrv_xmulv", "aggregates_hmw", "fragments_lmw", "acidic_variants"]
+assert set(iac.cqa) == set(_cq_order)
+_reg = cqa_reg.set_index("key")
+assert _reg.loc["lrv_xmulv", "set_by"] == UO and list(cqa_reg[cqa_reg.set_by == UO].key) == ["lrv_xmulv"]
+assert _reg.loc["aggregates_hmw", "set_by"] == "bioreactor" and _reg.loc["acidic_variants", "set_by"] == "bioreactor"
+assert _reg.loc["fragments_lmw", "set_by"] == "harvest"
+assert _reg.loc["acidic_variants", "criticality"] == "VL" and _reg.loc["fragments_lmw", "criticality"] == "L"
+# criticality follows the Tool #1 score for every attribute except viral clearance, which is very high by rule
+_lvl = {"VL": 0, "L": 1, "L-M": 2, "M": 3, "M-H": 4, "H": 5, "VH": 6}
+_nv = cqa_reg[~cqa_reg.key.str.startswith("lrv")].sort_values("tool1_score")
+assert all(_lvl[a] <= _lvl[b] for a, b in zip(list(_nv.criticality), list(_nv.criticality)[1:]))
+assert set(cqa_reg[cqa_reg.key.str.startswith("lrv")].criticality) == {"VH"}
+_cq = cqas_by_keys(_cq_order).reset_index(drop=True)
+_lvl_name = {"VH": "very high", "H": "high", "M-H": "moderate to high", "M": "moderate",
+             "L-M": "low to moderate", "L": "low", "VL": "very low"}
+crit_legend = " ".join(f"{x}, {_lvl_name[x]}." for x in sorted(set(_cq["Criticality"]), key=lambda x: -_lvl[x]))
+_cq_rows = []
+for _i, _key in enumerate(_cq_order):
+    _c = _cq.iloc[_i]
+    # the criterion as the register gives it, method qualifiers included (PCP-006 factual check)
+    _crit, _lv, _set = (_c["Acceptance"], _c["Criticality"],
+                        UNIT_OP_TITLES[_reg.loc[_key, "set_by"]])
+    if _key == "lrv_xmulv":
+        _crit, _lv, _set = _crit + "^a)^", _lv + "^b)^", _set + "^c)^"
+    _cq_rows.append([_c["CQA"], _crit, _lv, str(int(_c["Tool #1"])), _set])
+tbl_cqas = T.frame(
+    pd.DataFrame(_cq_rows, columns=["Attribute", "DS criterion", "Criticality", "Tool #1", "Formed or set at"]),
+    caption="Quality attributes in scope of this plan, from the drug substance CQA register.",
+    label="tbl-cqas", align=["P{4.0cm}", "P{3.3cm}", "l", "r", "P{3.6cm}"],
+    notes=[("a)", f"Cumulative requirement, met by the claims of {xm_steps_txt} together."),
+           ("b)", "Very high by rule for viral clearance, whatever the Tool #1 score."),
+           ("c)", "The register places the cumulative requirement at this step."),
+           ("", "DS, drug substance. Tool #1, the score of impact multiplied by uncertainty (A-Mab case study). "
+                + crit_legend)],
+    notes_per_row=True)
+
+# --- campaign facts -------------------------------------------------------------------
+chron = csv("study_chronology.csv")
+# the studies this plan governs: the studies of Version 1.0, which ended before the Version 1.0
+# reports were approved. Every later study of the step (the hold study, the confirmation and the
+# support studies) started after INV-001 opened, and PCR-006 records each as a discrepancy from
+# this plan. An amendment does not add a study to the plan it amends.
+_plan_kinds = ["qualification", "screening", "rsm", "univariate", "retest"]
+mine = chron[(chron.step == UO) & chron.kind.isin(_plan_kinds)
+             & (chron.end.astype(str) < REV1["effective"])].copy()
+assert sorted(mine.kind) == sorted(_plan_kinds) and len(mine) == len(_plan_kinds)
+_later = chron[(chron.step == UO) & ~chron.id.isin(set(mine.id))]
+assert len(_later) and (_later.start.astype(str) > INV["opened"]).all()
+sid = dict(zip(mine.kind, mine.id))
+first_start = mine.start.min()
+assert v1_date < first_start
+assert mine[mine.kind.isin(["screening", "rsm"])].end.max() < AMD["date"]
+assert mine[mine.kind == "retest"].start.iloc[0] > AMD["date"]
+# the studies that overlap in time ran in parallel
+_short_txt = {"qualification": "the qualification of the scale-down model",
+              "screening": "the screening design", "rsm": "the response-surface design",
+              "univariate": f"the univariate study of {conc_txt}", "retest": "the re-test"}
+_par = [(a, b) for a in mine.itertuples() for b in mine.itertuples()
+        if a.id < b.id and a.start <= b.end and b.start <= a.end]
+assert len(_par) == 1
+par_txt = join_and([_short_txt[s.kind] for s in _par[0]])
+_mp = csv("method_plan.csv").set_index("study")
+assert not _mp.loc[sid["screening"], "lmw_cesds"] and bool(_mp.loc[sid["rsm"], "lmw_cesds"])
+assert bool(_mp.loc[sid["screening"], "lmw_sec"]) and bool(_mp.loc[sid["rsm"], "lmw_sec"])
+assert not _mp.loc[sid["qualification"], "lmw_in_scope"] and not _mp.loc[sid["univariate"], "lmw_in_scope"]
+assert "CA2" in set(CAPA.id) and "fragment method" in CAPA[CAPA.id == "CA2"].iloc[0]["action"]
+
+# scale-down qualification design
+_q = csv("sdm_qualification.csv")
+_q = _q[_q.step == UO]
+n_sd = int((_q.scale == "scale-down").sum())
+n_mfg = int((_q.scale == "manufacturing").sum())
+_q_out = [c for c in _q.columns if c not in ("study", "step", "scale", "run") and _q[c].notna().any()]
+assert sorted(_q_out) == ["acidic_variants", "aggregate_out_pct"]
+
+# univariate design: the plan states the design of Version 1.0, which set settings across the
+# range studied and required every output on every run. What study S-VI-UNI measured is a matter
+# for PCR-006, so no level and no replicate count is read from its data here.
+_u = csv("univariate_studies.csv")
+_u = _u[_u.study == sid["univariate"]]
+assert set(_u.parameter) == {uv[0].key} and len(_u)
+assert all(float(uv[0].prange[0]) <= float(v) <= float(uv[0].prange[1]) for v in _u.value)
+
+# --- the tables of the methods, the sampling plan, the roles and the schedule ----------------
+_amv = dict(AMV_REFS + VIRAL_INACT_AMV_REFS)
+_meth = [["XMuLV log reduction factor", "Spiked pool at the start and at the end of the hold",
+          "AMV-3017"],
+         ["Aggregate (HMW)", "Input pool and neutralized pool", "AMV-3011"],
+         ["Fragments (LMW)", "Neutralized pool", "AMV-3020"],
+         ["Acidic variants", "Input pool and neutralized pool", "AMV-3013"],
+         [conc_txt_c, "Input pool", "AMV-3021"]]
+assert all(m[2] in _amv for m in _meth)
+tbl_methods = T.frame(
+    pd.DataFrame([[m[0], m[1], _amv[m[2]], m[2]] for m in _meth],
+                 columns=["Output", "Sample", "Method", "Validation"]),
+    caption="Analytical methods of the low-pH viral inactivation step, for each output and for "
+            "the antibody concentration of the load.",
+    label="tbl-methods", align=["P{3.4cm}", "P{4.2cm}", "P{4.4cm}", "l"],
+    notes=[("", f"{conc_txt_c} is a parameter of the step and is measured in its load.")])
+_sops = dict(SOP_REFS)
+_sop_extra = ("SOP-3011", "SOP-3013", "SOP-3015", "SOP-3016")
+assert all(s in _sops for s in _sop_extra)
+sop_list = VIRAL_INACT_SOP_REFS + [(s, _sops[s]) for s in _sop_extra]
+amv_list = VIRAL_INACT_AMV_REFS + [a for a in AMV_REFS if a[0] in ("AMV-3020", "AMV-3021")
+                                   and a not in VIRAL_INACT_AMV_REFS]
+
+# the four samples of a designed run (Version 1.0 §5.4): three from the spiked run and two from
+# the unspiked run, with the input pool taken from both
+_design_samples = [
+    ["Input pool, from both runs", f"Aggregate, acidic variants and {conc_txt}"],
+    ["Spiked load, at the start of the hold", "XMuLV titre"],
+    ["Spiked pool, at the end of the hold", "XMuLV titre"],
+    ["Neutralized pool, from the unspiked run",
+     "Aggregate, acidic variants and fragments by SEC"],
+]
+_kind_name = {"qualification": "Qualification of the scale-down model",
+              "screening": "Screening design", "rsm": "Response-surface design",
+              "univariate": "Univariate study", "retest": "Re-test"}
+_samp = [[f"{_kind_name['qualification']} ({sid['qualification']})",
+          f"{w(n_sd).capitalize()} scale-down runs at set-point and {w(n_mfg)} "
+          f"manufacturing-scale batches", "Neutralized pool", "Aggregate and acidic variants"]]
+for _kind, _runs in (("screening", f"{n_scr} runs, {c_scr} of them centre points"),
+                     ("rsm", f"{n_rsm} runs, {c_rsm} of them centre points")):
+    for _s, _t in _design_samples:
+        _samp.append([f"{_kind_name[_kind]} ({sid[_kind]})", _runs, _s,
+                      _t + (", with the samples retained"
+                            if _kind == "rsm" and "fragments" in _t else "")])
+_samp += [
+    [f"{_kind_name['univariate']} ({sid['univariate']})",
+     f"Settings across the range studied, the other {w(k)} parameters at set-point",
+     "Spiked and unspiked runs, as for the designs",
+     "XMuLV titre, aggregate and acidic variants"],
+    [f"{_kind_name['retest']} ({sid['retest']})",
+     f"Samples retained from the {n_rsm} response-surface runs",
+     "Neutralized pool", "Fragments by nrCE-SDS"],
+]
+tbl_sampling = T.frame(
+    pd.DataFrame(_samp, columns=["Study", "Runs or conditions", "Sample", "Tests"]),
+    caption="Sampling plan of the studies of the low-pH viral inactivation step.",
+    label="tbl-sampling", merge=["Study", "Runs or conditions"],
+    align=["P{3.6cm}", "P{3.6cm}", "P{3.8cm}", "P{3.6cm}"],
+    notes=[("", "Each run of a design is made as a spiked run, which gives the XMuLV titres, and "
+                "an unspiked run, which gives the quality attributes. The input pool is sampled "
+                "before acidification and the neutralized pool after neutralization and "
+                "filtration."),
+           ("", "SEC, size exclusion chromatography. nrCE-SDS, non-reduced capillary "
+                "electrophoresis with sodium dodecyl sulfate.")],
+    notes_per_row=True)
+
+tbl_roles = T.frame(
+    pd.DataFrame([
+        ["Process Development / MSAT", "Author of this plan and of " + PCR + ". Runs the scale-down model, "
+         "the designs and the univariate study, and analyses the data."],
+        ["Analytical Development", "Runs the SEC, nrCE-SDS and icIEF methods and the XMuLV infectivity assay "
+         "under their method validations. Owns the method decision AMD-001."],
+        ["Manufacturing Science", "Supplies the manufacturing-scale data for the qualification of the "
+         "scale-down model, and transfers the results to the receiving site."],
+        ["Statistics", "Reviews the designs, fits the models, and runs the PAR analysis and the verification "
+         "of the platform worst cases."],
+        ["Quality Assurance", "Approves this plan and " + PCR + ", and checks that every criterion applied "
+         "in " + PCR + " is the one stated in this plan."],
+    ], columns=["Function", "Responsibility"]),
+    caption="Responsibilities of the functions that approve this plan.",
+    label="tbl-roles", align=["P{4.2cm}", "P{10.4cm}"])
+
+_kind_txt = {"qualification": "Set-point runs of the scale-down model, compared with the manufacturing-scale "
+                              "batches, and the offsets",
+             "screening": "Screening design", "rsm": "Response-surface design",
+             "univariate": f"Univariate study of {conc_txt}",
+             "retest": "Re-test by nrCE-SDS of the retained samples of the response-surface design"}
+_kind_rank = {k_: i for i, k_ in enumerate(_plan_kinds)}
+_ss = mine.assign(_r=mine.kind.map(_kind_rank)).sort_values(["start", "_r"])
+_phase = {d: i + 1 for i, d in enumerate(sorted(_ss.start.unique()))}
+_sched = [[str(_phase[_r.start]), _r.id, _kind_txt[_r.kind], _r.start, _r.end]
+          for _r in _ss.itertuples()]
+tbl_schedule = T.frame(
+    pd.DataFrame(_sched, columns=["Phase", "Study", "Content", "Start", "End"]),
+    caption="Sequence of the studies under this plan and the execution window of each.",
+    label="tbl-schedule", merge=["Phase"],
+    align=["l", "l", "P{6.4cm}", "l", "l"],
+    notes=[("", "Start, the date of the first run or test of a study. End, the date of the last. "
+                "Studies in one phase ran in parallel."),
+           ("", "The qualification decision, the analysis of all studies and the report " + PCR
+                + " follow the last study.")],
+    notes_per_row=True)
+
+
+# --- planned design matrices (no results: a protocol shows the design only) --------------------
+def planned_tbl(kind, label, caption):
+    cm = D.planned_matrix_df(UO, kind, coded=True).reset_index(drop=True)
+    nm = D.planned_matrix_df(UO, kind, coded=False).reset_index(drop=True)
+    facs = D.rsm_factors(UO) if kind == "rsm" else D.screening_factors(UO)
+    lmap = D.factor_letters(UO)
+    # the run type is a column of its own with merged cells, never a heading row inside the body
+    # (owner, 2026-10-09: "Do not mix grouping variables in tables as rows")
+    tname = {"factorial": "Factorial", "axial": "Axial", "center": "Centre point"}
+
+    def cfmt(v):
+        v = int(v)
+        return "0" if v == 0 else ("+1" if v > 0 else "−1")
+
+    body, types = [], list(cm["Type"])
+    for r in range(len(cm)):
+        first = r == 0 or types[r] != types[r - 1]
+        n = next((k for k in range(r, len(cm)) if types[k] != types[r]), len(cm)) - r
+        body.append(([C(tname[types[r]], rs=n)] if first else [])
+                    + [str(int(cm.loc[r, "Run"]))] + [cfmt(cm.loc[r, lmap[f]]) for f in facs]
+                    + [fv(nm.loc[r, P[f].name], P[f].unit) for f in facs])
+    head2 = [lmap[f] for f in facs] + [("pH" if P[f].unit == "pH" else f"{P[f].name} ({P[f].unit})") for f in facs]
+    return CTable(header=[[C("Run type", rs=2), C("Run", rs=2), C("Coded level", cs=len(facs)),
+                           C("Setting", cs=len(facs))], head2],
+                  body=body, caption=caption, label=label, align="ll" + "r" * (2 * len(facs)),
+                  notes=[("", " ".join(f"{lmap[f]}, {PN[f]}." for f in facs)),
+                         ("", "The coded levels −1, 0 and +1 are the low end, the midpoint and the high end "
+                              "of the range studied."),
+                         ("", "Runs are listed in the order in which the design was generated, which is "
+                              "not standard order. They are executed in random order.")],
+                  notes_per_row=True)
 ```
+
+{{< pagebreak >}}
 
 ```{python}
 #| output: asis
@@ -139,711 +567,425 @@ print(SYN_BANNER)
 | Reviewer | Statistics | — | — | — |
 | Approver | Quality Assurance | — | — | — |
 
-: Approval record (synthetic; signatures not applied). {#tbl-appr}
-
-## Abbreviations {.unnumbered}
-
-AEX, anion exchange chromatography; ALCOA+, the data integrity attributes attributable,
-legible, contemporaneous, original and accurate, plus complete, consistent, enduring and
-available; AMV, analytical method validation; ANOVA, analysis of variance; BLA, Biologics
-License Application; CCD, central composite design; CEX, cation exchange chromatography;
-CPP, critical process parameter; CQA, critical quality attribute; DoE, design of
-experiments; DS, drug substance; HMW, high molecular weight; icIEF, imaged capillary
-isoelectric focusing; LIMS, laboratory information management system; LRF, log reduction
-factor; MSAT, Manufacturing Science and Technology; NOR, normal operating range; PAR,
-proven acceptable range; RSM, response surface methodology; SDM, scale-down model;
-SEC-HPLC, size exclusion high performance liquid chromatography; SOP, standard operating
-procedure; TCID50, fifty percent tissue culture infectious dose; XMuLV, xenotropic murine
-leukaemia virus.
+Synthetic record. Signatures are not applied.
 
 {{< pagebreak >}}
 
+## Revision history {.unnumbered}
+
+```{python}
+#| output: asis
+print(revision_history(DOC))
+```
+
+## Abbreviations {.unnumbered}
+
+```{python}
+#| output: asis
+print(abbreviations_table([
+    ("ALCOA+", "attributable, legible, contemporaneous, original and accurate, plus complete, "
+               "consistent, enduring and available"),
+    ("AMD", "analytical method decision"),
+    ("AMV", "analytical method validation"),
+    ("BLA", "Biologics License Application"),
+    ("CE-SDS", "capillary electrophoresis with sodium dodecyl sulfate"),
+    ("CEX", "cation exchange chromatography, an analytical method for charge variants"),
+    ("CPP", "critical process parameter"),
+    ("CQA", "critical quality attribute"),
+    ("DS", "drug substance"),
+    ("GPP", "general process parameter"),
+    ("HMW", "high molecular weight species"),
+    ("HPLC", "high performance liquid chromatography"),
+    ("IAC", "intermediate acceptance criterion"),
+    ("ICH", "International Council for Harmonisation"),
+    ("icIEF", "imaged capillary isoelectric focusing"),
+    ("KPP", "key process parameter"),
+    ("LMW", "low molecular weight species"),
+    ("LRF", "log reduction factor"),
+    ("MSAT", "Manufacturing Science and Technology"),
+    ("MVM", "minute virus of mice"),
+    ("NOR", "normal operating range"),
+    ("nrCE-SDS", "non-reduced capillary electrophoresis with sodium dodecyl sulfate"),
+    ("PAR", "proven acceptable range"),
+    ("PRESS", "prediction error sum of squares"),
+    ("QA", "Quality Assurance"),
+    ("SEC", "size exclusion chromatography"),
+    ("SOP", "standard operating procedure"),
+    ("TCID50", "50 % tissue culture infectious dose"),
+    ("WC-CPP", "well-controlled critical process parameter"),
+    ("XMuLV", "xenotropic murine leukemia virus"),
+]))
+```
+
+{{< pagebreak >}}
+
+<!-- ========================= BODY START ========================= -->
+
 # Purpose and scope {#sec-purpose}
 
-Low-pH viral inactivation is the hold step that follows Protein A capture in the A-Mab
-purification train. The step brings the Protein A eluate to acid pH, holds it there for a
-defined time and then neutralises it to the condition at which cation exchange is loaded.
-Acid disrupts the lipid envelope of an enveloped virus and denatures the glycoproteins the
-virus uses to enter a cell, so a particle that has been held at the inactivation pH stays
-in the pool and can no longer infect. The step is one of three orthogonal steps that
-together carry the enveloped virus safety claim for the drug substance.
+This plan sets out the Stage 1 characterization of the low-pH viral inactivation step, Step 6 of the A-Mab drug substance process [@fda2011; @amab2009]. It applies the Process Characterization Master Plan PCMP-001 to this step and adds what is specific to the step, which is its scale-down and spiking models, its designs, its sampling plan and the values of its criteria. The studies are run in a scale-down model at the development site in Cambridge, MA. Their results support the operating ranges and the control strategy that the Process Transfer Plan PTP-001 moves to the commercial drug substance facility in Grafton, WI. The commercial process runs at the `{python} scale_l` L scale.
 
-This plan describes the studies that will characterize the step for commercial
-manufacture at `{python} f"{V['commercial_scale_l']:,.0f}"` L, and it fixes the acceptance
-and decision criteria before any of the data exist. The studies will be executed on a
-qualified scale-down model of the commercial hold. Their conclusions will be applied to
-the commercial step only to the extent that the qualification described in @sec-sdm
-supports, and that limit is stated again with each claim the report makes.
+Low-pH viral inactivation holds the Protein A eluate at acid pH for a set time and then neutralizes it. The hold inactivates enveloped viruses. The step contributes a log reduction of xenotropic murine leukemia virus (XMuLV) to the modular viral clearance claim of the process [@ichq5a]. The same conditions act on the antibody and can raise the levels of aggregate, fragments and acidic variants in the pool.
 
-The scope of the plan is the acidification of the Protein A eluate, the hold itself and
-the neutralisation that ends it. `{python} n_params` process parameters are in scope, of
-which `{python} n_multi` will be varied together in designed experiments and
-`{python} n_uni` will be assessed one factor at a time. @sec-risk gives the basis for that
-split. `{python} n_resp` responses will be measured on every run, one for the viral safety
-claim and two for product quality, and they are listed with their acceptance criteria in
-@tbl-acc.
+The plan covers the `{python} w(n_par)` parameters of the step, which are `{python} params_txt`. It covers the attributes that the step sets or can change, the scale-down model and its qualification, and the spiking model for XMuLV. It sets out the designed experiments and the univariate study, the acceptance criteria and the planned analysis, including the proven acceptable ranges (PARs). The Protein A step that produces the load of this step is characterized under `{python} PCP_PA`. The results of this plan are reported in `{python} PCR`, which rolls up into the Process Characterization Master Report PCMR-001.
 
-Three things sit outside the scope of this plan. The step makes no clearance claim for
-host cell protein, DNA or leached Protein A, and the studies described here do not measure
-them. The virus clearance of the anion exchange and virus filtration steps is characterized
-in their own plans and reports, and the cumulative claim over the whole train is
-consolidated in PCMR-001. The commercial equipment qualification and the process
-performance qualification runs are covered by PTP-001 and are not repeated here.
+## Changes in this revision {#sec-changes}
+
+Version 1.0 of this plan was approved on `{python} v1_date`, before the first study of the step started on `{python} first_start`. Version 2.0 is a protocol amendment issued under the QA investigation INV-001. QA opened INV-001 on `{python} INV['opened']` after its review of PCMR-001 Version 1.0 for BLA readiness, and closed it on `{python} INV['closed']` with the classification `{python} INV['classification']`. The investigation found that the criteria used to judge each step in the PAR analysis were in no approved protocol and had been set after the data were seen (INV-001 finding 1). Corrective action CA2 of INV-001 amends each step plan with the criteria and the fragment method. This version is that amendment for Step 6, and it makes the following changes.
+
+1. It sets out the intermediate acceptance criteria for the outputs of this step as PCMP-001 Version 2.0 derives them (@sec-iac). It also sets out the rule by which the verification of the platform worst cases may tighten or widen the criteria upstream of this step (@sec-verification). The derivation uses no result of the studies in this plan.
+2. It adds fragments as an output of the step and judges them on results by non-reduced capillary electrophoresis with sodium dodecyl sulfate (nrCE-SDS), following the method decision AMD-001 of `{python} AMD['date']` (@sec-methods). Size exclusion chromatography (SEC) reads fragments high in the Protein A eluate and in the neutralized pool (INV-001 finding 6).
+3. It qualifies the scale-down model by its offset from manufacturing scale, and it states every judgement of an output with a known offset at manufacturing scale (@sec-sdm).
+4. It states the tests a response-surface model must pass before a range is set from it (@sec-crit-models). Version 1.0 asked for a significant model, no significant lack of fit and residuals with no structure. This version adds a limit on how far predicted R² may fall short of R², a regression of the residuals on the predicted values and on run order, and a cut-off on the Cook's distance of a single run.
+5. It judges XMuLV clearance at the least favourable combination of `{python} mv_txt` within their normal operating ranges (NORs), because viral clearance is validated at worst-case conditions (@sec-par). Version 1.0 judged XMuLV clearance on a single batch, as it judged the quality attributes.
+6. It records the execution window of every study that this plan governs (@tbl-schedule). The Version 1.0 records gave no execution dates, so the equipment tables of the package appeared to cite expired calibrations (INV-001 finding 5).
+7. It records the date on which Version 1.0 was approved. The title block of Version 1.0 carried `{python} REV1['effective']`, the date on which the Version 1.0 reports were approved. The revision history now gives the approval date of this plan (INV-001 finding 5).
+
+@tbl-criteria-change compares the criteria that the Version 1.0 report applied to the outputs of this step with the criteria of this version.
+
+```{python}
+#| output: asis
+T.criteria_change([UO]).show()
+```
+
+The Version 1.0 aggregate limit was the drug substance criterion carried back through the nominal clearance of this campaign and divided by a margin of `{python} agg_v1_margin` (INV-001 finding 2). The Version 2.0 aggregate criterion is wider than that limit, and stricter than its own a priori value of `{python} agg_apriori` % HMW (@sec-iac). The Version 1.0 limit was never an approved criterion, because it was applied in the report at analysis and appeared in no approved plan. For XMuLV clearance, Version 1.0 subtracted the nominal clearance of the other steps in this campaign from the cumulative requirement. Version 2.0 holds the step to its platform claim, which is the stricter criterion.
+
+The factors, ranges, NORs, set-points and designs are those of Version 1.0, against which the studies were planned and around which they were run. `{python} PCR` Version 2.0 `{python} changes_txt`. This plan does not adopt those values. The notes to @tbl-params give them and name `{python} PCR` as the document that made each change.
 
 # Objectives {#sec-objectives}
 
-The studies described in this plan have five objectives.
+The studies under this plan have the following objectives.
 
-(i) To qualify a scale-down model of the commercial hold, and to show that it reproduces
-    the pH, the temperature and the hold time of the commercial step closely enough for
-    its results to be applied to that step.
-
-(ii) To measure the effect of inactivation pH, hold time and temperature on the log
-     reduction of XMuLV, on the aggregate content of the neutralised pool and on the
-     acidic charge variant content, over ranges deliberately wider than the normal
-     operating ranges.
-
-(iii) To fit a response-surface model to each of the `{python} n_resp` responses over the
-      characterized region, and to establish the region within which every acceptance
-      criterion in @tbl-acc is met at the same time.
-
-(iv) To determine a proven acceptable range for each parameter against those criteria, by
-     the two analyses set out in @sec-par.
-
-(v) To provide the parameter classification and the step contribution to the modular
-    enveloped virus clearance claim that the control strategy needs, for consolidation in
-    PCMR-001.
-
-Objectives (i) to (iii) are met by the executed study. Objectives (iv) and (v) are met by
-the analysis of that study, and the rules for both are fixed in @sec-acceptance and
-@sec-par so that they are not chosen after the results are seen.
+1. To quantify the effects of `{python} mv_txt`, and of their interactions, on XMuLV clearance, aggregate, fragments and acidic variants.
+2. To fit response-surface models that predict these outputs over the range studied, and to test each model against the adequacy criteria of PCMP-001 §7.2.
+3. To determine, for each attribute that has a criterion at this step, the PAR of `{python} mv_txt`, and to establish whether the NOR of each lies within it.
+4. To verify the platform worst cases of this step on which the criteria upstream of it rely.
+5. To assess the effect of `{python} conc_txt` on aggregate, acidic variants and XMuLV clearance one factor at a time, and to support its range against the criteria for aggregate and acidic variants.
+6. To provide the evidence for the classification of each parameter under SOP-4001, and for the contribution of the step to the control strategy in PCMR-001.
 
 # Related documents {#sec-related}
 
-This plan is written under the master plan for the characterization campaign and against
-the risk assessment that scoped it. The documents it depends on, and the report that will
-carry its results, are listed in @tbl-rel.
+This plan is one document of the A-Mab characterization package. @tbl-related lists its parent documents, its paired report, the master report into which it rolls up and the investigation INV-001, under which this version is issued.
 
 ```{python}
 #| output: asis
 print(related_docs_md(DOC))
+print()
+print(": Documents related to this plan. {#tbl-related}")
 ```
 
-: Documents related to this plan. {#tbl-rel}
-
-The procedures that govern the execution and the analysis of the studies are listed in
-@tbl-sop. SOP-2009 governs the operation of the step at both scales, SOP-1001 governs the
-qualification of the scale-down model, SOP-1002 governs the design and the statistical
-analysis of the designed experiments, and SOP-4001 governs the classification of the
-parameters once the results are available. The analytical methods are listed separately in
-@sec-analytical.
+@tbl-sops lists the procedures and method validations that this plan cites. The SOP and AMV numbers are placeholders.
 
 ```{python}
 #| output: asis
-print(sop_table(sops=VIRAL_INACT_SOP_REFS))
+T.sop_references(sops=sop_list, amvs=amv_list).show()
 ```
-
-: Controlled procedures governing this study. {#tbl-sop}
 
 # Prior knowledge and quality risk basis {#sec-prior}
 
 ## Unit-operation description and prior knowledge {#sec-uo}
 
-The step receives the Protein A eluate, which is already at acid pH from the elution
-buffer. Acid is added to bring the pool to the inactivation pH, the pool is held at
-controlled temperature for the hold time, and base is then added to neutralise it for
-cation exchange. Inactivation of an enveloped virus under these conditions follows
-first-order kinetics. The rate constant rises as the pH falls and as the temperature
-rises, and the hold time integrates that rate, so the log reduction achieved by the step
-is set by the three parameters together.
+Low-pH viral inactivation is the step after Protein A capture and before cation exchange chromatography. The Protein A eluate leaves the column at low pH. It is adjusted to the `{python} PN['ph']` and held for the `{python} PN['hold_time']` at the set `{python} PN['temperature']`. Base is then added to neutralize the pool. The neutralized pool is the load of cation exchange. The step is operated under its standard operating procedure, SOP-2009.
 
-The acid of the hold partially unfolds the antibody as well. At acid pH the molecule
-carries a large net positive charge and the second constant domain of its heavy chain
-loses its folded structure, which exposes hydrophobic surface. Molecules in that state
-associate, and the association continues for as long as they are held at low pH and
-proceeds faster when they are warmer or more concentrated. Aggregate formed during the
-hold is carried into cation exchange,
-which is the step that removes it. Time at low pH can also add acidic species through
-acid-catalysed reactions at labile residues, including succinimide formation and
-hydrolysis.
+Low pH inactivates an enveloped virus by denaturing the glycoproteins of its envelope and by disrupting the envelope itself. The virus needs the envelope glycoproteins to bind to a cell and to fuse with its membrane. Inactivation follows first-order kinetics. Its rate constant rises as the pH falls and as the temperature rises, and the log reduction is proportional to that rate integrated over the `{python} PN['hold_time']`. The `{python} PN['ph']` is expected to govern the step, because the envelope glycoproteins denature much faster with each small fall in pH near the operating range. A longer hold gives a larger log reduction at any pH and temperature, and a warmer hold speeds the denaturation of the envelope glycoproteins.
 
-The low-pH hold is a platform step. It has been used for three previously licensed
-Novacyte antibodies (X-Mab, Y-Mab and Z-Mab) and its conditions have remained essentially
-unchanged across those products and through A-Mab development [@amab2009]. The mechanism
-of inactivation does not depend on the antibody, and the platform experience therefore
-transfers to A-Mab directly. Characterization is required nonetheless, because the log
-reduction credited to the step enters a cumulative viral safety claim and the claim must
-be supported by ranges that were themselves demonstrated.
+The same conditions act on the antibody. At acid pH the second constant domain of the heavy chain of the antibody is partially unfolded, which exposes hydrophobic surface. Molecules with exposed hydrophobic surface associate, so aggregate forms for as long as the pool is held at low pH. Aggregate forms faster in a warmer pool, because the unfolding and the association both speed up with temperature, and in a more concentrated pool (@sec-risk). On the platform, time at low pH adds a small amount of acidic variants. This plan measures that rise in every run of the designs, and `{python} PCR` verifies it against the platform worst case (@sec-verification). The low-pH hold also causes a small amount of acid-catalysed cleavage in the hinge region, which adds fragments. Over a hold of the length studied, the rise in acidic variants is expected to be small against the level formed in the production bioreactor, and the rise in fragments small against the level the load already carries. Aggregate formed in the hold is carried into cation exchange, the step that removes it.
 
-Antibody precipitation has been observed at pH below the low end of the range to be
-studied, so the low pH edge of the study is placed where the pool remains soluble.
-The hold is operated near ambient temperature in a suite that does not control temperature
-tightly, so the temperature range studied is wider than the range the suite is expected to
-deliver.
+The low-pH step belongs to the Novacyte downstream platform and was used for three earlier antibodies, X-Mab, Y-Mab and Z-Mab. Their history establishes the mechanism of the step and the range of performance to expect from it [@amab2009]. The same history supplies the platform claim for XMuLV clearance and the largest increases in aggregate, fragments and acidic variants that the step has shown. The intermediate acceptance criteria in @sec-iac are built on these values.
 
-## Quality attributes in scope {#sec-cqa}
+The step is not expected to change the glycan attributes, which are formed in the production bioreactor and which no downstream step changes (PCMP-001 §3). It makes no claim for the parvovirus minute virus of mice (MVM), because a parvovirus has no envelope and so no envelope glycoproteins for low pH to denature. The criteria also assume no change in host cell protein across the step, and no clearance of host cell protein is claimed for it.
 
-The hold inactivates XMuLV, the enveloped model virus whose clearance is the one critical
-quality attribute this step delivers. It also raises the aggregate content of the pool and
-adds acidic charge variants to it, and both of those attributes are formed upstream.
-@tbl-cqa gives all three with the drug substance acceptance criteria and the criticality
-assigned in RA-001. The Tool #1 column is the score from the risk ranking tool used in
-RA-001, which multiplies the severity of the impact an attribute has on safety or efficacy
-by the uncertainty in that assessment. The score does not order the attributes by
-criticality. In @tbl-cqa the viral clearance attribute is graded very high on a score
-below that of aggregate, which is graded high. A low score can mean that the relationship
-between the attribute and its clinical effect is well understood rather than that the
-attribute matters little, and the criticality grade is the assignment this plan refers
-to.
+## Quality attributes in scope {#sec-cqas}
+
+@tbl-cqas lists the attributes in scope of this plan, with their drug substance criteria and their criticality from the register of critical quality attributes (CQAs) in PCMP-001 §3. The register lists every attribute of the drug substance that has a criterion, whatever its criticality. Criticality was assigned with Tool #1 of the A-Mab case study, as the product of impact and uncertainty [@amab2009]. For every attribute except viral clearance, a higher Tool #1 score gives an equal or higher level of criticality. XMuLV clearance was assigned very high criticality by rule, because a viral contamination would harm the patient directly, whatever its score (PCMP-001 §3). Attributes of high or very high criticality are called critical.
 
 ```{python}
 #| output: asis
-show(cqas_by_keys(["lrv_xmulv", "aggregates_hmw", "acidic_variants"]))
+tbl_cqas.show()
 ```
 
-: Quality attributes in scope for this step, with drug substance acceptance and criticality. {#tbl-cqa}
+The step sets one attribute, XMuLV clearance. The requirement for XMuLV clearance is cumulative, and the step contributes its platform claim to it (@sec-claim). Aggregate and acidic variants are formed in the production bioreactor, and the register assigns fragments to harvest. The low-pH hold can add to each of these three attributes, so each has an intermediate acceptance criterion at the output of this step.
 
-The XMuLV criterion in @tbl-cqa is cumulative over the whole purification train. Low-pH
-inactivation, anion exchange and virus filtration each contribute an independent log
-reduction, and the modular claim is the sum of the three [@ichq5a]. The criterion that
-applies to this step alone is therefore not the cumulative figure but the contribution the
-step must deliver for the cumulative figure to hold, and @sec-acceptance states how that
-contribution is derived.
-
-Aggregate is a high criticality attribute that this step adds to rather than removes. The
-hold hands its aggregate content on to cation exchange, which is the polishing step that
-reduces it, so the criterion that applies here is an in-process limit rather than the drug
-substance specification of `{python} f"{ds_agg:g}"` %. Acidic charge variants are of very
-low criticality and are formed mainly in the production bioreactor. They are measured
-across the hold because acid-catalysed deamidation is mechanistically plausible over the
-times studied, and the study will show whether the addition is large enough to matter.
+The register gives the criterion for acidic variants against two methods, cation exchange chromatography (CEX) and imaged capillary isoelectric focusing (icIEF). Acidic variants are measured by icIEF throughout this campaign, under the charge-variant procedure SOP-3013.
 
 ## Risk-based prioritization of parameters {#sec-risk}
 
-RA-001 ranked every parameter of this step for its potential impact on the attributes in
-@tbl-cqa and for its potential to interact with the other parameters. The ranking placed
-inactivation pH, hold time and temperature in the group warranting multivariate
-evaluation, and A-Mab concentration in the group whose range can be supported by a
-univariate study. @tbl-params gives the outcome as the study type of each parameter.
+Every parameter of this step was assessed in RA-001 before characterization began. Each parameter was ranked on its potential impact on the CQAs and on its potential to interact with other parameters, as ICH Q9 describes [@ichq9]. RA-001 gives the scores and the rationale for each assignment.
 
-Inactivation pH was ranked highest because the inactivation rate depends on it most
-steeply of the three, and because the same acid conditions set how far the antibody is
-unfolded and therefore how fast aggregate forms during the hold. A change in pH therefore moves
-the inactivation rate of the virus and the rate at which the antibody associates in the same
-stroke, and the control range of the parameter is narrow because both rates change steeply
-across it. Hold time and temperature were ranked with it because a longer hold and a
-warmer hold each raise the log reduction of XMuLV and the aggregate content of the pool
-together. They were also ranked with it because hold time integrates a rate constant that
-pH and temperature both set, so a longer hold at a lower pH gives a larger log reduction
-than either change alone would predict from its main effect.
+The `{python} mv_txt` of the hold were assigned to multivariate study. A lower pH, a longer hold and a higher temperature each raise the log reduction of XMuLV, and each also raises the aggregate that forms in the hold. The three are also expected to interact. The log reduction is the product of a rate that pH and temperature set and the time over which that rate acts. A design that varies the three parameters together is therefore needed to estimate the clearance and the aggregate at their combinations.
 
-A-Mab concentration was ranked lower and was assigned to a univariate study. Association
-is a bimolecular event, so a more concentrated pool aggregates faster, but the
-concentration of the pool has no part in the inactivation chemistry. Concentration is also
-a property of the Protein A eluate rather than a parameter the operator sets, so its range
-is set by the capture step and is wide. A univariate scan across that range is sufficient
-to bound its effect on the two product quality responses.
+The `{python} conc_txt` was assigned to univariate study. A higher antibody concentration raises the rate at which partially unfolded molecules meet, so aggregate forms faster in a more concentrated pool. The mechanism of the step gives no reason to expect an effect of the antibody concentration on the inactivation of the virus, which acts on the viral envelope. The univariate study measures the log reduction at each setting of the concentration, so it tests that expectation (@sec-univariate). The concentration is also a property of the Protein A pool and not a setting of the hold, so it is assessed one factor at a time.
 
-# Materials and methods {#sec-methods}
+# Materials and methods {#sec-mm}
 
 ## Scale-down model and its qualification {#sec-sdm}
 
-The studies will be run in bench-scale hold vessels operated under the same principles as
-the commercial hold. The model will match the commercial step in the pH the pool is
-titrated to, the temperature it is held at and the time it is held for, because a lower pH
-and a warmer hold raise both the rate at which the viral envelope is disrupted and the
-rate at which the antibody associates, and the hold time integrates both rates. It will
-also match the commercial step in the titration scheme, the mixing regime during acid and
-base addition and the material of the wetted
-surfaces. Volume is the scale-dependent quantity and is not matched. The ratio of surface
-to volume differs between the vessels, and the qualification is what establishes that the
-difference does not change the responses.
+The scale-down model holds the Protein A eluate in a temperature-controlled vessel at laboratory scale. The eluate is adjusted to the `{python} PN['ph']`, held and neutralized in that vessel as in manufacture. The parameters of the step do not depend on scale. The `{python} params_txt` are therefore set to the same values as in manufacture, and the additions of acid and base are scaled with the volume of the pool.
 
-Qualification will follow SOP-1001 and will be executed before the characterization runs
-begin. Replicate scale-down runs will be performed at the set-point conditions on a single
-Protein A pool, and their results will be compared with the results of commercial-scale
-runs on comparable material. The comparison will cover the log reduction of XMuLV, the
-aggregate content of the neutralised pool, the acidic charge variant content and the pH
-and temperature actually achieved during the hold. The model will be accepted as
-representative when no statistically significant difference is found between scales at
-α = 0.05 for the three responses, and when the achieved pH and temperature at small scale
-lie within the tolerance the commercial step is controlled to.
+The qualification runs are made under SOP-1001 in study `{python} sid['qualification']`, before the first characterization run. The study compares `{python} w(n_sd)` runs of the scale-down model at set-point with `{python} w(n_mfg)` manufacturing-scale batches, for aggregate and acidic variants in the neutralized pool. These runs give the offset of each of the two outputs. The decision whether the scale-down model is qualified for an output rests on whether the output meets its criterion at every combination of NOR low, set-point and NOR high, and that judgement needs the response-surface model. The decision is therefore made at the analysis, in `{python} PCR`.
 
-Failure of any of those comparisons would stop the study. In that event the cause should
-be investigated and the model modified before the characterization runs are executed, and
-the modification and its requalification would be reported in PCR-006. Results from an
-unqualified model will not be used to support a range.
+The model is qualified for each output separately, by its offset from manufacturing scale and not by a test of equivalence (PCMP-001 §7.1). The rule has four parts.
+
+1. The offset of an output is the mean of the scale-down runs at set-point minus the mean of the manufacturing-scale batches. It is reported with its two-sided `{python} ci_off_pct` % confidence interval.
+2. Every scale-down result for aggregate or acidic variants is translated to manufacturing scale by subtracting the offset before it is compared with a criterion. Ranges and conclusions for these two outputs are therefore stated at manufacturing scale.
+3. The model is qualified for an output when the conclusion against its criterion over the NOR is the same with the offset at either end of its confidence interval. The conclusion is whether the output meets its criterion at every combination of NOR low, set-point and NOR high of the `{python} w(k)` factors of the response-surface design.
+4. A scale-down model whose conclusion for an output changes between the two ends of the confidence interval of the offset is not used for that output.
+
+Where the cause of an offset is known, `{python} PCR` will state it.
+
+Fragments and XMuLV clearance are not compared at both scales, so their offsets are unknown, not zero. These two outputs are judged as the model predicts them, with no translation to manufacturing scale. For fragments, representativeness rests on the mechanism of the step. Cleavage in the hinge region at low pH depends on pH, time and temperature, which the scale-down model sets to the manufacturing values, and not on the size of the vessel. The plan therefore assumes that the scale-down model forms fragments at the rate of manufacture (@sec-risks). For XMuLV clearance, representativeness rests on the spiking model.
+
+Virus cannot be introduced into the manufacturing process, so XMuLV clearance is measured in a spiking model of the step [@ichq5a]. The spiking model is the scale-down model, run on the same Protein A eluate and at the same `{python} mv_txt`. The XMuLV spike is added to the pool after the pool has been acidified and before the hold begins, at the volume ratio fixed in the operating procedure for the step, SOP-2009. That ratio is small enough that the spike changes neither the pH nor the antibody concentration of the pool. The input titre is taken from a sample of the spiked pool at the start of the hold and the output titre at the end of the hold, and the log reduction is the difference between the two. Each run of a design is made twice. The spiked run gives the two titres, and an unspiked run at the same settings gives the quality attributes.
+
+The inactivation rate depends on the pH and the temperature of the pool and on its matrix, which is the buffer of the Protein A eluate. It does not depend on the volume of the pool. The spiking runs use Protein A eluate produced at the set-points of the Protein A step, so the matrix is that of manufacture, and the runs of the designs hold the `{python} conc_txt` at its set-point. The small-scale result therefore represents the manufacturing step at that concentration, provided that the whole pool reaches the `{python} PN['ph']`. The univariate study measures the log reduction across the range of the concentration (@sec-univariate).
 
 ## Operation {#sec-operation}
 
-Each run will be executed on material from a single Protein A eluate pool, so that the
-input to every design point is the same. The pool will be characterized before the study
-for aggregate content, acidic charge variant content and A-Mab concentration, and those
-values will be reported as the input condition of the study.
+Each run starts from Protein A eluate produced at the set-points of the Protein A step. The eluate is adjusted to the `{python} PN['ph']` of the run and brought to the `{python} PN['temperature']` of the run. The `{python} PN['hold_time']` is counted from the moment the `{python} PN['ph']` is reached. At the end of the hold the pool is neutralized with base and filtered. Neutralization stops the inactivation and slows the reactions that the acid drives on the antibody. In the designs the `{python} conc_txt` is held at its set-point. In the univariate study the concentration is set to each of its planned values before the pH is adjusted.
 
-A run begins with the addition of acid to the pool under mixing until the target
-inactivation pH is reached and stable. The vessel is then held at the target temperature
-for the target hold time, with pH and temperature recorded throughout. At the end of the
-hold, base is added under mixing to bring the pool to the cation exchange load pH, and the
-neutralised pool is filtered. The recorded pH and temperature traces will be reported with
-the results, because the parameter values that enter the model are the achieved values and
-not the targets.
+The acid and base solutions and the other inputs of the step are prepared to their platform specifications. They are controlled for identity and quality and are not characterized in this plan.
 
-The clearance runs will be spiked with XMuLV. The spike will be added to the pool after
-acidification and before the hold begins, at the volume ratio fixed in SOP-2009, which is
-small enough that it does not change the pH or the antibody concentration of the hold. A
-sample of the spiked pool will be taken at the start of the hold to establish the input
-titre. Runs will be executed in randomized order within each design, and the operator, the
-pool lot and the analytical sequence will be recorded for each run.
+## Analytical methods {#sec-methods}
 
-## Analytical methods {#sec-analytical}
-
-The three responses will be measured by the validated methods in @tbl-amv. XMuLV
-infectivity will be determined by TCID50 under AMV-3017, aggregate content by SEC-HPLC
-under AMV-3011 and acidic charge variants by icIEF under AMV-3013.
+Each output is measured by a validated method under its own procedure. @tbl-methods lists the method for each output and the sample it is measured in. Size exclusion chromatography (SEC) is run under SOP-3011, non-reduced capillary electrophoresis with sodium dodecyl sulfate (nrCE-SDS) under SOP-3015, imaged capillary isoelectric focusing (icIEF) under SOP-3013 and Protein A affinity high performance liquid chromatography (HPLC) under SOP-3016. The log reduction factor (LRF) for XMuLV is the reduction in log~10~ infectious virus between the spiked pool at the start of the hold and the spiked pool at the end of the hold.
 
 ```{python}
 #| output: asis
-print(sop_table(amvs=VIRAL_INACT_AMV_REFS))
+tbl_methods.show()
 ```
 
-: Validated analytical methods for the study responses. {#tbl-amv}
+From the method decision AMD-001 of `{python} AMD['date']`, nrCE-SDS is the method for fragments wherever fragments are measured (PCMP-001 §7.8). Before that date fragments were measured by SEC, and SEC remains the method for aggregate. In the Protein A eluate and the neutralized pool, part of the host cell protein elutes in the low molecular weight window of SEC and is counted as fragment. SEC therefore reads fragments high in the Protein A eluate and the neutralized pool (INV-001 finding 6). @tbl-methods-by-study shows which method measured fragments in which design. Aggregate was measured by SEC in both designs.
 
-The log reduction factor for XMuLV will be calculated as the difference between the log10
-titre of the spiked pool at the start of the hold and the log10 titre of the sample taken
-at the end of the hold, each corrected for the volume of the fraction assayed. Where the
-end of hold sample gives no detectable infectivity, the titre will be reported as the
-limit of detection of the assay and the resulting log reduction will be reported as a
-greater-than value. A run reported that way constrains the model from below only, and the
-report will say so where it happens.
+```{python}
+#| output: asis
+T.methods_by_study([UO]).show()
+```
 
-Aggregate and acidic charge variant samples will be drawn after neutralisation, because
-those are the values the cation exchange step receives. Samples will be assayed within the
-stability window established for the method, and every analytical sequence will carry a
-system suitability control and a pool control drawn from the study input material. The
-pool control is what allows drift between analytical sequences to be separated from an
-effect of the process parameters.
+The screening design (`{python} sid['screening']`) and the response-surface design (`{python} sid['rsm']`) ran before the method decision and measured fragments by SEC. The screening samples were not retained, so the screening design has SEC results for fragments only. These results are kept in the record and are not used for any decision. The retained samples of the response-surface design are tested by nrCE-SDS in the re-test study `{python} sid['retest']`, and fragments are judged on those results. The qualification study and the univariate study do not measure fragments.
 
 ## Sampling plan {#sec-sampling}
 
-The sampling plan is the same for every design point and is given in @tbl-sample. Three
-samples are taken from each spiked run and two from each unspiked run.
+@tbl-sampling lists the runs of each study, the samples taken and the tests made on them. Each run of a design gives three samples from the spiked run and two from the unspiked run. The sample of the input pool is taken before the pool is acidified, and it gives the level of each attribute that the step starts from. The sample of the neutralized pool is taken after neutralization and filtration, and it gives the level the step delivers to cation exchange.
 
-| Sample | Point in the run | Assay | Method |
-|---|---|---|---|
-| Input pool | Before acidification | Aggregate, acidic variants, concentration | AMV-3011, AMV-3013 |
-| Spiked load | After acidification, before the hold | XMuLV infectivity | AMV-3017 |
-| End of hold | At the end of the hold | XMuLV infectivity | AMV-3017 |
-| Neutralised pool | After neutralisation and filtration | Aggregate, acidic variants | AMV-3011, AMV-3013 |
+```{python}
+#| output: asis
+tbl_sampling.show()
+```
 
-: Samples taken from each characterization run. {#tbl-sample}
-
-Centre-point runs will be sampled identically to the factorial runs. Their replicate
-results are the estimate of pure error that the lack-of-fit test in @sec-stats depends on,
-so no centre-point run may be excluded from the analysis for any reason other than a
-documented execution deviation.
+The centre points are replicate runs at the design centre. They give the pure error of each design, against which lack of fit is tested. The input and the output titre of XMuLV are measured in the same spiked run, so that each run of a design gives its own LRF.
 
 ## Statistical methods {#sec-stats}
 
-The designs will be analysed on coded factors, where the low edge of the characterization
-range is −1, the high edge is +1 and the design centre is 0. Coding puts the estimated
-effects on a common scale, so that an effect measures the change in the response over half
-the range studied and effects on different parameters can be compared directly.
+The designs and their analysis follow SOP-1002 and PCMP-001 §6. Each factor is coded −1 at the low end of its range studied, +1 at the high end and 0 at the midpoint [@montgomery2017]. An effect is the change in the response over the coded range of the factor, which is twice its coefficient in coded units. A model term is significant when its p-value is below α = `{python} a_eff`.
 
-The screening design will be analysed by a model containing the main effects and all
-two-factor interactions, which is `{python} n_terms_scr` terms against `{python} n_scr`
-runs and leaves `{python} df_res_scr` residual degrees of freedom. Effects will be tested
-at α = 0.05 and reported with their p-values. The curvature of each response will be
-tested by comparing the mean of the centre points with the mean of the factorial points.
-Curvature that is significant at α = 0.05 indicates that a model with quadratic terms is
-needed, which the response-surface design in @sec-rsm provides.
+The screening data will be fitted by least squares with a model of main effects and two-factor interactions. For `{python} w(k)` factors this model has `{python} w(p_scr)` terms. The `{python} n_scr` runs of the design leave `{python} w(dfr_scr)` residual degrees of freedom. The `{python} w(c_scr)` centre points give `{python} w(dfpe_scr)` of them for pure error, and the other `{python} w(dflof_scr)` test lack of fit, which combines curvature and the three-factor interaction. The screening model identifies effects. Its centre points can detect curvature but cannot attribute it to a factor, and no prediction will be made from it.
 
-The response-surface design will be analysed by a full quadratic model containing the main
-effects, the two-factor interactions and the pure quadratic terms, which is
-`{python} n_terms_rsm` terms against `{python} n_rsm` runs and leaves
-`{python} df_res_rsm` residual degrees of freedom. The `{python} c_rsm` centre-point
-replicates supply `{python} df_pe_rsm` degrees of freedom of pure error, and the remaining
-`{python} df_lof_rsm` degrees of freedom carry the lack of fit. The partition will be
-reported as an analysis of variance for each response, with the regression, residual,
-lack-of-fit and pure-error terms and their F ratios.
+The response-surface data will be fitted with a full quadratic model, which adds a squared term for each factor to the main effects and the two-factor interactions. The model has `{python} w(p_rsm)` terms. The `{python} n_rsm` runs of the design leave `{python} w(dfr_rsm)` residual degrees of freedom, `{python} w(dfpe_rsm)` for pure error from the `{python} w(c_rsm)` centre points and `{python} w(dflof_rsm)` for lack of fit. The response-surface model is the predictive model. Every prediction, every PAR and the verification of the platform worst cases in `{python} PCR` will come from it.
 
-Model adequacy will be judged on four things, and all four will be reported for every
-response. These are the coefficient of determination and its adjusted form, the
-significance of the regression at α = 0.05, the lack-of-fit F test against pure error, and
-the residual diagnostics. The diagnostics are the residuals plotted against the predicted
-values, a normal quantile plot of the residuals and the actual values plotted against the
-predicted values.
+Each response-surface model will be reported with R², adjusted R² and predicted R², the model F-test and the lack-of-fit test against pure error. Predicted R² is computed from the prediction error sum of squares (PRESS), in which each run is predicted by the model fitted without it. Residuals will be plotted against the predicted values and the run order, and on a normal probability plot, and the Cook's distance of each run will be computed. The criteria that a model must meet, including the tests on its residuals, are in @sec-crit-models.
 
-The screening model identifies which effects are present. The response-surface model is
-the predictive model, and it is the only model from which an operating region, a proven
-acceptable range or a prediction at an untested setting will be derived. The screening fit
-of a design this size is close to saturated, and nothing in this plan or in PCR-006 will
-claim predictive value for it.
+Aggregate, fragments and acidic variants must meet their criteria in every batch, and a response-surface model predicts the mean response. These three attributes are therefore judged through a `{python} pi_pct` % prediction interval of a single batch wherever a judgement supports a claim. There are three such judgements. They are the PAR computed while the other factors vary as in routine operation (@sec-par), the judgement over the NOR in the qualification of the scale-down model (@sec-sdm), which uses the exact prediction interval of a single run, and the verification of the platform worst cases (@sec-verification). The PAR analysis that holds the other parameters at their set-points judges the mean prediction (PCMP-001 §6.4). XMuLV clearance is judged on the mean predicted LRF at the least favourable combination of `{python} mv_txt` within their NORs, because viral clearance is validated at worst-case conditions. Predictions of aggregate and acidic variants are translated to manufacturing scale by subtracting their offsets (@sec-sdm) before they are compared with a criterion. Predictions of fragments and XMuLV clearance are compared as the model gives them.
 
-The response-surface model predicts the mean level of each response. Where the predicted
-mean sits exactly on a criterion, about half of the material produced at that setting
-would be expected to fall on the wrong side of the criterion, so an operating region drawn
-on the predicted means carries no margin at its own edge. The Monte-Carlo analysis in
-@sec-par is what puts that margin back, and the report will not claim assurance from a
-predicted mean alone. All analyses will be
-run from the seeded analysis scripts under SOP-1002, so that the same data return the same
-result on re-execution.
+The results of the univariate study are compared with the set-point runs of the qualification study and with the criteria for aggregate and acidic variants in @tbl-iac, and its log reductions are reported beside the platform claim of the step. A difference from the set-point runs within the precision of the method is attributed to the assay.
 
 # Study design {#sec-design}
 
 ## Factors, ranges and study type {#sec-factors}
 
-@tbl-params gives the parameters in scope with their set-points, the ranges to be studied,
-the normal operating ranges and the study type assigned in @sec-risk. The plan states no
-classification for any parameter. Classification is an outcome of the study and will be
-assigned in PCR-006 under SOP-4001.
+@tbl-params lists the parameters of the step with their planned set-points and NORs and their ranges studied. The range studied is the characterized range of PCMP-001. The code letters identify the factors in the design matrices of Appendices A and B.
 
 ```{python}
 #| output: asis
-show(pp)
+tbl_params.show()
 ```
 
-: Parameters, ranges to be studied, normal operating ranges and study type. {#tbl-params}
+For `{python} both_ends_txt`, the range studied extends beyond the NOR at both ends. It shows how the step behaves near and beyond the edges of routine operation, and it bounds the knowledge space within which a PAR can be claimed. For `{python} low_equal_txt`, the range studied starts at the lower end of the NOR. That end is the shortest hold that the NOR of this plan allows, and the least favourable condition for XMuLV clearance. The range extends beyond the upper end of the NOR to show how aggregate and fragments grow in longer holds. For the `{python} conc_txt` the NOR equals the range studied.
 
-The ranges studied are wider than the normal operating ranges in every case, and each edge
-is placed where it is for a reason of its own. Inactivation pH will be studied from
-`{python} f"{p_ph.prange[0]:g}"` to
-`{python} f"{p_ph.prange[1]:g}"` against a normal operating range of
-`{python} f"{p_ph.nor[0]:g}"` to `{python} f"{p_ph.nor[1]:g}"`. The low edge is placed
-above the pH at which antibody precipitation has been observed on the platform, and the
-high edge is placed above the pH at which the platform expects inactivation to become slow
-within the shortest hold studied. Hold time will be studied from
-`{python} f"{p_time.prange[0]:g}"` to `{python} f"{p_time.prange[1]:g}"` min against a
-normal operating range of `{python} f"{p_time.nor[0]:g}"` to
-`{python} f"{p_time.nor[1]:g}"` min. The minimum is what a clearance claim must be assured
-at and the maximum is a deliberate challenge to the aggregate response, since it is a hold
-half again as long as the longest hold the process allows. Temperature will be studied
-from `{python} f"{p_temp.prange[0]:g}"` to `{python} f"{p_temp.prange[1]:g}"` °C, which
-brackets what a manufacturing suite delivers around a normal operating range of
-`{python} f"{p_temp.nor[0]:g}"` to `{python} f"{p_temp.nor[1]:g}"` °C.
-
-The three multivariate factors are coded A to C for the design matrices, in the order given
-in @tbl-legend. The same letters are used in the screening design, in the response-surface
-design and in the model terms reported in PCR-006.
-
-```{python}
-#| output: asis
-show(D.factor_legend_df(UO))
-```
-
-: Coded factor legend for the designed experiments. {#tbl-legend}
+The centre of each design is the midpoint of the ranges studied, at `{python} centre_txt`. It is not the set-point of any of the `{python} w(k)` factors, because the ranges are not symmetrical about the set-points. The centre points therefore estimate pure error at the design centre. Each model predicts the outputs at the set-point from the fitted surface.
 
 ## Screening design {#sec-screening}
 
-The screening design is a full factorial in the `{python} n_fac` multivariate factors with
-`{python} c_scr` centre-point replicates, which is `{python} f_scr` factorial runs and
-`{python} n_scr` runs in total. The planned coded matrix is given in Appendix A. A full
-factorial was chosen over a fractional design because three factors is small enough that
-the full design costs only `{python} f_scr` runs, and because a full factorial confounds
-no main effect with an interaction. Hold time integrates a rate constant that pH
-sets, so pH and hold time interact in the log reduction, and that interaction must be
-estimated cleanly and not aliased with a main effect.
-
-The centre points serve two purposes. Their replicate results give the pure error of the
-step and the analytical methods together, which is the reproducibility figure the report
-will quote. Their mean, compared with the mean of the factorial points, tests each
-response for curvature. Curvature is expected in the XMuLV response, because first-order
-inactivation kinetics are linear in the log reduction against time but not against pH.
-
-The screening study will run first and its outcome decides nothing about which factors
-continue. All `{python} n_fac` factors will be carried into the response-surface design
-whatever the screening result. A lower pH, a longer hold and a warmer hold each raise the
-log reduction of XMuLV and the aggregate content of the pool, and the control range of
-each has to be justified in the report whether or not the screening design resolves its
-effect.
+The screening design (`{python} sid['screening']`) is a two-level full factorial design in the `{python} mv_txt`, with `{python} w(c_scr)` centre points, in `{python} n_scr` runs. Every combination of the low and high ends of the `{python} w(k)` ranges is run, so the design estimates all main effects and all two-factor interactions without aliasing. Its purpose is to identify which factors and interactions act on each output before the response-surface design is run. All `{python} w(k)` factors are carried into the response-surface design, because each of them is expected to act on XMuLV clearance (@sec-risk). The runs are executed in random order. The planned design is in Appendix A.
 
 ## Response-surface design {#sec-rsm}
 
-The response-surface design is a face-centred central composite design in the same
-`{python} n_fac` factors. It comprises `{python} f_rsm` factorial runs, `{python} a_rsm`
-axial runs and `{python} c_rsm` centre-point replicates, which is `{python} n_rsm` runs in
-total. The planned coded matrix is given in Appendix B. Placing the axial points on the
-faces of the cube, at coded ±1 rather than beyond it, keeps every run inside the ranges in
-@tbl-params. The design therefore never requires a setting outside the range the plan
-commits to studying, and the fitted model is never asked to extrapolate.
+The response-surface design (`{python} sid['rsm']`) is a face-centred central composite design in the same `{python} w(k)` factors [@montgomery2017]. It has `{python} w(f_rsm)` factorial runs, `{python} w(a_rsm)` axial runs and `{python} w(c_rsm)` centre points, `{python} n_rsm` runs in all. The axial runs lie at the centres of the faces of the design cube, at the ends of each range studied, so every run stays inside the range studied. Together with the centre points, the axial runs allow a squared term to be estimated for each factor, which the full quadratic model needs. The runs are executed in random order. The planned design is in Appendix B.
 
-The centre of the design is inactivation pH `{python} f"{ctr_ph:g}"`, hold time
-`{python} f"{ctr_time:g}"` min and temperature `{python} f"{ctr_temp:g}"` °C, and the
-`{python} c_rsm` centre-point replicates are run at those settings. The axial runs are what
-allow the pure quadratic terms to be estimated.
-
-The two designs will be executed on the same Protein A pool where the material supply
-allows it. Where a second pool is required, the pool will be treated as a block in the
-analysis and the block effect will be reported. Executing both designs gives
-`{python} n_total` runs on the same step. The report will present the two designs
-separately, because the screening design estimates effects and only the response-surface
-design predicts a response at a setting that was not run.
+Every output in @tbl-methods is measured on every run. Fragments are judged on the nrCE-SDS results of the retained samples (@sec-methods).
 
 ## Univariate assessment {#sec-univariate}
 
-A-Mab concentration will be assessed one factor at a time. The pool will be adjusted to
-settings across the range `{python} f"{p_conc.prange[0]:g}"` to
-`{python} f"{p_conc.prange[1]:g}"` `{python} p_conc.unit`, and the other three parameters
-will be held at their set-points. Aggregate content, acidic charge variant content and
-XMuLV log reduction will be measured on every run.
+The `{python} conc_txt` is assessed one factor at a time in the univariate study (`{python} sid['univariate']`). The low-pH hold is run at settings of the concentration across the range studied, `{python} conc_range_txt`, with the `{python} mv_txt` held at their set-points. Aggregate, acidic variants and the log reduction of XMuLV are measured on every run, and the set-point runs of the qualification study (`{python} sid['qualification']`) serve as the reference at set-point. The study does not measure fragments, so it supports no range of the concentration for that attribute, and @sec-risks states the assumption the plan then rests on. A study of one factor at a time cannot show whether the effect of the concentration depends on the other parameters.
 
-A univariate design cannot resolve an interaction between concentration and the other
-parameters, and it is not asked to. The mechanism gives concentration no part in the
-inactivation chemistry, and its effect on aggregation is expected to act independently of
-the pH and the temperature of the hold. Should the univariate results contradict that
-expectation, the report will say so and the parameter will be brought into a multivariate
-study rather than supported by this design.
+# Acceptance and decision criteria {#sec-criteria}
 
-# Acceptance and decision criteria {#sec-acceptance}
+The criteria below apply PCMP-001 §7 to this step. They are derived from the drug substance criteria, the platform history of X-Mab, Y-Mab and Z-Mab, and the bounds of downstream steps verified on the data of this campaign (PCMP-001 §7.3 and §7.5). No result of the studies in this plan enters them. `{python} PCR` will report each result against its criterion and state whether the criterion was met.
 
-The criteria in this section are fixed before the study is executed. They are the
-yardsticks against which the results in PCR-006 will be judged, and they will not be
-revised after the data are seen.
+## Scale-down model and model adequacy {#sec-crit-models}
 
-## Acceptance criteria for the responses
+1. The scale-down model is qualified for aggregate and for acidic variants when the conclusion against the criterion over the NOR is the same with the offset at either end of its `{python} ci_off_pct` % confidence interval (@sec-sdm). The decision is made at the analysis, with the response-surface model.
+2. A response-surface model is adequate for prediction when all four of the following conditions hold (PCMP-001 §7.2).
+    - The model F-test is significant at α = `{python} a_eff`.
+    - Lack of fit against pure error is not significant at α = `{python} a_lof`.
+    - Predicted R² falls short of R² by no more than `{python} gap_max`, the limit on overfitting of PCMP-001 §7.2.
+    - The residuals show no trend, and no run dominates the fit. A regression of the absolute residuals on the predicted values, and a regression of the residuals on run order, each has no slope significant at α = `{python} a_eff`. No run has a Cook's distance above 4/n, where n is the number of runs in the fit (`{python} cook_rsm` for the `{python} n_rsm` runs of the response-surface design).
+3. A model that fails the lack-of-fit test or the limit on overfitting is either refitted with a justified change of terms or transformation, or it is not used to set a range (PCMP-001 §7.2). This plan sets no rule for which terms a refit removes or which transformation it applies, so `{python} PCR` states the change it made to any model it refitted, with the reason for it.
+4. Where no adequate model results for an output, no range is set from the model of that output. `{python} PCR` then reports the output descriptively against its criterion, over the runs of the response-surface design (PCMP-001 §7.2).
 
-@tbl-acc gives the criterion that applies to each response, the quality attribute it
-belongs to and the basis on which the criterion was derived.
+## Intermediate acceptance criteria {#sec-iac}
+
+A drug substance criterion does not say what the output of an upstream step must meet. Each output of this step is therefore judged against an intermediate acceptance criterion, as PCMP-001 §7.3 derives it. The drug substance criterion is carried backward through the train using the worst case that each downstream step showed on the platform. That worst case is the lowest clearance factor for a step that removes the attribute and the largest increase for a step that adds to it. No margin is applied. An attribute that no downstream step changes keeps its drug substance criterion. @tbl-iac gives the criteria for the outputs of this step.
 
 ```{python}
 #| output: asis
-show(acc_df)
+T.iac_derivation([UO]).show()
 ```
 
-: Acceptance criteria for the study responses and their basis. {#tbl-acc}
+In @tbl-iac the downstream worst case is the cumulative clearance factor and increase of the steps after this one.
 
-The XMuLV criterion is the contribution this step must make for the cumulative claim to
-hold. The drug substance requires a cumulative enveloped virus clearance of at least
-`{python} f"{cum_xmulv:g}"` log10 across the train. Anion exchange and virus filtration
-are credited with their own demonstrated contributions, and the difference between the
-cumulative requirement and that credit is what this step must deliver, which is
-`{python} f"{acc_xmulv:.2f}"` log10.
+Aggregate in the neutralized pool must not exceed `{python} agg_hi` % HMW. Cation exchange is the only step after this one that is credited with removing aggregate, so the criterion is the drug substance criterion multiplied by the cation exchange clearance factor. Within its NOR, cation exchange cleared less aggregate than its platform worst case (`{python} PCR_CEX`). The one-sided `{python} vb_pct` % prediction bound of the clearance factor of a single cation exchange batch, at the least favourable combination within its NOR, therefore replaced the platform value (PCMP-001 §7.5). The a priori criterion of `{python} agg_apriori` % HMW tightened to the value in @tbl-iac.
 
-The aggregate criterion is an in-process limit of `{python} f"{lim_agg:.3g}"` %, not the
-drug substance specification of `{python} f"{ds_agg:g}"` %. The neutralised pool is an
-intermediate, and cation exchange reduces its aggregate content before the material becomes
-drug substance. The in-process limit is derived by carrying the drug substance
-specification back through the aggregate clearance the steps after the hold deliver,
-subtracting the aggregate those steps add, and then dividing by a safety factor so that
-the drug substance does not depend on every downstream step delivering its nominal
-clearance exactly. Acidic charge
-variants are judged against the drug substance specification of
-`{python} f"{lim_acid:.3g}"` %, because no downstream step of the train modifies them.
+Fragments in the neutralized pool must not exceed `{python} frag_hi` %, measured by nrCE-SDS. This criterion is the drug substance criterion carried back through the platform worst case of cation exchange, the only step after this one that is credited with removing fragments. Acidic variants must lie within `{python} acid_lo`–`{python} acid_hi` %, the drug substance criterion, because no downstream step is credited with a change in them. Both limits of the acidic variant criterion apply. XMuLV clearance must reach the platform claim of the step (@sec-claim).
 
-## Model adequacy criteria
+## XMuLV clearance claim {#sec-claim}
 
-A response-surface model will be accepted as adequate for prediction when its regression is
-significant at α = 0.05, its lack of fit is not significant at α = 0.05 against pure error,
-and its residual diagnostics show no structure. A model that fails any of these will not be
-used to define an operating region or a proven acceptable range for its response.
+Each step that clears a virus is held to its platform claim, which is the log reduction that the step has delivered for that virus on the platform (PCMP-001 §7.4). For XMuLV the claims are `{python} g(xm_claims['viral_inactivation'])` log~10~ for this step, `{python} g(xm_claims['aex'])` log~10~ for anion exchange and `{python} g(xm_claims['virus_filtration'])` log~10~ for virus filtration. They sum to `{python} f"{xm_sum:.2f}"` log~10~, which exceeds the cumulative requirement of `{python} g(xm_req)` log~10~ by `{python} f"{xm_margin:.2f}"` log~10~. A shortfall at this step larger than that surplus therefore cannot be made up by the claims of the other two steps. Anion exchange and virus filtration are characterized under `{python} PCP_AEX` and `{python} PCP_VF`, and PCMR-001 consolidates the cumulative claim.
 
-Two outcomes are anticipated and will be handled as follows. Where a response varies so
-little across the region that its regression is not significant, the report will state that
-the parameters have no detectable effect on it over the ranges studied and will support the
-ranges from the observed values instead of from a model. Where the pure error of a response
-is very small relative to its fitted values, the lack-of-fit F ratio may become large for
-differences too small to matter, and the report should then judge adequacy on the size of
-the residuals against the acceptance criterion rather than on the F test alone. Neither
-outcome is a reason to refit a different model.
+The XMuLV clearance of this step is judged at the worst case within the NOR. The lowest mean predicted LRF among all combinations of NOR low, set-point and NOR high of the `{python} mv_txt` must reach `{python} claim_txt` log~10~.
 
-## Decision criteria for the operating region
+## Verification of the platform worst cases {#sec-verification}
 
-The operating region of the step is the part of the characterized region in which every
-criterion in @tbl-acc is met at the same time. It will be established from the fitted
-response-surface models by evaluating all `{python} n_resp` responses over a grid spanning
-the ranges in @tbl-params and retaining the settings that satisfy every criterion. The
-proportion of the characterized region that satisfies every criterion will be reported.
+The criteria upstream of this step assume that the low-pH step adds no more aggregate, fragments and acidic variants than it added on the platform. @tbl-worst-cases lists these platform worst cases and the criteria upstream that rely on them. `{python} PCR` will check each of them with the response-surface model of this step (PCMP-001 §7.5).
 
-The study will be considered to have met its objectives when the scale-down model is
-qualified, when both designs are executed as planned or with documented deviations whose
-impact is assessed, when an adequate model is obtained for each response or the absence of
-an effect is demonstrated, and when the normal operating ranges in @tbl-params lie inside
-the operating region. If a normal operating range is found to extend outside the operating
-region, the report will define the edge of failure, and the normal operating range should
-be narrowed in the control strategy rather than the criterion relaxed.
+```{python}
+#| output: asis
+tbl_wc.show()
+```
+
+The verification of the platform worst cases takes the largest increase that the response-surface model predicts within the NOR of @tbl-params, at the least favourable combination of NOR low, set-point and NOR high. It also takes the one-sided `{python} vb_pct` % prediction bound of a single batch at that combination. The bound is a prediction bound of a single batch because each output is judged per batch, and the platform worst case that it may replace was a single run. An assumption is confirmed when the predicted largest increase is no larger than the platform worst case. The results observed at the ends of the range studied are reported beside the predicted largest increase, for information.
+
+The platform worst cases in @tbl-worst-cases are increases over a hold of `{python} f"{platform_hold_min} {PU['hold_time']}"`, the upper end of the range studied. The verification takes the A-Mab increase within the NOR, where the hold is at most `{python} f"{hold_nor_hi} {PU['hold_time']}"`. A bound smaller than a platform value may therefore reflect the shorter hold of the A-Mab NOR as well as the behaviour of the product, and `{python} PCR` states which of the two it reflects, for each attribute, from the runs made at a hold of `{python} f"{platform_hold_min} {PU['hold_time']}"`. The criterion that results is still right, because routine manufacture never holds the pool longer than the upper end of the NOR. The verification may change the criteria upstream of this step by the following rule.
+
+1. Where the largest increase predicted within the NOR exceeds the platform worst case, the `{python} vb_pct` % prediction bound of a single batch replaces the platform value. Every criterion upstream of this step is recalculated with the bound and becomes stricter.
+2. Where the `{python} vb_pct` % prediction bound of a single batch is smaller than the platform worst case, and the response-surface model meets the adequacy criteria of @sec-crit-models, the bound replaces the platform value. Every criterion upstream of this step is recalculated with the bound and becomes wider.
+3. Otherwise the platform value stands.
+
+Where the rule widens a criterion, `{python} PCR` should give the argument for it, with the bound, the runs behind it and the reason why the performance of this step for A-Mab is known well enough to replace the platform value. Every change of a criterion, in either direction, should also be argued by its risk. The argument names who bears the risk, whether and where an excursion would be detected, what the downstream steps must then clear and the probability of a drug substance out of specification.
+
+## Parameter classification {#sec-class}
+
+`{python} PCR` will classify each parameter by the rule of PCMP-001 §7.7, which reads as follows.
+
+> Parameters are classified under the parameter classification procedure SOP-4001 by the decision logic of the A-Mab case study [@amab2009].
+>
+> 1. A critical process parameter (CPP) has an effect on a CQA that is significant and practically relevant within the characterized range, and a high risk of falling outside its acceptable range in operation.
+> 2. A well-controlled critical process parameter (WC-CPP) has the same kind of effect on a CQA but a low risk of falling outside its acceptable range, because it is readily controlled and its PAR is wide against its NOR.
+> 3. A key process parameter (KPP) affects process performance, such as yield or concentration, and has no effect on a CQA within its range.
+> 4. A general process parameter (GPP) has no relevant effect on a CQA or on process performance within its range.
+>
+> A significant effect that is too small to move the attribute appreciably within the PAR does not by itself make a parameter critical. The PCR-00N should state the size of the effect beside its significance and give the reason for each class.
+
+An effect is significant when a term of the response-surface model that contains the parameter has a p-value below α = `{python} a_eff` (PCMP-001 §6.2). Neither PCMP-001 nor SOP-4001 sets a numerical threshold for an effect that is practically relevant, or for a PAR that is wide against its NOR, so neither decides a class on its own. `{python} PCR` states, for each parameter and each attribute it affects, the size of the effect across the PAR and the margin between the PAR and the NOR, and gives the reason for each class. Criticality is treated as a continuum, as described in ICH Q8(R2) [@ichq8].
 
 # Proven acceptable ranges (planned analysis) {#sec-par}
 
-A proven acceptable range is the range of a parameter over which the step has been
-demonstrated to meet its acceptance criteria [@ichq8]. For each quality attribute in
-@tbl-cqa and each multivariate parameter, a proven acceptable range will be derived from
-the fitted response-surface model of the corresponding response, against the criterion for
-that response in @tbl-acc.
+A PAR will be computed for each attribute that has a criterion at this step and for each factor of the response-surface model. Two analyses will be run (PCMP-001 §6.4). The first holds the other parameters at their set-points and scans the parameter of interest across its range studied. Its PAR is the contiguous range around the set-point over which the mean prediction meets the criterion.
 
-Two analyses will be run for every combination of attribute and parameter. The first holds
-the other parameters at their set-points and scans the parameter of interest across its
-characterization range. It answers what the parameter may do while the rest of the step is
-running as intended. The second propagates the normal operating ranges of the other
-parameters. At each of `{python} n_grid` points across the characterization range of the
-parameter of interest, `{python} f"{n_mc:,}"` Monte-Carlo draws are taken with the other
-parameters sampled within their normal operating ranges, the fitted model is evaluated at
-each draw with its prediction uncertainty included, and the criterion is applied to the
-result. It answers what the parameter may do while the rest of the step varies as it is
-permitted to.
+The second analysis computes the PAR while the other `{python} w(k - 1)` factors of the response-surface model vary about their set-points as in routine operation. PCMP-001 §6.4 calls it the NOR-propagated analysis. It scans the parameter across `{python} D.PAR_GRID` grid points over its range studied. How the other factors vary, and what is compared with the criterion, depend on the attribute.
 
-The proven acceptable range returned by each analysis is the contiguous interval around the
-design centre over which the criterion is met. An interval is reported only where it is
-contiguous, because a parameter that meets a criterion in two separated intervals is not
-supported by a range and should be reported as an edge of failure instead. Where the two
-analyses disagree, the narrower range is the one that will be carried into the control
-strategy, and both will be shown in the report.
+- For aggregate, fragments and acidic variants it compares the `{python} pi_pct` % prediction interval of a single batch, because a single batch is what must meet the criterion. At each grid point, `{python} mc_n` operating points are drawn for the other `{python} w(k - 1)` factors. Each factor is drawn from a normal distribution centred on its set-point, with a standard deviation of `{python} sd_frac` of the width of its NOR, so that the NOR spans `{python} n_sig` standard deviations on either side of the set-point. A draw that falls outside the range studied is set to the nearer end of that range. The interval holds the central `{python} pi_pct` % of the simulated batches, and it includes the model residual and the uncertainty of the fitted coefficients. For an upper limit the upper end of the interval must not exceed the limit, for a lower limit the lower end must not fall below it, and for a two-sided criterion both apply.
+- For XMuLV clearance it compares the worst case within the NOR. At each grid point the other `{python} w(k - 1)` factors are set to every combination of their NOR low, set-point and NOR high, and the lowest mean predicted LRF must reach the claim.
 
-Each proven acceptable range will be reported with a plot of the response against the
-parameter, with the acceptable region shaded green, the set-point marked and the normal
-operating range marked. The plot shows how steeply the response approaches its
-criterion. A parameter whose response crosses its
-criterion steeply needs tighter control than one whose response approaches it slowly, even
-where the two proven acceptable ranges are equally wide.
+The PAR of the second analysis is the contiguous range around the set-point over which the comparison passes. It is in general narrower than the PAR of the first analysis, because the range must hold while the other factors vary. The PAR of the second analysis is the one that supports a claim. The decision rules are the following.
 
-Two limits apply to every proven acceptable range this study will produce. The range is
-proven only within the characterization range that was studied, and a range reported as
-the full characterization range means that no edge was found inside it rather than that
-none exists. The range is also conditioned on the scale-down model, and it transfers to the
-commercial step only under the qualification in @sec-sdm.
+1. A range of a parameter is proven acceptable for an attribute when the second analysis meets the criterion of that attribute across it.
+2. A parameter that affects several attributes has a PAR for each attribute, and the range carried into the control strategy is their intersection.
+3. A PAR that reaches the end of the range studied is reported as reaching it, and no claim is made beyond it.
+4. Where an output does not meet its criterion even at the set-point, `{python} PCR` reports that no PAR exists for that attribute and states the consequence for the NOR.
+5. The range of the `{python} conc_txt` is supported by its own univariate data. It is supported when every result across the settings of the concentration meets the criterion for aggregate and for acidic variants in @tbl-iac, at manufacturing scale. `{python} PCR` reports the log reduction measured at each setting beside the claim of the step, which is itself judged on the response-surface model at the worst case within the NOR (@sec-claim). The univariate study supports no range of the concentration for fragments (@sec-risks).
+
+`{python} PCR` will tabulate both PARs for each attribute and each parameter. For each attribute it will also show a figure against the parameter with the largest main effect in the response-surface model. The figure plots the prediction across the range studied, with the region that meets the criterion shaded green.
 
 # Data management and integrity {#sec-data}
 
-Raw data from the study will be recorded contemporaneously and will meet the ALCOA+
-attributes throughout. Process data from the hold vessels, which are the pH and temperature
-traces and the recorded times, will be captured by the instrument systems and retained as
-the original electronic records. Analytical results will be reported from the validated
-methods into the laboratory information management system, and the instrument data files
-will be retained under the record retention policy of the site.
+The data of these studies are recorded and kept to the ALCOA+ principles. Raw data from the analytical instruments and the scale-down systems are held in validated electronic systems with audit trails. Records made by hand are made on controlled forms. Every study record carries the execution window of the study and the calibration status of the equipment it used (INV-001 finding 5).
 
-Manual entries will be made in the controlled study notebook and will carry the date and
-the identity of the person making them. Corrections will be made so that the original entry
-remains legible, with the reason recorded. No result may be excluded from the analysis
-without a documented investigation, and any exclusion will be reported in PCR-006 with its
-justification.
-
-The statistical analysis will be executed from version-controlled scripts under SOP-1002
-against a locked dataset. The dataset, the script version and the software environment will
-be recorded in the report, so that the analysis can be re-executed and returns the same
-result. A second reviewer independent of the analyst will verify the transcription of the
-results into the report and the correctness of every value quoted from the analysis.
+Results are transferred to the statistical analysis from the approved record, and a second analyst verifies the transfer. A result is excluded only for a documented reason, and `{python} PCR` lists every exclusion. Where a run is lost or invalidated, `{python} PCR` should report it and state whether the design was repaired or re-executed (PCMP-001 §6.1).
 
 # Roles and responsibilities {#sec-roles}
 
-The functions responsible for the study and their responsibilities are given in @tbl-roles.
-The named signatories are recorded in @tbl-appr.
+The functions that approve this plan share the work of the studies as @tbl-roles shows.
 
-| Function | Responsibility |
-|---|---|
-| Process Development / MSAT | Authors this plan, executes the scale-down runs, interprets the results and authors PCR-006 |
-| Analytical Development | Executes the size variant and charge variant methods and maintains their validated state |
-| Virology | Executes the XMuLV spiking runs and the infectivity assay, and calculates the log reduction factors |
-| Manufacturing Science | Confirms that the scale-down model represents the commercial step and that the ranges studied cover commercial operation |
-| Statistics | Approves the designs, executes the analysis and approves the model adequacy and range conclusions |
-| Quality Assurance | Approves this plan and PCR-006 and confirms that the study was executed under the governing procedures |
-
-: Functions and responsibilities for the study. {#tbl-roles}
-
-Process Development owns the study and is accountable for its execution against this plan.
-Statistics is accountable for the analysis and for the conclusions drawn from the models,
-and no range or classification will be reported without that approval. Quality Assurance
-approves the plan before execution begins and approves the report before its conclusions
-enter the control strategy.
+```{python}
+#| output: asis
+tbl_roles.show()
+```
 
 # Deliverables and schedule {#sec-deliverables}
 
-The deliverable of this plan is the Process Characterization Report for the step, PCR-006.
-It will report the qualification of the scale-down model, the executed designs, the fitted
-models with their adequacy, the operating region, the proven acceptable ranges, the
-classification of each parameter and the contribution of the step to the enveloped virus
-clearance claim. Any deviation from this plan will be recorded in that report with its
-impact on the conclusions.
+The deliverable of this plan is the paired Process Characterization Report `{python} PCR`. `{python} PCR` reports every study in @tbl-schedule against the criteria of @sec-criteria, and it rolls up into PCMR-001 with the reports of the other steps. The qualification runs of the scale-down model are made before the first characterization run (PCMP-001 §5). The qualification decision needs the response-surface model, so it is made at the analysis, after the last study. The screening design is run before the response-surface design, so that its effects are known when the response-surface design is analysed. The re-test by nrCE-SDS follows the method decision AMD-001.
 
-The study runs in four phases in the order given in @tbl-sched. No calendar dates are fixed
-in this plan. Each phase begins on completion of the one before it. The
-characterization runs will not begin until the scale-down model has been accepted, because
-results from an unqualified model cannot support a range.
+@tbl-schedule also records the execution window of each study, which the Version 1.0 record did not (INV-001 finding 5). The first study of the step started on `{python} first_start`, after this plan was approved, and `{python} par_txt` ran in parallel.
 
-| Phase | Content | Gate to the next phase |
-|---|---|---|
-| Qualification | Scale-down model qualification | Model accepted under SOP-1001 |
-| Screening | Screening design and univariate assessment | Designs executed and data locked |
-| Response surface | Response-surface design | Design executed and data locked |
-| Analysis | Proven acceptable ranges, classification and reporting | PCR-006 approved |
-
-: Study phases and the gate at the end of each. {#tbl-sched}
-
-The results of this study feed the master report PCMR-001, which consolidates the
-cumulative viral clearance claim across the three orthogonal steps and the control strategy
-across the train. PCR-006 is therefore required before the cumulative claim can be closed.
+```{python}
+#| output: asis
+tbl_schedule.show()
+```
 
 # Risks and assumptions {#sec-risks}
 
-The study rests on four assumptions and carries four risks, and each is stated here so that
-the report can confirm or correct it.
+The studies carry the following risks.
 
-The first assumption is that the scale-down model represents the commercial hold. It is
-tested directly by the qualification in @sec-sdm, and the risk it carries is that a
-difference between scales is present but too small to detect in replicate runs. The
-consequence would be a range that is proven at small scale and narrower at commercial
-scale. Confirmation at commercial scale during process performance qualification is what
-bounds that risk, and this plan claims nothing about the edges of the ranges at commercial
-scale.
+1. The scale-down model may differ in mean from manufacturing scale for aggregate and acidic variants. The offsets and the qualification rule of @sec-sdm address this, and every conclusion for these two outputs is stated at manufacturing scale.
+2. Fragments and XMuLV clearance are not compared at both scales, so their offsets are unknown (@sec-sdm). Their judgements rest on the spiking model and on the assumptions below.
+3. An infectivity titre carries the variability of a cell-based assay. The XMuLV claim is therefore judged on the mean prediction of the response-surface model and not on a single titre. The centre points estimate the variability of the LRF at the design centre.
+4. The design centre is not the set-point (@sec-factors). The models predict the outputs at the set-point and do not measure them there. Replicate runs at set-point are made only in the qualification study.
+5. The screening design has no fragment results that can be used for a decision (@sec-methods). Effects on fragments are therefore estimated from the response-surface design only.
+6. The designs and the univariate study need Protein A eluate produced at the Protein A set-points. A shortage of eluate would delay the studies, but it would not change the designs.
 
-The second assumption is that a single Protein A pool represents the material the step will
-receive. The pool fixes the input aggregate content, the input acidic variant content and
-the antibody concentration, and a pool with an unusual input would move all the responses
-together. The risk is mitigated by characterizing the pool before the study and by
-reporting its values as the input condition, so that a reader can see what the model is
-conditioned on. The univariate assessment in @sec-univariate covers the concentration part
-of that dependence across the full range the capture step delivers.
+The plan rests on the following assumptions.
 
-The third assumption is that the spiked runs behave as the unspiked step does. The spike is
-a virus preparation added to the pool, and it carries its own matrix. The volume ratio in
-SOP-2009 keeps that matrix to a small fraction of the hold, and the product quality
-responses of the spiked runs will be compared with those of the qualification runs to
-confirm that the spike did not shift them.
-
-The fourth assumption is that the analytical methods resolve the differences the study
-needs to see. The risk is largest for the infectivity assay near complete inactivation,
-where the end of hold titre may fall below the limit of detection and the log reduction can
-only be reported as a greater-than value. Several such runs at the low pH corner would
-flatten the fitted surface there and would make the model conservative rather than wrong.
-The report will identify any run reported that way and will state what it does to the
-model.
-
-One further risk is procedural. Material supply may force the two designs onto different
-Protein A pools, which introduces a block effect. @sec-rsm sets out how that would be
-handled, and the analysis would report the block effect rather than absorb it into the
-parameter estimates.
+1. Each downstream step performs at least as well as the platform worst case on which the criteria of this step rely. Each such assumption is checked in the report of that step. The verification of the cation exchange aggregate clearance has already changed the aggregate criterion of this step. Cation exchange cleared less aggregate within its NOR than its platform worst case, and the one-sided `{python} vb_pct` % prediction bound of a single batch for that clearance is part of the aggregate criterion (@sec-iac).
+2. The step does not change the glycan attributes or host cell protein, and no credit is taken for either.
+3. The scale-down model forms fragments at the rate of manufacture, because cleavage in the hinge region depends on pH, time and temperature and not on scale (@sec-sdm).
+4. The `{python} conc_txt` within its range studied does not change the fragments formed in the hold. The designs hold the concentration at its set-point, and the univariate study does not measure fragments (@sec-univariate). Cleavage in the hinge region is a reaction of each molecule with the solvent, so the fraction of fragments formed is not expected to depend on the antibody concentration.
+5. Each NOR spans the routine variation of its parameter, as the second PAR analysis assumes (@sec-par).
 
 # Approvals {#sec-approvals}
 
-This plan becomes effective when it has been approved by the functions recorded in
-@tbl-appr. Execution of the studies described here may not begin before that approval.
-Amendments to the plan will be issued as a new version and approved by the same functions,
-and any amendment made after execution has begun will be reported in PCR-006 with the
-reason for it.
-
-# Appendices {#sec-appendices}
-
-The appendices give the planned design matrices in coded form. No results appear in them,
-because none exist at the time this plan is issued. The natural-unit setting for each coded
-level follows from the range of the factor in @tbl-params, where coded −1 is the low edge
-of the range studied, coded +1 is the high edge and coded 0 is the midpoint between them.
-The factor letters are those of @tbl-legend.
-
-## Appendix A — Planned screening design matrix {#sec-appa}
+This plan is approved by the functions listed in the approval record at the front of this document. A change to the plan after approval is made in a new version, approved by the same functions.
 
 ```{python}
 #| output: asis
-show(scr_plan)
+print(appendix_numbering("A"))
 ```
 
-: Planned screening design matrix in coded units. Runs will be executed in randomized order. {#tbl-appa}
+# Appendix A. Planned screening design {.unnumbered #sec-appendix-a}
 
-## Appendix B — Planned response-surface design matrix {#sec-appb}
+@tbl-matrix-screening gives the planned screening design (`{python} sid['screening']`), with the coded level and the setting of each factor.
 
 ```{python}
 #| output: asis
-show(rsm_plan)
+planned_tbl("screening", "tbl-matrix-screening",
+            "Planned screening design of the low-pH viral inactivation step.").show()
 ```
 
-: Planned response-surface design matrix in coded units. Runs will be executed in randomized order. {#tbl-appb}
+```{python}
+#| output: asis
+print(appendix_numbering("B"))
+```
+
+# Appendix B. Planned response-surface design {.unnumbered #sec-appendix-b}
+
+@tbl-matrix-rsm gives the planned response-surface design (`{python} sid['rsm']`), with the coded level and the setting of each factor.
+
+```{python}
+#| output: asis
+planned_tbl("rsm", "tbl-matrix-rsm",
+            "Planned response-surface design of the low-pH viral inactivation step.").show()
+```
+
+<!-- ========================= BODY END ======================================== -->
 
 # References {.unnumbered}
 

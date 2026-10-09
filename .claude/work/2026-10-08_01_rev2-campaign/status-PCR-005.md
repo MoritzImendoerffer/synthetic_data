@@ -77,28 +77,52 @@ appended at the end of the setup chunk, none removed or weakened):
 Gate: check_render --render pass 1 green at 72 pp (before the length cuts). Length cuts round 1 applied
 (restatements in the summary, §2, §3.5.3, §4, §5.2/5.3/5.6/5.7/5.8, §8, §13); pass 2 running.
 
+## 2c. Data-state pass (data-state-2026-10-09b.md and the revised PCP-005), COMPLETE
+
+Eight setup asserts failed on the new data, as they should; each was corrected to the new fact (none dropped):
+- `PDS` has five entries (PD-005-05, the hold study S-PA-HLD, made 2026-09-19 to 09-28, after INV-001 closed
+  and after AMD-001; asserted). The characterization window now excludes both re-analysis studies.
+- Bioreactor acidic-variant upper limit back at its a priori value (39.0); the low-pH acidic-variant model is
+  an exact fit, status "none", not adequate, so its bound does not replace the platform value (asserted).
+- Hold data: acidic variants rose by the same 0.3 points at both temperatures; fragments rose faster at 21 °C
+  (0.25 against 0.08, difference above the day-0 aliquot difference); nrCE-SDS on every sample, no SEC.
+Text changed: F9; objectives (hold item removed, a sentence says the hold was not a PCP-005 objective);
+§1.4 items 5 and 8; §3.3 (hold study measured fragments by nrCE-SDS alone); §4.5 rewritten (study as
+PD-005-05, every time point by nrCE-SDS, the report's own hold rule because no plan states one, aggregate-only
+low-pH reason, acidic criterion at its a priori value with one sentence on why the bound does not replace it);
+§5.7 results and Table 5.17 caption and notes; Conclusion 9; new §13 subsection PD-005-05 (`#sec-pd05`);
+"criterion 7/8" plan numbers removed (the revised PCP-005 may renumber); the bioreactor parameter names are
+now computed (`lc()` keeps "CO2 partial pressure (pCO2)" capitalised; `alarm_txt`). New asserts: the low-pH
+aggregate model has no pH term and the hold-time and temperature NORs in force end where characterized.
+Then, after PCP-005 was revised (no hold study, no hold criterion, objectives 1-6, criteria 1-7 with
+classification = 7): the held eluate is judged against the criteria of the low-pH inactivation load (asserted
+from `D.iac_table`: low-pH output criterion less that step's credited increase = 6.46 % aggregate, 39 % acidic
+upper limit, 2.45 % fragments), and the report says the plan set no hold criterion because it foresaw no hold
+study; the hold rule is the report's own and part of PD-005-05. "Criterion 7/8" for the hold or classification
+removed; classification cited once as criterion 7. Every other PCP-005 reference (§2, §4.1, §5.1, §5.5, §6.2,
+§6.4, §7 criteria 1-5, §8.1, §8.2) checked against the new PDF. Acidic variants changed over the hold by less
+than the day-0 aliquot difference; the text now says so (asserted). Conclusion 1 no longer puts the hold study
+under PCP-005. PD-005-02 to 04 are named in the discrepancy intro (the register carries their details);
+PD-005-01 and PD-005-05 keep subsections.
+check_render --render passes 11-15 all green (69, 68, 69, 68, 67 pages). Final: **67 pages**.
+
 ## 3. What is left
 
-Nothing in the follow-up list. Final state, check_render --render pass 10 (of 10, all green):
-53 chunks, 680 inline expressions, no <<NEEDS:>>; style gate 0; docx and pdf render; all cross-references
-resolved; 29 complex tables complete; no index-cell repeats; no text below 7.9 pt. **PDF: 67 pages** (from 73).
-Length came from restatement cuts plus four layout moves: Table 5.6 after its discussion; the discrepancy
-register at the end of §13 (now Table 13.4); PD-005-02 to 04 folded into `#sec-pd-analysis`; the range-ends
-rationale moved from §4.1 to §2.3 and the letter-code table to the end of §4.2. Each chapter starts a new page;
-§3 (19 lines over), §7 (figure page) and §8 (10 lines over) cannot lose a page without dropping content.
-Tables 5.10, 7.1, 7.3, 4.1 and the design-space page inspected in the final PDF: correct.
+Nothing in this pass. Final check_render --render (pass 15 of this session's count): all chunks exec, 677
+inline expressions, no <<NEEDS:>>; style gate 0; docx and pdf render; all cross-references resolved and no
+inline source printed; 29 complex tables complete; no index-cell repeats; no text below 7.9 pt. PDF: 67 pages.
 
-Next (coordinator): factual pass on the follow-up text, then promote and re-anchor `build_report_protein_a`.
+Next (coordinator): factual pass on the follow-up and data-state text, then promote and re-anchor
+`build_report_protein_a`.
 
 For the owner/coordinator:
-- PCP-005 §8.1 still lists "the runs of the cation exchange design / the adequacy results of the cation
-  exchange model" as what PCR-005 must give for the widened criterion; under the single-batch rule it is anion
-  exchange. PCR-005 §7.1 gives the anion exchange bound, runs, adequacy and reason.
-- PCP-005's PDF prints a literal "{python} inad_text" (two adjacent inline expressions, PCP-005.qmd ~l.681).
-- The low-pH acidic-variant results carry no run-to-run scatter (identical at each hold time in
-  doe_viral_inactivation_rsm.csv), so their single-batch bound equals the point prediction (0.40).
-- Carried over: no ELISA coverage figure in the record (§7.1 says so); the qualification for pool HCP rests on
-  the choice among near-AICc models (2 of 9 would not qualify), on the 6 added runs and on the narrowed NOR.
+- The coordinator's note says the held-eluate criteria are "a priori by the master plan's rule". The report
+  uses the criteria IN FORCE for the low-pH inactivation load (aggregate 6.46 %, tightened and widened on
+  verification; the a priori value would be 9.30 %), as for every other judgement. Confirm that is intended.
+- `T.worst_case_verification` note b) says the low-pH acidic model "fails an adequacy test"; for an exact fit
+  the data-state says PCMP-001 §7.2 cannot be applied. PCR-005 §7.1 words it as "cannot be judged adequate".
+- No ELISA coverage figure in the record (§7.1 says so); the pool HCP qualification rests on the narrowed NOR,
+  the 6 added runs (optional stopping) and the model choice (2 of 9 near-AICc models would not qualify).
 
 ## 3-old. The list the previous author left (all done in pass 2, kept for the record)
 

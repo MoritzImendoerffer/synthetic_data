@@ -6573,22 +6573,8 @@ def build_plan_protein_a():
             f"intermediate acceptance criterion {o['Criterion']} ({basis}), on the upper end of the "
             f"95 % prediction interval of a single batch, {offset}.",
             "Acceptance and decision criteria", row, orow.header, ot.caption)
-    hold = "Hold study of the Protein A eluate"
-    agg_bx, acid_bx = ns["agg_bx"], ns["acid_bx"]
-    hold_q = (f"The criteria in force for that output, from the table of intermediate acceptance "
-              f"criteria in PCMP-001, are ≤ {agg_bx[1]:.2f} % HMW for aggregate and "
-              f"{acid_bx[0]:g}–{acid_bx[1]:g} % for acidic variants.")
-    add("attr:aggregates_hmw", "attribute_has_acceptance_criterion", "lit:pa_hold_aggregates",
-        f"The held Protein A eluate carries the criterion in force for the production bioreactor "
-        f"output for aggregate, ≤ {agg_bx[1]:.2f} % HMW.", hold, hold_q)
-    add("attr:acidic_variants", "attribute_has_acceptance_criterion", "lit:pa_hold_acidic",
-        f"The held Protein A eluate carries the criterion in force for the production bioreactor "
-        f"output for acidic variants, {acid_bx[0]:g}–{acid_bx[1]:g} %.", hold, hold_q)
-    add("attr:fragments_lmw", "attribute_has_acceptance_criterion", "lit:pa_hold_fragments",
-        f"The held Protein A eluate is judged for fragments against the Protein A pool criterion, "
-        f"≤ {ns['frag_iac']:.2f} % by nrCE-SDS.", hold,
-        f"For fragments the criterion is that of the Protein A pool, ≤ {ns['frag_iac']:.2f} % by "
-        f"nrCE-SDS.")
+    # no hold study in this plan: S-PA-HLD was made during the Version 2.0 re-analysis and PCR-005 records
+    # it as a discrepancy from the plan (owner, 2026-10-09), so the plan states no hold criterion
     prior = "Unit-operation description and prior knowledge"
     q_hcp = ("Pool host cell protein is expected to rise with protein load and as elution buffer "
              "pH falls, and the two may interact")
@@ -6740,13 +6726,12 @@ def build_plan_protein_a():
             "put in force is a statement anchored on the footnote of the parameter table. "
             "ProcessParameter.PAR carries the range studied, as everywhere in the corpus; the plan "
             "claims no proven acceptable range.",
-            "The hold study S-PA-HLD and the nrCE-SDS retest of retained samples S-PA-RET have no "
-            "StudyDesign.study_type. They appear only as rows of the execution-window table.",
+            "The nrCE-SDS retest of retained samples S-PA-RET has no StudyDesign.study_type; it "
+            "appears only as a row of the execution-window table. The hold study S-PA-HLD is not a "
+            "study of this plan: it was made during the Version 2.0 re-analysis and PCR-005 records "
+            "it as a discrepancy from the plan (PD-005-05).",
             "acceptance_criteria holds the rows of the criteria-change table (Version 1.0 analysis "
-            "limit, superseded, and the Version 2.0 criteria, in force). The criteria the held "
-            "eluate carries are the production bioreactor output criteria in force and the "
-            "Protein A pool criterion for fragments, applied to a hold, so they are assertions "
-            "and not AcceptanceCriterionRecords of this step.",
+            "limit, superseded, and the Version 2.0 criteria, in force).",
             "Step yield is a performance attribute with no acceptance criterion; it is the concept "
             "attr:step_yield in the prior-knowledge assertions.",
             "The methods table names each method by its title. Each AnalyticalMethod record is "

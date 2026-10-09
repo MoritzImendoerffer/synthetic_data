@@ -127,3 +127,32 @@ only.
 >
 > Report: which model you are, the flagged sentences grouped by question, and the seven yes/no
 > answers (for questions 6 and 7, "yes" means no sentence was flagged).
+
+## 5. Additions of 2026-10-09 (second session)
+
+**For a plan, add this paragraph to the review prompt of §4**, after the first paragraph:
+
+> This plan is Version 2.0, an amendment issued after the studies it governs were run. By the
+> master plan's rule, it may state only what the master plan PCMP-001 Version 2.0 sets: the a
+> priori acceptance criteria, the fragment method, the scale-down offset rule, the adequacy tests,
+> the judgement statistics, the verification rule and the execution windows. It may also add generic
+> tests applied identically in every plan. Beyond these it keeps the design, sampling and spiking of
+> Version 1.0. A decision rule that the plan does not contain is therefore not a defect of the
+> amendment, as long as the plan says plainly that it sets none and leaves the approach to the
+> report. Flag the opposite instead: a step-specific rule, or an execution detail, that the plan adds
+> after the data were known.
+
+**The factual pass** (one fresh agent per document; it may read the brief, the CSVs in
+`outputs/data/`, `config/parameters.yaml`, the frozen Version 1.0 PDFs in `pc_package/superseded/rev1/`
+and the rendered PCMP-001; it changes nothing but its report):
+
+> Do a factual check of `<DOC>` Version 2.0. Document: the PDF text in the work unit. Fact sheet:
+> `authoring/out/<DOC>.brief.md`. Check every number-bearing sentence, and every sentence whose
+> deciding word depends on data, against the table of the same document that holds its value and
+> against the brief. Use the CSVs and the config only where those are silent or disagree. Recompute
+> model-derived claims read-only with scratch scripts. For a plan, compare its design, sampling,
+> spiking and rules with the frozen Version 1.0 plan, and flag any rule or execution detail added
+> after the data were known (STORY_BIBLE §9b, "What a Version 2.0 plan may add"). Write
+> `factual-<DOC>.md`: errors, most consequential first, each with the sentence, what it says, what
+> the document, brief or data say instead, with the source, and the fix; then the classes of claims
+> checked and correct, and what could not be checked.

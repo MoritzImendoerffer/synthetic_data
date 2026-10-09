@@ -44,7 +44,29 @@ Running (fresh agents; the previous ones were lost with the restart):
 - INV-002 content review run 2 (fresh judge) → `content-review-INV-002.run2.md`.
 - PCP-006 factual pass (fresh agent) → `factual-PCP-006.md`.
 
-## Next, in order
+## Owner's answers of 2026-10-09 (second session), implemented in 26e5356
+1. Exact fit: not adequate, a priori value stands (bioreactor acidic upper limit back to 39.0).
+2. Hold studies: re-dated into September 2026, discrepancies from the plan (PD-004-02, PD-005-05,
+   PD-006-05), nrCE-SDS at every time point; no plan describes one.
+3. Low-pH concentration study: deviation DEV-006-03 plus the confirmation study S-VI-UNI2 (PD-006-06).
+4. Labels: all fixed (pCO2 partial pressure, mOsm/kg, % air saturation, 10⁶ cells/mL, × standard).
+Coordinator, same session: what a Version 2.0 plan may add (STORY_BIBLE §9b; PLAN-LESSONS rule 9);
+INV-002 CAPA statuses and effectiveness check (config); sample-size table wording; the gate for an inline
+expression printed as source. Data-state note for authors: `data-state-2026-10-09b.md`.
+
+## In flight (second session, after 26e5356)
+- PCP-003 author (resumed): data-state note + amendment scope (remove the osmolality NOR rule and other
+  post-data rules; generic residual tests). Then review run 2 + factual pass + final fix.
+- PCR-005 author (resumed): hold study as PD-005-05, nrCE-SDS throughout; acidic widening gone. Then a
+  factual pass, promote, re-anchor `build_report_protein_a`, rhetorical spans.
+- PCP-006 final fix pass (fresh author, `feedback-PCP-006.final.md`). Then promote and rewrite
+  `build_plan_viral_inactivation`.
+- INV-002 final fix pass (fresh author, `feedback-INV-002.run2.md`). Then a factual check, promote, write
+  its annex builder, add to REV2_READY and test_grounding.
+- PCP-005 (shipped) data-state pass (fresh author, `feedback-PCP-005.datastate.md`): hold study out of
+  the plan, acidic sentence, §8.1 anion exchange, the "{python} inad_text" leak. Then rebuild its annex.
+
+## Next, in order (older list; still valid where not superseded above)
 - **PCP-006:** final fix pass from review run 2 (`content-review-PCP-006.run2.md`) and the factual pass;
   then promote, rewrite `build_plan_viral_inactivation` for the Version 2.0 text, add to REV2_READY.
 - **INV-002:** fix pass from review run 2, then a factual check. The author flagged two statements as its

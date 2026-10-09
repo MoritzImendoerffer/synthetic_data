@@ -3,6 +3,55 @@
 Draft: `pc_package/PCP-003_bioreactor.DRAFT.qmd`. Nothing committed. Review:
 `content-review-PCP-003.md` (this directory).
 
+## 00. Pass 3 (after `data-state-2026-10-09b.md`): COMPLETE, gate passes
+
+The coordinator's message is applied in full. Gate `check_render.py --render` passed twice in this pass (after the
+rewrite, and after widening the Unit column of Table 6.2, where "mOsm/kg" ran into the "−1" column). It reports 261
+inline expressions, 445 sentences / 8,536 words, "no inline source printed" and 8 complex tables. PDF: 39 pages.
+Tables 1.1, 6.1, 6.2 and 7.1 were looked at as images.
+
+**These supersede parts of sections 0–1 below:**
+- **Acidic variants (a priori value stands).**
+  - The widening is removed from §1.1 and §7: the 39.6 arithmetic, the "adds less over the same 180 min"
+    sentence, the risk sentence and `AV_W` / `AV_WIDEN`.
+  - Asserted per attribute: not tightened, not widened, upper limit equal to the a priori value; the low-pH model
+    is not adequate; `downstream_added` equals the platform value.
+  - §7 shows the a priori derivation (40.0 − 1.00 = 39.0).
+  - Aggregate is the only changed criterion (`CHANGED == ["aggregates_hmw"]`). "Tightened and then widened" is
+    stated in §1.1 and §7.
+  - The hold paragraph covers aggregate only. Asserted: more than the platform at the edges; the NOR hold is
+    shorter; the bound covers the NORs in force (same hold and temperature highs; the low-pH aggregate model has
+    no pH term).
+- **Labels.**
+  - Every parameter name in the prose comes from the config (`N_*`, `nmc()`); the pCO2 abbreviation is asserted
+    against the config label; the units come from the config (`DUR_UNIT`, `HOLD_UNIT`).
+  - The abbreviations "e6" and "X" are removed.
+  - Tables 6.1 and 6.2 show the new names and units.
+- **Version 2.0 adds no step-specific rule (data note §5).** Removed:
+  - the osmolality NOR rule (old §7 item 5);
+  - the univariate t-test rule (old item 6);
+  - my design-space definition (now PCMP-001's words only, §7 item 6);
+  - my KPP and threshold sentences (§7 item 7 is PCMP-001 §7.7 verbatim in substance);
+  - the "PAR narrower than NOR" rule, the no-model qualification and judgement rules, and "no decision rests on
+    that comparison". The plan now says where PCMP-001 and the plan set no rule, and that PCR-003 states its
+    approach.
+  - **Also removed, under the same principle:** the response-surface factor ranking rule (§6.3), which I had
+    asserted against the screening data. §6.3 now states the Version 1.0 design, says the plan sets no rule for
+    what the screening review may change, and says osmolality is screening only and held at its set-point
+    (PD-003-01 records S-BRX-OSM).
+- **Execution details the record does not hold, removed:**
+  - the off-line pCO2 check (risk 2 now says drift is not seen in the recorded setting, and is limited by the
+    calibration interval);
+  - Protein A capture of samples (§1.1 and §5.3);
+  - osmolality set with sodium chloride and pCO2 held "by the sparge" (§5.1, §5.2, §6.3, §6.4);
+  - the S-HAR-HLD hold study sentence (§4.2; no plan describes a hold study);
+  - Start and End defined as inoculation and harvest (§11 now says only "from the start of its first run to the
+    end of its last run").
+- **Generic residual and influence tests** are in §7 item 2d and listed as change 7 in §1.1: the absolute residuals
+  on the predicted values and the residuals on the start order, no slope significant at α; no Cook's distance
+  above 4/n. The start order is defined as the run order of the design in §6.2.
+- §5.5 univariate sentence: back to the Version 1.0 wording. §8 points to §7 item 5.
+
 ## 0. Where it stands (second author, Claude Opus 5.5, 2026-10-09)
 
 **The fix cycle is complete in the draft.** Every section listed under "Sections and fixes left" by the first
@@ -158,10 +207,21 @@ Nothing. If the review is run again, re-read Section 7 items 5 to 8, which are n
 
 ## 3. Outside the draft (coordinator or owner)
 
-- **Config units and labels** (still mislead):
-  - "mOsm" should be mOsm/kg, "e6 cells/mL" should be 10⁶ cells/mL, and "% sat" should be % air saturation (Tables
-    6.1 and 6.2);
-  - the label "Dissolved CO2 (pCO2)";
+Updated in pass 3:
+- The units and the pCO2 label are fixed in the config.
+- The new plan rules listed below (osmolality, univariate, design space, KPP, Protein A capture, off-line pCO2,
+  Start/End) are REMOVED from the draft, so they no longer bind PCR-003.
+- PCR-003 must now state its own approach for:
+  - the osmolality NOR;
+  - the univariate decision;
+  - a PAR narrower than the NOR;
+  - an output with no adequate model (qualification);
+  - showing a KPP;
+  - what the screening review could change.
+
+Each is a discrepancy from the plan where the report needs one.
+
+- **Config (still mislead):**
   - the feed-1 volume definition;
   - the residual DNA unit ≤ 0.001 ng/dose (Table 4.1);
   - the decimals "1–1.4" and set-point "1" in Table 6.1.

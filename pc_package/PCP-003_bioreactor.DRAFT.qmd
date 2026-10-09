@@ -68,9 +68,19 @@ def nm(k):
     return n[0].lower() + n[1:] if n[1:2].islower() else n
 
 
+def nmc(k):
+    """A parameter's name in running text, capitalized to open a sentence."""
+    s = nm(k)
+    return s[0].upper() + s[1:]
+
+
+PCO2 = re.search(r"\((\w+)\)", NAME["co2"]).group(1)   # the short name inside the config label
+assert PCO2 == "pCO2"                                  # the abbreviation the prose uses and defines
+
+
 def nm_short(k):
     """The short name used after the first mention (pCO2)."""
-    return "pCO2" if k == "co2" else nm(k)
+    return PCO2 if k == "co2" else nm(k)
 
 
 def g(x):
@@ -133,10 +143,14 @@ assert all(p.prange[0] < p.nor[0] and p.prange[1] > p.nor[1]
 _ratios = [(p.prange[1] - p.prange[0]) / (p.nor[1] - p.nor[0]) for p in uo.parameters]
 RATIO_LO, RATIO_HI = min(_ratios), max(_ratios)
 DUR_SP = uo.param("duration").setpoint
+DUR_UNIT = uo.param("duration").unit
 MV_TXT = join_and([nm(k) for k in MV])
 UV_TXT = join_and([nm(k) for k in UV])
 RESP = list(D.responses(UO))
 RESP_TXT = join_and([ATTR[r] for r in RESP])
+# parameter names in running text, from the config labels (never typed)
+N_PH, N_TEMP, N_DUR, N_OSM = nm("pH"), nm("temperature"), nm("duration"), nm("osmolality")
+N_DO, N_IVCC, N_MED, N_FEED = nm("do"), nm("ivcc"), nm("medium_conc"), nm("feed_vol")
 
 # designs
 SCR_F = list(D.screening_factors(UO))
@@ -178,9 +192,12 @@ DF_LOF_RSM = N_RSM - N_TERMS_RSM - DF_PE_RSM
 for _d in (_scr, _rsm):
     assert sorted(_d.run_order) == list(range(1, len(_d) + 1))   # a randomized start order
 
-# osmolality is set with sodium chloride, pCO2 by the sparge, independently of each other
-OSM_CTRL = CFG.raw()["analytics"]["osmolality_study"]["control"]
-assert "sodium chloride" in OSM_CTRL and "sparge" in OSM_CTRL and "pCO2" in OSM_CTRL
+# what Version 1.0 planned for osmolality, as the discrepancy that records the later osmolality study states it
+_pd_osm = [d for d in PLAN_DISCREPANCIES.get("PCR-003", []) if "osmolality" in d["subject"].lower()]
+assert len(_pd_osm) == 1 and len(_pd_osm[0]["studies"]) == 1
+PD_OSM, OSM_STUDY = _pd_osm[0]["id"], _pd_osm[0]["studies"][0]
+assert "screening design only" in _pd_osm[0]["planned"] and "held at its set-point" in _pd_osm[0]["planned"]
+assert OSM_STUDY not in set(CH.id)                 # a later study, not a study of this plan
 
 # univariate study and scale-down qualification
 _uni = csv("univariate_studies.csv")
@@ -232,10 +249,6 @@ _frag = _iac_all[_iac_all.cqa == "fragments_lmw"].sort_values("step")
 assert _frag.step_key.iloc[0] == "protein_a" and int(_frag.step.min()) > HAR_STEP   # from the Protein A pool on
 _mp = csv("method_plan.csv")
 assert not _mp[_mp.step == UO].lmw_in_scope.any()  # fragments are not an attribute of these studies
-_hh = _chron[(_chron.step == "harvest") & (_chron.kind == "hold")]
-assert len(_hh) == 1
-HAR_HLD = _hh.id.iloc[0]
-assert {"lmw_sec_pct", "lmw_cesds_pct"} <= set(csv("hold_harvest.csv").columns)   # it measures fragments
 
 # intermediate acceptance criteria and their verification
 IAC = D.iac_table(UO).set_index("response")
@@ -250,12 +263,14 @@ TWO = [r for r in RESP if IAC.loc[r, "spec_type"] == "two_sided"]
 assert TWO == GLY + ["acidic_variants"] and AG.spec_type == "upper"
 TWO_TXT = join_and([ATTR[r] for r in TWO])
 CHANGED = [r for r in RESP if bool(IAC.loc[r, "tightened"]) or bool(IAC.loc[r, "widened"])]
-assert CHANGED == ["acidic_variants", "aggregates_hmw"]
+assert CHANGED == ["aggregates_hmw"]               # verification moved the aggregate criterion only
 CHANGED_TXT = join_and([ATTR[r] for r in CHANGED])
+# per attribute: aggregate tightened, then widened, net stricter than a priori
 assert bool(AG.tightened) and bool(AG.widened) and AG.iac_high < AG.iac_high_apriori
-assert bool(AV.widened) and not bool(AV.tightened) and AV.iac_high > AV.iac_high_apriori
+# acidic variants: neither tightened nor widened, the a priori value stands
+assert not bool(AV.tightened) and not bool(AV.widened) and AV.iac_high == AV.iac_high_apriori
 assert AV.iac_low == AV.ds_low and AV.iac_low > 0  # the lower limit is the drug substance lower limit
-AV_WIDEN = float(AV.iac_high - AV.iac_high_apriori)
+assert all(not bool(IAC.loc[r, "tightened"]) and not bool(IAC.loc[r, "widened"]) for r in GLY)   # glycans unchanged
 _ver = D.iac_verification()
 BOUND_PCT = int(round(100 * D.VERIFICATION_BOUND))
 _ver = _ver[_ver.step > STEP]
@@ -271,36 +286,42 @@ def _changed_by(cqa, kind):
 
 AG_T = _changed_by("aggregates_hmw", "tight")
 AG_W = _changed_by("aggregates_hmw", "wide")
-AV_W = _changed_by("acidic_variants", "wide")
-assert AG_T.step_key == "cex" and AG_W.step_key == "viral_inactivation" and AV_W.step_key == "viral_inactivation"
-assert all(int(x.step) > STEP for x in (AG_T, AG_W, AV_W))   # no criterion uses data from the bioreactor studies
+assert AG_T.step_key == "cex" and AG_W.step_key == "viral_inactivation"
+assert all(int(x.step) > STEP for x in (AG_T, AG_W))   # no criterion uses data from the bioreactor studies
 assert AG_T.predicted_nor < AG_T.assumed and AG_T.predicted_nor_bound95 < AG_T.assumed   # CEX cleared less
 assert AG_W.predicted_nor < AG_W.assumed and AG_W.predicted_nor_bound95 < AG_W.assumed   # VI added less
-assert AV_W.predicted_nor_bound95 < AV_W.assumed
 assert abs(AG.downstream_fold - AG_T.predicted_nor_bound95) < 1e-3
 assert abs(AG.downstream_added - AG_W.predicted_nor_bound95) < 1e-3
-assert abs(AV.downstream_added - AV_W.predicted_nor_bound95) < 1e-3
+# acidic variants: the low-pH model is not adequate, so its bound does not replace the platform value
+_av_vi = _ver[_ver.cqa == "acidic_variants"]
+assert len(_av_vi) == 1 and not bool(_av_vi.iloc[0].model_adequate)
+AV_P = _av_vi.iloc[0]
+assert abs(AV.downstream_added - AV_P.assumed) < 1e-9 and float(AV.downstream_fold) == 1.0
 # the arithmetic the text prints: drug substance limit x clearance fold - increase, from unrounded values
 assert abs(AG.ds_high * AG.downstream_fold - AG.downstream_added - AG.iac_high) < 1e-6
 assert abs(AG.ds_high * AG_T.assumed - AG_W.assumed - AG.iac_high_apriori) < 1e-6
 assert abs(AV.ds_high - AV.downstream_added - AV.iac_high) < 1e-6
-assert abs(AV.ds_high - AV_W.assumed - AV.iac_high_apriori) < 1e-6
 DOC_CEX = f"PCR-{int(AG_T.step):03d}"
 DOC_VI = f"PCR-{int(AG_W.step):03d}"
-# the platform worst cases of the low-pH hold are increases over a longer hold than the A-Mab NOR
-_hold = [int(re.search(r"(\d+) min", s).group(1)) for s in (AG_W.source, AV_W.source)]
-assert _hold[0] == _hold[1]
-HOLD_PLATFORM = _hold[0]
+# the platform worst case of the low-pH hold is an increase over a longer hold than the A-Mab NOR allows
+HOLD_PLATFORM = int(re.search(r"(\d+) min", AG_W.source).group(1))
 _ht = CFG.unit_op("viral_inactivation").param("hold_time")
+HOLD_UNIT = _ht.unit
 HOLD_NOR_HI = float(_ht.nor_characterized[1])
 HOLD_RANGE_HI = float(_ht.prange[1])
-assert HOLD_NOR_HI < HOLD_PLATFORM and float(_ht.nor[1]) == HOLD_NOR_HI   # routine holds end there too
+assert HOLD_UNIT == "min"                          # the unit of the platform source text
+assert HOLD_NOR_HI < HOLD_PLATFORM                 # the A-Mab NOR as characterized ends before the platform hold
 assert HOLD_RANGE_HI == HOLD_PLATFORM              # the range studied reaches the platform hold
-# the two replacements differ (coordinator's canon correction, 2026-10-09):
-assert AG_W.observed_edge > AG_W.assumed           # aggregate: at the edges A-Mab adds MORE than the platform,
-assert AG_W.predicted_nor_bound95 < AG_W.assumed   # so its replacement reflects the shorter NOR hold
-assert AV_W.observed_edge < AV_W.assumed           # acidic variants: A-Mab adds LESS than the platform at the same hold
-assert AV_W.predicted_nor_bound95 < AV_W.observed_edge   # and the shorter NOR hold lowers it further
+assert AG_W.observed_edge > AG_W.assumed           # at the edges A-Mab adds MORE aggregate than the platform,
+assert AG_W.predicted_nor_bound95 < AG_W.assumed   # so the replacement reflects the shorter NOR hold
+# the bound also covers the NOR in force: same longest hold and highest temperature, and no pH term
+_vt = CFG.unit_op("viral_inactivation").param("temperature")
+assert float(_ht.nor[1]) == HOLD_NOR_HI and float(_vt.nor[1]) == float(_vt.nor_characterized[1])
+_vi_agg = [r for r in D.responses("viral_inactivation") if D.RESP_TO_CQA.get(r, r) == "aggregates_hmw"]
+assert len(_vi_agg) == 1
+_agf = D.fit("viral_inactivation", "rsm", _vi_agg[0])
+assert _agf["status"] == "selected" and "ph" in _agf["factors"]
+assert all("ph" not in re.split(r"[:^]", t) for t in _agf["names"])   # the selected model has no pH term
 
 # the Version 1.0 limits
 R1 = D.rev1_criteria(UO).set_index("response")
@@ -313,15 +334,6 @@ assert all(IAC.loc[r, "iac_high"] > R1.loc[r, "high"] for r in RESP)   # every u
 assert float(R1.loc["acidic_variants", "low"]) == 0 and AV.iac_low > 0
 assert all(float(R1.loc[r, "low"]) == float(IAC.loc[r, "ds_low"]) == float(IAC.loc[r, "iac_low"])
            for r in GLY)                           # glycan lower limits: the drug substance limits, unchanged
-
-# the rule for the factors of the response-surface design (Section 6.3): each screening main effect
-# divided by the width of the criterion of its attribute, summed over the attributes
-_WIDTH = {r: float(IAC.loc[r, "iac_high"] - IAC.loc[r, "iac_low"]) for r in RESP}
-_EFF = {r: D.screening_effects_df(UO, r).set_index("Term")["Effect"] for r in RESP}
-SCORE = {f: sum(abs(float(_EFF[r][LETTER[f]])) / _WIDTH[r] for r in RESP) for f in SCR_F}
-RANKED = sorted(SCR_F, key=lambda f: -SCORE[f])
-assert set(RANKED[:K_RSM]) == set(RSM_F)           # the rule selects the factors of Appendix B
-assert RANKED[-1] == SCR_ONLY[0]                   # and leaves osmolality out
 
 # the planned analysis
 PAR_GRID_SP = D.PAR_GRID_SETPOINT
@@ -449,7 +461,6 @@ print(abbreviations_table([
     ("CQA", "critical quality attribute"),
     ("DoE", "design of experiments"),
     ("DS", "drug substance"),
-    ("e6", "× 10⁶, as in e6 cells/mL"),
     ("FcγRIIIa", "Fc gamma receptor IIIa"),
     ("G1, G2", "glycans with one or two terminal galactose residues"),
     ("GDP", "guanosine diphosphate"),
@@ -481,7 +492,6 @@ print(abbreviations_table([
     ("VH", "very high (criticality level)"),
     ("VL", "very low (criticality level)"),
     ("WC-CPP", "well-controlled critical process parameter"),
-    ("X", "concentration as a multiple of the nominal basal medium formulation"),
 ]))
 ```
 
@@ -507,15 +517,16 @@ Some related work lies outside the scope of this plan. The seed expansion steps 
 Version 1.0 of this plan was approved on `{python} V1_DATE`, before the first study of the step, the qualification study `{python} SID["qualification"]`, started on `{python} FIRST_START`. Version `{python} VER` is the protocol amendment that the QA investigation `{python} INV["id"]` required in its corrective action `{python} CA_AMEND`, which amends every step plan with the new criteria and the method for fragments. QA opened `{python} INV["id"]` on `{python} INV["opened"]` after its review of the master report PCMR-001 Version 1.0 for BLA readiness. QA closed the investigation on `{python} INV["closed"]` with the classification `{python} INV["classification"]`. The investigation found that the criteria used to judge each step in the proven acceptable range analysis were in no approved protocol and had been set after the data were seen (`{python} INV["id"]` finding 1). The limits that the Version 1.0 report PCR-003 applied to the outputs of this step were among them. This revision makes the following changes.
 
 1. Version `{python} VER` states an intermediate acceptance criterion (IAC) for each of the `{python} len(RESP)` outputs of the step (@sec-criteria, @tbl-iac). The master plan PCMP-001 derives these criteria a priori from the drug substance criteria and the worst case of every downstream step on the platform (PCMP-001 §7.3). The criteria replace the Version 1.0 limits. For the glycans and acidic variants, the Version 1.0 upper limit was the mean plus `{python} g(K_SD)` standard deviations of the capability data that it was then used to judge (`{python} INV["id"]` finding 3). For aggregate, Version 1.0 carried the drug substance limit back through the nominal downstream clearance of this campaign and then divided it by a safety factor of `{python} g(AG_MARGIN)` (`{python} INV["id"]` finding 2).
-2. Version `{python} VER` states the rule by which the verification of the platform worst cases may tighten or widen a criterion (PCMP-001 §7.5). That rule changed the criteria of this step for `{python} CHANGED_TXT` (@sec-criteria).
+2. Version `{python} VER` states the rule by which the verification of the platform worst cases may tighten or widen a criterion (PCMP-001 §7.5). That rule changed the criterion of this step for `{python} CHANGED_TXT`, which was tightened and then widened (@sec-criteria).
 3. Version `{python} VER` judges acidic variants against both the lower and the upper limit of their criterion. Version 1.0 assessed acidic variants against the upper limit only (`{python} INV["id"]` finding 4).
 4. Version `{python} VER` qualifies the scale-down model for each output by its offset from manufacturing scale, and it states every judgement against a criterion at manufacturing scale (@sec-sdm). The offsets are estimated before the first characterization run, and the decision whether the model is qualified for an output is made at analysis.
 5. Version `{python} VER` applies the campaign thresholds that PCMP-001 Version `{python} VER` sets. A model term is significant when its p-value is below α = `{python} g(ALPHA)`. A response-surface model is adequate only if its lack of fit is not significant at α = `{python} g(LOF_ALPHA)` and its predicted R² falls short of R² by no more than `{python} f"{GAP:.2f}"`. Capability is judged against a Cpk of `{python} g(CPK_TARGET)`, which is expected in routine manufacture, and a Cpk of `{python} g(CPK_MIN)`, below which an action is needed (@sec-stats, @sec-criteria).
 6. Version `{python} VER` records the execution window of each study and the calibration status of the instrumented system that the studies used (@sec-schedule). The Version 1.0 records gave no execution dates (`{python} INV["id"]` finding 5).
+7. Version `{python} VER` states the tests by which the residuals of a response-surface model are judged (@sec-criteria). A regression of the absolute residuals on the predicted values, and a regression of the residuals on the order in which the runs were started, must each show no slope significant at α = `{python} g(ALPHA)`. No run may have a Cook's distance above 4/n, where n is the number of runs of the design.
 
 The revision history also names `{python} INV2["id"]`, the investigation of the response-surface models that fell below the model-adequacy criteria of PCMP-001. `{python} INV2["id"]` changes nothing in this plan. What it changed in the analysis of the bioreactor studies is recorded in the bioreactor report PCR-003 as discrepancies from this plan.
 
-The analytical method decision `{python} AMD["id"]` of `{python} AMD["date"]` made non-reduced CE-SDS (nrCE-SDS) the method for fragments at every step. It does not change the methods of this plan, because fragments are not an attribute of the bioreactor studies (@sec-cqa). The interference that led to `{python} AMD["id"]` is host cell protein that elutes in the low molecular weight window of SEC. It does not apply to aggregate, which SEC reads from the high molecular weight window (PCMP-001 §7.8). The samples of this plan are also purified by Protein A capture before they are tested (@sec-analytical).
+The analytical method decision `{python} AMD["id"]` of `{python} AMD["date"]` made non-reduced CE-SDS (nrCE-SDS) the method for fragments at every step. It does not change the methods of this plan, because fragments are not an attribute of the bioreactor studies (@sec-cqa). The interference that led to `{python} AMD["id"]` is host cell protein that elutes in the low molecular weight window of SEC. It does not apply to aggregate, which SEC reads from the high molecular weight window (PCMP-001 §7.8).
 
 @tbl-criteria-change sets the Version 1.0 limits beside the criteria now in force. Every upper limit in Version `{python} VER` is higher than the limit that Version 1.0 applied, and Version `{python} VER` adds a lower limit of `{python} num(AV.iac_low)`\ % for acidic variants. The Version 1.0 lower limits of `{python} GLY_TXT` were their drug substance lower limits, and they are unchanged. The Version 1.0 limits were applied at analysis and appeared in no approved plan (`{python} INV["id"]` finding 1). The criteria in force are derived without data from the bioreactor studies. The studies, their factors and the ranges studied are unchanged.
 
@@ -529,7 +540,7 @@ T.criteria_change([UO]).show()
 The study has the following objectives.
 
 1. To estimate, before the first characterization run, the offset between the scale-down bioreactor and manufacturing scale for each of the `{python} len(RESP)` measured attributes, and to decide at analysis for which attributes the scale-down model is qualified (@sec-sdm).
-2. To identify which of the `{python} K_SCR` parameters of the screening design (`{python} MV_TXT`) affect the measured attributes, as main effects or through two-factor interactions, and to judge the NOR of osmolality from the screening model (@sec-screening, @sec-criteria).
+2. To identify which of the `{python} K_SCR` parameters of the screening design (`{python} MV_TXT`) affect the measured attributes, as main effects or through two-factor interactions (@sec-screening).
 3. To fit a response-surface model of each measured attribute in the `{python} K_RSM` factors of the response-surface design, and to test each model against the adequacy criteria of PCMP-001 §7.2 (@sec-rsm, @sec-criteria).
 4. To determine, for each measured attribute and each response-surface factor, the proven acceptable range against the intermediate acceptance criterion of the step at manufacturing scale, and to compare it with the NOR (@sec-par).
 5. To assess the `{python} len(UV)` remaining parameters (`{python} UV_TXT`) one factor at a time at both ends of their ranges studied (@sec-univariate).
@@ -557,27 +568,27 @@ T.sop_references(sops=PLAN_SOPS, amvs=PLAN_AMVS).show()
 
 ## Unit-operation description and prior knowledge {#sec-uo}
 
-The production bioreactor is a fed-batch culture in which a recombinant Chinese hamster ovary (CHO) cell line secretes A-Mab into the culture medium. The culture starts in basal medium at the initial viable cell concentration of the run and receives nutrient feed-1 while it grows. The pH, temperature, dissolved oxygen and pCO2 of the culture are controlled throughout the run. At the set-point the culture lasts `{python} g(DUR_SP)` days. The output of the step is the culture fluid at the end of the run, which passes to harvest and clarification (Step `{python} HAR_STEP`).
+The production bioreactor is a fed-batch culture in which a recombinant Chinese hamster ovary (CHO) cell line secretes A-Mab into the culture medium. The culture starts in basal medium at the `{python} N_IVCC` of the run and receives nutrient feed-1 while it grows. The pH, temperature, dissolved oxygen and pCO2 of the culture are controlled throughout the run. At the set-point the culture lasts `{python} g(DUR_SP)` `{python} DUR_UNIT`. The output of the step is the culture fluid at the end of the run, which passes to harvest and clarification (Step `{python} HAR_STEP`).
 
 Glycosylation is completed in the Golgi apparatus before the antibody is secreted, and no downstream step changes the glycan profile. Protein A binds the Fc region at the interface of the CH2 and CH3 domains, so it captures every glycoform alike (PCMP-001 §3). The two ion exchange steps separate by charge. Core fucose, galactose and mannose carry no charge, so glycoforms that differ only in these residues have the same charge, and the ion exchange steps cannot separate them [@amab2009]. Only sialic acid carries a charge, and sialylated forms are counted among the acidic variants. The glycan profile of the drug substance is therefore decided in this step. Charge variants and aggregate are also formed in the culture. Cation exchange removes part of the aggregate later in the process, and no downstream step is credited with removing acidic variants (@tbl-iac).
 
 The production bioreactor runs on the Novacyte fed-batch platform. The behaviour of the platform is established from three earlier humanized IgG1 antibodies, X-Mab, Y-Mab and Z-Mab, and from A-Mab clinical and engineering experience. This history shows the direction and the typical size of the effects to expect. The characterization of A-Mab tests these expectations and bounds the effects for this cell line and this molecule. The expected effects are summarized below, and the sign and size of each effect will be read from the fitted models.
 
-Core fucose is added to the N-glycan in the Golgi by a fucosyltransferase, from the donor GDP-fucose. A larger supply of GDP-fucose, or a longer residence of the glycan in the Golgi, lets the enzyme fucosylate a larger share of the antibody, and afucosylation falls. Culture temperature and culture pH set the growth rate and the intracellular pH, pCO2 lowers the intracellular pH, and osmolality changes the supply of nucleotide sugars. Each of these parameters can therefore change afucosylation, in a direction that the models will show. A-Mab acts mainly through antibody-dependent cellular cytotoxicity. Antibody without core fucose binds more strongly to the Fcγ receptor IIIa (FcγRIIIa), which triggers that cytotoxicity, so afucosylation is linked directly to the efficacy of the molecule.
+Core fucose is added to the N-glycan in the Golgi by a fucosyltransferase, from the donor GDP-fucose. A larger supply of GDP-fucose, or a longer residence of the glycan in the Golgi, lets the enzyme fucosylate a larger share of the antibody, and afucosylation falls. `{python} nmc("temperature")` and `{python} N_PH` set the growth rate and the intracellular pH, pCO2 lowers the intracellular pH, and `{python} N_OSM` changes the supply of nucleotide sugars. Each of these parameters can therefore change afucosylation, in a direction that the models will show. A-Mab acts mainly through antibody-dependent cellular cytotoxicity. Antibody without core fucose binds more strongly to the Fcγ receptor IIIa (FcγRIIIa), which triggers that cytotoxicity, so afucosylation is linked directly to the efficacy of the molecule.
 
-Terminal galactose is added by a galactosyltransferase, from the donor UDP-galactose, with manganese as its cofactor. Late in a fed-batch culture UDP-galactose and manganese are depleted, and the harvested pool accumulates antibody made under those conditions. Galactosylation is therefore expected to fall as the culture ages. High osmolality slows growth and raises the specific productivity of each cell. More antibody then passes through the Golgi in the same time, and galactosylation is expected to fall. Culture temperature, culture pH and pCO2 act on the galactosyltransferase and on the supply of UDP-galactose through the growth rate and the intracellular pH, in directions that the models will show. When the supply of UDP-galactose limits the reaction, a parameter that speeds the enzyme can raise galactosylation only as far as the donor allows. The effect of one parameter can then depend on the level of another. For this reason the designs test the interactions between them.
+Terminal galactose is added by a galactosyltransferase, from the donor UDP-galactose, with manganese as its cofactor. Late in a fed-batch culture UDP-galactose and manganese are depleted, and the harvested pool accumulates antibody made under those conditions. Galactosylation is therefore expected to fall as the culture ages. A high `{python} N_OSM` slows growth and raises the specific productivity of each cell. More antibody then passes through the Golgi in the same time, and galactosylation is expected to fall. `{python} nmc("temperature")`, `{python} N_PH` and pCO2 act on the galactosyltransferase and on the supply of UDP-galactose through the growth rate and the intracellular pH, in directions that the models will show. When the supply of UDP-galactose limits the reaction, a parameter that speeds the enzyme can raise galactosylation only as far as the donor allows. The effect of one parameter can then depend on the level of another. For this reason the designs test the interactions between them.
 
-High mannose glycans, mainly Man5, remain when processing in the Golgi stops before N-acetylglucosaminyltransferase I adds the first N-acetylglucosamine. Their level rises when transit through the Golgi is fast relative to the processing enzymes, or when those enzymes are inhibited. A parameter that raises the specific productivity of the cell, such as high osmolality, shortens the transit and is expected to raise high mannose. Culture pH, culture temperature and pCO2 act both on the processing enzymes and on the rate of secretion, and the models will show the direction of their effects. High mannose species are cleared faster from the circulation, which is why the attribute has very high criticality.
+High mannose glycans, mainly Man5, remain when processing in the Golgi stops before N-acetylglucosaminyltransferase I adds the first N-acetylglucosamine. Their level rises when transit through the Golgi is fast relative to the processing enzymes, or when those enzymes are inhibited. A parameter that raises the specific productivity of the cell, such as a high `{python} N_OSM`, shortens the transit and is expected to raise high mannose. `{python} nmc("pH")`, `{python} N_TEMP` and pCO2 act both on the processing enzymes and on the rate of secretion, and the models will show the direction of their effects. High mannose species are cleared faster from the circulation, which is why the attribute has very high criticality.
 
-Aggregate forms while the antibody sits in the culture fluid at culture temperature. Its rate of formation rises with the antibody concentration and with the time at temperature. It also rises as the culture pH approaches the isoelectric point of the antibody, which lies above the culture pH. Closer to that point the antibody carries less net charge, the repulsion between molecules is weaker, and they associate more readily. A longer culture and a higher culture pH are therefore expected to raise aggregate. A higher initial viable cell concentration gives a higher antibody concentration in the culture fluid, and it is expected to raise aggregate for the same reason.
+Aggregate forms while the antibody sits in the culture fluid at culture temperature. Its rate of formation rises with the antibody concentration and with the time at temperature. It also rises as the culture pH approaches the isoelectric point of the antibody, which lies above the culture pH. Closer to that point the antibody carries less net charge, the repulsion between molecules is weaker, and they associate more readily. A longer `{python} N_DUR` and a higher `{python} N_PH` are therefore expected to raise aggregate. A higher `{python} N_IVCC` gives a higher antibody concentration in the culture fluid, and it is expected to raise aggregate for the same reason.
 
-Acidic variants arise mainly from asparagine deamidation, with smaller contributions from sialylated glycans and glycated lysines. Deamidation is faster at higher temperature and at higher pH, and it accumulates with the time that the antibody spends in the culture fluid. Through deamidation alone, a higher culture temperature, a higher culture pH and a longer culture are each expected to raise acidic variants. Culture pH, pCO2 and osmolality also act on the intracellular pH and on sialylation, and the direction of that route is not known from the chemistry. For these three parameters the net direction of the effect on acidic variants is not predicted here.
+Acidic variants arise mainly from asparagine deamidation, with smaller contributions from sialylated glycans and glycated lysines. Deamidation is faster at higher temperature and at higher pH, and it accumulates with the time that the antibody spends in the culture fluid. Through deamidation alone, a higher `{python} N_TEMP`, a higher `{python} N_PH` and a longer `{python} N_DUR` are each expected to raise acidic variants. `{python} nmc("pH")`, pCO2 and `{python} N_OSM` also act on the intracellular pH and on sialylation, and the direction of that route is not known from the chemistry. For these three parameters the net direction of the effect on acidic variants is not predicted here.
 
 Host cell protein and residual DNA are released when cells die and lyse. Viability falls late in a fed-batch culture, so a longer culture carries a larger load of both into the harvest. The production bioreactor sets this load, and the purification steps clear it.
 
-Culture duration decides how much late-culture antibody the harvested pool contains and how far viability has fallen at the end of the run. A longer culture is therefore expected to lower galactosylation and to raise aggregate, host cell protein and residual DNA. A higher culture temperature or a higher culture pH speeds deamidation and aggregation. The effects of temperature and pH on the glycans pass through the glycosyltransferases and the growth rate, and the effect of each may depend on the level of the other and on the culture duration. Dissolved carbon dioxide crosses the cell membrane and lowers the intracellular pH. A high pCO2 therefore acts on the pH-sensitive Golgi enzymes as a low culture pH would, and it also slows growth. pCO2 also raises the osmolality of the medium as bicarbonate accumulates. In routine manufacture osmolality follows the base and feed additions and the accumulation of metabolites.
+`{python} nmc("duration")` decides how much late-culture antibody the harvested pool contains and how far viability has fallen at the end of the run. A longer culture is therefore expected to lower galactosylation and to raise aggregate, host cell protein and residual DNA. A higher `{python} N_TEMP` or a higher `{python} N_PH` speeds deamidation and aggregation. The effects of temperature and pH on the glycans pass through the glycosyltransferases and the growth rate, and the effect of each may depend on the level of the other and on the `{python} N_DUR`. Dissolved carbon dioxide crosses the cell membrane and lowers the intracellular pH. A high pCO2 therefore acts on the pH-sensitive Golgi enzymes as a low `{python} N_PH` would, and it also slows growth. pCO2 also raises the osmolality of the medium as bicarbonate accumulates. In routine manufacture `{python} N_OSM` follows the base and feed additions and the accumulation of metabolites.
 
-The risk assessment RA-001 ranked the `{python} len(UV)` remaining parameters lower (@sec-risk), but each has a route to the quality attributes. Dissolved oxygen is held by sparging, and the more gas is sparged, the more carbon dioxide is stripped from the culture. The initial viable cell concentration acts on aggregate through the antibody concentration. The basal medium concentration and the nutrient feed-1 volume set the supply of glucose, amino acids and the precursors of UDP-galactose. A lower supply is expected to deplete the galactose donor earlier and to lower galactosylation.
+The risk assessment RA-001 ranked the `{python} len(UV)` remaining parameters lower (@sec-risk), but each has a route to the quality attributes. `{python} nmc("do")` is held by sparging, and the more gas is sparged, the more carbon dioxide is stripped from the culture. The `{python} N_IVCC` acts on aggregate through the antibody concentration. The `{python} N_MED` and the `{python} N_FEED` set the supply of glucose, amino acids and the precursors of UDP-galactose. A lower supply is expected to deplete the galactose donor earlier and to lower galactosylation.
 
 ## Quality attributes in scope {#sec-cqa}
 
@@ -592,9 +603,9 @@ show(cqas_for(UO))
 
 Of the `{python} N_CQA` attributes, the `{python} len(RESP)` measured on every run of the bioreactor studies are `{python} RESP_TXT`. The register gives the criterion for acidic variants as measured by CEX or icIEF. This plan measures acidic variants by icIEF only (@sec-analytical).
 
-Host cell protein and residual DNA are released into the culture as cells lyse, and a longer culture is expected to carry more of both into the harvest (@sec-uo). They are not responses of the bioreactor studies, because neither has a criterion at this step. Host cell protein is first judged in the Protein A pool, against a criterion carried back from the drug substance limit, and residual DNA is judged on the drug substance only (PCMP-001 §7.3). The clearance of both is characterized in the plans of the purification steps. The classification of the bioreactor parameters therefore rests on the `{python} len(RESP)` measured attributes, and an effect of culture duration on the load of host cell protein is not assessed in this plan.
+Host cell protein and residual DNA are released into the culture as cells lyse, and a longer culture is expected to carry more of both into the harvest (@sec-uo). They are not responses of the bioreactor studies, because neither has a criterion at this step. Host cell protein is first judged in the Protein A pool, against a criterion carried back from the drug substance limit, and residual DNA is judged on the drug substance only (PCMP-001 §7.3). The clearance of both is characterized in the plans of the purification steps. The classification of the bioreactor parameters therefore rests on the `{python} len(RESP)` measured attributes, and an effect of `{python} N_DUR` on the load of host cell protein is not assessed in this plan.
 
-Fragments do not appear in @tbl-cqa. Fragments are formed in the culture and during the hold of the harvest, by proteases released from lysed cells that clip the antibody. The CQA register assigns them to harvest. The harvest hold study `{python} HAR_HLD`, planned in the harvest plan PCP-004, measures fragments in the clarified harvest over the hold. Fragments have intermediate acceptance criteria from the Protein A pool onward and none at this step (PCMP-001 §7.3). They are therefore not an attribute of the bioreactor studies.
+Fragments do not appear in @tbl-cqa. Fragments are formed in the culture and during the hold of the harvest, by proteases released from lysed cells that clip the antibody. The CQA register assigns them to harvest. Fragments have intermediate acceptance criteria from the Protein A pool onward and none at this step (PCMP-001 §7.3). They are therefore not an attribute of the bioreactor studies.
 
 ## Risk-based prioritization of parameters {#sec-risk}
 
@@ -608,30 +619,30 @@ The range studied of every parameter extends beyond its NOR at both ends. The wi
 
 ## Scale-down model and its qualification {#sec-sdm}
 
-The scale-down model is a stirred-tank bioreactor built on the same design principles as the commercial vessel. It has the same controls for pH, dissolved oxygen, temperature and nutrient addition. Mixing and the removal of carbon dioxide differ between a bench vessel and a commercial vessel, and the qualification study measures the offset that such differences give each output. Parameters that do not depend on scale are run at their commercial values. These include culture pH, culture temperature, dissolved oxygen, the initial viable cell concentration, the culture duration and the media and feeds. Agitation and gas flow depend on scale, and they are set so that oxygen transfer matches that of the commercial vessel (PCMP-001 §5). The model is operated under the bioreactor operating procedure SOP-2003, and the media and feeds are prepared under the media and feed procedure SOP-2004. The scale-down system runs several bioreactors at the same time, so the runs of a study overlap in time (@sec-schedule).
+The scale-down model is a stirred-tank bioreactor built on the same design principles as the commercial vessel. It has the same controls for pH, dissolved oxygen, temperature and nutrient addition. Mixing and the removal of carbon dioxide differ between a bench vessel and a commercial vessel, and the qualification study measures the offset that such differences give each output. Parameters that do not depend on scale are run at their commercial values. These include `{python} N_PH`, `{python} N_TEMP`, `{python} N_DO`, the `{python} N_IVCC`, the `{python} N_DUR` and the media and feeds. Agitation and gas flow depend on scale, and they are set so that oxygen transfer matches that of the commercial vessel (PCMP-001 §5). The model is operated under the bioreactor operating procedure SOP-2003, and the media and feeds are prepared under the media and feed procedure SOP-2004. The scale-down system runs several bioreactors at the same time, so the runs of a study overlap in time (@sec-schedule).
 
-pCO2 depends on scale, because it is set by the balance between the carbon dioxide that the cells produce and the carbon dioxide that the gas flow strips. A large vessel strips less carbon dioxide per unit volume than a bench vessel, so pCO2 tends to rise with scale. In the scale-down model pCO2 is a factor of the designs, and the stripping of the commercial vessel is therefore not matched. The sparge holds pCO2 at the level of each run, through the composition and the flow of the sparge gas, whatever the dissolved oxygen set-point. The pCO2 of each run is measured by the pCO2 probe of the scale-down bioreactor system (EQ-BRX-205), which is calibrated and under change control. The probe reading is checked against an off-line pCO2 measurement of a culture sample in each run, so that a drift of the probe is detected (@sec-risks).
+pCO2 depends on scale, because it is set by the balance between the carbon dioxide that the cells produce and the carbon dioxide that the gas flow strips. A large vessel strips less carbon dioxide per unit volume than a bench vessel, so pCO2 tends to rise with scale. In the scale-down model pCO2 is a factor of the designs and is controlled at the level of each run. The carbon dioxide stripping of the commercial vessel is therefore not matched. The pCO2 of each run is measured by the pCO2 probe of the scale-down bioreactor system (EQ-BRX-205), which is calibrated and under change control (@sec-risks).
 
 The qualification study `{python} SID["qualification"]` is run under the scale-down model procedure SOP-1001. It compares `{python} N_SD` runs of the scale-down model at the set-points in @tbl-params with `{python} N_M` batches at manufacturing scale. The outputs compared are the `{python} len(RESP)` measured attributes, `{python} RESP_TXT`. The qualification runs are made, and the offset of each output is estimated, before the first characterization run. A scale-down model need not reproduce the manufacturing mean. The difference between the two scales must instead be known precisely enough that no conclusion depends on its exact size. The model is qualified for each output separately, by the following rule (PCMP-001 §7.1).
 
 1. The offset of an output is the mean of the scale-down runs minus the mean of the manufacturing-scale batches. It is reported with its two-sided `{python} CI_PCT`\ % confidence interval, computed from Student's t with the pooled standard deviation of the two scales. Each end of that interval is a one-sided `{python} ONE_SIDED_PCT`\ % confidence bound.
 2. Every judgement of a scale-down result against a criterion first subtracts the offset of that output, in every study of this plan. Ranges and conclusions are therefore stated at manufacturing scale.
-3. For each output, the judgement over the NOR is whether the output meets its criterion at all `{python} N_COMB` combinations of NOR low, set-point and NOR high of the `{python} K_RSM` response-surface factors. Each combination is judged on the exact `{python} PI_PCT`\ % prediction interval of a single run from the response-surface model. For an output with no adequate response-surface model, the judgement over the NOR is whether every measured result of the designs meets the criterion (@sec-criteria).
+3. For each output, the judgement over the NOR is whether the output meets its criterion at all `{python} N_COMB` combinations of NOR low, set-point and NOR high of the `{python} K_RSM` response-surface factors. Each combination is judged on the exact `{python} PI_PCT`\ % prediction interval of a single run from the response-surface model.
 4. The model is qualified for an output when the judgement over the NOR gives the same conclusion with the offset at either end of its confidence interval.
 
-The decision whether the model is qualified for an output is made at analysis, because the judgement over the NOR needs the response-surface model. If the model is not qualified for an output, the report will state so, and no range will be set for that output from any study of this plan. The offset is estimated at the set-points only. Its use across the range studied is an assumption of this plan (@sec-risks).
+The decision whether the model is qualified for an output is made at analysis, because the judgement over the NOR needs the response-surface model. If the model is not qualified for an output, the report will state so and will state the consequence (PCMP-001 §5). PCMP-001 sets no qualification rule for an output that has no adequate response-surface model, and this plan sets none. The report states its approach for such an output. The offset is estimated at the set-points only. Its use across the range studied is an assumption of this plan (@sec-risks).
 
 ## Cell line, media and culture operation {#sec-operation}
 
-Each run starts from cells of the A-Mab production cell line, expanded through the seed train of the platform process. The bioreactor is filled with basal medium at the concentration of the run and inoculated at the initial viable cell concentration of the run. Nutrient feed-1 is added during the culture as a percentage of the working volume. pH, temperature, dissolved oxygen and pCO2 are controlled at the levels of the run throughout the culture. In each run osmolality is set to the level of the run with sodium chloride added with each feed, while the sparge holds pCO2 at its own level. Osmolality and pCO2 are therefore set independently of each other. The run ends at the culture duration of the run, when the culture fluid is sampled for analysis.
+Each run starts from cells of the A-Mab production cell line, expanded through the seed train of the platform process. The bioreactor is filled with basal medium at the concentration of the run and inoculated at the `{python} N_IVCC` of the run. Nutrient feed-1 is added during the culture as a percentage of the working volume. pH, temperature, dissolved oxygen and pCO2 are controlled at the levels of the run throughout the culture. The run ends at the `{python} N_DUR` of the run, when the culture fluid is sampled for analysis.
 
 Each factor of a design is held at the level that the design gives for the run (Appendices A and B). Every parameter that is not under study in a run is held at its set-point (@tbl-params). The basal medium and nutrient feed-1 are prepared to platform specification under SOP-2004 and are released by identity and quality testing. The composition of the media and feeds is not a factor of this study, and the lot of each medium and feed used in each run is recorded.
 
-Viable cell concentration, viability and titer are monitored during each run as SOP-2003 describes. Titer is measured by Protein A affinity HPLC under `{python} TITER_SOP`, validated under `{python} TITER_AMV`. These measures of process performance are recorded with each run, but they are not responses of the designs, and no model of process performance is fitted. A parameter can therefore be classified as a key process parameter (KPP) only from the platform knowledge of its effect on process performance that the risk assessment RA-001 records, not from an effect estimated in these studies (@sec-criteria).
+Viable cell concentration, viability and titer are monitored during each run as the bioreactor operating procedure SOP-2003 describes. Titer is measured by Protein A affinity HPLC under `{python} TITER_SOP`, validated under `{python} TITER_AMV`. These measures of process performance are recorded with each run, but they are not responses of the designs, and no model of process performance is fitted. This plan sets no rule by which these studies show a parameter to be a key process parameter (KPP), and the bioreactor report PCR-003 states its approach (@sec-criteria).
 
 ## Analytical methods {#sec-analytical}
 
-The `{python} len(RESP)` responses are measured by `{python} N_METHODS` validated methods (@tbl-methods). Each sample is first purified by Protein A capture, so that host cell proteins and the glycans of host cell glycoproteins do not enter the results. Released N-glycan mapping gives afucosylation, galactosylation and high mannose as percentages of the total glycans. Imaged capillary isoelectric focusing (icIEF) gives acidic variants as a percentage of the charge variant profile. Size exclusion chromatography (SEC) gives aggregate as the percentage of high molecular weight species (HMW). Within a study, each response is measured by one validated method under its SOP.
+The `{python} len(RESP)` responses are measured by `{python} N_METHODS` validated methods (@tbl-methods). Released N-glycan mapping gives afucosylation, galactosylation and high mannose as percentages of the total glycans. Imaged capillary isoelectric focusing (icIEF) gives acidic variants as a percentage of the charge variant profile. Size exclusion chromatography (SEC) gives aggregate as the percentage of high molecular weight species (HMW). Within a study, each response is measured by one validated method under its SOP.
 
 ```{python}
 #| label: tbl-methods
@@ -673,7 +684,7 @@ The response-surface data are fitted by least squares with the full quadratic mo
 
 A response-surface model predicts the mean response. At the edge of a region drawn on mean predictions, a single batch meets its criterion only about half the time if the variation is symmetrical [@amab2009]. For this reason each quality attribute is judged on the `{python} PI_PCT`\ % prediction interval of a single future batch, not on the mean prediction (PCMP-001 §6.2). The PAR computed with the other factors varied over their NORs uses such an interval from a Monte Carlo simulation (@sec-par). The judgement over the NOR in the qualification uses the exact `{python} PI_PCT`\ % prediction interval of a single run (@sec-sdm).
 
-The results of the univariate study are judged by the rule in @sec-criteria. The difference between the two ends of each range is stated together with the replicate variation at each end.
+The results of the univariate study are reported against the criteria of @tbl-iac and beside the set-point runs of the qualification study. The difference between the two ends of each range is stated together with the replicate variation at each end.
 
 Capability at commercial scale is estimated from the integrated process model (PCMP-001 §6.5). The model simulates `{python} f"{V['n_monte_carlo']:,}"` batches, with every process parameter varying about its set-point as in the PAR analysis (@sec-par), and it records the drug substance attributes of each batch. Cpk is computed against the drug substance criterion. The criteria of `{python} TWO_TXT` have two limits, and the Cpk of each is the lower of the two one-sided indices. The same simulation gives, for each attribute, the probability that the drug substance falls outside its criterion.
 
@@ -696,30 +707,30 @@ In the designs each factor carries a code letter and is run at coded levels. @tb
 #| label: tbl-levels
 #| tbl-cap: "Factors of the designs, with their code letters and the natural value of each coded level."
 #| output: asis
-print(table(LEVELS, [8, 27, 9, 8, 8, 8, 32]))
+print(table(LEVELS, [7, 26, 14, 8, 8, 8, 29]))
 ```
 
 ## Screening design {#sec-screening}
 
-The screening study `{python} SID["screening"]` varies the `{python} K_SCR` multivariate parameters in a two-level fractional factorial design. The design is a resolution `{python} RES_ROMAN` `{python} FRAC_WORD` fraction of the full factorial, with `{python} N_SCR_F` factorial runs and `{python} N_SCR_C` centre points, `{python} N_SCR` runs in all. The runs are started in a random order, which Appendix A gives as the start order. Several runs are in progress at the same time (@sec-sdm).
+The screening study `{python} SID["screening"]` varies the `{python} K_SCR` multivariate parameters in a two-level fractional factorial design. The design is a resolution `{python} RES_ROMAN` `{python} FRAC_WORD` fraction of the full factorial, with `{python} N_SCR_F` factorial runs and `{python} N_SCR_C` centre points, `{python} N_SCR` runs in all. The runs are started in a random order. Appendix A gives this start order, which is the run order of the design. Several runs are in progress at the same time (@sec-sdm).
 
 At resolution `{python} RES_ROMAN` no main effect or two-factor interaction is aliased with another main effect or two-factor interaction. Each two-factor interaction is aliased only with a three-factor interaction, which is assumed to be negligible. The design therefore estimates all `{python} K_SCR` main effects and all `{python} N_2FI_SCR` two-factor interactions. The screening design does not resolve curvature by factor. The centre points show whether curvature is present, and the response-surface design then resolves it for its own factors.
 
-Osmolality and pCO2 are set independently in every run (@sec-operation). The screening design therefore estimates the effect of pCO2 at constant osmolality, and the effect of osmolality at constant pCO2. At manufacturing scale a higher pCO2 also raises the osmolality, as bicarbonate accumulates (@sec-uo). The effect of a pCO2 excursion at manufacturing scale is then the effect of pCO2 in the models plus the effect of the rise in osmolality that comes with it, and the report states both.
+`{python} nmc("osmolality")` and pCO2 are separate factors of the screening design, and each run holds each of them at the level that the design gives (@sec-operation). The screening design therefore estimates the effect of pCO2 at constant `{python} N_OSM`, and the effect of `{python} N_OSM` at constant pCO2. At manufacturing scale a higher pCO2 also raises the osmolality, as bicarbonate accumulates (@sec-uo). The effect of a pCO2 excursion at manufacturing scale is then the effect of pCO2 in the models plus the effect of the rise in `{python} N_OSM` that comes with it.
 
 ## Response-surface design {#sec-rsm}
 
-The master plan PCMP-001 plans the response-surface design of this step in `{python} K_RSM` of its `{python} K_SCR` multivariate parameters (PCMP-001 §6.1). The `{python} K_RSM` factors are chosen from the screening results by the following rule. For each parameter, its main effect on each measured attribute is divided by the width of the criterion of that attribute, and the quotients are summed over the `{python} len(RESP)` attributes. For aggregate, which has an upper limit only, the width runs from zero to the limit. The `{python} K_RSM` parameters with the largest sums are the factors of the response-surface design. The response-surface study starts after Process Development and Statistics have reviewed the screening results and applied this rule. Appendix B gives the planned design in `{python} RSM_TXT`. If the rule selects a different set of factors, Appendix B is amended before the study starts.
+The master plan PCMP-001 plans the response-surface design of this step in `{python} K_RSM` of its `{python} K_SCR` multivariate parameters (PCMP-001 §6.1). The response-surface study `{python} SID["rsm"]` varies `{python} RSM_TXT` in a face-centred central composite design. The design has `{python} N_RSM_F` factorial runs, `{python} N_RSM_AX` axial runs at the centres of the faces of the design cube, and `{python} N_RSM_C` centre points, `{python} N_RSM` runs in all. The runs are started in a random order, which Appendix B gives as the start order. Because the axial runs lie on the faces of the cube, every run stays inside the range studied, and each factor is run at `{python} N_LEV_RSM` levels. The design supports the full quadratic model of @sec-stats.
 
-The response-surface study `{python} SID["rsm"]` varies its `{python} K_RSM` factors in a face-centred central composite design. The design has `{python} N_RSM_F` factorial runs, `{python} N_RSM_AX` axial runs at the centres of the faces of the design cube, and `{python} N_RSM_C` centre points, `{python} N_RSM` runs in all. The runs are started in a random order, which Appendix B gives as the start order. Because the axial runs lie on the faces of the cube, every run stays inside the range studied, and each factor is run at `{python} N_LEV_RSM` levels. The design supports the full quadratic model of @sec-stats.
+`{python} nmc("osmolality")` is a factor of the screening design only, and it is held at its set-point in every run of the response-surface design. The response-surface model therefore does not predict the effect of `{python} N_OSM`, and no PAR is computed for it (PCMP-001 §6.4). Its effects are estimated from the screening model. This plan sets no rule for judging the NOR of `{python} N_OSM` from the screening model. The bioreactor report PCR-003 reports what the screening showed, and it records the later `{python} N_OSM` study `{python} OSM_STUDY` as discrepancy `{python} PD_OSM` from this plan.
 
-The multivariate parameter that the rule leaves out is held at its set-point in every run of the response-surface design. In the planned design this parameter is osmolality, and it is held at its set-point with sodium chloride as in @sec-operation. The response-surface model therefore does not predict the effect of osmolality, and no PAR is computed for it (PCMP-001 §6.4). The effects of osmolality are estimated from the screening model, and the NOR of osmolality is judged by the rule in @sec-criteria.
+The response-surface study starts after Process Development and Statistics have reviewed the results of the screening study. This plan sets no rule by which that review could change the factors of the response-surface design.
 
 ## Univariate assessment {#sec-univariate}
 
-The univariate study `{python} SID["univariate"]` assesses `{python} UV_TXT` one factor at a time. Each parameter is run at the low and at the high end of its range studied, in `{python} UNI_REPS` replicate runs at each end, with every other parameter at its set-point. The univariate study has `{python} N_UNI` runs. In the runs of dissolved oxygen the sparge holds pCO2 at its set-point (@sec-sdm), so the study shows the effect of dissolved oxygen at constant pCO2.
+The univariate study `{python} SID["univariate"]` assesses `{python} UV_TXT` one factor at a time. Each parameter is run at the low and at the high end of its range studied, in `{python} UNI_REPS` replicate runs at each end, with every other parameter at its set-point. The univariate study has `{python} N_UNI` runs. In the runs of `{python} N_DO`, pCO2 is held at its set-point like every other parameter, so the study shows the effect of `{python} N_DO` at constant pCO2.
 
-The set-point reference of the univariate study is the `{python} N_SD` set-point runs of the qualification study `{python} SID["qualification"]`, made in the same scale-down system. They were run before the univariate study, not at the same time. A difference between them and the univariate runs can therefore include an effect of time and of the media lot, and no decision rests on that comparison (@sec-criteria).
+The set-point reference of the univariate study is the `{python} N_SD` set-point runs of the qualification study `{python} SID["qualification"]`, made in the same scale-down system. They were run before the univariate study, not at the same time. A difference between them and the univariate runs can therefore include an effect of time and of the media lot.
 
 An assessment of one factor at a time cannot detect an interaction between the parameter studied and the other parameters. The assessment therefore rests on the conclusion of the risk assessment RA-001 that the ranges of these parameters can be supported one factor at a time (@sec-risk). Runs at both ends of each range studied show the largest change that each parameter causes within that range, provided its effect does not reverse inside the range (@sec-risks).
 
@@ -727,23 +738,22 @@ An assessment of one factor at a time cannot detect an interaction between the p
 
 The criteria below apply the acceptance criteria framework of the master plan PCMP-001 (PCMP-001 §7) to the production bioreactor. None of them uses data from the bioreactor studies. The criteria decide when the scale-down model is qualified for an output, when a model is adequate, when a step output is acceptable, when a range is proven and how a parameter is classified.
 
-1. The scale-down model is qualified for an output when the judgement over the NOR gives the same conclusion with the offset at either end of its `{python} CI_PCT`\ % confidence interval (@sec-sdm). The judgement over the NOR is whether the output meets its criterion at all `{python} N_COMB` combinations of NOR low, set-point and NOR high of the `{python} K_RSM` response-surface factors. No range is set, from any study of this plan, for an output for which the model is not qualified.
+1. The scale-down model is qualified for an output when the judgement over the NOR gives the same conclusion with the offset at either end of its `{python} CI_PCT`\ % confidence interval (@sec-sdm). The judgement over the NOR is whether the output meets its criterion at all `{python} N_COMB` combinations of NOR low, set-point and NOR high of the `{python} K_RSM` response-surface factors. A scale-down model whose conclusion for an output changes between the two ends of the offset interval is not used for that output (PCMP-001 §7.1).
 2. A response-surface model is adequate for prediction when all of the following hold (PCMP-001 §7.2).
     a. The model F-test is significant at α = `{python} g(ALPHA)`.
     b. Lack of fit against pure error is not significant at α = `{python} g(LOF_ALPHA)`.
     c. Predicted R² falls short of R² by no more than `{python} f"{GAP:.2f}"`.
-    d. The residuals show no pattern against the predicted values or the start order, and no single run dominates the fit. Statistics judges this from the residual plots of @sec-stats, and the report shows the plots with the judgement.
+    d. The residuals show no pattern against the predicted values or the start order, and no single run dominates the fit. There is no pattern when a regression of the absolute residuals on the predicted values, and a regression of the residuals on the start order, each show no slope significant at α = `{python} g(ALPHA)`. No single run dominates when no run has a Cook's distance above 4/n, where n is the number of runs of the design.
 
-    A model that fails any of the four criteria is not used for prediction and sets no range. An output with no adequate model is judged on its measured results. It meets its criterion when every measured result of the screening and response-surface designs meets the criterion at manufacturing scale. The designs span the range studied of every multivariate parameter, so this judgement also covers the NOR.
+    A model is used for prediction only if it meets all four criteria (PCMP-001 §6.3). A model that fails the lack of fit test or the limit on overfitting is either refitted with a justified change of terms or transformation, or it is not used to set a range (PCMP-001 §7.2). Where no adequate model results, the report states the response descriptively, against its criterion, over the runs of the designs.
 3. Each step output is judged against its intermediate acceptance criterion in @tbl-iac, at manufacturing scale. A quality attribute is judged on the `{python} PI_PCT`\ % prediction interval of a single future batch. Afucosylation, galactosylation and high mannose keep their drug substance criteria, because no downstream step changes them. The criteria of `{python} TWO_TXT` are judged at both limits, and the criterion for aggregate at its upper limit.
-4. A range of a response-surface factor is proven acceptable for an attribute when the analysis of @sec-par with the other factors varied over their NORs meets the criterion of that attribute across it. A parameter has a PAR for each attribute, and the range carried into the control strategy is their intersection. A PAR that reaches the end of the range studied is reported as reaching it, and no claim is made beyond it. Where that analysis does not meet the criterion even with the parameter at its set-point, no PAR exists for the attribute. Where the PAR is narrower than the NOR, or no PAR exists, the NOR is not supported for that attribute, and the report states the consequence for the NOR (PCMP-001 §7.6).
-5. Osmolality has no PAR, because the response-surface design holds it at its set-point. Its NOR is judged from the screening model, for each attribute with an adequate response-surface model. The screening model gives the change in the attribute for a move of osmolality from its set-point to either edge of its NOR, from the main effect of osmolality and its two-factor interactions, with the other multivariate parameters at the edges of their NORs. The NOR of osmolality is supported for the attribute when the largest such change is smaller than the margin by which the `{python} PI_PCT`\ % prediction interval meets the criterion at the least favourable of the `{python} N_COMB` combinations of item 1. Otherwise the NOR of osmolality is not supported for that attribute, and the report states the consequence for the NOR (PCMP-001 §7.6). For an attribute with no adequate model, item 2 decides, because the screening runs cover the range studied of osmolality.
-6. The range studied of a univariate parameter is supported, as a PAR established one factor at a time, when every run at both ends of the range meets the criterion of every attribute at manufacturing scale. The effect of the parameter on an attribute is the difference between the mean of the runs at the high end and the mean at the low end. It is tested by a two-sided t-test at α = `{python} g(ALPHA)`, and it is reported with its size as a fraction of the width of the criterion, for the classification in item 8. A PAR established one factor at a time does not cover interactions with other parameters (@sec-univariate).
-7. The design space of the step is the region of the `{python} K_RSM` response-surface factors, within the range studied, in which the predicted mean of every measured attribute meets its criterion, with osmolality and the univariate parameters at their set-points. The report will show it as an overlay contour plot for each pair of factors, with the other factors at their set-points. A batch at the edge of this region meets its criterion only about half the time (@sec-stats). The design space therefore describes where the process mean meets every criterion, and a claim for a single batch rests on the PARs of item 4. An attribute with no adequate model is not drawn. It does not limit the design space when every measured result of the designs meets its criterion (item 2), and otherwise the report states that no design space is established for that attribute.
-8. Each parameter is classified under the parameter classification procedure SOP-4001, by the decision logic of PCMP-001 §7.7 [@amab2009]. A critical process parameter (CPP) has a significant and practically relevant effect on a CQA and a high risk of falling outside its acceptable range in operation. A well-controlled critical process parameter (WC-CPP) has such an effect but a low risk, because it is readily controlled and its PAR is wide against its NOR. A key process parameter (KPP) affects process performance and has no practically relevant effect on a CQA within its range. A general process parameter (GPP) has no relevant effect on either. PCMP-001 sets no numerical threshold for a practically relevant effect, a high risk or a wide PAR. The report therefore states, for each parameter, the size of each significant effect as a fraction of the width of the criterion and the margin between its PAR and its NOR, and it gives the reason for each class. A KPP is identified from the platform knowledge of its effect on process performance, because the designs do not model performance (@sec-operation).
-9. Capability is judged in the master report PCMR-001 against two values that PCMP-001 §7.9 sets. A Cpk of at least `{python} g(CPK_TARGET)` is expected of a CQA in routine manufacture. A Cpk below `{python} g(CPK_MIN)` requires an action in the control strategy. A Cpk between the two is acceptable, and the master report then states the side of the criterion that limits it and the parameters that drive it. This plan sets no capability criterion of its own.
+4. A range of a response-surface factor is proven acceptable for an attribute when the analysis of @sec-par with the other factors varied over their NORs meets the criterion of that attribute across it. A parameter has a PAR for each attribute, and the range carried into the control strategy is their intersection. A PAR that reaches the end of the range studied is reported as reaching it, and no claim is made beyond it. Where that analysis does not meet the criterion even with the parameter at its set-point, the report states that no PAR exists for the attribute and states the consequence for the NOR (PCMP-001 §7.6). Neither PCMP-001 nor this plan sets a rule for a PAR that is narrower than the NOR, and the report states its approach.
+5. `{python} nmc("osmolality")` and the univariate parameters have no PAR from the response-surface model (@sec-par). The range of a parameter studied one factor at a time is supported by its own data (PCMP-001 §4). Neither PCMP-001 nor this plan sets a decision rule for the univariate study or for the NOR of `{python} N_OSM`, and the bioreactor report PCR-003 states its approach.
+6. The design space of the step comes from the response-surface model, like every prediction and every PAR (PCMP-001 §6.2). A quality attribute is judged on a single batch, not on the mean prediction (@sec-stats). The master report PCMR-001 consolidates the design spaces of the steps (PCMP-001 §9).
+7. Each parameter is classified under the parameter classification procedure SOP-4001, by the decision logic of PCMP-001 §7.7 [@amab2009]. A critical process parameter (CPP) has an effect on a CQA that is significant and practically relevant within the range studied, and a high risk of falling outside its acceptable range in operation. A well-controlled critical process parameter (WC-CPP) has the same kind of effect on a CQA but a low risk of falling outside its acceptable range, because it is readily controlled and its PAR is wide against its NOR. A key process parameter (KPP) affects process performance, such as yield or concentration, and has no effect on a CQA within its range. A general process parameter (GPP) has no relevant effect on a CQA or on process performance within its range. A significant effect that is too small to move the attribute appreciably within the PAR does not by itself make a parameter critical. The report states the size of each effect beside its significance and gives the reason for each class.
+8. Capability is judged in the master report PCMR-001 against two values that PCMP-001 §7.9 sets. A Cpk of at least `{python} g(CPK_TARGET)` is expected of a CQA in routine manufacture. A Cpk below `{python} g(CPK_MIN)` requires an action in the control strategy. A Cpk between the two is acceptable, and the master report then states the side of the criterion that limits it and the parameters that drive it. This plan sets no capability criterion of its own.
 
-@tbl-iac gives the intermediate acceptance criteria of the step and their derivation. Each drug substance criterion is carried backward through the worst case of every downstream step, with no margin (PCMP-001 §7.3). The worst case is the platform value from X-Mab, Y-Mab and Z-Mab, unless the verification described below replaced it with an A-Mab value. The aggregate criterion is carried back through the aggregate clearance of cation exchange and the aggregate increase across low-pH viral inactivation. It is the drug substance limit multiplied by the clearance fold, less the increase. From the unrounded values in force this gives `{python} num(AG.ds_high)` × `{python} f"{AG.downstream_fold:.4f}"` − `{python} f"{AG.downstream_added:.4f}"` = `{python} num(AG.iac_high)`\ % HMW, against `{python} num(AG.ds_high)` × `{python} num(AG_T.assumed)` − `{python} num(AG_W.assumed)` = `{python} num(AG.iac_high_apriori)`\ % from the platform values alone. The upper limit for acidic variants is carried back through the increase across low-pH viral inactivation, `{python} num(AV.ds_high)` − `{python} num(AV.downstream_added)` = `{python} num(AV.iac_high)`\ %. Its lower limit is the drug substance lower limit of `{python} num(AV.iac_low)`\ %, because the derivation credits low-pH viral inactivation with no increase on the side of the lower limit. Each increase is in percentage points of the attribute.
+@tbl-iac gives the intermediate acceptance criteria of the step and their derivation. Each drug substance criterion is carried backward through the worst case of every downstream step, with no margin (PCMP-001 §7.3). The worst case is the platform value from X-Mab, Y-Mab and Z-Mab, unless the verification described below replaced it with an A-Mab value. The aggregate criterion is carried back through the aggregate clearance of cation exchange and the aggregate increase across low-pH viral inactivation. It is the drug substance limit multiplied by the clearance fold, less the increase. From the unrounded values in force this gives `{python} num(AG.ds_high)` × `{python} f"{AG.downstream_fold:.4f}"` − `{python} f"{AG.downstream_added:.4f}"` = `{python} num(AG.iac_high)`\ % HMW, against `{python} num(AG.ds_high)` × `{python} num(AG_T.assumed)` − `{python} num(AG_W.assumed)` = `{python} num(AG.iac_high_apriori)`\ % from the platform values alone. The upper limit for acidic variants is carried back through the platform worst case of the increase across low-pH viral inactivation, `{python} num(AV.ds_high)` − `{python} num(AV.downstream_added)` = `{python} num(AV.iac_high)`\ %. Its lower limit is the drug substance lower limit of `{python} num(AV.iac_low)`\ %, because the derivation credits low-pH viral inactivation with no increase on the side of the lower limit. Each increase is in percentage points of the attribute.
 
 ```{python}
 #| output: asis
@@ -752,11 +762,11 @@ T.iac_derivation([UO]).show()
 
 Each criterion in force assumes that every downstream step performs at least as well as the worst case from which the criterion was derived. The report of each downstream step checks this from its own response-surface model, and the rule of PCMP-001 §7.5 lets the check change a criterion in either direction. Where the A-Mab worst case predicted within the NOR of a downstream step is worse than the platform worst case, the one-sided `{python} BOUND_PCT`\ % prediction bound of a single batch there replaces the platform value, and every criterion upstream becomes stricter. Where that bound is better than the platform value, and the model behind it meets the adequacy criteria above, the bound replaces the platform value, and every criterion upstream becomes wider.
 
-That rule changed the criteria of this step for `{python} CHANGED_TXT`. For aggregate, the cation exchange model predicted a lower clearance within its NOR than the platform worst case of `{python} num(AG_T.assumed)`-fold. The one-sided `{python} BOUND_PCT`\ % prediction bound of a single batch for that clearance, `{python} num(AG.downstream_fold)`-fold, tightened the criterion (cation exchange report `{python} DOC_CEX`). The low-pH viral inactivation model predicted a smaller aggregate increase than the platform worst case of `{python} num(AG_W.assumed)` percentage points. The bound for that increase, `{python} num(AG.downstream_added)` percentage points, widened the criterion (low-pH viral inactivation report `{python} DOC_VI`). The resulting aggregate criterion of ≤ `{python} num(AG.iac_high)`\ % HMW is stricter than the a priori criterion of ≤ `{python} num(AG.iac_high_apriori)`\ %. For acidic variants, the bound of the increase across low-pH viral inactivation was `{python} num(AV.downstream_added)` percentage points, against `{python} num(AV_W.assumed)` on the platform. The bound widened the upper limit for acidic variants from `{python} num(AV.iac_high_apriori)`\ % to `{python} num(AV.iac_high)`\ %.
+That rule changed the criterion of this step for `{python} CHANGED_TXT`. The cation exchange model predicted a lower aggregate clearance within its NOR than the platform worst case of `{python} num(AG_T.assumed)`-fold. The one-sided `{python} BOUND_PCT`\ % prediction bound of a single batch for that clearance, `{python} num(AG.downstream_fold)`-fold, tightened the criterion (cation exchange report `{python} DOC_CEX`). The low-pH viral inactivation model predicted a smaller aggregate increase than the platform worst case of `{python} num(AG_W.assumed)` percentage points. The bound for that increase, `{python} num(AG.downstream_added)` percentage points, widened the criterion (low-pH viral inactivation report `{python} DOC_VI`). The resulting aggregate criterion of ≤ `{python} num(AG.iac_high)`\ % HMW is stricter than the a priori criterion of ≤ `{python} num(AG.iac_high_apriori)`\ %.
 
-The two replacements have different reasons. The platform worst cases of the low-pH hold are increases over a hold of `{python} HOLD_PLATFORM` min, and the range studied of the A-Mab hold time reaches the same `{python} g(HOLD_RANGE_HI)` min. For aggregate, the increase observed at the edges of the range studied was `{python} num(AG_W.observed_edge)` percentage points, more than the platform worst case of `{python} num(AG_W.assumed)`. Within the hold time NOR as characterized, which ends at `{python} g(HOLD_NOR_HI)` min, the model predicts an increase of `{python} num(AG_W.predicted_nor)` percentage points, with a bound of `{python} num(AG_W.predicted_nor_bound95)`. The aggregate replacement therefore reflects the shorter A-Mab hold, not a more stable product. It remains valid because routine manufacture does not hold longer than the NOR. For acidic variants, the increase observed at the edges of the range studied was `{python} num(AV_W.observed_edge)` percentage points, less than the platform worst case of `{python} num(AV_W.assumed)` over the same hold. A-Mab therefore adds fewer acidic variants than the platform at the same hold. The shorter hold within the NOR lowers the increase further, to `{python} num(AV_W.predicted_nor_bound95)` percentage points at the bound.
+The widening does not reflect a more stable product. The platform worst case of the low-pH hold is an increase over a hold of `{python} HOLD_PLATFORM` `{python} HOLD_UNIT`, and the range studied of the A-Mab hold time reaches the same `{python} g(HOLD_RANGE_HI)` `{python} HOLD_UNIT`. At the edges of the range studied, the A-Mab aggregate increase was `{python} num(AG_W.observed_edge)` percentage points, more than the platform worst case of `{python} num(AG_W.assumed)`. Within the hold time NOR as characterized, which ends at `{python} g(HOLD_NOR_HI)` `{python} HOLD_UNIT`, the model predicts an increase of `{python} num(AG_W.predicted_nor)` percentage points, with a bound of `{python} num(AG_W.predicted_nor_bound95)`. The widening therefore reflects the shorter A-Mab hold. The NORs in force for hold time and temperature end at the same values as the NORs as characterized, and the low-pH aggregate model has no pH term. The bound therefore also covers the NORs in force, and routine manufacture does not hold longer than the NOR.
 
-Each change moves risk between the producer and the patient. A stricter criterion lowers the risk to the patient and raises the risk to the producer, because more batches may fail it. A wider criterion does the opposite. The aggregate criterion in force is stricter than the a priori criterion. The upper limit for acidic variants is wider by `{python} num(AV_WIDEN)` percentage points. The bioreactor report PCR-003 judges the aggregate and acidic variant results against the changed criteria. For each widened value it gives the bound, the runs behind it, and the reason why the performance of low-pH viral inactivation for A-Mab is known well enough to replace the platform value. It also argues each change by its risk, as PCMP-001 §7.5 requires.
+The change moves risk between the producer and the patient. A stricter criterion lowers the risk to the patient and raises the risk to the producer, because more batches may fail it. A wider criterion does the opposite. The aggregate criterion in force is stricter than the a priori criterion, although the low-pH bound widened it. The bioreactor report PCR-003 judges the aggregate results against the changed criterion. For the widening it gives the bound, the runs behind it, and the reason why the performance of low-pH viral inactivation for A-Mab is known well enough to replace the platform value. It also argues the change by its risk, as PCMP-001 §7.5 requires.
 
 # Proven acceptable ranges (planned analysis) {#sec-par}
 
@@ -770,7 +780,7 @@ The NOR-propagated PAR is in general narrower than the set-point PAR, for two re
 
 The report will give both PARs for every combination in one table, with the criterion and the basis of each. For each attribute the report will also show, as a figure, the PAR of the factor with the largest main effect on that attribute. The figure has one panel for each analysis, with the acceptable region of the parameter shaded green and the set-point and the NOR marked.
 
-Osmolality and the `{python} len(UV)` univariate parameters are not factors of the response-surface model, and no PAR is computed for them from it. Their ranges are judged by items 5 and 6 of @sec-criteria.
+`{python} nmc("osmolality")` and the `{python} len(UV)` univariate parameters are not factors of the response-surface model, and no PAR is computed for them from it. Item 5 of @sec-criteria states what this plan sets for their ranges.
 
 # Data management and integrity {#sec-data}
 
@@ -804,7 +814,7 @@ The study delivers the following.
 
 The studies follow a fixed sequence. The qualification runs come first, and the offset of each output is estimated from them before the first characterization run. Whether the model is qualified for each output is decided at analysis (@sec-sdm). The screening study follows. The univariate study starts after the screening study ends, and the response-surface study starts after the screening results have been reviewed (@sec-rsm). The univariate and response-surface studies then overlap in time. The report is written when the data of all `{python} len(CH)` studies are complete.
 
-@tbl-schedule records the execution window of each study. Start is the day the first run of the study was inoculated, and End is the day its last run was harvested. Several runs of each study were in progress at the same time. Every study of this plan ran in the scale-down bioreactor system whose pCO2 probe is `{python} EQ_ID`. The next calibration of that probe was due on `{python} CAL_DUE`, and every study window closed before that date.
+@tbl-schedule records the execution window of each study, which runs from the start of its first run to the end of its last run. Several runs of each study were in progress at the same time. Every study of this plan ran in the scale-down bioreactor system whose pCO2 probe is `{python} EQ_ID`. The next calibration of that probe was due on `{python} CAL_DUE`, and every study window closed before that date.
 
 ```{python}
 #| output: asis
@@ -820,7 +830,7 @@ T.frame(SCHED,
 The main risks to the study are the following.
 
 1. The scale-down model may not represent manufacturing scale for an output. The qualification by offsets controls this risk (@sec-sdm), and an output for which the model is not qualified sets no range.
-2. pCO2 depends on scale and is measured by the pCO2 probe of the scale-down bioreactor system (`{python} EQ_ID`). A drift of the probe would move the true pCO2 of a run away from its design level, while the controller still holds the probe reading at that level. The off-line pCO2 measurement in each run detects such a drift (@sec-sdm), and the calibration and change control of the probe limit it.
+2. pCO2 depends on scale and is measured by the pCO2 probe of the scale-down bioreactor system (`{python} EQ_ID`). A drift of the probe between calibrations would move the true pCO2 of a run away from its design level, while the controller still holds the probe reading at that level, so the recorded setting would not show it. The calibration interval of the probe limits this risk, and every study window closed before the next calibration of the probe was due (@sec-schedule).
 3. Each run lasts the full culture duration, so a lost run cannot be repeated quickly. A lost or invalidated run is reported, and the report states whether the design was repaired or re-executed (PCMP-001 §6.1).
 4. A change of lot of a medium or feed between runs could add variation that the analysis attributes to error. The lot used in each run is recorded so that such an effect can be traced.
 
@@ -830,7 +840,7 @@ The study rests on the following assumptions.
 2. No downstream step changes afucosylation, galactosylation or high mannose, so their drug substance criteria apply to the output of this step (PCMP-001 §3).
 3. Interactions of three or more factors are negligible, as the screening design requires (@sec-screening).
 4. The univariate parameters do not interact with the other parameters within their ranges, and their effects do not reverse between the two ends of each range studied.
-5. The effects of pCO2 and of osmolality, each estimated at a constant level of the other, add when both change together at manufacturing scale (@sec-screening).
+5. The effects of pCO2 and of `{python} N_OSM`, each estimated at a constant level of the other, add when both change together at manufacturing scale (@sec-screening).
 6. In routine operation each parameter varies about its set-point as a normal distribution whose standard deviation is the width of its NOR divided by `{python} g(SD_DIV)` (@sec-par).
 7. Parameters that are not studied are held at their set-points, and the media and feeds meet platform specification.
 
@@ -862,7 +872,7 @@ print(appendix_numbering("B"))
 
 # Appendix B. Planned response-surface design {#sec-app-b .unnumbered}
 
-@tbl-matrix-rsm gives the planned response-surface design of the study `{python} SID["rsm"]` in coded units, with the randomized start order. Osmolality, code `{python} LETTER["osmolality"]`, is not a factor of this design and is held at its set-point in every run.
+@tbl-matrix-rsm gives the planned response-surface design of the study `{python} SID["rsm"]` in coded units, with the randomized start order. `{python} nmc("osmolality")`, code `{python} LETTER["osmolality"]`, is not a factor of this design and is held at its set-point in every run.
 
 ```{python}
 #| output: asis

@@ -55,6 +55,17 @@ went wrong when applying them.
    set at analysis and was in no approved plan. Do not add a sentence that the wider criterion "does
    not loosen" anything.
 
+9. **What an amendment may add** (STORY_BIBLE §9b, after the PCP-006 factual check). A Version 2.0
+   plan is issued after its studies ran. It may state, and list as changes, what PCMP-001 Version 2.0
+   sets, plus generic tests applied the same way in every plan. Those tests are the residual regressions
+   at α = 0.05 and Cook's distance above 4/n. It must not add a step-specific decision rule, such as a
+   refit procedure, a NOR rule for one parameter or a test chosen for one study, and it never says a
+   rule was "fixed before the data".
+   - It keeps the design, sampling and spiking as Version 1.0 planned them, even where a study departed
+     from them. The report records the departure.
+   - It describes no study made after Version 1.0: no hold study, augmentation, confirmation or support
+     study. Each report records those as discrepancies from its plan.
+
 ## 2. Science
 
 - A cause names the species, the property and the direction in the clause where the cause verb

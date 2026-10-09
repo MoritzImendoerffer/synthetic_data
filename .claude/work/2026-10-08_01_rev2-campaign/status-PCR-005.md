@@ -106,6 +106,25 @@ under PCP-005. PD-005-02 to 04 are named in the discrepancy intro (the register 
 PD-005-01 and PD-005-05 keep subsections.
 check_render --render passes 11-15 all green (69, 68, 69, 68, 67 pages). Final: **67 pages**.
 
+## 2d. Factual check run 3 fix pass (factual-PCR-005.run3.md), COMPLETE
+
+- Objectives quoted as the revised PCP-005 §2 words them (objective 1 "before the first characterization
+  run", objective 6 without the added clause).
+- F9 and Conclusion 9: what the hold added kept the three attributes within the UPPER limits of the low-pH
+  inactivation load (deciding word `hold_rule_word`, computed from `h_ok` and the acidic fall); the lower
+  limit is not claimed; acidic variants can enter below it (PCR-003).
+- PD-005-06 (loaded mass from the titre, not A280): `PDS` asserts six entries; named in §3.3 (`#sec-methods`)
+  and in the §13 discrepancy intro with its reason.
+- §2.2 leached Protein A counted unrounded with the strict comparison: 4 of 47, the lowest at 5.002 ppm.
+- §8: "does not lower acidic variants" in place of "raises slightly".
+- §5.7: 2-8 °C fragment change unrounded, 0.084 against 0.081, "about the same as" (computed word).
+- Notes: "at most 3.1 %" (f1); the two unsourced execution statements removed ("same laboratory columns",
+  "same procedures"); the brief's SOP/AMV subset omits SOP-3015, SOP-3016, AMV-3013, AMV-3019, which the
+  document adds deliberately and cites (brief/helper issue, document unchanged).
+- Table 7.1 note b) now renders the exact-fit wording.
+- Conclusions trimmed (step-yield restatement, univariate wording, LPA sentence, fragment-offset sentence)
+  to keep the chapter on one page. check_render --render passes 16-19 green; final 67 pages.
+
 ## 3. What is left
 
 Nothing in this pass. Final check_render --render (pass 15 of this session's count): all chunks exec, 677

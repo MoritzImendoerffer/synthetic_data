@@ -8635,10 +8635,9 @@ def build_investigation():
          f"{ns['amab_hold_max']:g} min.", "verif",
          f"The A-Mab values are increases within the NOR as characterized, where the hold lasts at most "
          f"{ns['amab_hold_max']:g} min."),
-        ("The two bioreactor criteria moved because the A-Mab low-pH hold is shorter, not because A-Mab "
-         "is more stable at low pH.", "verif",
-         "These two criteria therefore moved because the A-Mab hold is shorter, not because A-Mab is "
-         "more stable at low pH."),
+    ] + [   # why each moved, decided per attribute in the document (PCP-006 factual check, 2026-10-09)
+        (q, "verif", q) for q in ns["_vi_why"]
+    ] + [
         (ns["tight_phrase"], "verif", ns["tight_phrase"]),
         (f"A Protein A pool batch at the upper 95 % prediction limit for leached Protein A needs only "
          f"{f2(ns['lpa_need'])}-fold downstream clearance to meet the drug-substance criterion of "

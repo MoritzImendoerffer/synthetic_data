@@ -418,8 +418,13 @@ so no NOR or set-point decision moves a criterion or a Version 1.0 number.
   A replacement is not always "the product did better". The platform worst cases of the low-pH hold are
   increases over a 180-min hold (`iac.platform` sources); the A-Mab value is the increase within the NOR
   as characterized, at most 120 min. So the bioreactor aggregate criterion moves because the A-Mab hold is
-  shorter, not because the product is more stable: say so wherever that replacement is described (PCP-006
-  review run 2). The criterion is still right, because routine manufacture never holds longer than the NOR.
+  shorter, not because the product is more stable: at the edges of the range studied, which include
+  180 min, A-Mab adds more aggregate than the platform value. Say so wherever that replacement is
+  described (PCP-006 review run 2). **It is not true for acidic variants** (PCP-006 factual check,
+  2026-10-09): every 180-min run of the low-pH design adds less than the platform value, so A-Mab adds
+  fewer acidic variants over the same hold, and the shorter hold lowers the increase further. Decide the
+  wording per attribute from `iac_verification.csv` (`observed_edge` against `assumed`), never in
+  general. Both criteria are still right, because routine manufacture never holds longer than the NOR.
 - **PCR-006, low-pH inactivation: a decision revised, and confirmation runs.** On the selected XMuLV model
   (main effects of pH, hold time and temperature) the 6.6 claim fails at the worst corner of the
   characterized NOR. First decision: pH NOR 3.30–3.50 with the set-point re-centred to 3.40 (owner: "0.04 pH

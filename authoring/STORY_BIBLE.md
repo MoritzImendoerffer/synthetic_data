@@ -245,14 +245,16 @@ priori:
   studies it judges.
 - **Verification.** Each report checks the worst cases that the criteria upstream of its step
   rely on. The rule, stated in PCMP-001 before any study, is: where a step does worse within its
-  NOR than the platform worst case, the A-Mab prediction replaces the platform value and the
-  criteria upstream tighten. Where the A-Mab data show, at the 95 % confidence bound, that a step
-  does better than the platform worst case, that bound replaces the platform value and the
+  NOR than the platform worst case, the single-batch bound of the A-Mab prediction replaces the
+  platform value and the criteria upstream tighten. Where the A-Mab data show, at the one-sided 95 %
+  prediction bound of a single batch, that a step does better than the platform worst case, that
+  bound replaces the platform value and the
   criteria upstream widen (owner's decision 2026-10-08: "if the data supports it, a criterion
   could be widened, but it needs good arguments"). A widening also needs a downstream model that
   passes the adequacy tests of PCMP-001 (R² minus predicted R², lack of fit): a model that fails
   them is not a good argument. Tightening needs no such test. Both directions use the one-sided
-  95 % confidence bound, never the point prediction (`iac_verification.csv`: `model_adequate`).
+  95 % prediction bound of a single batch, never the point prediction and never a confidence bound
+  of the mean (the rule of 2026-10-09 below; `iac_verification.csv`: `model_adequate`).
   Each report that relies on a widened criterion gives the argument: the bound, the runs behind
   it, and why the downstream step's performance at A-Mab is known well enough. Which criteria
   tightened and which widened is a result read from `iac.csv` (`tightened`, `widened`), never

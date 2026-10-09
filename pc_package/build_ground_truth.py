@@ -6132,7 +6132,7 @@ def rev2_inventory(doc, f, dtype, process, topics):
     return S.DocumentInventoryItem(
         document_id=doc, file_name=f, predicted_document_type=dtype,
         product_name_candidates=["A-Mab"], process_name_candidates=[process],
-        site_candidates=[P.SENDING_SITE, P.RECEIVING_SITE], date_candidates=[eff],
+        site_candidates=[P.SENDING_LOCATION, P.RECEIVING_LOCATION], date_candidates=[eff],
         main_topics=topics,
         rationale=f"Title block declares document class '{P.DOC_REGISTRY[doc][0]}'.",
         source_references=[ref(doc, f, "Title block", "Title block", title_block_quote(doc))],
@@ -6166,11 +6166,14 @@ def _site_entities(doc, f, sec):
     return [
         S.ManufacturingSite(site_id="site:cambridge", site_name=P.SENDING_SITE, site_role="sending",
                             location="Cambridge, MA",
-                            source_references=[ref(doc, f, sec, "Title block", P.SENDING_SITE)],
+                            source_references=[ref(doc, f, sec, "Title block",
+                                                   CELL_SEP.join(["Development site", P.SENDING_LOCATION]))],
                             metadata=meta()),
         S.ManufacturingSite(site_id="site:grafton", site_name=P.RECEIVING_SITE,
                             site_role="receiving", location="Grafton, WI",
-                            source_references=[ref(doc, f, sec, "Title block", P.RECEIVING_SITE)],
+                            source_references=[ref(doc, f, sec, "Title block",
+                                                   CELL_SEP.join(["Commercial drug substance site",
+                                                                  P.RECEIVING_LOCATION]))],
                             metadata=meta()),
     ]
 
@@ -6489,9 +6492,9 @@ def build_plan_protein_a():
     def prose(kind, sid_):
         return {
             "qualification": [("Scale-down model and its qualification",
-                               f"The model is qualified under the scale-down model qualification "
-                               f"procedure SOP-1001 in study {sid_}, the scale-down model "
-                               f"qualification, before the first run of the screening design.")],
+                               f"The qualification runs are made under the scale-down model "
+                               f"qualification procedure SOP-1001 in study {sid_}, before the first "
+                               f"run of the screening design")],
             "screening": [("Screening design", f"The screening design (study {sid_}) is a full "
                                                f"two-level factorial design"),
                           ("Screening design", f"with {ns['fact_scr']} factorial runs and "
@@ -6693,8 +6696,8 @@ def build_plan_protein_a():
            table_title=pt.caption)
     for key, row in iacrow.items():
         r = iac[iac["cqa"] == key].iloc[0]
-        moved = (" It is in force at a widened value: the A-Mab confidence bound of a downstream "
-                 "step replaced a platform worst case." if bool(r["widened"]) else "")
+        moved = (" It is in force at a widened value: the one-sided 95 % prediction bound of a single "
+                 "batch of a downstream step replaced a platform worst case." if bool(r["widened"]) else "")
         st(f"The intermediate acceptance criterion for {names[key]} at the Protein A step "
            f"is the drug substance criterion carried back through a downstream clearance fold of "
            f"{T.num(r['downstream_fold'])} and an increase of {T.num(r['downstream_added'])}, with "
@@ -7523,10 +7526,15 @@ def build_master_plan():
     sdm2_q = (f"One supplementary qualification study of the Protein A scale-down model, "
               f"{ns['post_ids']} ({ns['post_window']}), ran afterwards, while {ns['inv_id']} was "
               f"open.")
-    studies, unrendered = [], []
+    studies, unrendered, later = [], [], []
+    listed = set(chdf["Study"])
     for _, r in chrono.iterrows():
         stype = STUDY_TYPE.get(r["kind"])
         if stype is None:
+            continue
+        if r["id"] not in listed:
+            # a study of the Version 2.0 re-analysis that the master plan leaves to its report
+            later.append(r["id"])
             continue
         if not _present(chrow[r["id"]], text):
             unrendered.append(r["id"])
@@ -7678,24 +7686,31 @@ def build_master_plan():
        f"{ns['n_apriori']} are in force at their a priori value and verification changed "
        f"{ns['n_moved']}.")
     st("Verification may change a criterion in either direction: an A-Mab worst case worse than "
-       "the platform tightens it, and a better 95 % confidence bound from an adequate model "
-       "widens it.", verif, "Verification may change a criterion in either direction, by the "
+       "the platform tightens it, and a better one-sided 95 % prediction bound of a single batch "
+       "from an adequate model widens it.", verif, "Verification may change a criterion in either direction, by the "
                             "following rule.")
-    st("In both directions the confidence bound, on its unfavourable side, replaces the platform "
-       "value, and the point prediction never does.", verif,
+    st("In both directions the prediction bound of a single batch, on its unfavourable side, "
+       "replaces the platform value, and the point prediction never does.", verif,
        "In both directions the bound, on its unfavourable side, replaces the platform value, and "
        "the point prediction never does.")
     st(f"Of the {ns['n_verif']} platform worst cases the criteria assume, {ns['n_verif_testable']} "
        f"can be checked against the response-surface designs of {ns['vtest_steps']}.", verif,
        f"Of these, {ns['n_verif_testable']} are responses of the response-surface designs of "
        f"{ns['vtest_steps']}, and they can be checked.")
-    st(f"The 95 % confidence bound replaced the platform value for {ns['vwid_list']}.", verif,
-       f"The 95 % confidence bound was better than the platform worst case for {ns['vwid_list']}, "
-       f"and these bounds replaced the platform values.")
-    st(f"For {ns['vinad_list']} the bound was also better, but the model does not meet the "
-       f"adequacy criteria, so the platform values stand.", verif,
-       f"For {ns['vinad_list']} the bound was also better, but the model does not meet the "
-       f"adequacy criteria, so the platform values stand.")
+    st(f"The prediction bound of a single batch replaced the platform value for "
+       f"{ns['vwid_list']}.", verif,
+       f"The prediction bound of a single batch was better than the platform worst case for "
+       f"{ns['vwid_list']}, and these bounds replaced the platform values.")
+    # each sentence only when its case occurs (single-batch rule, 2026-10-09: no bettered bound on an
+    # inadequate model is left, and three confirmations keep their platform values)
+    if ns["n_verif_inad"]:
+        st(f"For {ns['vinad_list']} the prediction bound of a single batch was also better, but the "
+           f"model does not meet the adequacy criteria, so the platform values stand.", verif,
+           ns["vinad_sentence"])
+    if ns["n_verif_conf"]:
+        st("Where the predicted worst case confirmed the platform worst case but the prediction "
+           "bound of a single batch was not better than it, the platform value stands.", verif,
+           ns["vcon_sentence"])
     st("The aggregate clearance of cation exchange within its NOR is lower than the platform worst "
        "case, which tightened the aggregate criteria upstream of cation exchange.", verif,
        "Verification found that the aggregate clearance of cation exchange within its NOR is lower "
@@ -7716,26 +7731,47 @@ def build_master_plan():
        "written last.", "Deliverables and schedule",
        "In Version 1.0 each step plan was approved before the first characterization run of its "
        "step, and each report after the data of all its studies were complete.")
-    # the NORs a Version 2.0 report narrowed: the table prints the NOR in force and footnotes it
+    # the NORs and set-points a Version 2.0 report changed: the table prints the values in force and
+    # footnotes each change on its own cell. A row may carry two markers (inactivation pH and hold
+    # time: the set-point and the NOR), so each statement is anchored on the note it belongs to,
+    # recognised by what the note says, and its verb comes from T.nor_change (the pH NOR moved and
+    # did not narrow; PCMP-001 author, 2026-10-09).
     notes = {n.split(" ", 1)[0]: n for n in pbs.notes_text().split(CELL_SEP)}
-    n_narrowed = 0
+    n_nor = n_sp = 0
     for (k, name), row in prow.items():
-        # the marker is its own run, so it reads " c1)" after the NOR; a row continuing the
-        # merged step cell starts with "| ", so the NOR is not at a fixed cell index
-        m = re.search(r"\s(c\d+\))(?=\s|$)", row)
-        if not m:
+        # the marker is its own run, so it reads " c1)" after its value; a row continuing the
+        # merged step cell starts with "| ", so the cells are not at a fixed index
+        marks = re.findall(r"\s(c\d+\))(?=\s|$)", row)
+        if not marks:
             continue
-        p = P.CFG.unit_op(k).param(next(q.key for q in P.CFG.unit_op(k).parameters
-                                        if q.name == name))
-        n_narrowed += 1
-        st(f"At Version 2.0, PCR-{P.CFG.unit_op(k).step:03d} narrowed the NOR of "
-           f"{name[0].lower() + name[1:]} at {T.STEP_NAME[k]} from "
-           f"{p.nor_characterized[0]:g}–{p.nor_characterized[1]:g} to "
-           f"{p.nor[0]:g}–{p.nor[1]:g} {p.unit}; the table gives the NOR in force.",
-           "Risk-based prioritization", notes[m.group(1)], table_title=pbs.caption)
-    if n_narrowed != sum(list(p.nor) != list(p.nor_characterized)
-                         for k in P.CFG.train_order for p in P.CFG.unit_op(k).parameters):
-        raise ValueError(f"{pbs.label}: a narrowed NOR has no footnote marker")
+        uo = P.CFG.unit_op(k)
+        p = uo.param(next(q.key for q in uo.parameters if q.name == name))
+        rep = f"PCR-{uo.step:03d}"
+        wu = (lambda v: f"pH {v}") if p.unit == "pH" else (lambda v: f"{v} {p.unit}")
+        pname = f"{name[0].lower() + name[1:]} at {T.step_mid(k)}"
+        for mk in marks:
+            note = notes[mk]
+            if note.endswith(f"the NOR as characterized ({rep})."):
+                n_nor += 1
+                st(f"At Version 2.0, {rep} {T.nor_change(p)} the NOR of {pname} from "
+                   f"{wu(f'{p.nor_characterized[0]:g}–{p.nor_characterized[1]:g}')} to "
+                   f"{wu(f'{p.nor[0]:g}–{p.nor[1]:g}')}; the table gives the NOR in force.",
+                   "Risk-based prioritization", note, table_title=pbs.caption)
+            elif note.endswith(f"the set-point the studies were run around ({rep})."):
+                n_sp += 1
+                st(f"At Version 2.0, {rep} moved the set-point of {pname} from "
+                   f"{wu(f'{p.setpoint_characterized:g}')} to {wu(f'{p.setpoint:g}')}; the table gives "
+                   f"the set-point in force.", "Risk-based prioritization", note,
+                   table_title=pbs.caption)
+            else:
+                raise ValueError(f"{pbs.label}: note {mk} of {name} is neither a NOR nor a set-point "
+                                 f"change: {note!r}")
+    ps_all = [p for k in P.CFG.train_order for p in P.CFG.unit_op(k).parameters]
+    if n_nor != sum(T.nor_change(p) is not None for p in ps_all):
+        raise ValueError(f"{pbs.label}: a changed NOR has no footnote marker")
+    if n_sp != sum(p.setpoint_characterized is not None and float(p.setpoint) != float(p.setpoint_characterized)
+                   for p in ps_all):
+        raise ValueError(f"{pbs.label}: a moved set-point has no footnote marker")
 
     concepts = _corpus_step_concepts()
     concepts += [Concept(concept_id=pid[k], concept_type="PROCESS_PARAMETER", canonical_name=k[1],
@@ -7775,7 +7811,9 @@ def build_master_plan():
             "method records on the rows that name each method and occur once in the document.",
             "No rhetorical_spans: the Version 1.0 annex carried none for the master plan, and none "
             "were curated for Version 2.0. weak_claims is empty.",
-        ] + _unrendered_note(unrendered),
+        ] + ([f"Studies of the Version 2.0 re-analysis that the master plan does not list, because "
+              f"each step report records its own as a discrepancy from its plan: {', '.join(later)}. "
+              f"They have no record here."] if later else []) + _unrendered_note(unrendered),
         inventory=rev2_inventory(doc, f, "process_characterization_master_plan",
                                  "A-Mab drug substance",
                                  ["process characterization", "master plan", "CQA framework",
@@ -7836,6 +7874,10 @@ def build_investigation():
     (S-PA-SDM2) are now plan discrepancy PD-005-01 of PCR-005 and not a deviation; at Version 2.0
     PCR-006 moves the NOR and set-points of low-pH viral inactivation; and the verification of the
     platform worst cases and the reissued reports use the models of INV-002 corrective action CA3.
+    Re-anchored the same day for the owner's later decisions: criteria move on the single-batch
+    bound; PCR-005 narrows the protein load NOR, because over the NOR as characterized the
+    scale-down model is not qualified for pool host cell protein; the low-pH changes are stated by
+    direction only; and the osmolality study S-BRX-OSM lies outside the scope (non-claim NC08).
 
     Every table is a complex table (``T.frame`` or a ``T.`` builder), read back through
     :func:`qmd_ctables` from the object the document printed, so each row quote comes from the call
@@ -7996,6 +8038,19 @@ def build_investigation():
                 r_("scope", f"The plan did not foresee the further runs, so the Protein A report "
                             f"PCR-005 Version 2.0 records them as {pd_id}, a discrepancy from the "
                             f"plan.")],
+            metadata=meta()),
+        ExplicitNonClaim(
+            non_claim_id=f"{doc}-NC08", subject=f"the {ns['osm_subj']} {ns['osm_id']}",
+            unit_operation=P.UNIT_OP_TITLES["bioreactor"],
+            statement=f"The {ns['osm_subj']} {ns['osm_id']} at the {ns['osm_step']}, which started on "
+                      f"{ns['osm_start']} during the investigation, is outside its scope.",
+            handled_elsewhere=f"{ns['osm_rep']} Version 2.0, which records it as {ns['osm_pd']}, a "
+                              f"discrepancy from the plan",
+            source_references=[
+                r_("event", f"The {ns['osm_subj']} {ns['osm_id']} at the {ns['osm_step']} started on "
+                            f"{ns['osm_start']}, during the investigation, and is outside its scope."),
+                r_("event", f"The bioreactor report {ns['osm_rep']} Version 2.0 records it as "
+                            f"{ns['osm_pd']}, a discrepancy from the plan.")],
             metadata=meta()),
         ExplicitNonClaim(
             non_claim_id=f"{doc}-NC04", subject="product impact",
@@ -8250,18 +8305,24 @@ def build_investigation():
             f"On the model PCR-005 Version 2.0 uses, Protein A pool host cell protein rises with "
             f"{'higher' if coef > 0 else 'lower'} {pa.param(k).name[0].lower()}"
             f"{pa.param(k).name[1:]}.", SEC["scope"], hcp_q)
-    # the low-pH NORs and set-points PCR-006 Version 2.0 changes, each on its own sentence
-    vs, j, vi_q = list(ns["_vs"]), 0, {}
+    # the low-pH NORs and set-points PCR-006 Version 2.0 changes: one sentence names every changed
+    # parameter and the direction of each change, and gives no value (PCR-006 revised the hold time
+    # after the investigation closed; revised 2026-10-09)
+    vi_sum = ns["vi_nor_summary"]
+    vi_nor_q = f"For this reason, the low-pH viral inactivation report PCR-006 Version 2.0 {vi_sum}."
     for c in ns["_vi_ch"]:
-        vi_q[c["key"]] = [vs[j]] + ([vs[j + 1]] if c["sp"] else [])
-        j += len(vi_q[c["key"]])
-    if j != len(vs):
-        raise ValueError(f"{doc}: {len(vs)} NOR sentences for {j} changes")
-    for c in ns["_vi_ch"]:
+        if c["name"] not in vi_sum:
+            raise ValueError(f"{doc}: the NOR sentence does not name {c['name']}")
         add("step:viral_inactivation", "step_has_parameter", f"param:viral_inactivation_{c['key']}",
             f"{P.UNIT_OP_TITLES['viral_inactivation']} has process parameter "
             f"{vi.param(c['key']).name}, whose NOR PCR-006 Version 2.0 changes.",
-            SEC["impact"], vi_q[c["key"]][0])
+            SEC["impact"], vi_nor_q)
+    # the Protein A NOR PCR-005 Version 2.0 narrows, on the sentence that gives it (§2)
+    pa_ch = ns["_pa_ch"][0]
+    add("step:protein_a", "step_has_parameter", f"param:protein_a_{pa_ch['key']}",
+        f"{P.UNIT_OP_TITLES['protein_a']} has process parameter {pa.param(pa_ch['key']).name}, whose "
+        f"NOR PCR-005 Version 2.0 narrows.", SEC["scope"],
+        f"The Protein A report PCR-005 Version 2.0 therefore {ns['pa_nor_txt']}.")
 
     # ---- report sections: one statement per sentence of the document it cites -------------------
     sname, aname = ns["sname"], ns["aname"]
@@ -8287,10 +8348,16 @@ def build_investigation():
          f"whole NOR, although each meets it with every parameter at its set-point.", "summary",
          f"In the re-analysis, {ns['nm_list']} do not meet their Version 2.0 criterion across the "
          f"whole NOR, although each meets it with every parameter at its set-point (§6.3)."),
+        (f"At Version 2.0 the Protein A report PCR-005 {ns['pa_nor_summary']}, because over the NOR "
+         f"as characterized the scale-down model is not qualified for pool host cell protein.",
+         "summary",
+         f"At Version 2.0, the Protein A report PCR-005 {ns['pa_nor_summary']}, because over the NOR "
+         f"as it was characterized the scale-down model is not qualified for pool host cell protein "
+         f"(§2)."),
         (f"At Version 2.0 the low-pH viral inactivation report PCR-006 {ns['vi_nor_summary']}, "
          f"because XMuLV clearance does not meet its claim at the least favourable combination of the "
          f"NOR as characterized.", "summary",
-         f"At Version 2.0, the low-pH viral inactivation report PCR-006 {ns['vi_nor_summary']}, "
+         f"The low-pH viral inactivation report PCR-006 {ns['vi_nor_summary']}, "
          f"because XMuLV clearance does not meet its claim at the least favourable combination of "
          f"the NOR as it was characterized (§6.3)."),
         ("The review found that none of the step criteria could be traced to a plan as approved "
@@ -8311,9 +8378,10 @@ def build_investigation():
          "The further runs were made during the re-analysis, to narrow the confidence interval of the "
          "offset of the model for pool host cell protein."),
         (f"On the model PCR-005 Version 2.0 uses, the upper 95 % prediction limit of Protein A pool "
-         f"host cell protein over the NOR is {ns['pa_hcp_use']:.0f} % of its criterion.", "scope",
+         f"host cell protein over the NOR as characterized is {ns['pa_hcp_use']:.0f} % of its "
+         f"criterion.", "scope",
          f"On the model that PCR-005 Version 2.0 uses, its upper 95 % prediction limit over the NOR "
-         f"is {ns['pa_hcp_use']:.0f} % of the criterion"),
+         f"as characterized is {ns['pa_hcp_use']:.0f} % of the criterion"),
         (f"On the planned runs alone, the scale-down offset for pool host cell protein, a ratio of "
          f"geometric means, is {ns['pa_r_plan']}, with a {ns['OFF_CI']} % confidence interval of "
          f"{ns['pa_r_plan_lo']} to {ns['pa_r_plan_hi']}.", "scope",
@@ -8323,10 +8391,30 @@ def build_investigation():
          f"to {ns['pa_r_all_hi']}.", "scope",
          f"On all runs it is {ns['pa_r_all']}, with an interval of {ns['pa_r_all_lo']} to "
          f"{ns['pa_r_all_hi']}."),
-        ("The Protein A scale-down model is therefore qualified on the planned runs alone as well.",
-         "scope", "The model is therefore qualified on the planned runs alone as well."),
-        ("The further runs narrowed the interval and did not change the conclusion.", "scope",
-         "The further runs narrowed the interval and did not change the conclusion."),
+        ("Over the Protein A NOR as characterized, the scale-down model is not qualified for pool host "
+         "cell protein, on the planned runs alone or on all runs.", "scope",
+         "Over the NOR as characterized, the model is not qualified for pool host cell protein, on the "
+         "planned runs alone or on all runs."),
+        (f"With the offset ratio at the low end of its interval, the upper prediction limit of pool "
+         f"host cell protein over the NOR as characterized is {big(ns['pa_upl_char_lo'])} ng/mg on all "
+         f"runs, above the criterion.", "scope",
+         f"With the ratio at the low end of its interval, which raises the prediction at manufacturing "
+         f"scale, the upper prediction limit over that NOR is {big(ns['pa_upl_char_lo'])} ng/mg on all "
+         f"runs, above the criterion."),
+        (f"Over the narrowed protein load NOR the limit is {big(ns['pa_upl_force_lo'])} ng/mg on all "
+         f"runs, and the scale-down model is qualified for pool host cell protein.", "scope",
+         f"Over the narrowed NOR, that limit is {big(ns['pa_upl_force_lo'])} ng/mg on all runs, and "
+         f"the model is qualified."),
+        (f"On the planned runs alone it is {big(ns['pa_upl_force_lo_plan'])} ng/mg, and the model "
+         f"would not be qualified.", "scope",
+         f"On the planned runs alone it is {big(ns['pa_upl_force_lo_plan'])} ng/mg, and the model "
+         f"would not be qualified."),
+        ("The further Protein A scale-down runs made the qualification possible.", "scope",
+         "The further runs therefore made the qualification possible."),
+        ("The qualification rests on runs added after the result on the planned runs was known, "
+         "which is a limitation of it.", "scope",
+         "The qualification therefore rests on runs added after a result was seen, and this is a "
+         "limitation of it."),
         (f"PCR-005 Version 2.0 records the further runs as {pd_id}, a discrepancy from the plan "
          f"PCP-005, which did not foresee them.", "scope",
          f"The plan did not foresee the further runs, so the Protein A report PCR-005 Version 2.0 "
@@ -8431,17 +8519,31 @@ def build_investigation():
          f"for MVM.", "iac",
          f"The sums are {ns['xm_sum']:.2f} against a requirement of {ns['xm_req']:g} log10 for XMuLV "
          f"and {ns['mvm_sum']:.2f} against {ns['mvm_req']:g} log10 for MVM."),
-        ("Verification replaces a platform worst case with the 95 % confidence bound of the A-Mab "
-         "worst case within the NOR of the downstream step, in either direction.", "iac",
-         "Verification against the A-Mab data replaces a platform worst case with the 95 % "
-         "confidence bound of the A-Mab worst case within the NOR of the downstream step, in either "
-         "direction."),
-        (f"Where the bound is better than the platform value, the criteria upstream widen only if the "
-         f"model passes the adequacy tests of PCMP-001 Version 2.0 (R² less predicted R² at most "
-         f"{ns['MAX_GAP']:g}, no lack of fit at the {ns['LOF_ALPHA']:g} level).", "iac",
-         f"Where it is better, they widen, but only if the model passes the adequacy tests of PCMP-001 "
+        ("Verification compares each platform worst case with the A-Mab worst case that the response "
+         "surface model of the downstream step predicts within its NOR.", "iac",
+         "Verification compares each platform worst case with the A-Mab worst case that the response "
+         "surface model of the downstream step predicts within its NOR."),
+        (f"The bound that can replace a platform value is the one-sided {ns['VB']} % prediction bound "
+         f"of a single batch at the least favourable combination of NOR low, set-point and NOR high.",
+         "iac",
+         f"The bound that can replace a platform value is the one-sided {ns['VB']} % prediction bound "
+         f"of a single batch at the least favourable combination of NOR low, set-point and NOR high "
+         f"(the single-batch bound)."),
+        ("Where the A-Mab prediction is worse than the platform value, the single-batch bound replaces "
+         "it and the criteria upstream tighten.", "iac",
+         "Where the A-Mab prediction is worse than the platform value, the single-batch bound replaces "
+         "it and the criteria upstream tighten."),
+        (f"Where the single-batch bound is better than the platform value, it replaces it and the "
+         f"criteria upstream widen, but only if the model passes the adequacy tests of PCMP-001 "
+         f"Version 2.0 (R² less predicted R² at most {ns['MAX_GAP']:g}, no lack of fit at the "
+         f"{ns['LOF_ALPHA']:g} level).", "iac",
+         f"Where the single-batch bound is better than the platform value, it replaces it and the "
+         f"criteria upstream widen, but only if the model passes the adequacy tests of PCMP-001 "
          f"Version 2.0 (R² less predicted R² at most {ns['MAX_GAP']:g}, and no lack of fit at the "
          f"{ns['LOF_ALPHA']:g} level)."),
+        ("No Version 2.0 criterion is set from a point prediction or from a confidence bound of the "
+         "mean.", "iac",
+         "No criterion is set from a point prediction or from a confidence bound of the mean."),
         (f"A scale-down model is qualified for an output when the conclusion over the NOR is the same "
          f"at either end of the {ns['OFF_CI']} % confidence interval of its offset.", "iac",
          f"A scale-down model is qualified for an output when its offset (the mean of the scale-down "
@@ -8465,38 +8567,78 @@ def build_investigation():
         ("The data of a step never set its own Version 2.0 criterion.", "iac",
          "The data of a step never set its own criterion."),
         (f"Of the {ns['n_ver']} platform worst cases that could be tested, {ns['n_ver_met']} were "
-         f"confirmed.", "verif",
-         f"Of the {ns['n_ver']} assumptions that could be tested, {ns['n_ver_met']} were confirmed."),
-        (f"For {ns['n_ver_wsup']} of them the 95 % bound was better than the platform value on an "
-         f"adequate model, and the criteria upstream were recalculated with the bound.", "verif",
-         f"For {ns['n_ver_wsup']} of them the 95 % bound was better than the platform value on an "
-         f"adequate model, and the criteria upstream were recalculated with the bound."),
-        (f"For {ns['n_ver_better_inadequate']} more the bound was also better, but the model failed "
-         f"an adequacy test, so the platform value stands.", "verif",
-         f"For {ns['n_ver_better_inadequate']} more the bound was also better, but the model failed "
-         f"an adequacy test, so the platform value stands."),
+         f"confirmed, because the prediction within the NOR was no worse than the platform value.",
+         "verif",
+         f"Of the {ns['n_ver']} assumptions that could be tested, {ns['n_ver_met']} were confirmed, "
+         f"because the prediction within the NOR was no worse than the platform value."),
+        (f"For {ns['n_ver_wsup']} of them the single-batch bound was also better than the platform "
+         f"value, on an adequate model, and the criteria upstream were recalculated with the bound.",
+         "verif",
+         f"For {ns['n_ver_wsup']} of them the single-batch bound was also better than the platform "
+         f"value, on an adequate model, and the criteria upstream were recalculated with the bound."),
+        (f"For the other {ns['n_ver_kept']} the single-batch bound was not better than the platform "
+         f"value, so the platform value stands.", "verif",
+         f"For the other {ns['nw'](ns['n_ver_kept'])} the single-batch bound was not better than the "
+         f"platform value, so the platform value stands."),
         (f"The verification used the models that {inv2} corrective action CA3 selects for each "
          f"output.", "verif",
          f"The verification used the models that {inv2} corrective action CA3 selects for each "
          f"output (§2)."),
-        (f"Verification widened the Protein A criterion for host cell protein from "
-         f"{big(ns['pa_hcp_apriori'])} to {big(ns['pa_hcp_v2'])} ng/mg.", "verif",
-         f"the Protein A criterion for host cell protein was widened from "
-         f"{big(ns['pa_hcp_apriori'])} to {big(ns['pa_hcp_v2'])} ng/mg."),
-    ] + ([   # only when the anion exchange bound replaced its platform value (hcp_aex_text)
+        (f"Within its NOR, the lowest host cell protein clearance the cation exchange model predicts "
+         f"is {f1(ns['cex_hcp_nor'])}-fold, and the single-batch bound is "
+         f"{f1(ns['cex_hcp_bound'])}-fold.", "verif",
+         f"Within the NOR, the lowest clearance the model predicts is {f1(ns['cex_hcp_nor'])}-fold, "
+         f"and the single-batch bound is {f1(ns['cex_hcp_bound'])}-fold."),
+        (f"The cation exchange single-batch bound is below the platform value, so the platform value "
+         f"of {f1(ns['cex_hcp_assumed'])}-fold stands for cation exchange.", "verif",
+         f"The single-batch bound is below it, so the platform value of "
+         f"{f1(ns['cex_hcp_assumed'])}-fold stands for cation exchange."),
+        (f"At anion exchange the single-batch bound for host cell protein is "
+         f"{T.num(ns['aex_hcp_bound'])}-fold, better than the platform value of "
+         f"{T.num(ns['aex_hcp_assumed'])}-fold, on a model that passes the adequacy tests.", "verif",
+         f"At anion exchange, the single-batch bound for host cell protein is "
+         f"{T.num(ns['aex_hcp_bound'])}-fold, which is better than the platform value of "
+         f"{T.num(ns['aex_hcp_assumed'])}-fold."),
         (f"The anion exchange bound widened the cation exchange criterion for host cell protein "
          f"from {T.num(ns['cex_hcp_apriori'])} to {T.num(ns['cex_hcp_v2'])} ng/mg.", "verif",
          f"The anion exchange bound widened the cation exchange criterion for host cell protein "
          f"from {T.num(ns['cex_hcp_apriori'])} to {T.num(ns['cex_hcp_v2'])} ng/mg."),
-    ] if ns["aex_hcp_widened"] else []) + [
+        (f"Carried back through the platform value at cation exchange and the bound at anion "
+         f"exchange, the Protein A criterion for host cell protein was widened from "
+         f"{big(ns['pa_hcp_apriori'])} to {big(ns['pa_hcp_v2'])} ng/mg.", "verif",
+         f"Carried back through the platform value at cation exchange and this bound at anion "
+         f"exchange, the Protein A criterion for host cell protein was widened from "
+         f"{big(ns['pa_hcp_apriori'])} to {big(ns['pa_hcp_v2'])} ng/mg."),
+        (f"The Protein A criterion for host cell protein is wider than the Version 1.0 limit of "
+         f"{big(ns['pa_hcp_crit'])} ng/mg, which was never an approved criterion.", "verif",
+         f"The Protein A criterion is also wider than the Version 1.0 limit of "
+         f"{big(ns['pa_hcp_crit'])} ng/mg, which was never an approved criterion (finding F1)."),
+    ] + [
         (f"In all, {ns['n_wid']} criteria were widened, for {ns['wid_list']}.", "verif",
          f"In all, {ns['n_wid']} criteria were widened, for {ns['wid_list']}."),
-        (f"The aggregate criteria upstream of cation exchange were recalculated with the 95 % "
-         f"confidence bound of its aggregate clearance, and the {ns['n_tight']} aggregate criteria "
-         f"at the {ns['tight_steps']} steps were tightened.",
+        (f"The aggregate criteria upstream of cation exchange were recalculated with the single-batch "
+         f"bound of its aggregate clearance, and the {ns['n_tight']} aggregate criteria at the "
+         f"{ns['tight_steps']} steps were tightened.",
          "verif",
          f"The aggregate criteria upstream of cation exchange were recalculated with the bound, and "
          f"the {ns['n_tight']} aggregate criteria at the {ns['tight_steps']} steps were tightened."),
+        (f"The bioreactor criterion for acidic variants was widened on the increase of acidic variants "
+         f"at low-pH viral inactivation, {f2(ns['vi_acid_bound'])} points at the single-batch bound "
+         f"against a platform value of {f2(ns['vi_acid_assumed'])}.", "verif",
+         f"The bioreactor criterion for acidic variants was widened in the same way, on the increase of "
+         f"acidic variants at low-pH viral inactivation ({f2(ns['vi_acid_bound'])} points against a "
+         f"platform value of {f2(ns['vi_acid_assumed'])})."),
+        (f"The platform values of the aggregate and acidic variant increases at low-pH viral "
+         f"inactivation are increases over a hold of {ns['plat_hold_min']} min.", "verif",
+         f"Both platform values are increases over a hold of {ns['plat_hold_min']} min."),
+        (f"The A-Mab values are increases within the NOR as characterized, where the hold lasts at most "
+         f"{ns['amab_hold_max']:g} min.", "verif",
+         f"The A-Mab values are increases within the NOR as characterized, where the hold lasts at most "
+         f"{ns['amab_hold_max']:g} min."),
+        ("The two bioreactor criteria moved because the A-Mab low-pH hold is shorter, not because A-Mab "
+         "is more stable at low pH.", "verif",
+         "These two criteria therefore moved because the A-Mab hold is shorter, not because A-Mab is "
+         "more stable at low pH."),
         (ns["tight_phrase"], "verif", ns["tight_phrase"]),
         (f"A Protein A pool batch at the upper 95 % prediction limit for leached Protein A needs only "
          f"{f2(ns['lpa_need'])}-fold downstream clearance to meet the drug-substance criterion of "
@@ -8551,21 +8693,8 @@ def build_investigation():
          f"also not met at the least favourable combination of the NOR as characterized.", "impact",
          f"On the model that {inv2} corrective action CA3 selects for XMuLV clearance, the claim is "
          f"also not met at the least favourable combination of the NOR as characterized."),
-        ("On the selected model, the XMuLV claim of low-pH viral inactivation is met across the NOR "
-         "in force at Version 2.0.", "impact",
-         "On that model it is met across the NOR in force at Version 2.0."),
-        (f"For this reason PCR-006 Version 2.0 changes {ns['vi_nor_count']} of low-pH viral "
-         f"inactivation.", "impact",
-         f"For this reason, the low-pH viral inactivation report PCR-006 Version 2.0 changes "
-         f"{ns['vi_nor_count']} of the step."),
     ]
-    # the NOR and set-point changes, one statement per sentence (the document's own strings)
-    S_ += [(q, "impact", q) for c in ns["_vi_ch"] for q in vi_q[c["key"]]]
     S_ += [
-        ("PCR-006 gives the reason for the new set-points, which rests on how closely pH can be "
-         "controlled at large scale.", "impact",
-         "PCR-006 gives the reason for the new set-points, which rests on how closely pH can be "
-         "controlled at large scale."),
         (f"PCMP-001 Version 2.0 sets a capability target of {f2(ns['CPK_TARGET'])}.", "cap",
          f"PCMP-001 Version 2.0 sets a capability target of {f2(ns['CPK_TARGET'])}, which is common "
          f"industry practice for a capable process."),
@@ -8582,10 +8711,11 @@ def build_investigation():
          "reported for information only and not used to judge a step.", "frag",
          "SEC fragment results from the Protein A pool and the low-pH viral inactivation pool will "
          "be reported for information only and not used to judge a step."),
-        ("The process is unchanged except at low-pH viral inactivation, where PCR-006 Version 2.0 "
-         "moves the NOR and the set-points.", "product",
-         "The process is unchanged except at low-pH viral inactivation, where PCR-006 Version 2.0 "
-         "moves the NOR and the set-points (§6.3)."),
+        (f"The process is unchanged except for NORs at the {ns['proc_nor_steps']} steps and "
+         f"set-points at {ns['proc_sp_steps']}, which PCR-005 and PCR-006 Version 2.0 change.",
+         "product",
+         f"The process is unchanged except for NORs at the {ns['proc_nor_steps']} steps and set-points "
+         f"at {ns['proc_sp_steps']}, which PCR-005 and PCR-006 Version 2.0 change (§2, §6.3)."),
         (f"Version 2.0 adds one drug-substance criterion, for fragments, at "
          f"{T.crit(0, ns['ds_frag'], 'upper')} %.", "product",
          f"Version 2.0 adds one drug-substance criterion, for fragments, at "
@@ -8662,7 +8792,8 @@ def build_investigation():
         else:
             found = (f"this campaign gives {T.num(r['observed_edge'])} at the edges of the "
                      f"characterization range, {T.num(r['predicted_nor'])} within the NOR and "
-                     f"{T.num(r['predicted_nor_bound95'])} at the 95 % confidence bound. Outcome: "
+                     f"{T.num(r['predicted_nor_bound95'])} at the one-sided {ns['VB']} % prediction "
+                     f"bound of a single batch. Outcome: "
                      f"{outcome[0].lower()}{outcome[1:]}")
         rowst(f"At {sname(sk)}, the platform worst case for {aname(cqa)} ({kind}) is "
               f"{T.num(r['assumed'])}; {found}.", "verif", vr_t, vrow, (sk, cqa))
@@ -8671,8 +8802,9 @@ def build_investigation():
     keys = list(dict.fromkeys([c for _, c in iacrow] + [v1k]))
     params_used = ([("bioreactor", k) for k in list(ns["_fall"]) + list(ns["_rise"])
                     + list(ns["acid_nsig"])]
-                   + [("protein_a", k) for _, k, _ in ns["_mains"]]
+                   + [("protein_a", k) for _, k, _ in ns["_mains"]] + [("protein_a", pa_ch["key"])]
                    + [("viral_inactivation", c["key"]) for c in ns["_vi_ch"]])
+    params_used = list(dict.fromkeys(params_used))
     concepts = [Concept(concept_id="process:amab_ds", concept_type="PROCESS",
                         canonical_name="A-Mab drug-substance process", review_status="human_verified")]
     concepts += [Concept(concept_id=f"step:{k}", concept_type="PROCESS_STEP",

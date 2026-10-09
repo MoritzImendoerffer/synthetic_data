@@ -630,6 +630,18 @@ def _setpoint_section(doc_id, key, is_report, is_plan) -> str:
           "one-sided 95 % lower confidence bound of the mean log fold against the fold the criteria rely on "
           "(`amab_process/adequacy.verification_runs`):\n\n")
         w(c.drop(columns=["folds"]).round(4).to_markdown(index=False) + "\n\n")
+        ws, wh = D.vi_worst_case_summary()
+        w("- **The decision revised, and S-VI-WC (PD-006-03)** — the hold-time NOR in force was revised after "
+          "the margin analysis above (STORY_BIBLE §9b), and confirmation runs were made at the harshest "
+          "combination within the PAR for the product (`D.vi_worst_case_summary()`, table "
+          "`T.vi_worst_case_runs()`). Hold output of each run against the step's criteria:\n\n")
+        w(wh.round(3).to_markdown(index=False) + "\n\n")
+        w("  Cation exchange on that material, by the same rule as S-CEX-VER:\n\n")
+        w(ws.drop(columns=["folds"]).round(4).to_markdown(index=False) + "\n\n")
+        w("  Where `passed` is False with `every_run_above` True, the pre-set rule is not met: say so plainly, "
+          "and give the risk argument the owner accepted (decision 5a): even with no clearance by cation "
+          "exchange the hold output meets the drug substance limit, the attribute is tested at release, and "
+          "the patient risk is nil. Never pool these runs with S-CEX-VER.\n\n")
         w("- **Downstream clearance is sufficient** (owner): show it with the cation exchange model and the "
           "criteria (the worst-case verification of `T.worst_case_verification`, the folds the criteria rely "
           "on) and with the verification runs (`pool_max` against `pool_crit`, the cation exchange criteria). "
@@ -647,6 +659,15 @@ def _setpoint_section(doc_id, key, is_report, is_plan) -> str:
           "pH and pCO2; the corner is the worst case and is stated), with risk mitigation: acidic variants "
           "monitored at harvest (early detection, acceptable but weak), and alarm limits on pH and pCO2 "
           "inside the NOR on the side that lowers acidic variants.\n\n")
+        oa = D.osmolality_analysis()
+        w("- **S-BRX-OSM, the osmolality study (PD-003-01)** — `D.osmolality_analysis()` (manufacturing scale, "
+          "the scale-down offset applied); osmolality set as `CFG.raw()[\"analytics\"][\"osmolality_study\"][\"control\"]` "
+          "says; runs per level from `amab_process.analytics.osmolality_runs` (the prediction at the NOR high with a "
+          "standard error of at most half the run-to-run SD). Owner's decision 6a: the risk that the worst-corner "
+          "mean falls below the lower limit with osmolality at its NOR high is accepted as the producer's risk "
+          "(a NOR is the range the process is routinely controlled in; narrowing it is not easy), with an "
+          "osmolality alarm inside the NOR on its upper side added to the mitigation.\n\n")
+        w(oa.round(3).to_markdown(index=False) + "\n\n")
     return b.getvalue()
 
 
@@ -814,7 +835,8 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
                     planned = [s_ for s_ in sdm_st if s_ not in extra]
                     calls.append(f'T.sdm_offsets(["{key}"], studies={planned!r}, label="tbl-sdm-offsets-planned")')
         if is_report and key == "viral_inactivation":
-            calls += ["T.vi_ofat()", "T.ofat_effects()", "T.cex_verification_n()", "T.cex_verification_runs()"]
+            calls += ["T.vi_ofat()", "T.ofat_effects()", "T.cex_verification_n()", "T.cex_verification_runs()",
+                      "T.vi_worst_case_runs()"]
     else:
         calls += {"INV-001": ["T.criteria_change()", "T.method_comparability()", "T.methods_by_study()",
                               "T.iac_derivation()", "T.worst_case_verification()", "T.calibration_windows()"],

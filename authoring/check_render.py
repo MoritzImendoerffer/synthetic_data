@@ -228,6 +228,7 @@ def check_tables_fit(qmd: str) -> int:
     import tables as T  # noqa: E402
     doc = fitz.open(pdf)
     text = re.sub(r"\s+", " ", " ".join(page.get_text() for page in doc))
+    text_nospace = re.sub(r"\s+", "", text)
     doc.close()
     bad = []
     # the document's namespace from the dry run where there was one, else its identity variables
@@ -253,7 +254,9 @@ def check_tables_fit(qmd: str) -> int:
             probes.append(t.notes[-1][1][:40])
         for pr in probes:
             pr = re.sub(r"\s+", " ", pr).strip()
-            if pr and pr not in text:
+            # compared without spaces: the PDF text layer drops the space after a minus sign that
+            # LaTeX sets as an operator ("requirement −nominal", PCP-006, 2026-10-09)
+            if pr and re.sub(r"\s+", "", pr) not in text_nospace:
                 bad.append(f"{t.label}: {pr[:50]!r} not in the PDF (table taller than a page?)")
     if bad:
         print(f"FAIL  {len(bad)} complex table(s) cut off in the PDF:")

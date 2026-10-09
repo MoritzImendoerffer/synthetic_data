@@ -141,6 +141,18 @@ def test_chronology_resolves_calibration_tension():
             assert s["end"] < due[s["equipment"]], s["id"]
 
 
+def test_each_plan_approved_before_its_first_study():
+    """STORY_BIBLE: each plan was approved after the master plan and before its studies began
+    (INV-001 finding 5). Re-dating S-BRX-SDM on 2026-10-09 once broke this for PCP-003."""
+    cfg = load_config()
+    raw = cfg.raw()["campaign"]
+    appr = raw["plan_approval"]
+    for k in cfg.train_order:
+        doc = f"PCP-{cfg.unit_op(k).step:03d}"
+        first = min(s["start"] for s in raw["studies"] if s["step"] == k)
+        assert appr["PCMP-001"] < appr[doc] < first, (doc, appr[doc], first)
+
+
 def test_method_decision_between_comparability_and_aex_repeat():
     import yaml
     cfg = yaml.safe_load(open(os.path.join(ROOT, "config", "parameters.yaml")))

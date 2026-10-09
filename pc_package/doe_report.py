@@ -549,8 +549,9 @@ def acceptance_for(key, resp):
 # judged against its intermediate acceptance criterion (IAC), derived a priori in
 # amab_process/iac.py from the drug-substance criterion and the platform worst case of every
 # downstream step, then tightened wherever this campaign's verification showed a downstream step doing worse
-# within its NOR, and widened only where the 95 % confidence bound of the A-Mab worst case beats
-# the platform value (config `iac.allow_widening`, owner's decision 2026-10-08). The table is outputs/data/iac.csv; nothing here
+# within its NOR, and widened only where the one-sided 95 % prediction bound of a single batch at the
+# A-Mab worst case beats the platform value on an adequate model (config `iac.allow_widening`, owner's
+# decisions 2026-10-08 and 2026-10-09). The table is outputs/data/iac.csv; nothing here
 # computes a limit, it only reads one. The Rev 1.0 criteria, fitted after the data were seen
 # (INV-001), are outputs/data/criteria_rev1.csv and are read only to tabulate the change.
 # --------------------------------------------------------------------------------------

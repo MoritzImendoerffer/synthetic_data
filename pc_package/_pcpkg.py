@@ -77,6 +77,10 @@ def doc_version(doc_id):
 COMPANY = "Novacyte Biologics"          # fictional sponsor
 SENDING_SITE = "Novacyte Biologics — Cambridge, MA (Development)"
 RECEIVING_SITE = "Novacyte Biologics — Grafton, WI (Commercial DS)"
+#: the locations alone, as the title block prints them (rows "Development site" and "Commercial drug
+#: substance site"); the annexes of the Version 2.0 documents ground their sites on these
+SENDING_LOCATION = "Cambridge, MA"
+RECEIVING_LOCATION = "Grafton, WI"
 PRODUCT = "A-Mab"
 
 # --------------------------------------------------------------------------- #
@@ -587,8 +591,8 @@ def title_block(doc_id, unit_op=None):
          else "Manufacturing Science & Technology (MSAT)"),
         # the two sites named for what each does, not joined by an arrow (PCP-006 author, 2026-10-09)
         ("Sponsor", COMPANY),
-        ("Development site", re.sub(r"\s*\(.*\)$", "", SENDING_SITE.replace(f"{COMPANY} — ", ""))),
-        ("Commercial drug substance site", re.sub(r"\s*\(.*\)$", "", RECEIVING_SITE.replace(f"{COMPANY} — ", ""))),
+        ("Development site", SENDING_LOCATION),
+        ("Commercial drug substance site", RECEIVING_LOCATION),
     ]
     return md_table(["Field", "Value"], rows, [22, 78])
 

@@ -145,7 +145,8 @@ def methods_by_study(steps: Optional[List[str]] = None, label="tbl-methods-by-st
     notes = [
         ("a)", "In this matrix part of the host cell protein elutes in the SEC low molecular weight "
                f"window. Reported for information only ({amd['id']})."),
-        ("b)", f"Retained response-surface samples, tested {ret['start']} to {ret['end']}."),
+        ("b)", f"Retained samples of the response-surface design and of the hold study, tested "
+               f"{ret['start']} to {ret['end']}."),
         ("c)", "Both methods on the same samples of this design."),
         ("d)", "Re-executed design (DEV-008-01). The invalidated first execution measured "
                "fragments by SEC."),
@@ -221,12 +222,13 @@ def iac_derivation(steps: Optional[List[str]] = None, label="tbl-iac") -> CTable
     notes = [
         ("a)", "No downstream step changes the attribute, so the drug-substance criterion applies."),
         ("b)", "The response-surface model of a downstream step predicted, within its NOR, a worse "
-               "value than the platform worst case. The 95 % confidence bound of that prediction "
-               "replaced it."),
+               "value than the platform worst case. The one-sided 95 % prediction bound of a single "
+               "batch there replaced it."),
         ("c)", "Log reduction claimed for this step in the modular viral clearance claim."),
         ("d)", "Cumulative requirement across the steps that clear the virus."),
-        ("e)", "The 95 % confidence bound of a downstream step's A-Mab worst case within its NOR "
-               "was better than the platform worst case. The bound replaced it."),
+        ("e)", "The one-sided 95 % prediction bound of a single batch at a downstream step's A-Mab "
+               "worst case within its NOR was better than the platform worst case. The bound replaced "
+               "it."),
     ]
     step_h = [] if one_step else [C("Step output", rs=2)]
     step_a = [] if one_step else ["P{2.9cm}"]      # one line for most step names
@@ -234,11 +236,11 @@ def iac_derivation(steps: Optional[List[str]] = None, label="tbl-iac") -> CTable
         header=[[C("Attribute", rs=2), C("DS criterion", rs=2), *step_h,
                  C("Downstream worst case\n(platform or verified)", cs=2), C("IAC", rs=2),
                  C("Basis", rs=2)],
-                ["Clearance fold", "Increase"]],
+                ["Clearance factor", "Increase"]],
         body=body, align=["P{2.4cm}", "l", *step_a, "r", "r", "l", "P{2.6cm}"], size="footnotesize",
         notes=[n for n in notes if n[0] in marks] + [("", "DS, drug substance. IAC, intermediate acceptance criterion. Increase, in the unit of the criterion.")] + [("", "Computed from unrounded values. A criterion recomputed from the rounded values shown can differ in its last digit.")], notes_per_row=True,
-        caption="Intermediate acceptance criteria and their derivation from the drug-substance "
-                "criteria" + (f", {step_mid(t['step_key'].iloc[0])} output" if one_step else "") + ".",
+        caption=("Intermediate acceptance criteria" + (f" for the {step_mid(t['step_key'].iloc[0])} "
+                 "output" if one_step else "") + " and their derivation from the drug-substance criteria."),
         label=label, resize=True)
 
 
@@ -305,9 +307,11 @@ def criteria_change(steps: Optional[List[str]] = None, label="tbl-criteria-chang
              ("d)", "Tightened on verification: a downstream step did worse within its NOR than the "
                     "platform worst case."),
              ("e)", "Widened on verification: a downstream step did better than the platform worst "
-                    "case at its 95 % confidence bound, on an adequate model.")]
+                    "case at the one-sided 95 % prediction bound of a single batch, on an adequate "
+                    "model.")]
     old_rules = {_rule_code(r): r for r in old["rule"].unique()}
-    notes += [(c, f"Version 1.0 rule: {old_rules[c]}.") for c in sorted(old_rules)]
+    # a subtraction in a recorded rule is shown with a minus sign, not a hyphen
+    notes += [(c, f"Version 1.0 rule: {old_rules[c].replace(' - ', ' − ')}.") for c in sorted(old_rules)]
     header = [[C("Step", rs=2), C("Attribute", rs=2), C("Version 1.0^b)^", cs=2), C("Version 2.0", cs=2)],
               ["Criterion", "Rule", "Criterion", "Basis"]]
     # wide enough that an attribute and a Version 1.0 rule take one line each: the table for the
@@ -406,7 +410,7 @@ def worst_case_verification(steps: Optional[List[str]] = None, label="tbl-iac-ve
     body = []
     for sk, g in v.groupby("step_key", sort=False):
         for i, (_, r) in enumerate(g.iterrows()):
-            kind = ("Clearance fold, lowest" if r["assumption"] == "fold_min" else
+            kind = ("Clearance factor, lowest" if r["assumption"] == "fold_min" else
                     "Increase, largest" + (" (points)" if ATTR_NAME[r["cqa"]].endswith("(%)") else ""))
             if pd.isna(r["met"]):
                 out = "n.t.^a)^"
@@ -436,12 +440,13 @@ def worst_case_verification(steps: Optional[List[str]] = None, label="tbl-iac-ve
             body.append(row)
     notes = [("a)", "Not a response of the response-surface study at this step, so the platform "
                     "value stands unverified."),
-             ("b)", "The criteria upstream of this step were recalculated with the 95 % confidence "
-                    "bound of the value predicted within the NOR."),
-             ("c)", "The 95 % confidence bound is better than the platform worst case. The criteria "
-                    "upstream of this step were recalculated with the bound."),
-             ("d)", "The 95 % confidence bound is better than the platform worst case, but the model "
-                    "fails an adequacy test of PCMP-001, so the platform value stands.")]
+             ("b)", "The criteria upstream of this step were recalculated with the one-sided 95 % "
+                    "prediction bound of a single batch at the value predicted within the NOR."),
+             ("c)", "The one-sided 95 % prediction bound of a single batch is better than the platform "
+                    "worst case. The criteria upstream of this step were recalculated with the bound."),
+             ("d)", "The one-sided 95 % prediction bound of a single batch is better than the platform "
+                    "worst case, but the model fails an adequacy test of PCMP-001, so the platform "
+                    "value stands.")]
     used = {m for row in body for c in row for m in re.findall(r"\^([a-d]\))\^", str(getattr(c, "text", c)))}
     rounding = [("", "Computed from unrounded values. A criterion recomputed from the rounded values shown can differ in its last digit.")]
     return CTable(
@@ -660,6 +665,23 @@ def criteria_results(step: str, label: Optional[str] = None) -> CTable:
 # --------------------------------------------------------------------------------------
 # 9. Process parameters, grouped by step
 # --------------------------------------------------------------------------------------
+def nor_change(par) -> Optional[str]:
+    """How the NOR in force differs from the NOR as characterized: "narrowed" (inside it),
+    "moved" (same width, shifted), "moved and narrowed", or None when unchanged. The pH NOR of
+    low-pH inactivation moved at Version 2.0 and did not narrow (PCMP-001 author, 2026-10-09)."""
+    (lo0, hi0), (lo1, hi1) = map(float, par.nor_characterized), map(float, par.nor)
+    if (lo0, hi0) == (lo1, hi1):
+        return None
+    if lo1 >= lo0 and hi1 <= hi0:
+        return "narrowed"
+    if math.isclose(hi1 - lo1, hi0 - lo0, rel_tol=1e-9, abs_tol=1e-9):
+        return "moved"
+    if hi1 - lo1 < hi0 - lo0:
+        return "moved and narrowed"
+    raise ValueError(f"{par.name}: the NOR in force {lo1}–{hi1} is wider than the NOR as "
+                     f"characterized {lo0}–{hi0}, which no Version 2.0 decision allows")
+
+
 def parameters_by_step(steps: Optional[List[str]] = None, label="tbl-parameters-by-step") -> CTable:
     p = _csv("parameter_classification.csv")
     cfg = _cfg()
@@ -675,12 +697,12 @@ def parameters_by_step(steps: Optional[List[str]] = None, label="tbl-parameters-
             if same:
                 used.add("a)")
             if list(par.nor) != list(par.nor_characterized):
-                # a Version 2.0 report narrowed this NOR; the note gives the NOR the studies used
+                # a Version 2.0 report narrowed or moved this NOR; the note gives the NOR the studies used
                 m = f"c{len([u for u in used if u.startswith('c')]) + 1})"
                 nor[-1] = f"{nor[-1]}^{m}^"
                 used.add(m)
                 wu = lambda v_: f"pH {v_}" if par.unit == "pH" else f"{v_} {par.unit}"
-                narrowed.append((m, f"Narrowed at Version 2.0 from "
+                narrowed.append((m, f"{nor_change(par).capitalize()} at Version 2.0 from "
                                     f"{wu(pval(par.nor_characterized[0]) + '–' + pval(par.nor_characterized[1]))}, "
                                     f"the NOR as characterized (PCR-{uo.step:03d})."))
             sp_txt = pval(r["setpoint"])
@@ -718,6 +740,8 @@ def calibration_windows_data() -> pd.DataFrame:
     eq = _csv("dev_equipment.csv")
     chron = _csv("study_chronology.csv")
     rev1 = str(_cfg().raw()["campaign"]["revisions"][0]["effective"])
+    # the studies Version 1.0 reported (finding F5), not those of the re-analysis
+    chron = chron[chron["end"].astype(str) < rev1]
     rows = []
     for _, e in eq.iterrows():
         for _, s in chron[chron["equipment"] == e["id"]].sort_values("start").iterrows():
@@ -1514,13 +1538,11 @@ def ofat_effects(label="tbl-vi-ofat-effects") -> CTable:
                 f"(study S-VI-OFAT).", label=label)
 
 
-def cex_verification_runs(label="tbl-cex-verification") -> CTable:
-    """S-CEX-VER: each cation exchange run on the worst-case material of the re-centred step, and the
-    decision on the clearance fold of each attribute."""
-    import doe_report as D
-    runs = _csv("cex_verification.csv")
-    s = D.cex_verification_summary().set_index("cqa")
-    lf = _cfg().raw()["analytics"]["cex_verification"]["load_from"]
+def _vi_cex_runs_table(runs_file, summary, load_note, caption, label) -> CTable:
+    """Cation exchange runs on low-pH material, one row per run, and the decision on the clearance
+    factor of aggregate and of fragments (S-CEX-VER, S-VI-WC)."""
+    runs = _csv(runs_file)
+    s = summary.set_index("cqa")
     body = []
     for r in runs.itertuples():
         body.append([str(int(r.run)), num(r.load_aggregate_pct, 2), num(r.aggregate_out_pct, 2),
@@ -1537,16 +1559,41 @@ def cex_verification_runs(label="tbl-cex-verification") -> CTable:
         header=[[C("Run", rs=2), C("Aggregate, % HMW (SEC)", cs=3), C("Fragments, % LMW (nrCE-SDS)", cs=3)],
                 ["Load", "Pool", "Fold", "Load", "Pool", "Fold"]],
         body=body, align=["P{3.4cm}"] + ["R{1.45cm}"] * 6,
-        notes=[("", f"Load: material inactivated at pH {lf['ph']:.2f} for {lf['hold_time']:g} min at "
-                    f"{lf['temperature']:g} °C, the worst case of the NOR in force. Cation exchange at "
-                    "set-point. Fold: load divided by pool."),
+        notes=[("", load_note + " Cation exchange at set-point. Fold: load divided by pool."),
                ("a)", "One-sided, of the mean log fold, with the run-to-run SD of the log fold from the "
                       "cation exchange data, as in the simulation that set the number of runs."),
-               ("b)", "The clearance fold through cation exchange that the intermediate acceptance "
+               ("b)", "The clearance factor through cation exchange that the intermediate acceptance "
                       "criteria upstream of it assume (PCMP-001).")],
-        notes_per_row=True,
-        caption="Cation exchange runs on material from the re-centred low-pH step (study S-CEX-VER).",
-        label=label)
+        notes_per_row=True, caption=caption, label=label)
+
+
+def cex_verification_runs(label="tbl-cex-verification") -> CTable:
+    """S-CEX-VER: each cation exchange run on the worst-case material of the re-centred step, and the
+    decision on the clearance factor of each attribute."""
+    import doe_report as D
+    lf = _cfg().raw()["analytics"]["cex_verification"]["load_from"]
+    note = (f"Load: material inactivated at pH {lf['ph']:.2f}, the re-centred set-point, for "
+            f"{lf['hold_time']:g} min at {lf['temperature']:g} °C, the longest hold and the highest "
+            "temperature of the NOR in force.")
+    return _vi_cex_runs_table("cex_verification.csv", D.cex_verification_summary(), note,
+                              "Cation exchange runs on material from the re-centred low-pH step "
+                              "(study S-CEX-VER).", label)
+
+
+def vi_worst_case_runs(label="tbl-vi-worst-case") -> CTable:
+    """S-VI-WC (PD-006-03): each low-pH hold at the harshest combination within the PAR, followed by
+    a cation exchange run, and the decision on the clearance factor of each attribute."""
+    import doe_report as D
+    from amab_process.analytics import _position
+    w = _cfg().raw()["analytics"]["vi_worst_case"]
+    lf = {k: _position(_cfg(), "viral_inactivation", k, pos) for k, pos in w["load_from"].items()}
+    note = (f"Load: material held at pH {lf['ph']:.2f}, the lower end of the pH range studied and of "
+            f"the pH PAR, for {lf['hold_time']:g} min at {lf['temperature']:g} °C, the upper ends of "
+            "the hold-time and temperature NORs in force.")
+    s, _ = D.vi_worst_case_summary()
+    return _vi_cex_runs_table("vi_worst_case.csv", s, note,
+                              "Low-pH holds at the harshest combination within the PAR, each followed by "
+                              "a cation exchange run (study S-VI-WC).", label)
 
 
 def cex_verification_n(label="tbl-cex-verification-n") -> CTable:

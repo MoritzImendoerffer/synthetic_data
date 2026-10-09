@@ -120,31 +120,35 @@ def cumulative_claims(cfg: Config) -> pd.DataFrame:
 # --------------------------------------------------------------------------------------
 def _nor_worst(cfg: Config, step: str, df: pd.DataFrame, col: str, feed: float, mode: str):
     """Worst predicted fold (mode 'fold') or increase (mode 'add') over the NOR box of the step's
-    response-surface factors: the quadratic RSM model evaluated at every combination of NOR low,
-    set-point and NOR high."""
+    response-surface factors, from the model INV-002 corrective action CA3 selects for the output
+    (``adequacy.select_model``: Box-Cox scale, AICc over the hierarchical submodels of the full
+    quadratic), evaluated at every combination of NOR low, set-point and NOR high, and the same
+    worst case at its one-sided 95 % confidence bound. Returns (worst, bound, adequacy)."""
     import itertools
-    from .studies import RSM_TOP, DOE_FACTORS, fit_effects
+    from . import adequacy as ad
+    from .studies import RSM_TOP, DOE_FACTORS
     fac = [f for f in RSM_TOP.get(step, DOE_FACTORS[step][:4]) if f"coded_{f}" in df]
-    model = fit_effects(df, col, fac, quadratic=True)["model"]
+    th = {k: float(v) for k, v in cfg.raw()["campaign"]["thresholds"].items()}
+    sel = ad.select_model(df, col, fac, th)
     uo = cfg.unit_op(step)
     pts = []
     # the NOR as characterized: the criteria were fixed at INV-001 closure, before any report
     # narrowed a NOR, so no later NOR decision moves them
-    for combo in itertools.product(*[[uo.param(f).nor_characterized[0], uo.param(f).setpoint,
+    for combo in itertools.product(*[[uo.param(f).nor_characterized[0], uo.param(f).setpoint_characterized,
                                       uo.param(f).nor_characterized[1]] for f in fac]):
-        pts.append({f: (v - sum(uo.param(f).prange) / 2) / ((uo.param(f).prange[1] - uo.param(f).prange[0]) / 2)
+        pts.append({"coded_" + f: (v - sum(uo.param(f).prange) / 2) / ((uo.param(f).prange[1] - uo.param(f).prange[0]) / 2)
                     for f, v in zip(fac, combo)})
-    X = pd.DataFrame(pts)
-    y = np.asarray(model.predict(X))
+    X = ad.matrix(pd.DataFrame(pts), sel["terms"]).to_numpy()
+    back = np.exp if sel["scale"] == "log" else (lambda v: v)
+    # the upper confidence limit of the output where a high output is bad (a fold computed from it
+    # is a lower bound on the clearance), or the upper limit of the increase; one-sided 95 %: the
+    # upper limit of the two-sided 90 % interval, on the scale of the model, back-transformed
+    ci = sel["model"].get_prediction(X).summary_frame(alpha=0.10)
+    y, up = back(ci["mean"].to_numpy()), back(ci["mean_ci_upper"].to_numpy())
     worst = float((feed / y).min()) if mode == "fold" else float((y - feed).max())
-    # the same worst case at 95 % confidence: the upper confidence limit of the output where a
-    # high output is bad (a fold computed from it is a lower bound on the clearance), or the
-    # upper limit of the increase
-    # one-sided 95 %: the upper limit of the two-sided 90 % interval
-    ci = model.get_prediction(X).summary_frame(alpha=0.10)
-    up = ci["mean_ci_upper"].to_numpy()
     bound = float((feed / up).min()) if mode == "fold" else float((up - feed).max())
-    return worst, bound, _adequacy(cfg, model, df, col)
+    adq = {"r2_gap": sel["gap"], "p_lof": sel["p_lof"], "adequate": bool(sel["adequate"])}
+    return worst, bound, adq
 
 
 def _adequacy(cfg: Config, model, df: pd.DataFrame, col: str) -> Dict[str, float]:

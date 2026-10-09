@@ -34,8 +34,8 @@ class UFDF(BaseUnitOp):
         y = self.uo.raw["yield"]
         m = self.uo.raw["model"]
         final_conc = sp.get("final_conc", self.cfg.meta["drug_substance_target_g_per_l"])
-        cc = (final_conc - float(self.uo.param("final_conc").setpoint)) / m["conc_scale_g_l"]
-        ct = (sp["tmp"] - float(self.uo.param("tmp").setpoint)) / m["tmp_scale_psi"]
+        cc = (final_conc - float(self.uo.param("final_conc").setpoint_characterized)) / m["conc_scale_g_l"]
+        ct = (sp["tmp"] - float(self.uo.param("tmp").setpoint_characterized)) / m["tmp_scale_psi"]
         step_yield = clip(y["base"] * lognormal_noise(rng, y["cv"]) + m["yield_conc"] * cc, 0.85, 0.995)
 
         out = inp.copy()

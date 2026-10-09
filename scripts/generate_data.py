@@ -231,6 +231,50 @@ def main() -> None:
     save(ia.p_oos(cfg, mc), "p_oos.csv")
     save(ia.p_oos(cfg, mc1), "p_oos_rev1.csv")        # the simulation at the NOR as characterized
 
+    # -- 13. Version 2.0 support for the re-centred low-pH set-points (PCR-006, PD-006-01/02) ------
+    save(an.vi_ofat(cfg, proc, feeds).round(4), "vi_ofat.csv")
+    vcfg = cfg.raw()["analytics"]["cex_verification"]
+    thr = {k: float(v) for k, v in cfg.raw()["campaign"]["thresholds"].items()}
+    cex_rsm = rsm_planned["cex"]
+    cfac = [c[len("coded_"):] for c in cex_rsm.columns if c.startswith("coded_")]
+    vrow = ver.set_index(["step_key", "cqa"])
+    allow_w = bool(cfg.raw()["iac"].get("allow_widening", False))
+
+    def relied_on(cqa):
+        r = vrow.loc[("cex", cqa)]
+        moved = (r["met"] is False or r["met"] == False) or (allow_w and bool(r["widening_supported"]))  # noqa: E712
+        return float(r["predicted_nor_bound95"]) if moved else float(r["assumed"])
+
+    vgrid, ns = [], []
+    nom_frag = an.nominal_train(cfg)
+    for k_, cqa in enumerate(vcfg["attributes"]):
+        if cqa == "aggregates_hmw":
+            # the fold the CEX data show at set-point, and its run-to-run SD, from the selected model
+            sel = ad.select_model(cex_rsm, "aggregate_out_pct", cfac, thr)
+            sp = pd.DataFrame([{"coded_" + f_: float(np.ravel(an._coded(cfg, "cex", f_, cfg.unit_op("cex").param(f_).setpoint_characterized))[0]) for f_ in cfac}])
+            lin = float((ad.matrix(sp, sel["terms"]).to_numpy() @ sel["model"].params.to_numpy())[0])
+            feed = float(ps.set_index("step").loc[6, "aggregate_out_pct"])
+            out = np.exp(lin) if sel["scale"] == "log" else lin
+            sigma = float(np.sqrt(sel["model"].mse_resid)) if sel["scale"] == "log" else float(np.sqrt(sel["model"].mse_resid) / out)
+            f_data = feed / out
+        else:
+            # fragments have no adequate CEX model: the fold and its SD from the centre points, with the
+            # nrCE-SDS repeatability on the load
+            cen = cex_rsm[cex_rsm["run_type"] == "center"]["lmw_cesds_pct"].to_numpy(float)
+            feed = float(nom_frag["viral_inactivation"])
+            lf = np.log(feed / cen)
+            sigma = float(np.sqrt(lf.var(ddof=1) + (cfg.raw()["analytics"]["methods"]["cesds"]["sd_abs"] / feed) ** 2))
+            f_data = float(np.exp(lf.mean()))
+        f_req = relied_on(cqa)
+        res = ad.verification_runs(f_data, f_req, sigma, int(vcfg["n_max"]), float(vcfg["power"]),
+                                   int(vcfg["reps"]), an._rng(cfg, 17, k_))
+        for g_ in res["grid"]:
+            vgrid.append({"cqa": cqa, "f_data": f_data, "f_required": f_req, "sigma_ln": sigma, **g_,
+                          "n_required": res["n"]})
+        ns.append(res["n"] if res["n"] is not None else int(vcfg["n_max"]))
+    save(pd.DataFrame(vgrid).round(5), "cex_verification_n.csv")
+    save(an.cex_verification(cfg, proc, feeds, max(ns)).round(5), "cex_verification.csv")
+
     # -- write headline values -------------------------------------------------
     with open(os.path.join(ROOT, "outputs", "report_values.json"), "w") as fh:
         json.dump(values, fh, indent=2)

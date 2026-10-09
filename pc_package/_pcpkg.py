@@ -495,11 +495,32 @@ def _augmentation_discrepancies():
     return out
 
 
+def _model_selection_discrepancy(doc, step, k):
+    """INV-002 CA3 in a report with a response-surface design: every output analysed by model
+    selection, which the plan did not provide (owner, 2026-10-09: written as a discrepancy from the
+    plan in each report, PCMP-001 unchanged)."""
+    n = CFG.unit_op(step).step
+    return {"id": f"PD-{n:03d}-{k:02d}", "step": step, "plan": f"PCP-{n:03d}",
+            "subject": "Model selection for the response-surface outputs",
+            "planned": "the full quadratic model of each output (PCMP-001 §6 and §7.2)",
+            "done": "for each output the scale chosen by the Box-Cox profile (the log scale where its 95 % "
+                    "interval contains 0 and excludes 1), the model with the lowest AICc among all hierarchical "
+                    "submodels of the full quadratic, a block term kept, and that model judged against "
+                    "PCMP-001 §7.2; a scale-down offset taken on the scale of the model",
+            "reason": f"the full quadratic carries terms the data do not support; selecting the model is "
+                      f"standard practice, and {INV2['id']} corrective action CA3 applies it to every report",
+            "studies": []}
+
+
 # Discrepancies from the plan (config ``campaign.plan_discrepancies``, plus the INV-002
-# augmentations, which are computed): {report: [{id, plan, planned, done, reason, ...}]}
+# augmentations and model selection, which are computed): {report: [{id, plan, planned, done, reason, ...}]}
 PLAN_DISCREPANCIES = {k: list(v) for k, v in CAMPAIGN.get("plan_discrepancies", {}).items()}
 for _doc, _ds in _augmentation_discrepancies().items():
     PLAN_DISCREPANCIES.setdefault(_doc, []).extend(_ds)
+for _step in st.DOE_FACTORS:
+    _doc = f"PCR-{CFG.unit_op(_step).step:03d}"
+    PLAN_DISCREPANCIES.setdefault(_doc, []).append(
+        _model_selection_discrepancy(_doc, _step, len(PLAN_DISCREPANCIES.get(_doc, [])) + 1))
 
 
 def discrepancy_register(doc_id):
@@ -563,6 +584,14 @@ def md_table(header, rows, widths):
     out = ["| " + " | ".join(str(h) for h in header) + " |", sep]
     out += ["| " + " | ".join(str(c) for c in r) + " |" for r in rows]
     return "\n".join(out)
+
+
+def join_and(xs):
+    """'a', 'a and b', 'a, b and c' — a list in running text."""
+    xs = [str(x) for x in xs]
+    if not xs:
+        return ""
+    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1]
 
 
 def appendix_numbering(letter):

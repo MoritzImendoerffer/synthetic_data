@@ -124,10 +124,17 @@ def test_chronology_resolves_calibration_tension():
     rev1 = cfg["campaign"]["revisions"][0]["effective"]
     supplementary = {v["study"] for v in cfg["analytics"]["sdm"].get("supplementary", {}).values()}
     closed = cfg["campaign"]["investigation"]["closed"]
+    rev2 = cfg["campaign"]["revisions"][-1]["effective"]
+    # studies a report records as a discrepancy from its plan: after Version 1.0, before Version 2.0
+    pd_studies = {x for ds in cfg["campaign"]["plan_discrepancies"].values() for d in ds
+                  for x in d.get("studies", [])}
     for s in cfg["campaign"]["studies"]:
         if s["id"] in supplementary:
             # runs a deviation added during the investigation: after Version 1.0, before closure
             assert rev1 < s["start"] <= s["end"] < closed, s["id"]
+            continue
+        if s["id"] in pd_studies:
+            assert rev1 < s["start"] <= s["end"] < rev2, s["id"]
             continue
         assert s["start"] <= s["end"] < rev1, s["id"]
         if s.get("equipment"):
@@ -207,3 +214,24 @@ def test_version1_capability_reproduced():
     for k in ("afucosylation", "galactosylation", "high_mannose", "acidic_variants"):
         assert np.allclose(old.loc[k, ["mean", "sd"]].to_numpy(float),
                            new.loc[k, ["mean", "sd"]].to_numpy(float), rtol=1e-9), k
+
+
+
+def test_recentred_low_ph_support():
+    """PCR-006 Version 2.0: the OFAT study at the re-centred pH shows no pH effect on aggregate or
+    fragments beyond method precision, and the CEX verification has the number of runs its
+    simulation gives and passes its rule."""
+    from scipy import stats
+    o = pd.read_csv(os.path.join(DATA, "vi_ofat.csv"))
+    for col in ("aggregate_out_pct", "lmw_cesds_pct"):
+        a = o[(o["ph"] == 3.4) & (o["hold_min"] > 0)][col].to_numpy()
+        b = o[(o["ph"] == 3.5) & (o["hold_min"] > 0)][col].to_numpy()
+        assert stats.ttest_rel(a, b).pvalue > 0.05, col
+    n = pd.read_csv(os.path.join(DATA, "cex_verification_n.csv"))
+    v = pd.read_csv(os.path.join(DATA, "cex_verification.csv"))
+    assert len(v) == int(n["n_required"].max())
+    z = stats.norm.ppf(0.95)
+    for cqa, col in (("aggregates_hmw", "aggregate_fold"), ("fragments_lmw", "fragment_fold")):
+        r = n[n["cqa"] == cqa].iloc[0]
+        lb = np.log(v[col]).mean() - z * r["sigma_ln"] / np.sqrt(len(v))
+        assert lb >= np.log(r["f_required"]), cqa

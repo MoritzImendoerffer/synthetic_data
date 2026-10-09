@@ -164,10 +164,12 @@ differ only in their `UO` key and unit-specific narrative:
 - **Complex tables come from `pc_package/tables.py`** (merged cells, two-level headers,
   footnotes, n.t.), rendered by `ctable.CTable` as an HTML twin for DOCX and a raw-LaTeX twin for
   PDF. Annex rows come from the same builder call (`T.<builder>(...).rows()`), never retyped.
-- **Model adequacy (PCMP-001 §7.2, INV-002):** `D.fit(UO, "rsm", resp)` returns the model a response
-  ends up with: the full quadratic on all runs (planned plus any augmentation block) when it is
-  adequate, else the hierarchical refit, else none (`status` "none": judged on measured results, no
-  range). Never set a range from a failing model. `D.planned_full_models()` gives Version 1.0's models.
+- **Model selection (INV-002 CA3; owner: "all DoEs should be analyzed correctly"):** `D.fit(UO, "rsm",
+  resp)` returns the selected model of every output (`adequacy.select_model`: Box-Cox scale, lowest AICc
+  over all hierarchical submodels, block kept), on all runs (planned plus any augmentation block), with
+  `status` "selected", or "none" when it fails §7.2 (judged on measured results, no range). The
+  verification of platform worst cases uses the same selection. PCMP-001 is not changed: each DoE report
+  records it as a discrepancy from its plan. `D.planned_full_models()` gives Version 1.0's models.
 - **Framing rule:** the screening model identifies effects; the **response-surface
   model is the predictive/design-space model**. State this; don't over-claim the
   near-saturated screening fit.

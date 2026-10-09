@@ -657,14 +657,24 @@ def parameters_by_step(steps: Optional[List[str]] = None, label="tbl-parameters-
                 m = f"c{len([u for u in used if u.startswith('c')]) + 1})"
                 nor[-1] = f"{nor[-1]}^{m}^"
                 used.add(m)
-                narrowed.append((m, f"Narrowed at Version 2.0 from {pval(par.nor_characterized[0])}–"
-                                    f"{pval(par.nor_characterized[1])} {par.unit}, the NOR as characterized "
-                                    f"(PCR-{uo.step:03d})."))
+                wu = lambda v_: f"pH {v_}" if par.unit == "pH" else f"{v_} {par.unit}"
+                narrowed.append((m, f"Narrowed at Version 2.0 from "
+                                    f"{wu(pval(par.nor_characterized[0]) + '–' + pval(par.nor_characterized[1]))}, "
+                                    f"the NOR as characterized (PCR-{uo.step:03d})."))
+            sp_txt = pval(r["setpoint"])
+            if par.setpoint_characterized is not None and float(par.setpoint) != float(par.setpoint_characterized):
+                # a Version 2.0 report moved this set-point; the studies ran around the former one
+                m = f"c{len([u for u in used if u.startswith('c')]) + 1})"
+                sp_txt = f"{pval(par.setpoint)}^{m}^"
+                used.add(m)
+                wu = lambda v_: f"pH {v_}" if par.unit == "pH" else f"{v_} {par.unit}"
+                narrowed.append((m, f"Moved at Version 2.0 from {wu(pval(par.setpoint_characterized))}, "
+                                    f"the set-point the studies were run around (PCR-{uo.step:03d})."))
             study = "multivariate" if r["study"] == "multivariate" else "univariate^b)^"
             if r["study"] != "multivariate":
                 used.add("b)")
             row = ([C(STEP_NAME[k], rs=len(g))] if i == 0 else []) + [
-                r["parameter"], r["unit"], pval(r["setpoint"]), *nor,
+                r["parameter"], r["unit"], sp_txt, *nor,
                 f"{pval(par.prange[0])}–{pval(par.prange[1])}", study, r["classification"]]
             body.append(row)
     notes = [("a)", "The normal operating range equals the characterized range."),
@@ -1325,12 +1335,16 @@ def model_reevaluation(step: str, label: Optional[str] = None) -> CTable:
             else:
                 row += [C("not measured in the augmentation^a)^", cs=6)]
         u = D.fit(step, "rsm", resp)
-        if u["status"] == "refit":
-            nm_ = [_term_name(t, step) for t in u["names"]]
-            used = ("Refit, no effect" if not nm_ else
-                    "Refit: " + ", ".join(nm_) if len(nm_) <= 3 else f"Refit, {len(nm_)} terms")
+        nm_ = [_term_name(t, step) for t in u["names"]]
+        sc = ", log scale" if u.get("transform") == "log" else ""
+        if u["status"] == "none":
+            used = "None^b)^"
+        elif not nm_:
+            used = f"No effect{sc}"
+        elif len(nm_) <= 3:
+            used = ", ".join(nm_)[:1].upper() + ", ".join(nm_)[1:] + sc
         else:
-            used = {"full": "Full quadratic", "none": "None^b)^"}[u["status"]]
+            used = f"{len(nm_)} terms{sc}"
         row.append(used)
         body.append(row)
     head1 = [C("Attribute", rs=2), C("Planned runs, full quadratic", cs=4)]
@@ -1338,15 +1352,16 @@ def model_reevaluation(step: str, label: Optional[str] = None) -> CTable:
     if aug:
         head1.append(C("All runs, full quadratic with block", cs=6))
         head2 += ["Runs", "R²", "Pred. R²", "Gap", "Lack of\nfit p", "Block p"]
-    head1.append(C("Model used", rs=2))
+    head1.append(C("Model used\n(terms)", rs=2))
     return CTable(
         header=[head1, head2], body=body,
         align=["P{3.2cm}"] + ["r"] * (len(head2)) + ["P{2.4cm}"],
         notes=[("a)", "Viral clearance was not measured in the augmentation runs (INV-002)."),
                ("b)", "No adequate model. The output is judged on its measured results."),
                ("", f"Gap: R² minus predicted R², at most {float(th['max_r2_minus_pred_r2']):.2f} "
-                    "under PCMP-001 §7.2. Refit: hierarchical backward elimination at α = "
-                    f"{float(th['effect_alpha']):g}; a block term is kept.")],
+                    "under PCMP-001 §7.2. Model used: the scale chosen by the Box-Cox profile and the "
+                    "model with the lowest AICc among the hierarchical submodels of the full quadratic, "
+                    "a block term kept (INV-002).")],
         notes_per_row=True, size="footnotesize", landscape=aug,
         caption="Re-evaluation of the response-surface models"
                 + (" with the augmentation runs" if aug else "") + ".",

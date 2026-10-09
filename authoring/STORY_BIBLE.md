@@ -302,31 +302,96 @@ qualification rule and the criterion were not changed after the three-run result
 the number of replicates grew, and the report says that the decision to add runs was taken after
 that result.
 
-**Version 2.0 NOR narrowings (owner's decisions 2026-10-08 and 2026-10-09).** Two reports narrow
-NORs, because the conclusion over the NOR as characterized did not hold. Config `nor_v2`;
-`Parameter.nor` is the NOR in force, `Parameter.nor_characterized` and `D.characterized_nor()` give the
-NOR the studies were planned against. `T.parameters_by_step` footnotes each narrowed NOR.
-- PCR-006: low-pH inactivation. Under INV-002 the XMuLV model is the refit (main effects of pH, hold
-  time and temperature). At the least favourable combination of the characterized NOR the mean
-  predicted clearance is below the 6.6 claim, and with hold time 90–120 min and temperature 20–23 °C
-  alone it still is; the upper pH edge binds. NOR in force: pH 3.4–3.5, hold time 90–120 min,
-  temperature 20–23 °C. (The first decision, on the full quadratic model, narrowed hold time and
-  temperature only; the full model fails §7.2.)
-- PCR-005: Protein A. Response-surface run 23 is analysed at the elution buffer pH recorded under
-  DEV-005-01 (`campaign.setting_corrections`). The raw-scale model of pool host cell protein then shows
-  significant lack of fit, so PCR-005 models it on the log scale (PCMP-001 §7.2 names a transformation;
-  the Box-Cox profile supports the log and rejects the raw scale), back-transforms its prediction limits
-  (exact coverage, asymmetric in ng/mg, the centre is the median), and takes the scale-down offset as a
-  ratio of geometric means. All of this is the discrepancy from the plan PD-005-03, described in full in
-  the report's statistical methods. On that analysis the qualification holds over protein load
-  20–36 g/L resin. Sensitivities the report gives: the log-scale refit (no load × pH interaction; it
-  disappears on the log scale) and run 23 at its design pH or excluded.
-Monte Carlo and PPQ sample the NOR in force. The verification of platform worst cases, and with it
-every criterion, uses the NOR as characterized (the criteria were fixed at INV-001 closure), so no NOR
-decision moves a criterion. INV-001 closed before either report was issued; it judges at the NOR as
-characterized and says only that the reports narrow the NOR. The Version 1.0 capability-based limits
-and INV-001's capability findings come from the simulation at the NOR as characterized
-(`capability_rev1.csv`, `p_oos_rev1.csv`), which reproduces Version 1.0.
+**How every DoE is analysed: model selection (owner, 2026-10-09: "all DoEs should be analyzed
+correctly").** INV-002 corrective action CA3 (adopted 2026-09-15, before the criteria were fixed at
+INV-001 closure) analyses every response-surface output by model selection:
+`adequacy.select_model`, used by the report engine (`D.fit`) and by the verification of platform worst
+cases (`iac.py`) alike.
+1. The scale from the Box-Cox profile of the full quadratic: the log scale where its 95 % interval
+   contains 0 and excludes 1, else the raw scale.
+2. The model with the lowest AICc among all hierarchical submodels of the full quadratic, by
+   exhaustive search (a block term is kept; stepwise search can stop at a worse model).
+3. The selected model judged against PCMP-001 §7.2 (and a significant F-test when it has terms). A
+   model with no term says the output does not depend on the parameters within the range studied. An
+   output with no adequate model is judged on its measured results and sets no range.
+4. A scale-down offset on the scale of the model: a ratio of geometric means for a log-scale model.
+PCMP-001 is not changed (owner): each DoE report records the model selection as a discrepancy from its
+plan (computed, `PLAN_DISCREPANCIES`). Version 1.0 and INV-001's comparison use the full quadratic on
+the planned runs (`D.planned_full_models()`, `rev1_criteria_in_force`). Consequence for the criteria:
+with the anion exchange host cell protein model adequate once selected, the Protein A pool and the
+cation exchange host cell protein criteria widen; the aggregate criteria upstream of cation exchange
+move with the cation exchange bound. Numbers come from `iac.csv`, never from this file.
+
+**INV-002: response-surface models below the model-adequacy criteria.** The re-analysis applied PCMP-001
+§7.2 to the planned full quadratic models (the plan's model) and 14 failed the limit on overfitting.
+QA opened INV-002 during INV-001 (config `campaign.investigation_2`). Its record, as decided then:
+- **The rule** (config `campaign.model_adequacy`, decided 2026-09-02, before any new run): a failing
+  model of an attribute of the drug substance specification with an effect is resolved by further runs;
+  every other failing model is refitted; viral clearance is not a drug substance test, so its models are
+  refitted and no augmentation spikes virus; no augmentation larger than the planned design.
+- **Sample size** (INV-002 carries it in full): the smallest D-optimal augmentation of the face-centred
+  design, as a second block, giving an assurance of at least 0.90 that the planned model meets §7.2,
+  simulated from the refit of the planned runs. The augmentations were made (S-BRX-AUG, S-AEX-AUG).
+- **Root cause and CA3** (2026-09-15): the plans prescribed the full quadratic as the predictive model
+  and no model selection. CA3 introduced the analysis above for every output.
+- **Honesty about the augmentation** (option a, owner 2026-10-09): once models are selected, the bioreactor
+  and anion exchange models are adequate on the planned runs alone, so the augmentation was not needed
+  for adequacy. It sharpened the estimates and showed which planned-run terms were noise (the high mannose
+  interactions disappeared with the second block). INV-002 says so, and describes every procedure it applied.
+- **The reports** carry their additional runs (`T.doe_results(UO, "aug")`), the re-evaluation on all runs
+  with a block term (`T.model_reevaluation(UO)`), and the discrepancies from the plan. They cite INV-002
+  for the sample size and never recompute it.
+
+**Version 2.0 NOR and set-point decisions (owner, 2026-10-08 and 2026-10-09).** Config `nor_v2` and
+`setpoint_v2`; `Parameter.nor`/`.setpoint` are in force, `nor_characterized`/`setpoint_characterized`
+(and `D.characterized_nor()`) give what the studies were planned against and run around.
+`T.parameters_by_step` footnotes each change. Monte Carlo and PPQ use the values in force; the recorded
+experiments, the nominal batch and the verification of platform worst cases use the characterized ones,
+so no NOR or set-point decision moves a criterion or a Version 1.0 number.
+- **PCR-006, low-pH inactivation.** On the selected XMuLV model (main effects of pH, hold time and
+  temperature) the 6.6 claim fails at the worst corner of the characterized NOR. NOR in force: pH
+  3.30–3.50, hold time 90–120 min, temperature 20–23 °C. The set-points sat on the edges of that NOR,
+  0.04 pH units and 6 min from the XMuLV PAR edges, which large-scale control cannot hold (owner: "0.04 pH
+  units is not controllable. 0.1 is already very tight for large scale production"). Version 2.0 re-centres
+  them: pH 3.40 and 105 min. Two studies support it, both discrepancies from the plan in PCR-006:
+  S-VI-OFAT (the low-pH hold at pH 3.40 against 3.50 over 0–180 min: aggregate and fragments rise with
+  hold time, with no pH effect beyond method precision; report any apparent acidic-variant difference with
+  its multiplicity) and S-CEX-VER (small-scale cation exchange runs on the worst-case material of the new
+  set-point; the number of runs from the simulation in `cex_verification_n.csv`: aggregate needs 1, fragments
+  3, so 3; each passes the rule on the clearance fold the criteria rely on). PCR-006 also shows, with the
+  CEX model and the criteria, that downstream clearance stays sufficient. D-001 still applies to the
+  set-point PAR analysis (design centre, not set-point) and is kept.
+- **PCR-005, Protein A.** No narrowing: on the selected models the Protein A pool criterion is wider and the
+  qualification holds over the NOR as characterized. Run 23 is analysed at its recorded elution buffer pH
+  (PD-005-03); on that data the pool host cell protein model is on the log scale (Box-Cox) with a ratio
+  offset, as for every output.
+- **PCR-003, bioreactor acidic variants (owner: option a).** At the worst corner of the NOR (high pH, high
+  pCO2, low temperature, long culture) the median acidic-variant level is below the 18 % lower limit; the
+  plan's NOR-propagated PAR (Monte Carlo) still contains the NOR, with almost no margin in pH and pCO2. The
+  corner, not the Monte Carlo, is the worst case. Accepted on the plan's PAR method, with risk mitigation:
+  the risk is mainly the producer's (a very-low-criticality attribute; 18 % is a range-of-experience limit),
+  quantified by the drug substance probability out of specification (`p_oos.csv`); monitoring acidic
+  variants at harvest (early detection, acceptable but weak) and alarm limits on pH and pCO2 inside the
+  NOR on the side that lowers acidic variants.
+
+**Harvest and UF/DF univariate studies (owner's decision 2026-10-08, option A).** Version 1.0 had
+no parameter data for the two steps without a design. Version 2.0 reports S-HAR-UNI and
+S-UFDF-UNI (`univariate_studies.csv`; config `analytics.univariate_nodoe`): each parameter at five
+levels (low, low-mid, set-point, mid-high, high) in duplicate, the others at set-point. They are
+not designed experiments, and no document calls them one.
+- Harvest: centrate turbidity falls with centrifuge rcf and levels off. Clarified turbidity is flat
+  across the depth filter load NOR and rises steeply at the top of the characterized range, as the
+  filter nears capacity. Host cell protein, aggregate and step yield show no trend beyond assay
+  precision. This keeps A-Mab's assumption (p.85) that harvest has no impact on product quality.
+  Post-clarification turbidity is the outcome of the other two parameters. It was studied as a
+  challenge: clarified filtrate adjusted to each level with centrate, and the attributes measured.
+- UF/DF: residual buffer falls as exp(−DV) (0.034 % at 8 DV, the value Version 1.0 printed).
+  Aggregate rises a little with final concentration and TMP. The source gives nothing for this
+  step (A-Mab p.86), so this effect is the campaign's own finding, and PCR-010 presents it as a
+  result, not as prior knowledge. Its size against the criterion is computed, never stated here.
+- The process model carries the same effects (`process.harvest.model`, `process.ufdf.model`), so
+  Monte Carlo and PPQ include them. They are zero at set-point, so the nominal batch is unchanged.
+
 
 **Hold-study fragment results.** The hold studies ran before AMD-001. Their first and last time
 points were retained and tested by nrCE-SDS together with the retained response-surface samples,

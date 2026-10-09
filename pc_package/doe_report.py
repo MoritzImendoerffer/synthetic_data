@@ -174,41 +174,28 @@ def has_augmentation(key):
 
 
 def _rsm_fit(key, resp, runs, form, corrected=True):
-    """The response-surface fit of INV-002 and PCMP-001 §7.2. ``status`` is "full" (the full
-    quadratic is adequate), "refit" (the hierarchical refit is), or "none" (no adequate model: the
-    response is judged on its measured results). ``full`` carries the full model's statistics."""
+    """The response-surface fit of an output. By default the model INV-002 corrective action CA3
+    selects (``adequacy.select_model``: Box-Cox scale, AICc over the hierarchical submodels of the full
+    quadratic, block kept), with ``status`` "selected" when it meets PCMP-001 §7.2 and "none" when it
+    does not (the output is then judged on its measured results). ``form="full"`` gives the full
+    quadratic on the raw scale with no gate (``status`` "full"): Version 1.0's analysis, and the
+    planned model the reports compare against. ``full`` always carries the full model's statistics."""
     factors = rsm_factors(key)
     df = rsm_data(key, runs, corrected)
     d = df[df[resp].notna()].reset_index(drop=True)
     full = ad.adequacy(d, resp, factors, ad.full_terms(factors), TH)
-    transform, ycol, boxcox = None, resp, None
-    if form == "full" or full["adequate"]:
-        chosen, frm = full, "full"
+    if form == "full":
+        chosen, frm, transform, ycol, boxcox, status = full, "full", None, resp, None, "full"
     else:
-        rt = ad.reduce(d, resp, factors, ad.full_terms(factors), TH["effect_alpha"])
-        chosen, frm = ad.adequacy(d, resp, factors, rt, TH), "refit"
-        if not chosen["adequate"] and ad.log_supported(d, resp, factors, ad.full_terms(factors)):
-            # PCMP-001 §7.2 also names a transformation. The log scale, where the Box-Cox interval
-            # contains 0 and excludes 1: the full quadratic on it if adequate, else its refit.
-            boxcox = ad.boxcox_interval(d, resp, factors, ad.full_terms(factors))
-            ycol = f"ln_{resp}"
-            d = d.assign(**{ycol: np.log(d[resp].to_numpy(float))})
-            lf = ad.adequacy(d, ycol, factors, ad.full_terms(factors), TH)
-            if lf["adequate"]:
-                chosen, frm, transform = lf, "full", "log"
-            else:
-                lrt = ad.reduce(d, ycol, factors, ad.full_terms(factors), TH["effect_alpha"])
-                lr = ad.adequacy(d, ycol, factors, lrt, TH)
-                if lr["adequate"]:
-                    chosen, frm, transform = lr, "refit", "log"
-                else:
-                    d, ycol = d.drop(columns=[ycol]), resp
-    # a caller that asks for the full model (Version 1.0, which applied no adequacy test, and
-    # INV-001's comparison on Version 1.0's models) gets it with no gate
-    status = "full" if form == "full" else (frm if chosen["adequate"] else "none")
+        sel = ad.select_model(d, resp, factors, TH)
+        chosen, frm = sel, "selected"
+        transform = "log" if sel["scale"] == "log" else None
+        ycol, boxcox, d = sel["ycol"], sel["boxcox"], sel["data"]
+        status = "selected" if sel["adequate"] else "none"
     m = chosen["model"]
     return dict(model=m, df=d, factors=factors, names=list(chosen["terms"]), quad=True,
-                transform=transform, ycol=ycol, boxcox=boxcox,
+                transform=transform, ycol=ycol, boxcox=boxcox, aicc=chosen.get("aicc"),
+                aicc_full=chosen.get("aicc_full"),
                 block=bool(chosen["block"]), n=chosen["n"], R2=chosen["R2"], adjR2=chosen["adjR2"],
                 predR2=chosen["predR2"], gap=chosen["gap"], F=chosen["F"], p=chosen["p"],
                 rmse=chosen["rmse"], ss_pe=chosen["ss_pe"], df_pe=chosen["df_pe"],
@@ -724,7 +711,8 @@ def measured_met(key, resp):
 
 
 def model_status(key, resp):
-    """"full", "refit" or "none" (no adequate model) for a response-surface output (INV-002)."""
+    """"selected" (the selected model meets PCMP-001 §7.2) or "none" (no adequate model) for a
+    response-surface output; "full" inside ``planned_full_models`` and Version 1.0 mode."""
     try:
         return fit(key, "rsm", resp)["status"]
     except Exception:
@@ -804,14 +792,18 @@ def offset_qualification(key, resp, studies=None):
 
 class rev1_criteria_in_force:
     """Context manager: inside it, every PAR and acceptance helper judges against the Version 1.0
-    criteria (criteria_rev1.csv). Used to state, from the data, which Version 1.0 conclusions
-    moved at Version 2.0. Never used to produce a Version 2.0 result."""
+    criteria (criteria_rev1.csv), at the NOR and set-points as characterized, as Version 1.0 did.
+    Used to state, from the data, which Version 1.0 conclusions moved at Version 2.0. Never used to
+    produce a Version 2.0 result."""
     def __enter__(self):
         _CRITERIA["rev"] = "1.0"
+        self._cn = characterized_nor()
+        self._cn.__enter__()
         return self
 
     def __exit__(self, *a):
         _CRITERIA["rev"] = "2.0"
+        self._cn.__exit__(*a)
         return False
 
 
@@ -1256,7 +1248,7 @@ def par_table(key):
         crit = (f"≥ {_fmt_crit(lo)}" if stype == "lower" else f"≤ {_fmt_crit(hi)}" if stype == "upper"
                 else f"{_fmt_crit(lo)}–{_fmt_crit(hi)}")
         status = fit(key, "rsm", resp)["status"]
-        basis = {"full": "model", "refit": "refitted model", "none": "measured results"}[status]
+        basis = {"full": "model", "selected": "selected model", "none": "measured results"}[status]
         for factor in rsm_factors(key):
             p = CFG.unit_op(key).param(factor)
             rng_ = f"{p.prange[0]:g}–{p.prange[1]:g}"

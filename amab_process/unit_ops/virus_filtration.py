@@ -24,7 +24,7 @@ class VirusFiltration(BaseUnitOp):
         sp = self.setpoints(setpoints)
         m = self.uo.model
         vol = sp["filtration_volume"]
-        vol_ref = self.uo.param("filtration_volume").setpoint
+        vol_ref = self.uo.param("filtration_volume").setpoint_characterized
 
         lrv_mvm = m["lrv_mvm_base"] + m["lrv_mvm_volume_coef"] * (vol - vol_ref)
         lrv_mvm = clip(lrv_mvm * lognormal_noise(rng, m["lrv_cv"]), 0.0)

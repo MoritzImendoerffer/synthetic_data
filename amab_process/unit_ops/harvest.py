@@ -31,7 +31,7 @@ class Harvest(BaseUnitOp):
             return c["floor_ntu"] + c["excess_ntu"] * np.exp(-(rcf - c["rcf_ref_g"]) / c["rcf_scale_g"])
 
         cen = centrate(sp["centrifuge_g"])
-        ref = centrate(float(self.uo.param("centrifuge_g").setpoint))
+        ref = centrate(float(self.uo.param("centrifuge_g").setpoint_characterized))
         cla = (f["base_ntu"] * (cen / ref) ** f["feed_exponent"]
                + f["knee_ntu"] * np.exp((sp["depth_filter_load"] - f["capacity_l_m2"]) / f["width_l_m2"]))
         return {"centrate_turbidity_ntu": float(cen), "clarified_turbidity_ntu": float(cla)}

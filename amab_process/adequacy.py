@@ -376,3 +376,92 @@ def log_supported(df: pd.DataFrame, resp: str, factors: Sequence[str], terms: Se
         return False
     b = boxcox_interval(d, resp, factors, terms)
     return b["lo"] <= 0.0 <= b["hi"] and not (b["lo"] <= 1.0 <= b["hi"])
+
+
+# --------------------------------------------------------------------------------------
+# Model selection: the analysis INV-002 corrective action CA3 applies to every response-surface output
+# --------------------------------------------------------------------------------------
+def hierarchical_subsets(factors: Sequence[str], quad: bool = True) -> List[List[str]]:
+    """Every submodel of the full quadratic that obeys strong hierarchy: an interaction only with
+    both its main effects, a square only with its main effect. Simplest first, in a fixed order."""
+    out = []
+    for r in range(len(factors) + 1):
+        for main in itertools.combinations(factors, r):
+            extra = [f"{a}:{b}" for a, b in itertools.combinations(main, 2)]
+            extra += [f"{f}^2" for f in main] if quad else []
+            for k in range(len(extra) + 1):
+                for e in itertools.combinations(extra, k):
+                    out.append(list(main) + list(e))
+    return out
+
+
+def aicc(y: np.ndarray, X: np.ndarray) -> float:
+    """Akaike's information criterion with the small-sample correction, for an OLS fit (the
+    residual variance counted as a parameter)."""
+    m = sm.OLS(y, X).fit()
+    k, n = X.shape[1] + 1, len(y)
+    return float(m.aic + 2 * k * (k + 1) / (n - k - 1)) if n - k - 1 > 0 else float("inf")
+
+
+def select_model(df: pd.DataFrame, resp: str, factors: Sequence[str], thresholds: Dict[str, float],
+                 block: Optional[bool] = None, transform: bool = True) -> Dict[str, object]:
+    """The model of one response-surface output, as INV-002 CA3 analyses it.
+
+    1. The scale: the Box-Cox profile of the full quadratic. The log scale where its 95 % interval
+       contains 0 and excludes 1 (the response must be positive), else the raw scale.
+    2. The model: the hierarchical submodel of the full quadratic with the lowest AICc, by
+       exhaustive search (stepwise search can stop at a worse model); a block term is kept.
+    3. The check: the selected model against PCMP-001 §7.2. ``adequate`` also requires a
+       significant model F-test when the model has terms; a model with no term says the output
+       does not depend on the parameters within the range studied.
+    Returns the ``adequacy`` dict of the selected model with ``scale``, ``ycol``, ``boxcox``,
+    ``aicc``, ``aicc_full`` and the data (``data``) it was fitted to."""
+    d = df[df[resp].notna()].reset_index(drop=True)
+    blk = has_blocks(d) if block is None else block
+    scale, ycol, bc = "raw", resp, None
+    if transform and (d[resp] > 0).all():
+        bc = boxcox_interval(d, resp, factors, full_terms(factors))
+        if bc["lo"] <= 0.0 <= bc["hi"] and not (bc["lo"] <= 1.0 <= bc["hi"]):
+            scale, ycol = "log", f"ln_{resp}"
+            d = d.assign(**{ycol: np.log(d[resp].to_numpy(float))})
+    y = d[ycol].to_numpy(float)
+    X = matrix(d, full_terms(factors), blk)
+    best = None
+    for terms in hierarchical_subsets(factors):
+        cols = ["const"] + terms + ([BLOCK] if blk else [])
+        a = aicc(y, X[cols].to_numpy())
+        if best is None or a < best[0] - 1e-9:
+            best = (a, terms)
+    order = full_terms(factors)
+    terms = [t for t in order if t in best[1]]
+    fit = adequacy(d, ycol, factors, terms, thresholds, blk)
+    if terms and not fit["f_ok"]:
+        fit["adequate"] = False
+    fit.update(scale=scale, ycol=ycol, boxcox=bc, aicc=best[0],
+               aicc_full=aicc(y, X.to_numpy()), data=d)
+    return fit
+
+
+# --------------------------------------------------------------------------------------
+# Small-scale verification runs: how many (PCR-006, PD-006-02)
+# --------------------------------------------------------------------------------------
+def verification_runs(f_data: float, f_req: float, sigma: float, n_max: int, power: float,
+                      reps: int, rng: np.random.Generator, alpha: float = 0.05) -> Dict[str, object]:
+    """Simulation of a verification of a clearance fold. Each run gives a log fold
+    ln f ~ N(ln f_true, sigma²). The verification passes when the one-sided (1 - alpha) lower
+    confidence bound of the mean log fold, with sigma known from the earlier data, is at least
+    ln f_req. By construction a true fold equal to f_req passes with probability alpha. Returns, for
+    n = 1 … n_max + 2, the probability of passing when the true fold is the one the data show
+    (``f_data``) and when it equals the required fold, and the smallest n <= n_max reaching
+    ``power`` (None when none does)."""
+    z = stats.norm.ppf(1 - alpha)
+    rows, n_req = [], None
+    for n in range(1, n_max + 3):
+        out = {}
+        for lab, ft in (("data", f_data), ("required", f_req)):
+            y = rng.normal(np.log(ft), sigma, (reps, n)).mean(axis=1)
+            out[lab] = float((y - z * sigma / np.sqrt(n) >= np.log(f_req)).mean())
+        rows.append({"n": n, "p_pass_at_data": out["data"], "p_pass_at_required": out["required"]})
+        if n_req is None and n <= n_max and out["data"] >= power:
+            n_req = n
+    return {"grid": rows, "n": n_req}

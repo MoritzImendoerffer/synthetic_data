@@ -60,7 +60,7 @@ def _coded(cfg: Config, step: str, param: str, value) -> np.ndarray:
 
 
 def _sp(cfg: Config, step: str, param: str) -> float:
-    return float(cfg.unit_op(step).param(param).setpoint)
+    return float(cfg.unit_op(step).param(param).setpoint_characterized)
 
 
 # --------------------------------------------------------------------------------------
@@ -385,7 +385,7 @@ def univariate_studies(cfg: Config, proc, feeds) -> pd.DataFrame:
 
 def _nodoe_levels(p) -> list:
     """Five levels: the range ends, set-point, and halfway between set-point and each end."""
-    lo, hi, sp = float(p.prange[0]), float(p.prange[1]), float(p.setpoint)
+    lo, hi, sp = float(p.prange[0]), float(p.prange[1]), float(p.setpoint_characterized)
     return [lo, (lo + sp) / 2, sp, (sp + hi) / 2, hi]
 
 
@@ -474,6 +474,75 @@ def augmentation_runs(cfg: Config, proc, feeds, step: str, coded: np.ndarray, st
     out["block"] = 2
     out["study"] = study
     out["run_order"] = _rng(cfg, 13, si, 2).permutation(len(out)) + 1
+    return out
+
+
+def vi_ofat(cfg: Config, proc, feeds) -> pd.DataFrame:
+    """S-VI-OFAT: the low-pH hold at the re-centred pH against the former set-point, over the hold
+    times of ``analytics.vi_ofat``, in duplicate, from its own stream (key 15). Aggregate and acidic
+    variants as the step model gives them; fragments as the fragment model gives them, measured by
+    nrCE-SDS. Time 0 is the pH-adjusted load before the hold."""
+    from .studies import _response_value, _unit
+    o = _a(cfg)["vi_ofat"]
+    uo = _unit(proc, "viral_inactivation")
+    feed = feeds["viral_inactivation"]
+    nom = nominal_train(cfg)
+    meth = {m["id"]: m for m in cfg.raw()["deviations"]["methods"]}
+    sec_cv = float(meth["AMV-3221"]["precision_pct"]) / 100
+    icief_cv = float(_a(cfg)["sdm"]["assay_cv"]["acidic_variants"])
+    rows = []
+    for ai, ph in enumerate(o["ph"]):
+        for ti, t in enumerate(o["hold_min"]):
+            rng = _rng(cfg, 15, ai, ti)
+            for rep in range(1, int(o["replicates"]) + 1):
+                if t == 0:
+                    agg, acid = float(feed.cqas["aggregates_hmw"]), float(feed.cqas["acidic_variants"])
+                    frag_true = float(nom["protein_a"])
+                else:
+                    res = uo.run(feed.copy(), rng, setpoints={"ph": float(ph), "hold_time": float(t),
+                                                              "temperature": float(o["temperature"])})
+                    agg = _response_value(res, "aggregate_out_pct")
+                    acid = _response_value(res, "acidic_variants")
+                    frag_true = float(frag_vi(cfg, nom["protein_a"], t, o["temperature"]))
+                frag = float(measure(cfg, "cesds", np.array([frag_true]), rng)[0])
+                # every result carries the repeatability of its method (SEC, icIEF): the step model
+                # gives acidic variants without noise, which a laboratory result never is
+                agg *= float(np.exp(rng.normal(0.0, sec_cv)))
+                acid *= float(np.exp(rng.normal(0.0, icief_cv)))
+                rows.append({"study": o["study"], "ph": float(ph), "hold_min": int(t),
+                             "temperature": float(o["temperature"]), "replicate": rep,
+                             "aggregate_out_pct": agg, "acidic_variants": acid, LMW_CE: frag})
+    return pd.DataFrame(rows)
+
+
+def cex_verification(cfg: Config, proc, feeds, n: int) -> pd.DataFrame:
+    """S-CEX-VER: ``n`` cation exchange runs at set-point on the worst-case material of the
+    re-centred low-pH step (``analytics.cex_verification.load_from``), from their own stream
+    (key 16): each run inactivates its own load and purifies it. Aggregate as the step models give
+    it; fragments from the fragment model, measured by nrCE-SDS on load and pool."""
+    from .studies import _response_value, _unit
+    v = _a(cfg)["cex_verification"]
+    vi, cx = _unit(proc, "viral_inactivation"), _unit(proc, "cex")
+    nom = nominal_train(cfg)
+    lf = v["load_from"]
+    rows = []
+    for i in range(int(n)):
+        rng = _rng(cfg, 16, i)
+        vres = vi.run(feeds["viral_inactivation"].copy(), rng, setpoints={k: float(x) for k, x in lf.items()})
+        load = vres.out.copy()
+        cres = cx.run(load.copy(), rng)
+        frag_load = float(frag_vi(cfg, nom["protein_a"], lf["hold_time"], lf["temperature"]))
+        frag_pool = float(frag_cex(cfg, frag_load))
+        fl, fp = measure(cfg, "cesds", np.array([frag_load, frag_pool]), rng)
+        rows.append({"study": v["study"], "run": i + 1,
+                     "load_aggregate_pct": float(load.cqas["aggregates_hmw"]),
+                     "aggregate_out_pct": _response_value(cres, "aggregate_out_pct"),
+                     "hcp_out_ng_mg": _response_value(cres, "hcp_out_ng_mg"),
+                     "step_yield": float(cres.step_yield),
+                     "load_lmw_cesds_pct": float(fl), LMW_CE: float(fp)})
+    out = pd.DataFrame(rows)
+    out["aggregate_fold"] = out["load_aggregate_pct"] / out["aggregate_out_pct"]
+    out["fragment_fold"] = out["load_lmw_cesds_pct"] / out[LMW_CE]
     return out
 
 

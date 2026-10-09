@@ -25,7 +25,10 @@ class BaseUnitOp:
     # -- helpers ---------------------------------------------------------------
     def setpoints(self, overrides: Optional[Dict[str, float]] = None) -> Dict[str, float]:
         """Natural-unit operating point: config set-points updated by overrides."""
-        sp = {p.key: float(p.setpoint) for p in self.uo.parameters}
+        # the set-point the studies were run around: a Version 2.0 set-point (``setpoint_v2``) is the
+        # operating point of routine manufacture (Monte Carlo, PPQ), never of the recorded experiments
+        sp = {p.key: float(p.setpoint_characterized if p.setpoint_characterized is not None else p.setpoint)
+              for p in self.uo.parameters}
         if overrides:
             sp.update(overrides)
         return sp

@@ -131,3 +131,22 @@ expression printed as source. Data-state note for authors: `data-state-2026-10-0
   - INV-002: factual check, promote, new annex builder, REV2_READY, test_grounding;
   - then the plans PCP-004 and PCP-007 to PCP-010 (briefs ready; give authors PLAN-LESSONS.md and the
     data-state note), then the reports, PTP-001, RA-001 and PCMR-001.
+
+## State after the reset (2026-10-09, late; owner: only 4 % of the weekly limit left)
+- Promoted with Version 2.0 annexes: PCMP-001, INV-001, PCP-005, PCP-006 (1ca165e). PCP-003 promoted
+  (41 pp), its annex builder running; until it lands, strict grounding fails on PCP-003 only.
+- PCR-005: final fixes from `factual-PCR-005.run3.md` running (resumed author); new config discrepancy
+  PD-005-06 (load mass from the titre assay). After it: promote, re-anchor `build_report_protein_a`
+  (fitted to the 2026-10-08 text; large job), rhetorical spans.
+- INV-002: final pass done (54 pp); factual check running (`factual-INV-002.md`). Then a short fix pass,
+  promote, new annex builder, REV2_READY, test_grounding ALL_DOCS.
+- PCP-007, PCP-008: authors STOPPED at the start to save budget; the instantiated template drafts
+  `pc_package/PCP-007_cex.DRAFT.qmd` and `PCP-008_aex.DRAFT.qmd` are empty templates; re-launch with the
+  same prompt (it is in this session's history: brief, RUNNER, section_plan, STORY_BIBLE, WRITING_GUIDE,
+  REGISTER_EXEMPLAR, PLAN-LESSONS, data-state note; may read rendered PCMP-001 and the frozen V1.0 plan
+  for content only).
+- Not started: PCP-004, PCP-009, PCP-010; all reports except PCR-005; PTP-001, RA-001, PCMR-001.
+- PCR-003 must record the departures in `pcr003-departures.md`.
+- Small open items: config revision reason "re-analysis of the studies" is wrong for plans (shared, affects
+  every revision history); `D.fig_assurance` y-axis says "Assurance"; INV-002 config wording ("assurance",
+  "design-size check", "criterion attribute"): INV-002 substitutes at display time with asserts.

@@ -167,9 +167,17 @@ differ only in their `UO` key and unit-specific narrative:
 - **Model selection (INV-002 CA3; owner: "all DoEs should be analyzed correctly"):** `D.fit(UO, "rsm",
   resp)` returns the selected model of every output (`adequacy.select_model`: Box-Cox scale, lowest AICc
   over all hierarchical submodels, block kept), on all runs (planned plus any augmentation block), with
-  `status` "selected", or "none" when it fails §7.2 (judged on measured results, no range). The
-  verification of platform worst cases uses the same selection. PCMP-001 is not changed: each DoE report
-  records it as a discrepancy from its plan. `D.planned_full_models()` gives Version 1.0's models.
+  `status` "selected", or "none" when it fails §7.2 (judged on measured results, no range). An exact fit
+  (results with no scatter, e.g. low-pH acidic variants) is never adequate: §7.2 cannot be applied and its
+  bound cannot widen a criterion (owner, 2026-10-09). The verification of platform worst cases uses the
+  same selection. PCMP-001 is not changed: each DoE report records it as a discrepancy from its plan.
+  `D.planned_full_models()` gives Version 1.0's models.
+- **What a Version 2.0 plan may add (STORY_BIBLE §9b):** a plan is an amendment issued after its
+  studies ran. It states what PCMP-001 Version 2.0 sets, plus generic tests applied identically in every
+  plan, and lists each as a change. It never adds a step-specific rule or an execution detail written with
+  the data known (that is INV-001 finding 1 again), and it describes no study made after Version 1.0
+  (hold, augmentation, confirmation and support studies): each report records those as discrepancies
+  from its plan (`campaign.plan_discrepancies`, `discrepancy_register(DOC)`).
 - **Framing rule:** the screening model identifies effects; the **response-surface
   model is the predictive/design-space model**. State this; don't over-claim the
   near-saturated screening fit.
@@ -220,9 +228,10 @@ Steps **without** DoE: **harvest (4)** and **UF/DF (10)** — their plan/report 
 univariate characterization and are correspondingly shorter; do not fabricate a DoE for
 them. The rule follows the source: A-Mab p.85 assumes harvest has no impact on product
 quality "for simplicity", and p.86 leaves UF/DF out of the case study, so there is nothing
-to calibrate a design against. Version 2.0 gives both steps univariate studies
-(`S-HAR-UNI`, `S-UFDF-UNI`: five levels in duplicate, `analytics.univariate_nodoe`, owner's
-decision 2026-10-08). Harvest keeps the no-quality-impact assumption (turbidity responds,
+to calibrate a design against. The Version 1.0 univariate studies (`S-HAR-UNI`, `S-UFDF-UNI`) had no
+recorded results, so Version 2.0 adds new univariate studies made during the re-analysis
+(`S-HAR-UNI2`, `S-UFDF-UNI2`: five levels in duplicate, `analytics.univariate_nodoe`), recorded as
+discrepancies from the plan (PD-004-01, PD-010-01; owner, 2026-10-09). Harvest keeps the no-quality-impact assumption (turbidity responds,
 attributes do not). The UF/DF aggregate effect at high concentration and TMP is our own
 addition (`process.ufdf.model`) and a document must say so.
 

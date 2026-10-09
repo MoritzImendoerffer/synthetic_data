@@ -105,3 +105,29 @@ expression printed as source. Data-state note for authors: `data-state-2026-10-0
   `T.iac_derivation` prints "≥ 16.7" beside "≥ 8.60".
 - Design space on the mean vs per batch (PCP-003 review); KPP process-performance data;
   `revision_history` content; registry title nits.
+
+## State at the usage limit (2026-10-09, about 20:40)
+- Committed: 26e5356 (decision batch), 62fd2f5 (PCP-005, PCMP-001 hold decision), 6c7dd35 (PCR-005 at 67 pp).
+- Uncommitted, safe:
+  - CLAUDE.md (exact fit, amendment scope, UNI2 studies);
+  - tables.py note d) of `T.worst_case_verification` (exact-fit wording). INV-001 and PCMP-001 were
+    being re-rendered for it (`render6_*` logs in the scratchpad). Re-render both, then rebuild their
+    annexes with `gt_one.py`;
+  - PCP-006 draft after its final pass (40 pp, rendered, gate green). One open fix: Table 5.1 names
+    AMV-3021, the titre HPLC, for the load concentration. It should be A280 (AMV-3019). My attempt
+    failed a setup assertion and was reverted; find which assertion (probably the `_amv` lookup:
+    AMV-3019 may not be in AMV_REFS or VIRAL_INACT_AMV_REFS). Then promote PCP-006 and write its annex
+    builder (pattern: `build_plan_protein_a`).
+- Agents running at the limit; their outputs land here:
+  - INV-002 final fix: draft and `status-INV-002.md`;
+  - PCP-003 review run 2: `content-review-PCP-003.run2.md`;
+  - PCP-003 factual pass: `factual-PCP-003.md`;
+  - PCR-005 factual run 3: `factual-PCR-005.run3.md`.
+  If a file is missing, that agent was cut off: rerun it.
+- Next:
+  - PCP-003 final fix pass from the run-2 review and the factual pass, then promote and annex;
+  - PCR-005 final fixes from factual run 3, then promote, re-anchor `build_report_protein_a`, and
+    update the rhetorical spans;
+  - INV-002: factual check, promote, new annex builder, REV2_READY, test_grounding;
+  - then the plans PCP-004 and PCP-007 to PCP-010 (briefs ready; give authors PLAN-LESSONS.md and the
+    data-state note), then the reports, PTP-001, RA-001 and PCMR-001.

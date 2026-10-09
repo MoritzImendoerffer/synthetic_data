@@ -443,7 +443,8 @@ def worst_case_verification(steps: Optional[List[str]] = None, label="tbl-iac-ve
              ("c)", "The one-sided 95 % prediction bound of a single batch is better than the platform "
                     "worst case. The criteria upstream of this step were recalculated with the bound."),
              ("d)", "The one-sided 95 % prediction bound of a single batch is better than the platform "
-                    "worst case, but the model fails an adequacy test of PCMP-001, so the platform "
+                    "worst case, but the model is not adequate by the criteria of PCMP-001: it fails a "
+                    "test, or it fits the results exactly and the tests cannot be applied. The platform "
                     "value stands.")]
     used = {m for row in body for c in row for m in re.findall(r"\^([a-d]\))\^", str(getattr(c, "text", c)))}
     rounding = [("", "Computed from unrounded values. A criterion recomputed from the rounded values shown can differ in its last digit.")]

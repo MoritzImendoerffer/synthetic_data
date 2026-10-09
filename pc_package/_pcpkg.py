@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 
 import numpy as np  # noqa: F401  (re-exported for document chunks)
@@ -575,7 +576,8 @@ def title_block(doc_id, unit_op=None):
     rows = [
         ("Document ID", doc_id),
         ("Document class", cls),
-        ("Title", f"{cls} — {subject}" if unit_op is None else f"{cls}: {unit_op}"),
+        # a non-breaking space keeps "(Step 6)" on one line
+        ("Title", (f"{cls} — {subject}" if unit_op is None else f"{cls}: {unit_op}").replace("Step ", "Step\u00a0")),
         ("Product", PRODUCT),
         ("Version", ver),
         ("Effective date", eff),
@@ -583,7 +585,10 @@ def title_block(doc_id, unit_op=None):
         ("Status", "Approved (synthetic)"),
         ("Document owner", "Quality Assurance (QA)" if doc_id in INVESTIGATIONS
          else "Manufacturing Science & Technology (MSAT)"),
-        ("Sponsor / sites", f"{COMPANY}; {SENDING_SITE} → {RECEIVING_SITE}"),
+        # the two sites named for what each does, not joined by an arrow (PCP-006 author, 2026-10-09)
+        ("Sponsor", COMPANY),
+        ("Development site", re.sub(r"\s*\(.*\)$", "", SENDING_SITE.replace(f"{COMPANY} — ", ""))),
+        ("Commercial drug substance site", re.sub(r"\s*\(.*\)$", "", RECEIVING_SITE.replace(f"{COMPANY} — ", ""))),
     ]
     return md_table(["Field", "Value"], rows, [22, 78])
 

@@ -118,8 +118,13 @@ def cumulative_claims(cfg: Config) -> pd.DataFrame:
 # --------------------------------------------------------------------------------------
 # Verification: did this campaign's studies show the worst case the criteria assumed?
 # --------------------------------------------------------------------------------------
+#: the one-sided confidence of the bound that may replace a platform worst case (PCMP-001 §7.5): the
+#: upper end of a two-sided interval at 2 x (1 - BOUND_CONFIDENCE)
+BOUND_CONFIDENCE = 0.95
+
+
 def _nor_worst(cfg: Config, step: str, df: pd.DataFrame, col: str, feed: float, mode: str,
-               form: str = "selected"):
+               form: str = "selected", bound: str = "batch"):
     """Worst predicted fold (mode 'fold') or increase (mode 'add') over the NOR box of the step's
     response-surface factors, from the model INV-002 corrective action CA3 selects for the output
     (``adequacy.select_model``: Box-Cox scale, AICc over the hierarchical submodels of the full
@@ -157,8 +162,12 @@ def _nor_worst(cfg: Config, step: str, df: pd.DataFrame, col: str, feed: float, 
     # the upper confidence limit of the output where a high output is bad (a fold computed from it
     # is a lower bound on the clearance), or the upper limit of the increase; one-sided 95 %: the
     # upper limit of the two-sided 90 % interval, on the scale of the model, back-transformed
-    ci = sel["model"].get_prediction(X).summary_frame(alpha=0.10)
-    y, up = back(ci["mean"].to_numpy()), back(ci["mean_ci_upper"].to_numpy())
+    # bound="batch": the one-sided prediction bound of a single batch, the rule in force (owner,
+    # 2026-10-09; PCMP-001 §7.5); bound="mean": the confidence bound of the mean output, the rule as
+    # first set on 2026-10-08, kept for comparison only
+    ci = sel["model"].get_prediction(X).summary_frame(alpha=2 * (1 - BOUND_CONFIDENCE))
+    y = back(ci["mean"].to_numpy())
+    up = back(ci["mean_ci_upper" if bound == "mean" else "obs_ci_upper"].to_numpy())
     worst = float((feed / y).min()) if mode == "fold" else float((y - feed).max())
     bound = float((feed / up).min()) if mode == "fold" else float((up - feed).max())
     adq = {"r2_gap": sel["gap"], "p_lof": sel["p_lof"], "adequate": bool(sel["adequate"])}
@@ -192,7 +201,7 @@ def _adequacy(cfg: Config, model, df: pd.DataFrame, col: str) -> Dict[str, float
 
 def verification(cfg: Config, data: Dict[str, pd.DataFrame], ps: pd.DataFrame,
                  frag_nominal: Dict[str, float], vi_feed_acidic: float,
-                 form: str = "selected") -> pd.DataFrame:
+                 form: str = "selected", bound: str = "batch") -> pd.DataFrame:
     """For every platform worst case the IACs rely on, what THIS campaign showed for that step.
 
     Two numbers. ``observed_edge`` is the worst value among the response-surface runs, which sit
@@ -227,7 +236,7 @@ def verification(cfg: Config, data: Dict[str, pd.DataFrame], ps: pd.DataFrame,
                 df = data[step]
                 if col in df and df[col].notna().all():
                     edge = float((feed / df[col]).min()) if mode == "fold" else float((df[col] - feed).max())
-                    nor, nor_bound, adq = _nor_worst(cfg, step, df, col, feed, mode, form)
+                    nor, nor_bound, adq = _nor_worst(cfg, step, df, col, feed, mode, form, bound)
             met = None if nor is None else (nor >= assumed if kind == "fold_min" else nor <= assumed)
             # widening (owner's decision 2026-10-08): allowed only where the A-Mab worst case beats
             # the platform value even at its 95 % confidence bound

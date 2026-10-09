@@ -232,7 +232,7 @@ def iac_derivation(steps: Optional[List[str]] = None, label="tbl-iac") -> CTable
     step_a = [] if one_step else ["P{2.9cm}"]      # one line for most step names
     return CTable(
         header=[[C("Attribute", rs=2), C("DS criterion", rs=2), *step_h,
-                 C("Downstream worst case", cs=2), C("IAC", rs=2),
+                 C("Downstream worst case\n(platform or verified)", cs=2), C("IAC", rs=2),
                  C("Basis", rs=2)],
                 ["Clearance fold", "Increase"]],
         body=body, align=["P{2.4cm}", "l", *step_a, "r", "r", "l", "P{2.6cm}"], size="footnotesize",
@@ -264,11 +264,13 @@ def criteria_change(steps: Optional[List[str]] = None, label="tbl-criteria-chang
             n = new[(new["step_key"] == sk) & (new["response"] == resp)]
             cqa = (n.iloc[0]["cqa"] if not n.empty else o.iloc[0]["cqa"])
             st = "lower" if cqa.startswith("lrv") else ("two_sided" if (not o.empty and o.iloc[0]["low"] > 0 and not cqa.startswith("lrv")) else "upper")
+            # the state of the Version 1.0 criterion in its own column, a dash for the rule: centred
+            # across both, "none" read as either (PCP-006 review run 2)
             if o.empty and cqa == "fragments_lmw":
-                ocells = [C("not assessed^c)^", cs=2)]
+                ocells = ["not assessed^c)^", "–"]
                 marks.add("c)")
             elif o.empty:
-                ocells = [C("none^a)^", cs=2)]
+                ocells = ["none^a)^", "–"]
                 marks.add("a)")
             else:
                 orow = o.iloc[0]
@@ -284,9 +286,12 @@ def criteria_change(steps: Optional[List[str]] = None, label="tbl-criteria-chang
                 short = {"drug substance": "Drug substance", "platform claim": "Platform claim",
                          "back-calculated": "Carried back"}.get(b_)
                 if short is None:
+                    # say what the criterion was tightened or widened FROM: beside a Version 1.0
+                    # value three times smaller, "tightened" alone read as wrong (PCP-006 review)
                     t_, w_ = "tightened" in b_, "widened" in b_
-                    short = "Carried back, " + " and ".join(
+                    short = ("Carried back, " + " and ".join(
                         [x for x, f in (("tightened^d)^", t_), ("widened^e)^", w_)) if f])
+                        + " from " + crit(nrow["iac_low_apriori"], nrow["iac_high_apriori"], nrow["spec_type"]))
                     marks.update({"d)"} if t_ else set()); marks.update({"e)"} if w_ else set())
                 ncells = [crit(nrow["iac_low"], nrow["iac_high"], nrow["spec_type"]), short]
             row = ([C(STEP_NAME[sk], rs=len(resps))] if i == 0 else []) + [ATTR_NAME[cqa], *ocells, *ncells]
@@ -1220,11 +1225,12 @@ def model_adequacy(steps: Optional[List[str]] = None, failing_only: bool = True,
         header=[[C("Step", rs=2), C("Attribute", rs=2), C("Runs", rs=2), C("Terms", rs=2),
                  C("R²", rs=2), C("Predicted\nR²", rs=2), C("R² minus\npredicted R²", rs=2),
                  C("p-value", cs=2)], ["Lack of fit", "Model"]],
-        body=body, align=["P{2.4cm}", "P{3.6cm}", "r", "r", "r", "r", "r", "r", "r"],
-        notes=[("", f"Full quadratic model on the planned runs. Terms include the intercept. "
-                    f"PCMP-001 §7.2 requires R² minus predicted R² of at most "
-                    f"{float(th['max_r2_minus_pred_r2']):.2f} and no significant lack of fit "
-                    f"(α = {float(th['lof_alpha']):g}).")],
+        body=body, align=["P{2.4cm}", "P{4.4cm}", "r", "r", "r", "r", "r", "r", "r"],
+        notes=[("", f"Full quadratic model on the planned runs. Terms include the intercept. PCMP-001 "
+                    f"§7.2 requires a significant model F-test (α = {float(th['effect_alpha']):g}), no "
+                    f"significant lack of fit (α = {float(th['lof_alpha']):g}) and R² minus predicted R² of "
+                    f"at most {float(th['max_r2_minus_pred_r2']):.2f}. R² minus predicted R² is calculated "
+                    "before rounding.")],
         notes_per_row=True, size="footnotesize",
         caption="Response-surface models that do not meet the model-adequacy criteria of PCMP-001."
                 if failing_only else "Model adequacy of the response-surface models.",
@@ -1265,16 +1271,17 @@ def adequacy_remedy(steps: Optional[List[str]] = None, label: str = "tbl-remedy"
         # text height leaves an empty landscape page before it (tables are placed [H]; INV-002
         # authoring, 2026-10-08)
         body=body, align=["P{2.0cm}", "P{3.6cm}", "P{7.0cm}", "r", "P{2.5cm}", "P{4.8cm}"],
-        notes=[("a)", "The step's augmentation has the largest number of runs any of its models "
-                      "needs."),
+        notes=[("a)", "The step's augmentation has the largest number of runs that any of the models "
+                      "the rule augments at that step needs."),
                ("b)", "Terms significant at α = "
                       f"{float(_cfg().raw()['campaign']['thresholds']['effect_alpha']):g}. A main effect in "
                       "parentheses is not significant and is kept because an interaction or a square of "
                       "it remains in the refit."),
                ("", f"Runs needed: the smallest augmentation that gives an assurance of at least "
-                    f"{float(ma['assurance']):.2f} that the planned model meets PCMP-001 §7.2 "
-                    "(–: not reached within the size of the planned design, or not computed when "
-                    "the refit keeps no effect).")],
+                    f"{float(ma['assurance']):.2f} that the planned model meets PCMP-001 §7.2. A dash means "
+                    "not reached within the size of the planned design, or not computed when the refit keeps "
+                    "no effect. For a refitted model the number is what an augmentation would have needed, "
+                    "and no runs were made.")],
         notes_per_row=True, size="footnotesize", landscape=True,
         caption="Remedy of each model that does not meet the model-adequacy criteria.", label=label)
 
@@ -1305,18 +1312,37 @@ def sample_size(steps: Optional[List[str]] = None, label: str = "tbl-sample-size
                  C("Runs\nneeded", rs=2), C("Lowest\npower", rs=2)],
                 [str(m) for m in show]],
         body=body, align=["P{2.2cm}", "P{3.2cm}"] + ["r"] * (len(show) + 2),
-        notes=[("", f"Assurance: the share of {int(ma['reps']):,} simulated data sets in which the "
-                    "planned model (full quadratic with a block term) meets PCMP-001 §7.2. The data "
-                    "are simulated from the refit of the planned runs and its residual standard "
-                    "deviation. Further runs: a D-optimal augmentation of that size. Sizes in steps "
-                    f"of {int(ma['step'])} were computed; the table shows every fourth. Runs "
-                    f"needed: the smallest size with an assurance of at least {target:.2f} (–: not "
-                    "reached within the size of the planned design). Lowest power: the power, at "
-                    f"that size and α = {float(_cfg().raw()['campaign']['thresholds']['effect_alpha']):g}, "
-                    "of the weakest effect the refit found.")],
+        # the wording INV-002 settled on after review run 1 (2026-10-09): what the simulation
+        # conditions on, its scale, and why no size takes the assurance much above 1 - lof_alpha
+        notes=[("", f"Assurance: the probability, at the effects estimated from the planned runs, that the "
+                    "planned model meets the lack-of-fit test and the limit on overfitting of PCMP-001 "
+                    f"§7.2, estimated from {int(ma['reps']):,} simulated data sets. It does not include the "
+                    "uncertainty of those estimates. The planned model is the full quadratic, with a block "
+                    "term where there are further runs. The data are simulated on the raw scale from the "
+                    "refit of the planned runs and its residual standard deviation. Further runs: a "
+                    f"D-optimal augmentation of that size. Sizes in steps of {int(ma['step'])} were computed, "
+                    "and the table shows every fourth. A dash in an assurance column marks a size larger "
+                    "than the planned design, which was not computed. Runs needed: the smallest size with "
+                    f"an assurance of at least {target:.2f}, and a dash where it is not reached within the "
+                    "size of the planned design. Lowest power: the power, at that size and α = "
+                    f"{float(_cfg().raw()['campaign']['thresholds']['effect_alpha']):g}, of the weakest "
+                    "significant effect of the refit. The lack-of-fit test rejects a correct model in "
+                    f"{100 * float(_cfg().raw()['campaign']['thresholds']['lof_alpha']):g} % of data sets, so "
+                    f"no size takes the assurance much above {1 - float(_cfg().raw()['campaign']['thresholds']['lof_alpha']):.2f}.")],
         notes_per_row=True, size="footnotesize", landscape=True,
         caption="Assurance that the planned model meets the model-adequacy criteria, by the number "
                 "of further runs.", label=label)
+
+
+def _name_unit(name: str, unit: str) -> str:
+    """A parameter with its unit for a column header: "Load pH", "Culture temperature\n(°C)",
+    "Dissolved CO2\n(pCO2, mmHg)" (no unit that only repeats the name, no double parentheses)."""
+    if unit in ("", "pH") or name.endswith(unit):
+        return name
+    if name.endswith(")"):
+        i = name.rindex("(")
+        return name[:i].rstrip() + "\n" + name[i:-1] + ", " + unit + ")"
+    return f"{name}\n({unit})"
 
 
 def augmentation_design(step: str, label: Optional[str] = None) -> CTable:
@@ -1326,17 +1352,25 @@ def augmentation_design(step: str, label: Optional[str] = None) -> CTable:
     cfg = _cfg()
     factors = [c[len("coded_"):] for c in a.columns if c.startswith("coded_")]
     codes = [chr(ord("A") + i) for i in range(len(factors))]
+    # one number of decimals per factor (6.60, 6.85, 7.10, not 6.6, 6.85, 7.1), and each setting
+    # column headed by the factor's name, so two columns in the same unit are told apart without
+    # the note (INV-002 review run 1, 2026-10-09)
+    def _dec(v):
+        t = f"{float(v):g}"
+        return len(t.split(".")[1]) if "." in t else 0
+    dec = {f: max(_dec(v) for v in a[f]) for f in factors}
     body = []
     for _, r in a.iterrows():
         body.append([str(int(r["run"]))] + [f"{int(round(r['coded_' + f])):+d}".replace("+0", "0")
                                             for f in factors]
-                    + [pval(r[f]) for f in factors])
+                    + [f"{float(r[f]):.{dec[f]}f}" for f in factors])
     units = [re.sub(r"\s*\(.*\)$", "", cfg.unit_op(step).param(f).unit) for f in factors]
-    note = ". ".join(f"{k}, {cfg.unit_op(step).param(f).name}" for k, f in zip(codes, factors)) + "."
+    names = [cfg.unit_op(step).param(f).name for f in factors]
+    note = ". ".join(f"{k}, {n}" for k, n in zip(codes, names)) + "."
     return CTable(
         header=[[C("Run", rs=2), C("Coded level", cs=len(factors)), C("Setting", cs=len(factors))],
-                codes + [f"{k} ({u})" for k, u in zip(codes, units)]],
-        body=body, align=["r"] + ["c"] * len(factors) + ["r"] * len(factors),
+                codes + [f"{k}, " + _name_unit(n, u) for k, n, u in zip(codes, names, units)]],
+        body=body, align=["r"] + ["c"] * len(factors) + ["R{2.1cm}"] * len(factors),
         notes=[("", "Factors: " + note), ("", "Block 2. Runs are numbered on from the planned "
                                               "design.")],
         notes_per_row=True, size="footnotesize",

@@ -145,7 +145,10 @@ that belongs to one cell. The prose then says what the table shows, not what eac
 Set every table the way a report sets it (owner's comment 2026-10-08). Where an index column
 repeats down the rows (a step, an attribute, a study), merge its cells: build the table with
 `T.frame(df, caption, label, merge=["Step", ...])` instead of a pipe table, and the render gate
-fails a table that repeats an index cell instead. Keep headers narrow. Break a long header over two
+fails a table that repeats an index cell instead. A grouping variable is always a column of its
+own with merged cells, never a heading row inside the body (owner, 2026-10-09: "Do not mix
+grouping variables in tables as rows"): a design matrix has a "Run type" column, not rows that say
+"Factorial runs" between the runs. Keep headers narrow. Break a long header over two
 lines (`header={"col": "Drug-substance\ncriterion"}`), or use an abbreviation that the table's
 note and the Abbreviations table both define. A table may be set smaller than the text, but no
 smaller than 8 pt (the owner's limit, 2026-10-08), and the render gate fails any text below it. A

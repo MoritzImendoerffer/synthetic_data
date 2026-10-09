@@ -266,10 +266,11 @@ class CTable:
                 if col in starts:
                     c = starts[col]
                     txt = _latex(c.text)
-                    if r"\newline" in txt and ("p{" not in aligns[col] or c.align):
+                    if r"\newline" in txt and ("p{" not in aligns[col] or c.align or c.cs > 1):
                         # a line break in a column that does not wrap (a header, a short label), or
-                        # in a cell with its own alignment, which becomes a non-wrapping
-                        # \multicolumn below
+                        # in a cell with its own alignment or spanning columns, which becomes a
+                        # non-wrapping \multicolumn below (a \newline there was dropped, and the words
+                        # either side ran together: "pH 3.40against", PCP-006 Table 7.1)
                         a_ = c.align or (aligns[col] if len(aligns[col]) == 1 else "l")
                         txt = r"\makecell[" + a_ + "]{" + txt.replace(r"\newline ", r"\\") + "}"
                     if c.rs > 1 and _lines_needed(c.text, _w(col, c), lo) <= sum(row_lines[r:r + c.rs]):

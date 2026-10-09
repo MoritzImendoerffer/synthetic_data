@@ -488,6 +488,14 @@ def fig_diagnostics(key, resp):
 PAR_SEED = 20240724
 PAR_MC_N = 2000          # Monte-Carlo draws per grid point
 PAR_GRID = 81            # parameter grid points across the characterization range
+PAR_GRID_SETPOINT = 201  # grid points of the set-point (design-centre) PAR analysis
+#: the NOR spans this many standard deviations of a parameter's draw in the NOR-propagated
+#: analysis: SD = NOR width / NOR_SD_DIVISOR (3 SD either side of the set-point), clipped to the range
+NOR_SD_DIVISOR = 6.0
+#: the coverage of the central interval of the NOR-propagated analysis, and of a prediction interval
+PI_LEVEL = 0.95
+#: the one-sided confidence level of the bound in the verification of platform worst cases (iac.py)
+from amab_process.iac import BOUND_CONFIDENCE as VERIFICATION_BOUND  # noqa: E402
 
 # response key -> CQA-register key (for responses not named as a CQA key directly)
 RESP_TO_CQA = {
@@ -555,6 +563,26 @@ def _iac_row(key, resp):
 _CRITERIA = {"rev": "2.0"}
 
 
+class criteria_from:
+    """Context manager: inside it the Version 2.0 criteria are read from another criteria file of
+    the same form as ``iac.csv`` (``iac_full.csv``, ``iac_batch.csv``). The models stay the selected
+    ones. For showing what a conclusion would be under criteria derived another way."""
+    def __init__(self, name):
+        self.name = name
+
+    def __enter__(self):
+        self._old = _CRITERIA.get("file")
+        _CRITERIA["file"] = self.name
+        return self
+
+    def __exit__(self, *a):
+        if self._old is None:
+            _CRITERIA.pop("file", None)
+        else:
+            _CRITERIA["file"] = self._old
+        return False
+
+
 class criteria_without_ca3:
     """Context manager: inside it the Version 2.0 criteria are the ones the verification on the full
     quadratic models gives (``iac_full.csv``), the criteria as they would have been without INV-002
@@ -606,7 +634,10 @@ def ca3_criteria_sensitivity():
                      "qualified_without_ca3": None if not q_wo or not q_wo.get("judged") else bool(q_wo["qualified"]),
                      "criterion_in_force": None if acc_in is None else acc_in[1] if acc_in[2] == "upper" else acc_in[0],
                      "criterion_without_ca3": None if acc_wo is None else acc_wo[1] if acc_wo[2] == "upper" else acc_wo[0],
-                     "criterion_moved": acc_in != acc_wo, "met_in_force": met_in, "met_without_ca3": met_wo,
+                     "criterion_moved": (acc_in is None) != (acc_wo is None) or (acc_in is not None and not np.allclose(
+                         [x if np.isfinite(x) else 0.0 for x in acc_in[:2]],
+                         [x if np.isfinite(x) else 0.0 for x in acc_wo[:2]], rtol=1e-6, atol=1e-9)),
+                     "met_in_force": met_in, "met_without_ca3": met_wo,
                      "conclusion_differs": met_in != met_wo, "pars_same": bool(same_par)})
     out = pd.DataFrame(rows)
     out["qualification_differs"] = [a is not None and b is not None and a != b
@@ -1033,7 +1064,7 @@ def _contiguous_range(xs, mask, center=0.0):
     return float(xs[lo]), float(xs[hi])
 
 
-def par_at_design_centre(key, resp, factor, n_grid=201):
+def par_at_design_centre(key, resp, factor, n_grid=PAR_GRID_SETPOINT):
     """PAR of `factor` for `resp` with all other factors at the DESIGN CENTRE (coded 0).
 
     The design centre is the midpoint of each factor's characterization range. It is **not**
@@ -1103,7 +1134,7 @@ def _mc_predictive(r, key, factor, x_coded, others, rng, n_mc, residual=True):
     coded = pd.DataFrame({factor: np.full(n_mc, x_coded)})
     for g in others:
         p = CFG.unit_op(key).param(g)
-        w = max((p.nor[1] - p.nor[0]) / 6.0, 1e-9)
+        w = max((p.nor[1] - p.nor[0]) / NOR_SD_DIVISOR, 1e-9)
         nat = np.clip(rng.normal(p.setpoint, w, n_mc), p.prange[0], p.prange[1])
         coded[g] = _to_coded(nat, key, g)
     noise = rng.normal(0.0, r["rmse"], n_mc)      # drawn either way: the stream stays aligned
@@ -1506,7 +1537,7 @@ def ofat_analysis():
     return out
 
 
-def cex_verification_summary():
+def cex_verification_summary(runs_file="cex_verification.csv"):
     """S-CEX-VER (PD-006-02): cation exchange runs at set-point on the worst-case material of the
     re-centred low-pH step, per attribute.
 
@@ -1522,7 +1553,7 @@ def cex_verification_summary():
     from scipy import stats as _st
     v = CFG.raw()["analytics"]["cex_verification"]
     g = csv("cex_verification_n.csv")
-    runs = csv("cex_verification.csv")
+    runs = csv(runs_file)
     alpha = float(CFG.raw()["campaign"]["thresholds"]["effect_alpha"])
     z = float(_st.norm.ppf(1 - alpha))
     cols = {"aggregates_hmw": ("aggregate_fold", "aggregate_out_pct", "load_aggregate_pct", "Aggregate"),
@@ -1548,6 +1579,55 @@ def cex_verification_summary():
     out = pd.DataFrame(rows)
     assert int(out["n_runs"].iloc[0]) == int(out["n_required"].max())   # as many runs as the larger need
     return out
+
+
+def vi_worst_case_summary():
+    """S-VI-WC (PD-006-03): the cation exchange decision on the material of the harshest combination
+    within the PAR, by the same rule as S-CEX-VER (``cex_verification_summary``), and the hold output
+    of each run against the step's intermediate acceptance criteria."""
+    s = cex_verification_summary("vi_worst_case.csv")
+    w = csv("vi_worst_case.csv")
+    hold = []
+    for col, resp in (("load_aggregate_pct", "aggregate_out_pct"), ("load_lmw_cesds_pct", "lmw_cesds_pct"),
+                      ("load_acidic_variants", "acidic_variants")):
+        lo, hi, typ = ipc_limit("viral_inactivation", resp)
+        v = w[col].to_numpy(float)
+        ok = ((v >= lo) if typ in ("lower", "two_sided") else True) & ((v <= hi) if typ in ("upper", "two_sided") else True)
+        hold.append({"response": resp, "min": float(v.min()), "max": float(v.max()), "crit_lo": lo, "crit_hi": hi,
+                     "spec_type": typ, "met": bool(np.all(ok))})
+    return s, pd.DataFrame(hold)
+
+
+def osmolality_analysis():
+    """S-BRX-OSM (PD-003-01): each bioreactor output regressed on osmolality (a straight line over
+    its three levels, with the other parameters at their least favourable NOR combination for acidic
+    variants). Per output: the slope across the NOR, its p-value, and at each level the predicted mean
+    and the 95 % prediction interval of a single batch, at manufacturing scale (the scale-down offset
+    of the output applied), judged against the criterion of the step."""
+    import statsmodels.formula.api as smf
+    d = csv("osmolality_study.csv")
+    o = CFG.raw()["analytics"]["osmolality_study"]
+    p = CFG.unit_op("bioreactor").param(o["factor"])
+    half = (p.nor[1] - p.nor[0]) / 2
+    d = d.assign(x=(d[o["factor"]] - p.setpoint) / half)
+    rows = []
+    for resp in st.DOE_RESPONSES["bioreactor"]:
+        m = smf.ols(f"{resp} ~ x", data=d).fit()
+        acc = effective_acceptance("bioreactor", resp)
+        for lev in sorted(d[o["factor"]].unique()):
+            x = (lev - p.setpoint) / half
+            sf = m.get_prediction(pd.DataFrame({"x": [x]})).summary_frame(alpha=1 - PI_LEVEL)
+            # the study ran in the scale-down model: its results are taken to manufacturing scale by the
+            # output's scale-down offset before they are judged, as every result is
+            mean, plo, phi = (float(to_mfg("bioreactor", resp, float(sf[c].iloc[0])))
+                              for c in ("mean", "obs_ci_lower", "obs_ci_upper"))
+            lo, hi, typ = acc if acc else (np.nan, np.nan, None)
+            rows.append({"response": resp, "level": float(lev), "slope_nor": float(m.params["x"]),
+                         "p_slope": float(m.pvalues["x"]), "mean": mean, "pi_low": plo, "pi_high": phi,
+                         "sd": float(np.sqrt(m.mse_resid)), "crit_lo": lo, "crit_hi": hi, "spec_type": typ,
+                         "mean_met": None if typ is None else bool((typ == "upper" or mean >= lo) and (typ == "lower" or mean <= hi)),
+                         "pi_met": None if typ is None else bool((typ == "upper" or plo >= lo) and (typ == "lower" or phi <= hi))})
+    return pd.DataFrame(rows)
 
 
 def par_margins(key):

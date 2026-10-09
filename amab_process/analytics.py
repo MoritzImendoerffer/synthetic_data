@@ -515,34 +515,102 @@ def vi_ofat(cfg: Config, proc, feeds) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def cex_verification(cfg: Config, proc, feeds, n: int) -> pd.DataFrame:
-    """S-CEX-VER: ``n`` cation exchange runs at set-point on the worst-case material of the
-    re-centred low-pH step (``analytics.cex_verification.load_from``), from their own stream
-    (key 16): each run inactivates its own load and purifies it. Aggregate as the step models give
-    it; fragments from the fragment model, measured by nrCE-SDS on load and pool."""
+def _position(cfg: Config, step: str, param: str, pos: str) -> float:
+    """A named position of a parameter, in force: ``range_low``/``range_high`` (the range studied),
+    ``nor_low``/``nor_high`` (the NOR in force) or ``setpoint`` (the set-point in force)."""
+    p = cfg.unit_op(step).param(param)
+    return float({"range_low": p.prange[0], "range_high": p.prange[1], "nor_low": p.nor[0],
+                  "nor_high": p.nor[1], "setpoint": p.setpoint}[pos])
+
+
+def _vi_cex_runs(cfg: Config, proc, feeds, n: int, study: str, lf: Dict[str, float],
+                 key: int) -> pd.DataFrame:
+    """``n`` runs of the low-pH hold at the settings ``lf``, each followed by a cation exchange run at
+    set-point on its own material, from the stream ``key``. The hold output (aggregate, fragments by
+    nrCE-SDS, acidic variants) is the load of the cation exchange run."""
     from .studies import _response_value, _unit
-    v = _a(cfg)["cex_verification"]
     vi, cx = _unit(proc, "viral_inactivation"), _unit(proc, "cex")
     nom = nominal_train(cfg)
-    lf = v["load_from"]
+    icief_cv = float(_a(cfg)["sdm"]["assay_cv"]["acidic_variants"])
     rows = []
     for i in range(int(n)):
-        rng = _rng(cfg, 16, i)
+        rng = _rng(cfg, key, i)
         vres = vi.run(feeds["viral_inactivation"].copy(), rng, setpoints={k: float(x) for k, x in lf.items()})
         load = vres.out.copy()
         cres = cx.run(load.copy(), rng)
         frag_load = float(frag_vi(cfg, nom["protein_a"], lf["hold_time"], lf["temperature"]))
         frag_pool = float(frag_cex(cfg, frag_load))
         fl, fp = measure(cfg, "cesds", np.array([frag_load, frag_pool]), rng)
-        rows.append({"study": v["study"], "run": i + 1,
+        # acidic variants of the hold output carry the icIEF repeatability, as in S-VI-OFAT (the step
+        # model gives them without noise); drawn last, so no value above moves
+        acid = float(load.cqas["acidic_variants"]) * float(np.exp(rng.normal(0.0, icief_cv)))
+        rows.append({"study": study, "run": i + 1,
                      "load_aggregate_pct": float(load.cqas["aggregates_hmw"]),
                      "aggregate_out_pct": _response_value(cres, "aggregate_out_pct"),
                      "hcp_out_ng_mg": _response_value(cres, "hcp_out_ng_mg"),
                      "step_yield": float(cres.step_yield),
-                     "load_lmw_cesds_pct": float(fl), LMW_CE: float(fp)})
+                     "load_lmw_cesds_pct": float(fl), LMW_CE: float(fp),
+                     "load_acidic_variants": acid})
     out = pd.DataFrame(rows)
     out["aggregate_fold"] = out["load_aggregate_pct"] / out["aggregate_out_pct"]
     out["fragment_fold"] = out["load_lmw_cesds_pct"] / out[LMW_CE]
+    return out
+
+
+def cex_verification(cfg: Config, proc, feeds, n: int) -> pd.DataFrame:
+    """S-CEX-VER: ``n`` cation exchange runs at set-point on the worst-case material of the
+    re-centred low-pH step (``analytics.cex_verification.load_from``), from their own stream
+    (key 16): each run inactivates its own load and purifies it. Aggregate as the step models give
+    it; fragments from the fragment model, measured by nrCE-SDS on load and pool."""
+    v = _a(cfg)["cex_verification"]
+    return _vi_cex_runs(cfg, proc, feeds, n, v["study"], v["load_from"], 16)
+
+
+def vi_worst_case(cfg: Config, proc, feeds, n: int) -> pd.DataFrame:
+    """S-VI-WC (PD-006-03): the low-pH hold at the harshest combination within the PAR after the
+    hold-time NOR was revised (``analytics.vi_worst_case.load_from``, named positions resolved in
+    force), each run followed by a cation exchange run at set-point, from its own stream (key 18).
+    As many runs as the cation exchange verification (``n``)."""
+    w = _a(cfg)["vi_worst_case"]
+    lf = {k: _position(cfg, "viral_inactivation", k, pos) for k, pos in w["load_from"].items()}
+    return _vi_cex_runs(cfg, proc, feeds, n, w["study"], lf, 18)
+
+
+def osmolality_runs(cfg: Config) -> int:
+    """Runs per level of S-BRX-OSM: the smallest number for which the straight-line prediction at the
+    highest of three equally spaced levels has a standard error of at most ``se_fraction`` of the
+    run-to-run SD, that is n >= (1/3 + 1/2) / se_fraction**2 for levels coded -1, 0, +1."""
+    o = _a(cfg)["osmolality_study"]
+    k = len(o["levels"])
+    codes = np.linspace(-1, 1, k)
+    need = (1.0 / k + 1.0 / float((codes ** 2).sum())) / float(o["se_fraction"]) ** 2
+    return int(np.ceil(need - 1e-9))
+
+
+def osmolality_study(cfg: Config, proc, feeds) -> pd.DataFrame:
+    """S-BRX-OSM (PD-003-01): osmolality at its NOR low, set-point and NOR high, with the four
+    response-surface parameters at their least favourable NOR combination for acidic variants
+    (``analytics.osmolality_study.at``, named positions in force), ``osmolality_runs`` cultures per
+    level, from its own stream (key 19). Osmolality is set independently of pCO2 (``control``)."""
+    from .studies import DOE_RESPONSES, _response_value, _unit
+    o = _a(cfg)["osmolality_study"]
+    uo = _unit(proc, "bioreactor")
+    fac = o["factor"]
+    at = {k: _position(cfg, "bioreactor", k, pos) for k, pos in o["at"].items()}
+    levels = [_position(cfg, "bioreactor", fac, pos) for pos in o["levels"]]
+    n = osmolality_runs(cfg)
+    rows = []
+    for li, lv in enumerate(levels):
+        for rep in range(n):
+            rng = _rng(cfg, 19, li, rep)
+            res = uo.run(None, rng, setpoints={**at, fac: lv})
+            row = {"study": o["study"], "level": o["levels"][li], fac: lv, "replicate": rep + 1, **at}
+            for r in DOE_RESPONSES["bioreactor"]:
+                row[r] = _response_value(res, r)
+            rows.append(row)
+    out = pd.DataFrame(rows)
+    out.insert(1, "run", range(1, len(out) + 1))
+    out["run_order"] = _rng(cfg, 19, 99).permutation(len(out)) + 1
     return out
 
 

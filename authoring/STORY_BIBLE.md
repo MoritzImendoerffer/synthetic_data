@@ -302,12 +302,13 @@ is not a deviation: no procedure or GMP requirement was departed from. What the 
 is a computed result, and the report states it openly, whatever it is
 (`T.sdm_offsets(["protein_a"], studies=["S-PA-SDM"])` against `T.sdm_offsets(["protein_a"])`,
 `D.offset_qualification(..., studies=...)`). Under the final analysis (the log-scale model, a ratio
-offset, the criteria in force) the model is qualified for pool host cell protein on the three planned
-runs alone as well, so the further runs did not change the conclusion: they narrowed the interval of
-the ratio. Never claim that the three-run result would have failed; the data no longer say so. The
-qualification rule and the criterion were not changed because of the further runs. Only the number of
-replicates grew, and the report says that the decision to add runs was taken during the re-analysis,
-after the three-run result was seen.
+offset, the single-batch criterion in force, the narrowed load NOR) the model is qualified for pool host
+cell protein on all nine runs and would NOT be on the three planned runs alone: the further runs narrowed
+the interval of the ratio enough to make the qualification possible. State it plainly and computed; a
+re-run that changes it must fail an assertion. The qualification rule and the criterion were not changed
+because of the further runs. Only the number of replicates grew, and the report says that the decision to
+add runs was taken during the re-analysis, after the three-run result was seen, and that the conclusion
+therefore rests on runs added after a result was known (optional stopping): name it as a limitation.
 
 **How every DoE is analysed: model selection (owner, 2026-10-09: "all DoEs should be analyzed
 correctly").** INV-002 corrective action CA3 (adopted 2026-09-15, before the criteria were fixed at
@@ -364,9 +365,11 @@ numbers from the data, in plain sentences:
 PCMP-001 is not changed (owner): each DoE report records the model selection as a discrepancy from its
 plan (computed, `PLAN_DISCREPANCIES`). Version 1.0 and INV-001's comparison use the full quadratic on
 the planned runs (`D.planned_full_models()`, `rev1_criteria_in_force`). Consequence for the criteria:
-with the anion exchange host cell protein model adequate once selected, the Protein A pool and the
-cation exchange host cell protein criteria widen; the aggregate criteria upstream of cation exchange
-move with the cation exchange bound. Numbers come from `iac.csv`, never from this file.
+with the anion exchange host cell protein model adequate once selected, its single-batch bound widens the
+Protein A pool and the cation exchange host cell protein criteria; the aggregate criteria upstream of
+cation exchange move with the cation exchange bound. What depends on CA3 is computed
+(`D.ca3_criteria_sensitivity()`: conclusions, PARs and the scale-down qualifications under the criteria
+without CA3). Numbers come from `iac.csv`, never from this file.
 
 **INV-002: response-surface models below the model-adequacy criteria.** The re-analysis applied PCMP-001
 §7.2 to the planned full quadratic models (the plan's model) and 14 failed the limit on overfitting.
@@ -380,10 +383,16 @@ QA opened INV-002 during INV-001 (config `campaign.investigation_2`). Its record
   simulated from the refit of the planned runs. The augmentations were made (S-BRX-AUG, S-AEX-AUG).
 - **Root cause and CA3** (2026-09-15): the plans prescribed the full quadratic as the predictive model
   and no model selection. CA3 introduced the analysis above for every output.
-- **Honesty about the augmentation** (option a, owner 2026-10-09): once models are selected, the bioreactor
-  and anion exchange models are adequate on the planned runs alone, so the augmentation was not needed
-  for adequacy. It sharpened the estimates and showed which planned-run terms were noise (the high mannose
-  interactions disappeared with the second block). INV-002 says so, and describes every procedure it applied.
+- **Honesty about the augmentation** (option a, owner 2026-10-09; INV-002 review run 1): once models are
+  selected, the bioreactor and anion exchange models are adequate on the planned runs alone, so the
+  augmentation was not needed to pass §7.2. But a model selected on the same runs it is judged on passes an
+  optimistic check, and the augmentation runs are the independent one: the planned-run models predict
+  them (`D.augmentation_prediction_check()`). Two do it poorly (high mannose, bioreactor aggregates), with no
+  block effect, and on all runs high mannose loses the interactions the planned runs suggested while
+  aggregates gain a pH curvature. So the augmentation changed what two models say; never write that it
+  only "sharpened the estimates". The widening of four criteria under CA3 decides two scale-down
+  qualifications (Protein A and cation exchange host cell protein) and no conclusion across the NOR
+  (`D.ca3_criteria_sensitivity()`). INV-002 says all of this, and describes every procedure it applied.
 - **The reports** carry their additional runs (`T.doe_results(UO, "aug")`), the re-evaluation on all runs
   with a block term (`T.model_reevaluation(UO)`), and the discrepancies from the plan. They cite INV-002
   for the sample size and never recompute it.
@@ -394,39 +403,76 @@ QA opened INV-002 during INV-001 (config `campaign.investigation_2`). Its record
 `T.parameters_by_step` footnotes each change. Monte Carlo and PPQ use the values in force; the recorded
 experiments, the nominal batch and the verification of platform worst cases use the characterized ones,
 so no NOR or set-point decision moves a criterion or a Version 1.0 number.
-- **PCR-006, low-pH inactivation.** On the selected XMuLV model (main effects of pH, hold time and
-  temperature) the 6.6 claim fails at the worst corner of the characterized NOR. NOR in force: pH
-  3.30–3.50, hold time 90–120 min, temperature 20–23 °C. The set-points sat on the edges of that NOR,
-  0.04 pH units and 6 min from the XMuLV PAR edges, which large-scale control cannot hold (owner: "0.04 pH
-  units is not controllable. 0.1 is already very tight for large scale production"). Version 2.0 re-centres
-  them: pH 3.40 and 105 min. Two studies support it, both discrepancies from the plan in PCR-006:
-  S-VI-OFAT (the low-pH hold at pH 3.40 against 3.50 over 0–180 min: aggregate and fragments rise with
-  hold time, with no pH effect beyond method precision; report any apparent acidic-variant difference with
-  its multiplicity) and S-CEX-VER (small-scale cation exchange runs on the worst-case material of the new
-  set-point; the number of runs from the simulation in `cex_verification_n.csv`: aggregate needs 1, fragments
-  3, so 3; each passes the rule on the clearance fold the criteria rely on). PCR-006 also shows, with the
-  CEX model and the criteria, that downstream clearance stays sufficient. D-001 still applies to the
-  set-point PAR analysis (design centre, not set-point) and is kept.
-- **PCR-005, Protein A.** No narrowing: on the selected models the Protein A pool criterion is wider and the
-  qualification holds over the NOR as characterized. Run 23 is analysed at its recorded elution buffer pH
-  (PD-005-03); on that data the pool host cell protein model is on the log scale (Box-Cox) with a ratio
-  offset, as for every output.
-- **PCR-003, bioreactor acidic variants (owner: option a).** At the worst corner of the NOR (high pH, high
-  pCO2, low temperature, long culture) the 95 % prediction interval of a single batch reaches below the
-  18 % lower limit, while the predicted median, at manufacturing scale, stays just above it
-  (`D.nor_worst_corner("bioreactor", "acidic_variants")`; never quote the scale-down value). The plan's
-  NOR-propagated PAR (Monte Carlo) still contains the NOR, with almost no margin in pH and pCO2
-  (`D.par_margins("bioreactor")`). The corner, not the Monte Carlo, is the worst case. Accepted on the plan's PAR method, with risk mitigation:
-  the risk is mainly the producer's (a very-low-criticality attribute; 18 % is a range-of-experience limit),
-  quantified by the drug substance probability out of specification (`p_oos.csv`); monitoring acidic
-  variants at harvest (early detection, acceptable but weak) and alarm limits on pH and pCO2 inside the
-  NOR on the side that lowers acidic variants.
+- **The rule for changing a criterion (owner, 2026-10-09).** Verification tightens or widens a criterion on
+  the one-sided 95 % prediction bound of a SINGLE BATCH at the least favourable NOR combination of the
+  downstream step (`iac.verification(..., bound="batch")`, `D.VERIFICATION_BOUND`), never on a confidence
+  bound of the mean: every output is judged per batch, and the platform worst case it replaces was a
+  single run. A tolerance-interval bound would be statistically purer and is too conservative; the
+  single-batch prediction bound is the pragmatic choice (owner). Every change of a criterion is argued by
+  its risk (owner: "What is the risk of the change? Producers or patient risk. Detectability and impact on
+  downstream unit operations and the drug substance."): who bears the risk, whether and where an excursion
+  is detected (an in-process or release test), what the downstream steps must then clear, and the drug
+  substance probability out of specification (`p_oos.csv`). Numbers from `iac.csv`, never from this file.
+  A replacement is not always "the product did better". The platform worst cases of the low-pH hold are
+  increases over a 180-min hold (`iac.platform` sources); the A-Mab value is the increase within the NOR
+  as characterized, at most 120 min. So the bioreactor aggregate criterion moves because the A-Mab hold is
+  shorter, not because the product is more stable: say so wherever that replacement is described (PCP-006
+  review run 2). The criterion is still right, because routine manufacture never holds longer than the NOR.
+- **PCR-006, low-pH inactivation: a decision revised, and confirmation runs.** On the selected XMuLV model
+  (main effects of pH, hold time and temperature) the 6.6 claim fails at the worst corner of the
+  characterized NOR. First decision: pH NOR 3.30–3.50 with the set-point re-centred to 3.40 (owner: "0.04 pH
+  units is not controllable. 0.1 is already very tight for large scale production"), hold-time set-point
+  105 min. Two studies support the re-centring: S-VI-OFAT (pH 3.40 against 3.50 over 0–180 min: aggregate
+  and fragments rise with hold time, no pH effect beyond method precision; an apparent acidic-variant
+  difference sits at time 0 and does not grow, so it is not a pH effect) and S-CEX-VER (cation exchange on
+  worst-case material at pH 3.40; three runs from the simulation; both clearance folds pass). The margin
+  analysis (`D.par_margins`) then showed the upper pH NOR edge only 0.04 from the XMuLV PAR edge at the
+  least favourable hold time and temperature. The decision was REVISED: hold-time NOR 100–120 min,
+  set-point 110 min, which gives that edge a margin of about 0.11 (values from config and `D.par_margins`).
+  Because the revision moves routine operation toward longer holds, confirmation runs were made at the
+  harshest combination within the PAR for the product: pH at the lower end of its range and PAR, hold time
+  and temperature at their NOR highs (S-VI-WC, PD-006-03; three runs, as many as S-CEX-VER;
+  `D.vi_worst_case_summary()`). Product quality met every criterion of the step. Cation exchange cleared
+  aggregate as required. For fragments every run cleared more than the fold the criteria rely on, but the
+  one-sided 95 % lower bound of the three runs fell below it, so the pre-set rule is NOT met. Accepted on its
+  risk (owner, decision 5a): even with no fragment clearance by cation exchange the hold output meets the
+  drug substance limit, fragments are tested at release by nrCE-SDS, and the patient risk is nil. The
+  report states that the rule was not met and why that is acceptable; it never pools the runs with
+  S-CEX-VER (an analysis chosen after the result, the pattern INV-001 condemns). D-001 is kept.
+- **PCR-005, Protein A.** Under the single-batch rule the pool host cell protein criterion is widened only by
+  the anion exchange bound. At that criterion the scale-down model is not qualified for pool host cell
+  protein at the characterized load NOR (20–40 g/L resin): with the offset at the unfavourable end of its
+  interval the conclusion fails. PCR-005 Version 2.0 therefore narrows the load NOR in force (config
+  `nor_v2`), where the model is qualified. On the three planned scale-down runs alone the model would not
+  be qualified even there; the six supplementary runs (PD-005-01) made the qualification possible
+  (computed: `D.offset_qualification(..., studies=[...])`). Run 23 is analysed at its recorded pH
+  (PD-005-03); pool host cell protein is modelled on the log scale with a ratio offset.
+- **PCR-003, bioreactor acidic variants (owner: option a, confirmed after the osmolality study).** At the
+  worst corner of the NOR (high pH, high pCO2, low temperature, long culture) the single-batch prediction
+  interval reaches below the 18 % lower limit while the median at manufacturing scale stays just above it
+  (`D.nor_worst_corner`). Osmolality, which the response-surface design held at its set-point, lowers acidic
+  variants in the screening; narrowing the osmolality NOR to its set-point was not accepted (owner), so the
+  effect was measured (S-BRX-OSM, PD-003-01; osmolality at NOR low, set-point and NOR high at the worst
+  corner, osmolality set with sodium chloride independently of pCO2, runs per level from the precision of the
+  prediction at the NOR high; `D.osmolality_analysis()`). At the NOR high the worst-corner mean falls below
+  18 %. Narrowing the pH or pCO2 NOR would restore it, but a NOR is the range the process is routinely
+  controlled in (owner, citing the EMA definition: "Narrowing it would not be easy"), so the risk is accepted
+  as the producer's (decision 6a): acidic variants have very low criticality, 18 % is a range-of-experience
+  limit, release testing detects a low result, and the probability out of specification is quantified
+  (`p_oos.csv`, whose simulation varies osmolality within its NOR). Mitigation: acidic variants monitored at
+  harvest, and alarm limits inside the NOR on the side that lowers acidic variants, for pH, pCO2 and now
+  osmolality.
 
 **Harvest and UF/DF univariate studies (owner's decision 2026-10-08, option A).** Version 1.0
-described a univariate study of each of the two steps without a design and narrated its outcome,
-but gave no result for any parameter effect. Version 2.0 reports S-HAR-UNI and S-UFDF-UNI (`univariate_studies.csv`; config `analytics.univariate_nodoe`): each parameter at five
-levels (low, low-mid, set-point, mid-high, high) in duplicate, the others at set-point. They are
-not designed experiments, and no document calls them one.
+described a univariate study of each of the two steps without a design (S-HAR-UNI, S-UFDF-UNI) and
+narrated its outcome, but gave no result for any parameter effect. Those studies keep their record as
+Version 1.0 described it, with no data (Version 1.0's harvest plan and report even describe different
+level counts; neither is corrected). Version 2.0 adds a NEW study of each step, made during the
+re-analysis after INV-001 closed (owner's option c, 2026-10-09): S-HAR-UNI2 and S-UFDF-UNI2
+(`univariate_studies.csv`; config `analytics.univariate_nodoe`), discrepancies from the plan PD-004-01 and
+PD-010-01. Each parameter at five levels (low, low-mid, set-point, mid-high, high) in duplicate, the others
+at set-point; S-UFDF-UNI2 ran on the second TFF skid EQ-TFF-188, in calibration. They are not designed
+experiments, and no document calls them one.
 - Harvest: centrate turbidity falls with centrifuge rcf and levels off. Clarified turbidity is flat
   across the depth filter load NOR and rises steeply at the top of the characterized range, as the
   filter nears capacity. Host cell protein, aggregate and step yield show no trend beyond assay

@@ -225,8 +225,10 @@ def main() -> None:
     save(ia.rev1_criteria(cfg, ps, cap1, vc.reset_index(drop=True)).round(4), "criteria_rev1.csv")
     rsm_data = {k: pd.read_csv(os.path.join(ROOT, "outputs", "data", f"doe_{k}_rsm.csv"))
                 for k in st.DOE_FACTORS}
+    # the rule in force (owner, 2026-10-09): a criterion is tightened or widened on the one-sided 95 %
+    # prediction bound of a single batch (PCMP-001 §7.5)
     ver = ia.verification(cfg, rsm_data, ps, an.nominal_train(cfg),
-                          vi_feed_acidic=feeds["viral_inactivation"].cqas["acidic_variants"])
+                          vi_feed_acidic=feeds["viral_inactivation"].cqas["acidic_variants"], bound="batch")
     save(ver.round(4), "iac_verification.csv")
     save(ia.final(cfg, ver), "iac.csv")
     # the same verification on the full quadratic models the plans prescribe: the criteria as they
@@ -234,7 +236,7 @@ def main() -> None:
     # criteria in force rest on the selected models); INV-002 compares the two
     ver_full = ia.verification(cfg, rsm_data, ps, an.nominal_train(cfg),
                                vi_feed_acidic=feeds["viral_inactivation"].cqas["acidic_variants"],
-                               form="full")
+                               form="full", bound="batch")
     save(ver_full.round(4), "iac_verification_full.csv")
     save(ia.final(cfg, ver_full), "iac_full.csv")
     save(ia.p_oos(cfg, mc), "p_oos.csv")
@@ -283,6 +285,11 @@ def main() -> None:
         ns.append(res["n"] if res["n"] is not None else int(vcfg["n_max"]))
     save(pd.DataFrame(vgrid).round(5), "cex_verification_n.csv")
     save(an.cex_verification(cfg, proc, feeds, max(ns)).round(5), "cex_verification.csv")
+
+    # -- 14. The owner's decisions of 2026-10-09: worst-case confirmation runs after the hold-time NOR
+    #        was revised (PD-006-03), and the osmolality study (PD-003-01) --------------------------
+    save(an.vi_worst_case(cfg, proc, feeds, max(ns)).round(5), "vi_worst_case.csv")
+    save(an.osmolality_study(cfg, proc, feeds).round(5), "osmolality_study.csv")
 
     # -- write headline values -------------------------------------------------
     with open(os.path.join(ROOT, "outputs", "report_values.json"), "w") as fh:

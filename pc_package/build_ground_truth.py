@@ -361,12 +361,12 @@ def build_sites(doc_id, file_name, sec):
         S.ManufacturingSite(site_id="site:cambridge", site_name=P.SENDING_SITE, site_role="sending",
                             location="Cambridge, MA",
                             source_references=[ref(doc_id, file_name, sec, "Title block",
-                                                   "Cambridge, MA (Development)")],
+                                                   CELL_SEP.join(["Development site", "Cambridge, MA"]))],
                             metadata=meta()),
         S.ManufacturingSite(site_id="site:grafton", site_name=P.RECEIVING_SITE, site_role="receiving",
                             location="Grafton, WI",
                             source_references=[ref(doc_id, file_name, sec, "Title block",
-                                                   "Grafton, WI (Commercial DS)")],
+                                                   CELL_SEP.join(["Commercial drug substance site", "Grafton, WI"]))],
                             metadata=meta()),
     ]
 
@@ -1183,12 +1183,12 @@ def h_sites(doc_id, file_name, sec):
         S.ManufacturingSite(site_id="site:cambridge", site_name=P.SENDING_SITE, site_role="sending",
                             location="Cambridge, MA",
                             source_references=[ref(doc_id, file_name, sec, "Title block",
-                                                   "Cambridge, MA (Development)")],
+                                                   CELL_SEP.join(["Development site", "Cambridge, MA"]))],
                             metadata=meta()),
         S.ManufacturingSite(site_id="site:grafton", site_name=P.RECEIVING_SITE, site_role="receiving",
                             location="Grafton, WI",
                             source_references=[ref(doc_id, file_name, sec, "Title block",
-                                                   "Grafton, WI (Commercial DS)")],
+                                                   CELL_SEP.join(["Commercial drug substance site", "Grafton, WI"]))],
                             metadata=meta()),
     ]
 
@@ -1753,12 +1753,12 @@ def vi_sites(doc_id, file_name, sec):
         S.ManufacturingSite(site_id="site:cambridge", site_name=P.SENDING_SITE, site_role="sending",
                             location="Cambridge, MA",
                             source_references=[ref(doc_id, file_name, sec, "Title block",
-                                                   "Cambridge, MA (Development)")],
+                                                   CELL_SEP.join(["Development site", "Cambridge, MA"]))],
                             metadata=meta()),
         S.ManufacturingSite(site_id="site:grafton", site_name=P.RECEIVING_SITE, site_role="receiving",
                             location="Grafton, WI",
                             source_references=[ref(doc_id, file_name, sec, "Title block",
-                                                   "Grafton, WI (Commercial DS)")],
+                                                   CELL_SEP.join(["Commercial drug substance site", "Grafton, WI"]))],
                             metadata=meta()),
     ]
 
@@ -2402,12 +2402,12 @@ def cx_sites(doc_id, file_name, sec):
         S.ManufacturingSite(site_id="site:cambridge", site_name=P.SENDING_SITE, site_role="sending",
                             location="Cambridge, MA",
                             source_references=[ref(doc_id, file_name, sec, "Title block",
-                                                   "Cambridge, MA (Development)")],
+                                                   CELL_SEP.join(["Development site", "Cambridge, MA"]))],
                             metadata=meta()),
         S.ManufacturingSite(site_id="site:grafton", site_name=P.RECEIVING_SITE, site_role="receiving",
                             location="Grafton, WI",
                             source_references=[ref(doc_id, file_name, sec, "Title block",
-                                                   "Grafton, WI (Commercial DS)")],
+                                                   CELL_SEP.join(["Commercial drug substance site", "Grafton, WI"]))],
                             metadata=meta()),
     ]
 
@@ -3159,12 +3159,12 @@ def ax_sites(doc_id, file_name, sec):
         S.ManufacturingSite(site_id="site:cambridge", site_name=P.SENDING_SITE, site_role="sending",
                             location="Cambridge, MA",
                             source_references=[ref(doc_id, file_name, sec, "Title block",
-                                                   "Cambridge, MA (Development)")],
+                                                   CELL_SEP.join(["Development site", "Cambridge, MA"]))],
                             metadata=meta()),
         S.ManufacturingSite(site_id="site:grafton", site_name=P.RECEIVING_SITE, site_role="receiving",
                             location="Grafton, WI",
                             source_references=[ref(doc_id, file_name, sec, "Title block",
-                                                   "Grafton, WI (Commercial DS)")],
+                                                   CELL_SEP.join(["Commercial drug substance site", "Grafton, WI"]))],
                             metadata=meta()),
     ]
 
@@ -3769,12 +3769,12 @@ def vf_sites(doc_id, file_name, sec):
         S.ManufacturingSite(site_id="site:cambridge", site_name=P.SENDING_SITE, site_role="sending",
                             location="Cambridge, MA",
                             source_references=[ref(doc_id, file_name, sec, "Title block",
-                                                   "Cambridge, MA (Development)")],
+                                                   CELL_SEP.join(["Development site", "Cambridge, MA"]))],
                             metadata=meta()),
         S.ManufacturingSite(site_id="site:grafton", site_name=P.RECEIVING_SITE, site_role="receiving",
                             location="Grafton, WI",
                             source_references=[ref(doc_id, file_name, sec, "Title block",
-                                                   "Grafton, WI (Commercial DS)")],
+                                                   CELL_SEP.join(["Commercial drug substance site", "Grafton, WI"]))],
                             metadata=meta()),
     ]
 
@@ -4409,12 +4409,12 @@ def uf_sites(doc_id, file_name, sec):
         S.ManufacturingSite(site_id="site:cambridge", site_name=P.SENDING_SITE, site_role="sending",
                             location="Cambridge, MA",
                             source_references=[ref(doc_id, file_name, sec, "Title block",
-                                                   "Cambridge, MA (Development)")],
+                                                   CELL_SEP.join(["Development site", "Cambridge, MA"]))],
                             metadata=meta()),
         S.ManufacturingSite(site_id="site:grafton", site_name=P.RECEIVING_SITE, site_role="receiving",
                             location="Grafton, WI",
                             source_references=[ref(doc_id, file_name, sec, "Title block",
-                                                   "Grafton, WI (Commercial DS)")],
+                                                   CELL_SEP.join(["Commercial drug substance site", "Grafton, WI"]))],
                             metadata=meta()),
     ]
 

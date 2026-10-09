@@ -150,3 +150,8 @@ expression printed as source. Data-state note for authors: `data-state-2026-10-0
 - Small open items: config revision reason "re-analysis of the studies" is wrong for plans (shared, affects
   every revision history); `D.fig_assurance` y-axis says "Assurance"; INV-002 config wording ("assurance",
   "design-size check", "criterion attribute"): INV-002 substitutes at display time with asserts.
+- INV-002 factual check done (`factual-INV-002.md`, 9 errors: the fourth adequacy criterion of PCMP-001
+  §7.2 (residuals/influence) left out; run 23 at design pH vs recorded pH (Protein A HCP full quadratic
+  fails LOF at the recorded pH: decide whether the count becomes 15); Table 9.2 footnotes swapped;
+  Version 1.0 misdescribed; AICc constant; INV-001 misquoted; NOR of the worked example; SOP-1002 title;
+  Table 10.1 quoting). Next: one fix pass by a fresh author, then promote and annex.

@@ -82,3 +82,23 @@ column, A.1 planned levels per series (long form, doubled filter series), B.1 me
   culture, clarified-vs-culture netting DNA adsorption, criterion 2 basis, blend bypassing the sterile
   filter, <LOQ exclusion, turbidity-series PAR, time-held rule vs retained centrate); helper-defined
   related_docs_md (no PCP-003/PCP-005/PCR-005) and revision-history cell; Table 3.2 already merged.
+
+## Final pass (2026-10-10, same author), after feedback-PCP-004.final.md
+Inputs: feedback-PCP-004.final.md, content-review-PCP-004.run2.md, feedback-plans-shared-2026-10-10.md,
+PLAN-LESSONS (re-read; rules 4, 8, 10 updated, harvest-relevant: 8 = no compiled criteria at harvest).
+Plan: A1 drop S-HAR-HLD/S-HAR-UNI2 + 4 of 5 hold-scope statements (keep §1 item 5); A2 drop discrepancy
+def + its change item; A3 qualification order; A4 one sentence; A5 AMD-001 per PCMP-001 §1.1 item 4,
+once; A6 closing sentence; A7 determine/to be met/is to provide; A8 drop analytical variance; A9 wording;
+B change 7 named list + "(corrected, change 7)" markers; shared item 4: V1.0 classification sentence
+verbatim + change 5 (PCMP-001 §6.2/§7.7); V1.0 bracket design + "held at its set-point" + block +
+risks restored; gaps (resolution size, turbidity PAR, two-series PAR, regression threshold) said once
+in §8; Table 6.1 -> T.frame with turbidity footnote.
+- [x] final pass written (file saved after an API cut; rewritten in full)
+- [x] gate: 2 runs, all HARD gates OK both times (numeral lint advisory: identifiers + "change 7" markers only)
+- [x] pdf + docx rendered (venv on PATH); changed tables inspected: 5.1 (no variance column), 6.1 (T.frame,
+      one number format, turbidity footnote). PDF 34 pp. 356 sentences, 7618 words. No <<NEEDS:>>.
+- [x] PCP-004_harvest.DRAFT.txt refreshed (pdftotext -layout); no S-HAR-HLD/S-HAR-UNI2 in it.
+- Annex builder: tbl-params is now T.frame(params_tab) with a) note on the turbidity row; tbl-perf has
+  4 data columns (Reference, Method, Precision RSD, LOQ, Accuracy); others as in revision run 1.
+- Left as is, per "fix these and nothing else": Q5 items 2-4, 8, 10, 12, 13, 16, 18 (Version 1.0 design
+  or not in the fix list); Table A.1 and B.1 layout; Table 3.2/3.1 (shared builders); Tool #1 header.

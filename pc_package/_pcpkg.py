@@ -812,7 +812,8 @@ def corpus_docs_md(doc_id=None):
 # Editorial one-line role of each unit operation in the control strategy. Narrative
 # only (no numbers); the quantitative facts are pulled from the CSVs elsewhere.
 UNIT_OP_ROLE = {
-    "bioreactor": "Forms the glycan, charge-variant and aggregate CQAs (design-space step)",
+    # an attribute is formed, not a CQA; "design-space step" was a coined label (PTP-001 and RA-001 reviews, 2026-10-10)
+    "bioreactor": "Forms the glycan, charge-variant and aggregate attributes",
     # the CQA register assigns fragments to harvest (PCMP-001 Version 2.0 Table 1.1; PCP-004 factual check)
     "harvest": "Primary recovery and clarification, where fragments form during the harvest hold",
     "protein_a": "Capture; principal HCP and DNA clearance; source of leached Protein A",

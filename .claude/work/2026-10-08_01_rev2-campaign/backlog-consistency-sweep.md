@@ -205,3 +205,40 @@ Table-agent findings for the owner: (1) every uncaptioned pipe table in the defa
 row (the longtable counter patch in _tables.tex), fixed in the variants only; (2) INV-002 Table 5.1 note
 cut off (fixed: shorter note, gate now probes note ends); (3) Approvals tables of INV-001/INV-002 ran 16 pt
 past the margin (fixed: relative widths; template too); (4) row padding left out of the variants.
+
+### Third session, afternoon (2026-10-10, after the API outage at about 14:30)
+Promoted today: INV-002 (ff2b01f, 54 pp), PCP-010 (dcc175c, 31 pp). PCMP-001 re-rendered three times
+(§7.5 rule 2 names the three tests; §7.8 fragments sentence; parameter table fits its page; the virus filter
+role names XMuLV; the moved-set-point note names the plan's set-point); 535/535 grounded.
+Machinery: check_render.check_footer_clear (text into the page foot); table-fit probe reads typographic
+quotes; true minus in T.num/_sgn/offsets; T.criteria_results note c; fig_par band label;
+design_space_grid includes fragments; ra_content.cqa_table criteria by type and no severity for unscored
+attributes; DEV-005-02 rule on the full quadratic, ratio 3.0 (oot_check); register DEV-003-07/08,
+DEV-005-03, DEV-007-03, DEV-008-04, wording of DEV-003-01/03/05.
+Agents (resume by ID with SendMessage):
+- Annex builders: INV-002 ac6a717e02b6ae911, PCP-010 ab582c36f3bd6aae7. After each: add the document to
+  REV2_READY and to ALL_DOCS in tests/test_grounding.py, build, ground, commit.
+- Plans: PCP-004 final pass (a4f22fc16c1edba54, feedback-PCP-004.final.md); PCP-007 revised (author
+  ac165794047144c20), review run 2 aa97020d05885f3a3; PCP-008 revised (a85321c9cc5db62b4), review run 2
+  a116dad938b470292; PCP-009 final pass (a8386d13c874ea937, feedback-PCP-009.final.md).
+- Re-open of the promoted PCP-003/005/006 (a9fbbfbe01c8ef961, feedback-promoted-plans-reopen-2026-10-10.md);
+  then re-anchor their annexes (legacy builders in build_ground_truth.py).
+- PCR-005 follow-up (abadf6256c0fc7077, feedback-PCR-005.followup-2026-10-10.md); then re-anchor its annex.
+- PTP-001: factual saved (factual-PTP-001.md); content review ad3f19600c7ed6b1b running; author a84158a8f962603ae.
+- RA-001: factual saved (factual-RA-001.md); content review a2065767a62f14e49 running; author affba11fac83b329f.
+  RA-001 author must adapt to ra_content.cqa_table (fragments severity None) and drop Table 3.2.
+- PCR-003 drafted (79 pp; author a927024c4bf0fc18f): content review a9651619b55b03f57, factual a2df8d084c9f4048e.
+  Its fix pass must cite DEV-003-07/08 and the reworded DEV-003-01/03/05.
+- PCR-006 drafted (74 pp; author afabf170561291d76): content review ade968d8b5ef485a7, factual
+  a7e90f52e29059230. Its fix pass: font floor on pp. 41, 51, 73 (Tables 7.4, 7.12, D.1).
+For the owner (report when the round closes): the DNA calibration (AEX 5 logs, 70 kg reference adult);
+the empty last row of uncaptioned pipe tables in the default layout; PCR-003 at 79 pp and PCR-006 at 74 pp
+against the CLAUDE.md bands (update the bands at the end); `show()` re-parses pre-formatted numeric strings
+(tabulate numparse), reported by the PCR-003 author.
+For later reports: PCR-008 records the AEX coded-0 runs at 175 g/L (not the 200 g/L set-point) without
+reconciling D-001, examines the HCP bound for single-run dependence, states the 5-log DNA clearance as
+"more than" (pools below the LOQ), DEV-008-04; PCR-007 records DEV-007-03 and the missing load
+aggregate/HCP and screening DNA/leached Protein A; PCR-009 records how yield was determined on spiked runs
+(the Version 1.0 "unspiked filtrate pool" cannot exist); PCR-004 records the missing harvest scale-down
+qualification as a deviation (owner Q8); every report states residual DNA as controlled by clearance (A-Mab:
+"None as DNA is consistently cleared"), not by a release test.

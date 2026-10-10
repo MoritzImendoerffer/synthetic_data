@@ -123,6 +123,18 @@ All three come from one decision — coded 0 was treated as the set-point — so
 finds one has a thread to pull. The figure is the easiest to overlook, because its title is
 drawn into the image rather than written in the prose.
 
+### One plan shows a seam of its own (noted 2026-10-10)
+
+PCP-008 states, in Version 1.0 text that its Version 2.0 amendment keeps word for word, that "each
+parameter will be coded so that the set-point is 0 and the edges of the characterization range are ±1".
+For protein load (set-point 200 g/L resin in a range of 50 to 300 g/L) no linear coding can do both, so
+a careful reader of PCP-008 alone can see that its coded centre points cannot all sit at the set-points.
+The plan does not say which statement gives way, and the report does not say either. This does not
+resolve D-001 (the plan still commits to the set-point PAR, and the report still presents the design
+centre under that heading); it is a thread a reviewer can pull from one document. The amendment rule
+(STORY_BIBLE §9b) forbids rewriting the coding statement, and a reviewer of the Version 2.0 draft found
+the seam on 2026-10-10.
+
 ### Version 2.0 and INV-001 do not touch it
 
 Version 2.0 (2026-10-08) changed the CRITERION each PAR is judged against, not the way the other

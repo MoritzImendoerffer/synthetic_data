@@ -33,6 +33,10 @@ SHARED = ["doe_bioreactor_screening", "doe_bioreactor_rsm", "doe_protein_a_scree
           "process_summary", "viral_clearance"]
 # monte_carlo and ppq_batches left this list on 2026-10-08: they sample each parameter within the
 # NOR in force, and Version 2.0 narrowed three NORs (config nor_v2, PCR-005 and PCR-006).
+# A model output that an owner's decision changed by design, not an experiment, is exempt column by column
+# (each entry names its decision): residual DNA of the drug substance moved when DNA was carried in pg/mg
+# with a real dose and AEX DNA clearance set to 5 logs (owner's decision Q4, 2026-10-10, meta.dose).
+DECIDED = {("process_summary", "residual_dna_ng_per_dose")}
 
 
 def _at_tag(name):
@@ -51,6 +55,8 @@ def test_rev1_experiments_unchanged(name):
     assert len(new) == len(old)
     for col in old.columns:
         assert col in new.columns, f"{name}: column {col} dropped"
+        if (name, col) in DECIDED:
+            continue
         a, b = old[col], new[col]
         if pd.api.types.is_numeric_dtype(a):
             assert np.allclose(a, b, rtol=1e-12, atol=0, equal_nan=True), f"{name}.{col} moved"

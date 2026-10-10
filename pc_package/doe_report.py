@@ -1256,7 +1256,17 @@ def par_nor_propagated(key, resp, factor, n_grid=PAR_GRID, n_mc=PAR_MC_N, batch=
                                                    _natural(par_c[1], key, factor))}
 
 
-def design_space_grid(key, n=11):
+def _pi_points(r, coded, alpha=None):
+    """(centre, lower, upper) of the prediction interval of a single new run at coded factor
+    settings (DataFrame of factor columns), on the scale of the response: a log-scale model gives
+    the median and the back-transformed exact limits. The interval is two-sided at ``PI_LEVEL``."""
+    alpha = (1.0 - PI_LEVEL) if alpha is None else alpha
+    sf = r["model"].get_prediction(_design_matrix(r, coded)).summary_frame(alpha=alpha)
+    return (_back(r, sf["mean"].to_numpy()), _back(r, sf["obs_ci_lower"].to_numpy()),
+            _back(r, sf["obs_ci_upper"].to_numpy()))
+
+
+def design_space_grid(key, n=11, basis="batch"):
     """How much of the characterized region actually meets every criterion this step governs.
 
     Once a step has intermediate acceptance criteria, the design space stops being "the whole characterized
@@ -1266,10 +1276,19 @@ def design_space_grid(key, n=11):
     cube and reports what survives, so a report can state the size of its region from the data
     instead of asserting it.
 
+    A grid point is inside when every output meets its criterion there on the statistic it is
+    judged on everywhere else (owner's decision 2026-10-10: the design space on the single-batch
+    limit): a quality attribute when both ends of the 95 % prediction interval of a single run lie
+    within its criterion, viral clearance when its mean prediction does. The criterion is moved
+    by the scale-down offset (``_judging``). ``basis="mean"`` gives the former convention, every
+    output on its mean (median) prediction, for comparison only.
+
     Returns a dict with ``fraction`` (share of grid points inside every criterion),
-    ``per_response`` (share each response alone rejects) and ``binding`` (the response that
-    rejects most). Uses mean predictions, matching the design-space convention of the reports.
+    ``per_response`` (share each response alone rejects), ``binding`` (the response that
+    rejects most) and ``basis``.
     """
+    if basis not in ("batch", "mean"):
+        raise ValueError(f"basis must be 'batch' or 'mean', not {basis!r}")
     fs = rsm_factors(key)
     grids = np.meshgrid(*[np.linspace(-1, 1, n)] * len(fs), indexing="ij")
     coded = pd.DataFrame({f: g.ravel() for f, g in zip(fs, grids)})
@@ -1286,13 +1305,94 @@ def design_space_grid(key, n=11):
             # when every measured result meets its criterion, and is reported in ``measured``
             measured[resp] = measured_met(key, resp)
             continue
-        good = _in_spec(_predict_points(r, coded), lo, hi, stype)
+        if basis == "batch" and decision_statistic(resp) == "batch":
+            _, plo, phi = _pi_points(r, coded)
+            good = _in_spec(plo, lo, hi, stype) & _in_spec(phi, lo, hi, stype)
+        else:
+            good = _in_spec(_predict_points(r, coded), lo, hi, stype)
         per[resp] = float(1.0 - good.mean())
         ok &= good
     binding = max(per, key=per.get) if per else None
     return {"fraction": float(ok.mean()), "per_response": per, "binding": binding,
-            "n_points": int(len(coded)), "measured": measured}
+            "n_points": int(len(coded)), "measured": measured, "basis": basis}
 
+
+
+def residual_influence(key, resp, runs=None, form=None):
+    """Criterion 4 of PCMP-001 §7.2 for the selected model of one response-surface output: "the
+    residuals show no pattern against predicted values or run order, and no single run dominates
+    the fit", tested as the Version 2.0 plans state it (``campaign.thresholds``):
+
+    * a regression of the absolute residuals on the predicted values (a spread that grows with the
+      level), at ``residual_alpha``; not tested for a model with no term, which predicts one value;
+    * a regression of the residuals on the order of execution (a drift), at ``residual_alpha``; the
+      runs of a second block continue the order of the first;
+    * Cook's distance against ``cook_factor``/n (a run that dominates the fit).
+
+    One definition for every report (2026-10-10), so that two reports cannot test the criterion
+    differently. Residuals are on the scale of the model. Returns a dict: ``p_spread``,
+    ``spread_slope``, ``p_order``, ``order_slope`` (per run), ``order_range`` (runs), ``cook``
+    (array, in the row order of ``runs``), ``runs``, ``cook_max``, ``cook_run``, ``cook_limit``,
+    ``over`` (runs above the limit), ``n``, ``trends_met``, ``cook_met``, ``met``; ``testable`` is
+    False for an exact fit (no residual), whose criterion cannot be applied."""
+    import statsmodels.api as sm
+    th = CFG.raw()["campaign"]["thresholds"]
+    alpha = float(th.get("residual_alpha", th["effect_alpha"]))
+    k4 = float(th.get("cook_factor", 4.0))
+    r = fit(key, "rsm", resp, runs=runs, form=form)
+    if r.get("exact"):
+        return {"testable": False, "met": None, "trends_met": None, "cook_met": None, "n": int(r["n"])}
+    m, d = r["model"], r["df"]
+    n = len(d)
+    cd = np.asarray(m.get_influence().cooks_distance[0], dtype=float)
+    if r["names"]:
+        g = sm.OLS(np.abs(np.asarray(m.resid, float)), sm.add_constant(np.asarray(m.fittedvalues, float))).fit()
+        p_spread, spread = float(g.pvalues[1]), float(g.params[1])
+    else:
+        p_spread, spread = float("nan"), float("nan")
+    order = d["run_order"].to_numpy(dtype=float).copy()
+    if ad.BLOCK in d.columns and (d[ad.BLOCK] > 1).any():
+        first = (d[ad.BLOCK] == 1).to_numpy()
+        order[~first] += order[first].max()
+    go = sm.OLS(np.asarray(m.resid, float), sm.add_constant(order)).fit()
+    p_order, drift = float(go.pvalues[1]), float(go.params[1])
+    lim = k4 / n
+    run_ids = d["run"].to_numpy()
+    over = [int(x) for x in run_ids[cd > lim]]
+    trends_met = bool((np.isnan(p_spread) or p_spread >= alpha) and p_order >= alpha)
+    cook_met = not over
+    return {"testable": True, "p_spread": p_spread, "spread_slope": spread, "p_order": p_order,
+            "order_slope": drift, "order_range": float(order.max() - order.min()), "cook": cd,
+            "runs": [int(x) for x in run_ids], "cook_max": float(cd.max()),
+            "cook_run": int(run_ids[int(cd.argmax())]), "cook_limit": lim, "over": over, "n": n,
+            "alpha": alpha, "trends_met": trends_met, "cook_met": cook_met,
+            "met": bool(trends_met and cook_met)}
+
+
+def oot_check(key, resp, run, value, level=None):
+    """The out-of-trend rule the analytical review applies (deviation record ``oot_rule``; owner's
+    decision Q7, 2026-10-10): a result is out of trend when it lies outside the two-sided
+    ``level`` prediction interval of a single result from the model selected on the other runs of
+    the response-surface design (the run under review left out and the selection repeated), at
+    the settings of the run under review. The review was made when the design was run, so the
+    planned runs at their recorded settings are used. ``level`` defaults to the record's
+    ``oot_level`` (0.99). Returns a dict: ``lower``, ``upper``, ``centre`` (median on a log
+    scale), ``value``, ``out``, ``terms``, ``scale``, ``level``."""
+    lvl = 0.99 if level is None else float(level)
+    full = rsm_data(key, "planned")
+    rest = full[full["run"] != run].reset_index(drop=True)
+    row = full[full["run"] == run].reset_index(drop=True)
+    if row.empty:
+        raise ValueError(f"run {run} is not a response-surface run of {key}")
+    sel = ad.select_model(rest, resp, rsm_factors(key), TH)
+    X = ad.matrix(row, sel["terms"], False)
+    sf = sel["model"].get_prediction(X).summary_frame(alpha=1.0 - lvl)
+    c, lo, hi = (float(sf[k].iloc[0]) for k in ("mean", "obs_ci_lower", "obs_ci_upper"))
+    if sel["scale"] == "log":
+        c, lo, hi = float(np.exp(c)), float(np.exp(lo)), float(np.exp(hi))
+    v = float(value)
+    return {"lower": lo, "upper": hi, "centre": c, "value": v, "out": bool(v < lo or v > hi),
+            "terms": list(sel["terms"]), "scale": sel["scale"], "level": lvl}
 
 def governing_factor(key, resp):
     """The RSM factor with the largest absolute main effect on `resp` — its governing

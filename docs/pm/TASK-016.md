@@ -32,7 +32,7 @@ Moved into the pilot (decision 2026-10-08): a report author reads PCMP-001 for c
 
 ## What was built
 
-PCMP-001 Version 2.0 authored by one Opus 5.5 agent; audit clean; run-1 review Q1-Q6 No/No/sentences/No/conflicts/No -> machinery fixes (plan approval dates, tightened fold, role strings, viral >=, units, thresholds) + one author cycle; run-2: arithmetic holds, 12 Q5 items -> one extra factual pass (recorded departure from the one-cycle rule) + SEC sentence after the model correction. Shipped: 34 pp, 304 sentences / 4,896 words, check_render clean, 0 NEEDS. Annex pending (TASK-014).
+PCMP-001 Version 2.0 promoted (39 pp), annex 535 quotes.
 
 ## Documents it is about
 

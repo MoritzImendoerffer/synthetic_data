@@ -3,12 +3,12 @@ type: pm-task
 epic: 2026-10-08_01_rev2-campaign
 sprint: 2026-10-08_01_rev2-campaign
 task: TASK-027
-status: todo
+status: doing
 kind: document
 title: "Author PCP-009 Rev 2.0 and re-anchor its annex"
 generated: true
 waiting_on: the assistant
-tags: [pm/task, pm/todo]
+tags: [pm/task, pm/doing]
 about: ["PCMR-001", "PCP-009"]
 ---
 
@@ -17,11 +17,11 @@ about: ["PCMR-001", "PCP-009"]
 
 # TASK-027 — Author PCP-009 Rev 2.0 and re-anchor its annex
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `doing` · **Waiting on:** the assistant · **Board:** [[_Board]]
 
 ## Why it exists
 
-PCMR-001 last: it summarises every other document.
+PCMR-001 last: it summarises every other document. author running 2026-10-10
 
 ## Acceptance criteria
 

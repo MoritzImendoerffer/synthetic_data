@@ -2,7 +2,7 @@
 
 NOT part of the A-Mab drug-substance characterization (p.140); included for mass
 balance and to express the final drug substance. Concentrates to the DS target
-and converts the tracked relative residual-DNA quantity to ng/dose.
+and converts residual DNA from pg per mg of antibody to ng per dose (``meta.dose``).
 
 Version 2.0 adds the effects of the univariate study S-UFDF-UNI (``process.ufdf.model``): residual
 buffer falls as exp(-DV); aggregate rises a little at high final concentration and high TMP; step
@@ -19,10 +19,13 @@ import numpy as np
 from ..core import Stream, StepResult, clip, lognormal_noise
 from .base import BaseUnitOp
 
-# Calibration: relative residual-DNA units -> ng/dose. Chosen so the nominal
-# process (harvest DNA ~1e3 rel, ~8 logs total clearance) lands ~1e-4 ng/dose,
-# an order of magnitude below the <1e-3 ng/dose acceptance criterion (p.47-48).
-DNA_NG_PER_DOSE_PER_REL = 10.0
+
+
+def dna_ng_per_dose(cfg, pg_per_mg):
+    """Residual DNA per dose: pg DNA per mg antibody times the mg of antibody in one dose
+    (``meta.dose``: mg/kg times body weight), in ng (owner's decision Q4, 2026-10-10)."""
+    d = cfg.meta["dose"]
+    return pg_per_mg * float(d["mg_per_kg"]) * float(d["body_weight_kg"]) / 1000.0
 
 
 class UFDF(BaseUnitOp):
@@ -44,10 +47,14 @@ class UFDF(BaseUnitOp):
         residual_buffer = m["residual_buffer_pct_at_0dv"] * float(np.exp(-sp["diavolumes"]))
         out.product_mass_g = inp.product_mass_g * step_yield
         out.volume_l = out.product_mass_g / final_conc
-        # express residual DNA as ng/dose for the drug substance
-        out.cqas["residual_dna"] = inp.cqas.get("residual_dna", 0.0) * DNA_NG_PER_DOSE_PER_REL
+        # express residual DNA as ng/dose for the drug substance (pg/mg upstream of this step)
+        out.cqas["residual_dna"] = dna_ng_per_dose(self.cfg, inp.cqas.get("residual_dna", 0.0))
         out.meta["ds_concentration_g_per_l"] = final_conc
+        # permeate flux at the end of the final concentration, deterministic (no draw from rng)
+        fx = m.get("flux_lmh", {"setpoint": 0.0, "tmp": 0.0, "conc": 0.0})
+        flux = float(fx["setpoint"]) + float(fx["tmp"]) * ct + float(fx["conc"]) * cc
         return StepResult(step=self.name, step_yield=step_yield, inp=inp, out=out, params=sp,
                           metrics={"ds_concentration_g_per_l": final_conc,
                                    "residual_dna_ng_per_dose": out.cqas["residual_dna"],
-                                   "residual_buffer_pct": residual_buffer})
+                                   "residual_buffer_pct": residual_buffer,
+                                   "flux_lmh": flux})

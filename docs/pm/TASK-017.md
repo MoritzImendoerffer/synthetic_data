@@ -3,12 +3,12 @@ type: pm-task
 epic: 2026-10-08_01_rev2-campaign
 sprint: 2026-10-08_01_rev2-campaign
 task: TASK-017
-status: todo
+status: done
 kind: document
 title: "Author PCP-003 Rev 2.0 and re-anchor its annex"
 generated: true
-waiting_on: the assistant
-tags: [pm/task, pm/todo]
+waiting_on: —
+tags: [pm/task, pm/done]
 about: ["PCMR-001", "PCP-003"]
 ---
 
@@ -17,7 +17,7 @@ about: ["PCMR-001", "PCP-003"]
 
 # TASK-017 — Author PCP-003 Rev 2.0 and re-anchor its annex
 
-**Epic:** [[epic]] · **Status:** `todo` · **Waiting on:** the assistant · **Board:** [[_Board]]
+**Epic:** [[epic]] · **Status:** `done` · **Waiting on:** — · **Board:** [[_Board]]
 
 ## Why it exists
 
@@ -25,10 +25,14 @@ PCMR-001 last: it summarises every other document.
 
 ## Acceptance criteria
 
-- [ ] check_render hard gates pass
-- [ ] annex valid and strictly grounded
+- [x] check_render hard gates pass
+- [x] annex valid and strictly grounded
 
 **Depends on:** [[TASK-015]]
+
+## What was built
+
+PCP-003 Version 2.0 promoted (41 pp), annex 322 quotes, commit 6f33df5.
 
 ## Documents it is about
 

@@ -96,7 +96,7 @@ class Bioreactor(BaseUnitOp):
         via_factor = (100.0 - final_via) / (100.0 - 60.0)  # 0 at 100% via, 1 at 60%
         hcp = hc["hcp"] + lin["hcp"]["duration"] * c.get("duration", 0)
         hcp *= (0.7 + 0.6 * clip(via_factor, 0, 2))
-        dna = hc["residual_dna_rel"] + lin["residual_dna_rel"]["duration"] * c.get("duration", 0)
+        dna = hc["residual_dna_pg_mg"] + lin["residual_dna_pg_mg"]["duration"] * c.get("duration", 0)
         dna *= (0.7 + 0.6 * clip(via_factor, 0, 2))
         if rng is not None:
             hcp *= lognormal_noise(rng, 0.15)

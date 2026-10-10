@@ -155,9 +155,12 @@ differ only in their `UO` key and unit-specific narrative:
   every downstream step, with no margin. `iac.derive()` reads the config only
   (`tests/test_iac.py`). Verification against this campaign's data tightens a criterion where a
   step does worse than the platform worst case, and widens it only by the rule stated in advance:
-  the one-sided 95 % confidence bound of the A-Mab worst case beats the platform value
-  and the downstream model passes the PCMP-001 adequacy tests (`iac.allow_widening`, owner's
-  decision 2026-10-08), and the report argues it. Tightening also uses the bound. Version 1.0
+  the one-sided 95 % prediction bound of a single batch at the A-Mab worst case (the least
+  favourable NOR combination of the downstream step) beats the platform value and the downstream
+  model passes the PCMP-001 adequacy tests (`iac.allow_widening`, owner's decision 2026-10-08;
+  single-batch bound `iac.BOUND_CONFIDENCE`, owner's decision 2026-10-09), and the report argues
+  it by its risk: whose risk, how it is detected, and its impact downstream and on the drug
+  substance. Tightening also uses the bound. Version 1.0
   fitted its criteria to the data instead and that is `INV-001`; its criteria are data in
   `criteria_rev1.csv`, never a yardstick. Quality attributes are judged per batch, viral clearance
   on the mean LRF at the least favourable NOR combination of the other parameters (`doe_report.decision_statistic`).

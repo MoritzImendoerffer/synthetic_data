@@ -36,6 +36,7 @@ _METHOD_SUFFIX = {
     "loq": "loq",
     "variance_fraction": "var_frac",
     "accuracy_pct": "accuracy",
+    "coverage_pct": "coverage",
 }
 
 
@@ -108,6 +109,7 @@ def build(cfg) -> Dict[str, Any]:
                 "equipment": ev.get("equipment", ""),
                 "method": ev.get("method", ""),
                 "prior_doc": ev.get("prior_doc", ""),
+                "oot_rule": ev.get("oot_rule", ""),
             })
 
     tables = {

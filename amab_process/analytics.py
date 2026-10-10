@@ -295,6 +295,9 @@ SDM_RESPONSES = {
     "cex": ["aggregate_out_pct", "hcp_out_ng_mg", "step_yield"],
     "aex": ["hcp_out_ng_mg", "step_yield"],
     "virus_filtration": ["step_yield"],
+    # appended last so no step index above moves (owner's decision Q8, 2026-10-10: S-UFDF-SDM, the comparison
+    # Version 1.0 PCP-010 planned: step yield, permeate flux, final concentration and aggregate)
+    "ufdf": ["step_yield", "aggregate_out_pct", "ds_concentration_g_per_l", "flux_lmh"],
 }
 
 
@@ -307,6 +310,14 @@ def _assay_noise(cfg: Config, row: dict, si: int, stream: int, i: int) -> None:
     for r, c in cv.items():
         if r in row and row[r] is not None:
             row[r] = float(row[r] * rng.lognormal(0.0, float(c)))
+    # repeatability of the results of one step only (assay_cv_step), from a stream of its own, so that no
+    # draw of the shared loop above moves
+    cvs = _a(cfg)["sdm"].get("assay_cv_step", {}).get(row.get("step"), {})
+    if cvs:
+        rng2 = _rng(cfg, 11, si, stream, i, 1)
+        for r, c in cvs.items():
+            if r in row and row[r] is not None:
+                row[r] = float(row[r] * rng2.lognormal(0.0, float(c)))
 
 
 def sdm_qualification(cfg: Config, proc, feeds) -> pd.DataFrame:
@@ -326,10 +337,13 @@ def sdm_qualification(cfg: Config, proc, feeds) -> pd.DataFrame:
             for i in range(int(n)):
                 feed = feeds.get(step)
                 res = uo.run(None if feed is None else feed.copy(), rng)
-                row = {"study": f"S-{ {'bioreactor': 'BRX', 'protein_a': 'PA', 'viral_inactivation': 'VI', 'cex': 'CEX', 'aex': 'AEX', 'virus_filtration': 'VF'}[step]}-SDM",
+                row = {"study": f"S-{ {'bioreactor': 'BRX', 'protein_a': 'PA', 'viral_inactivation': 'VI', 'cex': 'CEX', 'aex': 'AEX', 'virus_filtration': 'VF', 'ufdf': 'UFDF'}[step]}-SDM",
                        "step": step, "scale": scale, "run": i + 1}
                 for r in resps:
                     v = _response_value(res, r)
+                    if r == "aggregate_out_pct" and np.isnan(v):
+                        # a step with no aggregate metric of its own (UF/DF): the aggregate of its pool
+                        v = float(res.out.cqas.get("aggregates_hmw", np.nan))
                     if scale == "manufacturing" and r in off:
                         v *= float(off[r])
                     row[r] = v
@@ -666,7 +680,8 @@ def protein_a_extras(cfg: Config, df: pd.DataFrame, kind: str, bio_hmw: float) -
     out["hmw_sec_pct"] = bio_hmw + 0.08 * (-cph) + rng.normal(0, 0.05, len(out))
     lrv = float(cfg.process["protein_a"]["model"]["dna_lrv"])
     centre = out["run_type"].astype(str).str.startswith("cent").to_numpy()
-    load = 2.0e5 * rng.lognormal(0, 0.15, len(out))
+    # the DNA of the clarified broth (process.bioreactor harvest_centre), the load of capture
+    load = float(cfg.process["bioreactor"]["rsm"]["harvest_centre"]["residual_dna_pg_mg"]) * rng.lognormal(0, 0.15, len(out))
     pool = load / 10 ** (lrv + rng.normal(0, 0.15, len(out)))
     out["dna_load_pg_mg"] = np.where(centre, load, np.nan)
     out["dna_pool_pg_mg"] = np.where(centre, pool, np.nan)

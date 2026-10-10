@@ -31,7 +31,7 @@ Pilot. May read PCP-005 and PCMP-001 for content.
 
 ## What was built
 
-PCR-005 v2.0: one Opus 5.5 author, audit clean. First draft left 5 NEEDS for data the plan promised but the model lacked -> generated (univariate studies, column efficiency, run order, per-pool HMW, centre-point DNA) for all steps. Found the PCP-005 equivalence test could never pass with n=3 -> DEV-005-03, 6 supplementary runs (S-PA-SDM2), margin unchanged: HCP equivalent, yield misses by 1.4 % of margin. Run-1 review -> 6 source fixes (inward PAR rounding, decision statistic, DEV-005-01/-02 consistency, leaching mechanism, tokens); run-2 -> prediction interval now includes coefficient uncertainty (engine), par_table number format, shrink-to-fit tables; final factual pass. Shipped 55 pp, 625 sentences / 11,661 words, 0 NEEDS.
+PCR-005 Version 2.0 promoted (67 pp), annex re-anchored (410 quotes), commit 61a2a75.
 
 ## Documents it is about
 

@@ -11,7 +11,7 @@ tags: [pm/board]
 
 # Board — the active epic
 
-**[[epic|2026-10-08_01_rev2-campaign]]** · **15 of 35 done** · 1 doing · 19 todo
+**[[epic|2026-10-08_01_rev2-campaign]]** · **18 of 36 done** · 6 doing · 12 todo
 
 [[epic|Why this epic]] · [[_Artifacts|The corpus and its gates]] · [[_Archive|Finished epics]]
 
@@ -29,24 +29,22 @@ and it is here so the state is visible, not so anyone else acts on it.
 
 | Task | Status | Waiting on | Kind | What it is |
 |---|---|---|---|---|
-| [[TASK-015]] | `doing` | the assistant | measurement | HALT: owner reads the pilot |
-| [[TASK-017]] | `todo` | the assistant | document | Author PCP-003 Rev 2.0 and re-anchor its annex |
 | [[TASK-018]] | `todo` | the assistant | document | Author PCR-003 Rev 2.0 and re-anchor its annex |
-| [[TASK-019]] | `todo` | the assistant | document | Author PCP-004 Rev 2.0 and re-anchor its annex |
+| [[TASK-019]] | `doing` | the assistant | document | Author PCP-004 Rev 2.0 and re-anchor its annex |
 | [[TASK-020]] | `todo` | the assistant | document | Author PCR-004 Rev 2.0 and re-anchor its annex |
-| [[TASK-021]] | `todo` | the assistant | document | Author PCP-006 Rev 2.0 and re-anchor its annex |
 | [[TASK-022]] | `todo` | the assistant | document | Author PCR-006 Rev 2.0 and re-anchor its annex |
-| [[TASK-023]] | `todo` | the assistant | document | Author PCP-007 Rev 2.0 and re-anchor its annex |
+| [[TASK-023]] | `doing` | the assistant | document | Author PCP-007 Rev 2.0 and re-anchor its annex |
 | [[TASK-024]] | `todo` | the assistant | document | Author PCR-007 Rev 2.0 and re-anchor its annex |
-| [[TASK-025]] | `todo` | the assistant | document | Author PCP-008 Rev 2.0 and re-anchor its annex |
+| [[TASK-025]] | `doing` | the assistant | document | Author PCP-008 Rev 2.0 and re-anchor its annex |
 | [[TASK-026]] | `todo` | the assistant | document | Author PCR-008 Rev 2.0 and re-anchor its annex |
-| [[TASK-027]] | `todo` | the assistant | document | Author PCP-009 Rev 2.0 and re-anchor its annex |
+| [[TASK-027]] | `doing` | the assistant | document | Author PCP-009 Rev 2.0 and re-anchor its annex |
 | [[TASK-028]] | `todo` | the assistant | document | Author PCR-009 Rev 2.0 and re-anchor its annex |
-| [[TASK-029]] | `todo` | the assistant | document | Author PCP-010 Rev 2.0 and re-anchor its annex |
+| [[TASK-029]] | `doing` | the assistant | document | Author PCP-010 Rev 2.0 and re-anchor its annex |
 | [[TASK-030]] | `todo` | the assistant | document | Author PCR-010 Rev 2.0 and re-anchor its annex |
 | [[TASK-031]] | `todo` | the assistant | document | Author PTP-001 Rev 2.0 and re-anchor its annex |
 | [[TASK-032]] | `todo` | the assistant | document | Author RA-001 Rev 2.0 and re-anchor its annex |
 | [[TASK-033]] | `todo` | the assistant | document | Author PCMR-001 Rev 2.0 and re-anchor its annex |
+| [[TASK-036]] | `doing` | the assistant | document | Author INV-002 (model adequacy investigation) and write its annex builder |
 | [[TASK-034]] | `todo` | the assistant | measurement | Full rebuild from clean; 21 annexes valid and grounded; Rev 1.0 set still grounds |
 | [[TASK-035]] | `todo` | the assistant | documentation | Ship: results page, HANDOFF/TASKS/CLAUDE.md, ROADMAP row, delete both proposals |
 
@@ -68,7 +66,10 @@ and it is here so the state is visible, not so anyone else acts on it.
 | [[TASK-012]] | `done` | — | document | Author PCP-005 Rev 2.0 |
 | [[TASK-013]] | `done` | — | document | Author PCR-005 Rev 2.0 |
 | [[TASK-014]] | `done` | — | annex | Annex the pilot: INV-001, PCMP-001, PCP-005, PCR-005 |
+| [[TASK-015]] | `done` | — | measurement | HALT: owner reads the pilot |
 | [[TASK-016]] | `done` | — | document | Author PCMP-001 Rev 2.0 and re-anchor its annex |
+| [[TASK-017]] | `done` | — | document | Author PCP-003 Rev 2.0 and re-anchor its annex |
+| [[TASK-021]] | `done` | — | document | Author PCP-006 Rev 2.0 and re-anchor its annex |
 
 ---
 

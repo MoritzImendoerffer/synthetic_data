@@ -53,6 +53,17 @@ AMD = CAMPAIGN["method_decision"]
 EFFECTIVE_DATE = REV2["effective"]
 VERSION = REV2["rev"]
 
+# The clinical dose (config meta.dose; owner's decision Q4, 2026-10-10): A-Mab's weekly 10 mg/kg for a 70 kg
+# reference adult (the body weight is our assumption). Residual DNA is carried in pg per mg of antibody and
+# judged in ng per dose, A-Mab's unit.
+DOSE = CFG.raw()["meta"]["dose"]
+DOSE_MG = float(DOSE["mg_per_kg"]) * float(DOSE["body_weight_kg"])
+
+
+def dna_ng_per_dose(pg_per_mg):
+    """Residual DNA per dose in ng, from pg DNA per mg antibody and the mg of antibody in a dose."""
+    return pg_per_mg * DOSE_MG / 1000.0
+
 
 PLAN_APPROVAL = CAMPAIGN.get("plan_approval", {})
 CAPA = pd.DataFrame(CAMPAIGN.get("capa", []))
@@ -795,7 +806,8 @@ def corpus_docs_md(doc_id=None):
 # only (no numbers); the quantitative facts are pulled from the CSVs elsewhere.
 UNIT_OP_ROLE = {
     "bioreactor": "Forms the glycan, charge-variant and aggregate CQAs (design-space step)",
-    "harvest": "Primary recovery and clarification; forms no product-quality CQA",
+    # the CQA register assigns fragments to harvest (PCMP-001 Version 2.0 Table 1.1; PCP-004 factual check)
+    "harvest": "Primary recovery and clarification, where fragments form during the harvest hold",
     "protein_a": "Capture; principal HCP and DNA clearance; source of leached Protein A",
     "viral_inactivation": "Low-pH hold; inactivates enveloped virus (XMuLV credit)",
     "cex": "Polish; principal aggregate reduction; major HCP/DNA/leached-PA clearance",

@@ -1302,7 +1302,8 @@ def adequacy_remedy(steps: Optional[List[str]] = None, label: str = "tbl-remedy"
                       "it remains in the refit."),
                ("", f"Runs needed: the smallest augmentation that gives a probability of success of at least "
                     f"{float(ma['assurance']):.2f}, at the effects estimated from the planned runs, that the "
-                    "planned model meets PCMP-001 §7.2. A dash means "
+                    "planned model meets the lack-of-fit test and the limit on overfitting of PCMP-001 "
+                    "§7.2. A dash means "
                     "not reached within the size of the planned design, or not computed when the refit keeps "
                     "no effect. For a refitted model the number is what an augmentation would have needed, "
                     "and no runs were made.")],
@@ -1359,8 +1360,8 @@ def sample_size(steps: Optional[List[str]] = None, label: str = "tbl-sample-size
                     f"{100 * float(_cfg().raw()['campaign']['thresholds']['lof_alpha']):g} % of data sets, so "
                     f"no size takes the probability much above {1 - float(_cfg().raw()['campaign']['thresholds']['lof_alpha']):.2f}.")],
         notes_per_row=True, size="footnotesize", landscape=True,
-        caption="Probability of success that the planned model meets the model-adequacy criteria, by the "
-                "number of further runs.", label=label)
+        caption="Probability of success that the planned model meets the lack-of-fit test and the limit on "
+                "overfitting, by the number of further runs.", label=label)
 
 
 def _name_unit(name: str, unit: str) -> str:

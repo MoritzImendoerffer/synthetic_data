@@ -1190,7 +1190,8 @@ def build():
        "Model adequacy condition 4: the residuals show no pattern against the predicted values or the run "
        "order, and no single run dominates the fit.")
     sq("stats", """The absolute residuals are regressed on the predicted values, and the residuals are regressed on the run order, each at α = `{python} f"{res_alpha:g}"`.""")
-    sq("stats", """A run whose Cook's distance exceeds `{python} f"{cook_factor:g}"`/n, where n is the number of runs in the design, is taken to dominate the fit.""")
+    sq("stats", """A run with a Cook's distance above `{python} f"{cook_factor:g}"`/n is examined by deleting it and repeating the judgement.""")
+    sq("stats", """The model fails this test only where a run's Cook's distance exceeds `{python} cook_fq_txt` of the F distribution with p and n − p degrees of freedom, where p is the number of model parameters and n the number of runs.""")
     sq("stats", """The factor of `{python} f"{cook_factor:g}"` is the usual convention, and for the `{python} n_rsm` runs of the response surface design the cut-off is `{python} f"{cook:.2f}"`.""")
     sq("stats", "A parameter with no active term in either model will be described as having no detectable "
                 "effect on that response over the range studied.")

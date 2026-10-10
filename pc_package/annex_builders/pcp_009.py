@@ -870,7 +870,8 @@ def build():
     sq("criteria", "The absolute residuals are regressed on the predicted value, and the residuals on run order, each at α = `{python} g(a_res)`, and a significant slope counts as a pattern.",
        "Adequacy criterion 4 of PCMP-001 §7.2: the residuals show no pattern against predicted values or run order, tested by regressing the absolute residuals on the predicted value and the residuals on run order, each at α = `{python} g(a_res)`.",
        extra_=[("criteria", "The residuals show no pattern against predicted values or run order, and no single run dominates the fit.")])
-    sq("criteria", "A run whose Cook's distance exceeds `{python} g(cook_k)`/n, a conventional cut-off where n is the number of runs, dominates the fit.")
+    sq("criteria", "A run with a Cook's distance above `{python} g(cook_k)`/n is examined by deleting it and repeating the judgement.")
+    sq("criteria", "The model fails this test only where a run's Cook's distance exceeds `{python} cook_fq_txt` of the F distribution with p and n − p degrees of freedom, where p is the number of model parameters and n the number of runs.")
     sq("criteria", "A model that fails the lack-of-fit test or the limit on overfitting is either refitted with a justified change of terms or transformation, or it is not used to set a range.",
        extra_=[("changes", "A model that fails the lack-of-fit test or the limit on overfitting is now either refitted with a justified change of terms or transformation, or it is not used to set a range.")])
     sq("criteria", "Where no adequate model results, PCR-009 should report the response descriptively, against the criterion, over the runs of the design (PCMP-001 §7.2).")

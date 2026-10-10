@@ -8965,9 +8965,10 @@ def build_plan_bioreactor():
        "their set-points.", "Univariate assessment",
        "The range it supports for each parameter is therefore conditioned on the other parameters "
        "being at their set-points")
-    st(f"No run may have a Cook's distance above 4/n, which is {ns['COOK_RSM']:.2f} for the "
-       f"{ns['N_RSM']} runs of the response-surface design.", crit,
-       f"which is {ns['COOK_RSM']:.2f} for the {ns['N_RSM']} runs of the response-surface design.")
+    # owner's decision 2026-10-10, "4/n flags, F decides": 4/n flags a run for examination
+    st(f"A run with a Cook's distance above 4/n is examined by deletion; the flag is "
+       f"{ns['COOK_RSM']:.2f} for the {ns['N_RSM']} runs of the response-surface design.", crit,
+       f"and it is {ns['COOK_RSM']:.2f} for the {ns['N_RSM']} runs of the response-surface design.")
     st("The NORs must lie inside the declared operating region.", crit,
        "The NORs must lie inside the declared region.")
     st("A parameter has a PAR for each attribute its model shows it changes, and the range carried "

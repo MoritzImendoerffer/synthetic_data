@@ -52,3 +52,33 @@ Scratch: /tmp/claude-1000/-home-moritz-github-repos-synthetic-data/be14bf3c-e46a
 - Draft complete and gated. Not committed. Rendered DRAFT.pdf / DRAFT.docx in pc_package/ (untracked names).
 - Stale on re-authoring (annex step, not done here): build_ground_truth.py PTP-001 region (Version 1.0
   quotes), ground_truth/PTP-001.json; PTP-001 not yet in REV2_READY. No rhetorical spans file exists.
+
+## Revision run 2 (2026-10-10, after factual-PTP-001.md and feedback-PTP-001.run1.md)
+Same author, same draft. Pre-revision copy: scratch/PTP-001.pre-run2.qmd.
+- Factual 1: Table 10.2, §10 and §1.1 item 1 count the 27 studies Version 1.0 reported (computed: ended before
+  2026-07-24, kinds comparability/retest excluded, asserted = S-CEX-FRC, S-PA-RET, S-VI-RET). Caption
+  "studies that Version 1.0 reported". PA 4, VI 4, CEX 4; same span.
+- Factual 2: §1.1 item 4 written as PCMP-001 §1.1 item 4 (the addition of nrCE-SDS answers finding 6).
+- Factual 3: §6.3 release testing has two exceptions (residual DNA, viral clearance, met through clearance);
+  new DNA paragraph (A-Mab claimed range p.47, dose 10 mg/kg p.26 = 700 mg at an assumed 70 kg, qPCR LOQ
+  1 pg/mg = 0.7 ng/dose = 700x the criterion, asserted); §5 comparability qualified likewise. §7 had no
+  release-testing statement, so nothing added to the PPQ strategy.
+- Factual 4: §6.2 titre paragraph cites PCR-005 PD-005-06 (asserted from PLAN_DISCREPANCIES); change 5 too.
+- Factual 5: V1.0 sentence on the outputs compared restored in §5.
+- Factual 6: virus filter "removes small and enveloped virus" in §6.3; role from UNIT_OP_ROLE.
+- Factual 7: "where one is defined" in §6.3 and §7. Factual 8: findings 1 to 3. Factual 9: builder note.
+- Factual 10: new change items 8 (corrections of V1.0) and 9 (engineering batches under the master batch
+  record, Table 10.1 order; §6.3, gap 4 action and §10 now agree); §8 intro says which actions changed;
+  Table 6.2 text matches its caption. Factual 11: PCMP-001 §7.8 wording; ranking among %RSD methods.
+- Content review: S-CEX-FRC no longer the basis (PCMP-001 §7.8/AMD-001 are); SEC-for-aggregate attributed to
+  PCMP-001; harvest gap basis kept and listed; V1.0 "Its transfer should therefore..." kept (V1.0 text);
+  scale-dependent parameters corrected; filters at set pressure; CO2/O2 cause named (solubility, gas flow
+  vs kLa); "remaining elements" corrected; "will confirm"; sending-site comparison said once (§5, item 3);
+  AMV-3011 vs AMV-3221 named; Protein A/CEX bind the antibody; aggregate also at low pH; "commits the
+  studies of its step"; transfer protocol sets the numerical limits; viral margin vs titre precision;
+  afucosylation -> FcγRIIIa/ADCC and galactose -> CDC (A-Mab p.38); "virus spiking studies"; reader
+  glosses cut; code subjects named. Tables: 2.2 note (criteria basis, VH by rule); 6.3 units per cell.
+- Gate: check_render --render run 2 pass 1 OK; two prose fixes; pass 2 OK; explicit pdf/docx renders;
+  closing check_render OK (incl. new page-foot check). PDF 35 pp. 335 sentences, 5977 words. No <<NEEDS:>>.
+- Table images read: 2.1, 2.2, 6.1 (now fits its page), 6.3, 8.1 (both pages), 10.2.
+- Extract refreshed: .claude/work/2026-10-08_01_rev2-campaign/PTP-001_transfer.DRAFT.txt.

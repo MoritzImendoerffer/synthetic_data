@@ -302,3 +302,9 @@ Update at the limit: RA-001 revision run 1 DONE (affba11fac83b329f; 35 pp, gates
 status-RA-001.md). Its flag for PCR-003: RA-001 now expects acidic variants to RISE with culture pH (deamidation is
 base-catalysed); the seeded data show the opposite (pH effect −4.17, p = 0.003), so PCR-003 must report the
 measured direction as contradicting the RA-001 expectation. The RA-001 brief still lists T.methods_by_study.
+Update at the limit: PTP-001 revision run 1 DONE (a84158a8f962603ae; 35 pp, gates green; committed). Next: review
+run 2, promote, annex builder (the Version 1.0 PTP-001 region in build_ground_truth.py is stale). Its judgement
+calls to check: engineering batches under the master batch record after PCMR-001 (Version 1.0 Table 10.1; listed
+as change 9); the reason a narrower distribution does not invalidate a range (computed: every NOR inside its
+characterized range); manufacturing-scale batches placed at the sending site (no record field). nrCE-SDS has no
+performance row in dev_methods.csv; citation page locators render without "p.".

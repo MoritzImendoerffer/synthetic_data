@@ -36,6 +36,14 @@ def _cfg():
 # --------------------------------------------------------------------------------------
 # Number formatting: one rule for every table in the corpus
 # --------------------------------------------------------------------------------------
+def _minus(s: str) -> str:
+    """A formatted number with a true minus sign, and no sign on a value that rounds to zero
+    ("−0.00"). The tables printed negatives with a hyphen (PCR-006 author, 2026-10-10)."""
+    if s.startswith("-"):
+        return ("−" + s[1:]) if any(ch in "123456789" for ch in s) else s[1:]
+    return s
+
+
 def num(v, nd=None) -> str:
     """A value as a table shows it. NaN is "n.t." (not tested); inf is "–"."""
     if v is None or (isinstance(v, float) and math.isnan(v)):
@@ -44,15 +52,15 @@ def num(v, nd=None) -> str:
     if math.isinf(v):
         return "–"
     if nd is not None:
-        return f"{v:,.{nd}f}"
+        return _minus(f"{v:,.{nd}f}")
     a = abs(v)
     if a >= 1000:
-        return f"{v:,.0f}"
+        return _minus(f"{v:,.0f}")
     if a >= 100:
-        return f"{v:.0f}"
+        return _minus(f"{v:.0f}")
     if a >= 10:
-        return f"{v:.1f}"
-    return f"{v:.2f}"
+        return _minus(f"{v:.1f}")
+    return _minus(f"{v:.2f}")
 
 
 def pval(v) -> str:
@@ -648,8 +656,11 @@ def criteria_results(step: str, label: Optional[str] = None) -> CTable:
                             "scale-down model for this output"
                             + (", or divided by it where the offset is a ratio" if any_ratio else "") + "."))
     if any_meas:
+        # "at manufacturing scale" alone was wrong for an output with no known offset, such as
+        # fragments (PCR-006 author, 2026-10-10)
         notes.append(("c)", "No adequate model (PCMP-001 §7.2): the range of the measured results of the "
-                            "designs at manufacturing scale, on which the output is judged."))
+                            "designs, less the offset of the scale-down model where one is known, on which "
+                            "the output is judged."))
     if any_log:
         notes.append(("d)", "Modelled on the log scale: the median, the back-transformed mean "
                             "prediction."))
@@ -837,7 +848,7 @@ def sdm_offsets(steps: Optional[List[str]] = None, studies: Optional[List[str]] 
         same_n = g["n_sd"].nunique() == 1 and g["n_m"].nunique() == 1
         for i, (_, r) in enumerate(g.iterrows()):
             name, unit, nd = SDM_OUTPUT[r["output"]]
-            f = lambda v: f"{v:,.{nd}f}"
+            f = lambda v: _minus(f"{v:,.{nd}f}")
             lead = [C(STEP_NAME[sk], rs=len(g))] if i == 0 else []
             if r["judged"]:
                 concl = [f"{yn(r['met_lo'])} / {yn(r['met_point'])} / {yn(r['met_hi'])}"]
@@ -1500,7 +1511,7 @@ def _p3(p) -> str:
 
 def _sgn(v, nd=2) -> str:
     """A signed difference, with no negative zero."""
-    return f"{0.0:.{nd}f}" if round(abs(v), nd) == 0 else f"{v:+.{nd}f}"
+    return f"{0.0:.{nd}f}" if round(abs(v), nd) == 0 else f"{v:+.{nd}f}".replace("-", "−")
 
 
 def vi_ofat(label="tbl-vi-ofat") -> CTable:

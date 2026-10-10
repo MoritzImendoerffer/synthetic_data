@@ -247,7 +247,10 @@ def check_tables_fit(qmd: str) -> int:
     sys.path.insert(0, os.path.join(ROOT, "pc_package"))
     import tables as T  # noqa: E402
     doc = fitz.open(pdf)
-    text = re.sub(r"\s+", " ", " ".join(page.get_text() for page in doc))
+    # typographic quotes as straight ones: LaTeX sets "Holm's" with a right single quote, which made
+    # a complete landscape table read as cut off (PCR-006 author, 2026-10-10)
+    _q = str.maketrans({"\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"'})
+    text = re.sub(r"\s+", " ", " ".join(page.get_text() for page in doc)).translate(_q)
     text_nospace = re.sub(r"\s+", "", text)
     # also without hyphens: a note that wraps is hyphenated at a line end in the PDF ("augmen-tation")
     text_nohyph = re.sub(r"[\s\-\u2010\u00ad]", "", text)
@@ -278,7 +281,7 @@ def check_tables_fit(qmd: str) -> int:
             note = re.sub(r"\^[^^]+\^", "", t.notes[-1][1])
             probes += [note[:40], note[-40:]]
         for pr in probes:
-            pr = re.sub(r"\s+", " ", pr).strip()
+            pr = re.sub(r"\s+", " ", pr).strip().translate(_q)
             # compared without spaces: the PDF text layer drops the space after a minus sign that
             # LaTeX sets as an operator ("requirement −nominal", PCP-006, 2026-10-09); and, failing
             # that, without hyphens, which a wrapped line may add or split at

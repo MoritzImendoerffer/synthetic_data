@@ -94,3 +94,23 @@ the real reason is no response-surface model) -> flag for PCR-010 / coordinator.
   set-points via g()); T.methods_by_study dropped although the brief still lists it.
 - T.sdm_offsets(["ufdf"]) note a) says aggregate has no criterion at the step (real reason: no RSM model).
 - A-Mab p.86 citation unverified by me (brief, bible, CLAUDE.md say p.86; a config comment says p.140).
+
+## FINAL PASS (review run 2), 2026-10-10, same author
+Inputs: feedback-PCP-010.final.md (fix these only), content-review-PCP-010.run2.md, feedback-plans-shared-2026-10-10.md,
+PLAN-LESSONS rules 4/8/10 re-read. V1.0 wording of named sentences pulled from the V1.0 extract.
+Plan: A1 QA sentence kept + one sentence on V2.0 (CA2 named, effective date); A2 offset requirement once (§5.1)
++ PCR-010 names batches and timing, §11 step 1 runs only; A3 item 6 quotes §6.2/§7.7, no KPP claim, §7.4 reads
+rules at a step without RSM; A4 pH not analysed -> PCR-010, §5.4/§6.2/Table 5.2 agree (retitled, DV series row);
+A5 V1.0 rule described as a test for a difference; A6 one consistent statement; A7 readings decide the criterion;
+A8 acidic/aggregate origins corrected; A9 PAR basis Table 4.1 both places; A10 set-points; A11 V1.0 expectation
+sentence restored; A12 effective-date wording; A13 run-order clause cut. B: item 7 lists 12 named corrections;
+non-V1.0 expectations deleted (curvature sentence, hinge-hydrolysis expectation, "expected to be low" -> V1.0 text).
+C: causes with direction, glosses cut, restatements once, documents named at first use, limitations, abbrevs.
+- final pass gate runs: 3 check_render --render runs, all HARD gates OK (run 1 after the rewrite; run 2 after
+  merging two corrections, tightening §7.4, naming documents at first use; run 3 final after explicit quarto
+  pdf/docx renders). PDF 31 pp (pages 18 and 23 carry short spills before new chapters, layout only).
+  328 sentences, 6,777 words of prose. No <<NEEDS:>>. Digit audit: identifiers only.
+- table changed in this pass: Table 5.2 (retitled, diafiltration series in the diavolume runs, marker spaced,
+  purposes fixed, "Measures the input"); page image p. 17 checked. §1.1 nested corrections list checked (p. 7-8).
+- PCP-010_ufdf.DRAFT.txt refreshed with pdftotext -layout.
+## FINAL PASS DONE (2026-10-10)

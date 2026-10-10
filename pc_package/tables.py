@@ -689,7 +689,9 @@ def criteria_results(step: str, label: Optional[str] = None) -> CTable:
         notes.append(("e)", "Judged on the mean prediction at the least favourable combination, the lower "
                             "end of the range over the NOR."))
     return CTable(
-        header=[[C("Attribute", rs=2), C("Criterion", rs=2), C("Mean predicted by the response-surface model" + ("^b)^" if any_off else ""), cs=2), C("95 % limits of a\nsingle run over\nthe NOR" + ("^b)^" if any_off else ""), rs=2), C("Met across\nthe NOR^a)^", rs=2)],
+        header=[[C("Attribute", rs=2), C("Criterion", rs=2), C(("Mean predicted by the response-surface model, or measured results where it has none^c)^"
+                                                if any_meas else "Mean predicted by the response-surface model")
+                                               + ("^b)^" if any_off else ""), cs=2), C("95 % limits of a\nsingle run over\nthe NOR" + ("^b)^" if any_off else ""), rs=2), C("Met across\nthe NOR^a)^", rs=2)],
                 ["At the set-point", "Range over the NOR"]],
         body=body, align="llrrrl", notes=notes, notes_per_row=True,
         caption=f"{STEP_NAME[step]} outputs against their intermediate acceptance criteria.",
@@ -1519,7 +1521,7 @@ def model_reevaluation(step: str, label: Optional[str] = None) -> CTable:
                ("", f"Gap: R² minus predicted R², at most {float(th['max_r2_minus_pred_r2']):.2f} "
                     "under PCMP-001 §7.2. Model used: the scale chosen by the Box-Cox profile and the "
                     "model with the lowest AICc among the hierarchical submodels of the full quadratic, "
-                    "a block term kept (INV-002).")],
+                    + ("a block term kept (INV-002)." if aug else "on one block of runs (INV-002)."))],
         notes_per_row=True, size="footnotesize", landscape=aug,
         caption="Re-evaluation of the response-surface models"
                 + (" with the augmentation runs" if aug else "") + ".",

@@ -543,7 +543,7 @@ def _model_selection_discrepancy(doc, step, k):
             "planned": "the full quadratic model of each output (PCMP-001 §6 and §7.2)",
             "done": "for each output the scale chosen by the Box-Cox profile (the log scale where its 95 % "
                     "interval contains 0 and excludes 1), the model with the lowest AICc among all hierarchical "
-                    "submodels of the full quadratic, a block term kept, and that model judged against "
+                    "submodels of the full quadratic, a block term kept where the design has a second block, and that model judged against "
                     "PCMP-001 §7.2; a scale-down offset taken on the scale of the model",
             "reason": f"the full quadratic carries terms the data do not support; selecting the model is "
                       f"standard practice, and {INV2['id']} corrective action CA3 applies it to every report",

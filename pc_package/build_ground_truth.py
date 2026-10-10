@@ -6459,8 +6459,9 @@ def build_plan_protein_a():
                                                 f"{ns['n_axial']} axial runs at the faces of the "
                                                 f"cube (coded −1 and +1) and {ns['cp_rsm']} centre "
                                                 f"points, {ns['n_rsm']} runs in all.")],
-            "univariate": [("Univariate assessment", f"Operating temperature and bed height are "
-                                                     f"studied one factor at a time (study {sid_})")],
+            # the Version 1.0 design sentence, restored word for word at the re-open (2026-10-10)
+            "univariate": [("Univariate assessment", "Operating temperature and bed height will be "
+                                                     "assessed one factor at a time")],
         }.get(kind, [])
     design = {"screening": dict(design_name="full two-level factorial", factors=fac,
                                 responses=resp_scr, n_runs=P.doe_runs(PAUO, "screening"),
@@ -6574,10 +6575,10 @@ def build_plan_protein_a():
        f"PCR-005 applied.", chg,
        f"The Version 2.0 criterion for pool host cell protein, {ns['hcp_iac']:,.0f} ng/mg, is "
        f"wider than the Version 1.0 analysis limit of {ns['rev1_hcp']:,.0f} ng/mg.")
-    st("The Version 1.0 analysis limit was never an approved criterion, so the wider Version 2.0 "
-       "criterion does not loosen one.", chg,
-       "The Version 1.0 limit was never an approved criterion, so the wider Version 2.0 criterion "
-       "does not loosen one.")
+    st("The Version 1.0 analysis limit was written into the plan text when the package was compiled "
+       "and was not approved with the plan.", chg,
+       "The limit was written into the text of this plan when the package was compiled, and it was "
+       "not approved with the plan (INV-001 finding 1).")
     st("The intermediate acceptance criteria are derived without data from the Protein A studies, "
        "so they may be applied to studies already executed.", chg,
        "Because this derivation uses no data from the Protein A studies, it may be applied to "

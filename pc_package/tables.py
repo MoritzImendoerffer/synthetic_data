@@ -711,8 +711,10 @@ def parameters_by_step(steps: Optional[List[str]] = None, label="tbl-parameters-
                 sp_txt = f"{pval(par.setpoint)}^{m}^"
                 used.add(m)
                 wu = lambda v_: f"pH {v_}" if par.unit == "pH" else f"{v_} {par.unit}"
+                # the set-point of the plan, not "the set-point the studies were run around": the low-pH
+                # designs were centred elsewhere (PTP-001 factual check, 2026-10-10)
                 narrowed.append((m, f"Moved at Version 2.0 from {wu(pval(par.setpoint_characterized))}, "
-                                    f"the set-point the studies were run around (PCR-{uo.step:03d})."))
+                                    f"the set-point in the characterization plan (PCR-{uo.step:03d})."))
             # the study type as a mark on the parameter, not a column of its own: with that column
             # the table for the whole train ran 58 pt into the page foot of PCMP-001 (2026-10-10)
             pname = r["parameter"]

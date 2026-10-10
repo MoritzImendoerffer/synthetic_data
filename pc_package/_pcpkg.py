@@ -421,18 +421,6 @@ def cqas_by_keys(keys):
     return d[["CQA", "Category", "Acceptance", "Criticality", "Tool #1"]]
 
 
-def _acc_text(r):
-    """A CQA criterion as its spec type reads: a clearance has a floor only, an impurity a
-    ceiling only. Version 1.0 printed both ends of the config range for every attribute, so
-    viral clearance read "16.7–30" as if an upper limit on clearance existed."""
-    st_ = getattr(r, "spec_type", "two_sided")
-    if st_ == "lower":
-        return f"≥ {r.acc_low:g} {r.unit}"
-    if st_ == "upper":
-        return f"≤ {r.acc_high:g} {r.unit}"
-    return f"{r.acc_low:g}–{r.acc_high:g} {r.unit}"
-
-
 def cap_for(keys):
     """Commercial-scale capability rows for the given CQA keys."""
     d = cap[cap.key.isin(keys)].copy()
@@ -822,7 +810,9 @@ UNIT_OP_ROLE = {
     "viral_inactivation": "Low-pH hold; inactivates enveloped virus (XMuLV credit)",
     "cex": "Polish; principal aggregate reduction; major HCP/DNA/leached-PA clearance",
     "aex": "Flow-through polish; clears HCP, DNA and virus (XMuLV and MVM credit)",
-    "virus_filtration": "Dedicated small-virus removal; principal MVM clearance",
+    # the filter claims XMuLV as well as MVM (PCMP-001 Table 7.2); without it the XMuLV sum of the
+    # claims could not be read from the roles (PTP-001 factual check, 2026-10-10)
+    "virus_filtration": "Dedicated small-virus removal by size; principal MVM clearance (MVM and XMuLV credit)",
     "ufdf": "Formulation / mass balance; delivers drug substance at target concentration",
 }
 

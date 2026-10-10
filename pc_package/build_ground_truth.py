@@ -9456,10 +9456,10 @@ def build_master_plan():
        "Scale-down model strategy",
        f"They are work that the Protein A plan {ns['pd_plan']} did not foresee, and the Protein A "
        f"report {ns['pd_report']} records them as discrepancy {ns['pd_id']} from that plan.")
-    st(f"Version 2.0 sets nrCE-SDS ({ns['cesds_amv']}) as the method for fragments in every study "
-       f"at every step from {ns['amd_date']} ({ns['amd_id']}).", "Method for fragments",
-       f"From {ns['amd_date']}, fragments are measured by nrCE-SDS ({ns['cesds_amv']}, under "
-       f"{ns['cesds_sop']}) in every study at every step.")
+    st(f"From {ns['amd_date']} ({ns['amd_id']}), every study that measures fragments, at every step, "
+       f"measures them by nrCE-SDS ({ns['cesds_amv']}).", "Method for fragments",
+       f"From {ns['amd_date']}, every study that measures fragments, at every step, measures them by "
+       f"nrCE-SDS ({ns['cesds_amv']}, under {ns['cesds_sop']}).")
     st("The screening model identifies effects, and the response-surface model is the predictive "
        "model from which every prediction, PAR and design space in the package comes.",
        "Models, and what each model is for",
@@ -9571,7 +9571,7 @@ def build_master_plan():
                    f"{wu(f'{p.nor_characterized[0]:g}–{p.nor_characterized[1]:g}')} to "
                    f"{wu(f'{p.nor[0]:g}–{p.nor[1]:g}')}; the table gives the NOR in force.",
                    "Risk-based prioritization", note, table_title=pbs.caption)
-            elif note.endswith(f"the set-point the studies were run around ({rep})."):
+            elif note.endswith(f"the set-point in the characterization plan ({rep})."):
                 n_sp += 1
                 st(f"At Version 2.0, {rep} moved the set-point of {pname} from "
                    f"{wu(f'{p.setpoint_characterized:g}')} to {wu(f'{p.setpoint:g}')}; the table gives "

@@ -1294,7 +1294,11 @@ def design_space_grid(key, n=11, basis="batch"):
     coded = pd.DataFrame({f: g.ravel() for f, g in zip(fs, grids)})
     ok = np.ones(len(coded), dtype=bool)
     per, measured = {}, {}
-    for resp in responses(key):
+    # fragments by nrCE-SDS carry a criterion at every step from Protein A on but are not among
+    # ``responses(key)``; without them the region was drawn without one quality attribute
+    # (PCR-005 author, 2026-10-10)
+    frag = [c for c in fragment_responses(key) if c == "lmw_cesds_pct" and c not in responses(key)]
+    for resp in list(responses(key)) + frag:
         acc = _judging(key, resp)
         if acc is None:
             continue
@@ -1372,27 +1376,27 @@ def residual_influence(key, resp, runs=None, form=None):
 def oot_check(key, resp, run, value, level=None):
     """The out-of-trend rule the analytical review applies (deviation record ``oot_rule``; owner's
     decision Q7, 2026-10-10): a result is out of trend when it lies outside the two-sided
-    ``level`` prediction interval of a single result from the model selected on the other runs of
-    the response-surface design (the run under review left out and the selection repeated), at
-    the settings of the run under review. The review was made when the design was run, so the
-    planned runs at their recorded settings are used. ``level`` defaults to the record's
-    ``oot_level`` (0.99). Returns a dict: ``lower``, ``upper``, ``centre`` (median on a log
-    scale), ``value``, ``out``, ``terms``, ``scale``, ``level``."""
+    ``level`` prediction interval of a single result from the full quadratic model of the
+    response-surface design, fitted to the other runs (the run under review left out), at the
+    settings of the run under review. The review was made when the design was run, so the planned
+    runs at their recorded settings and the model the plan specified are used: model selection was
+    adopted only in September 2026 (INV-002 CA3; the rule named it until 2026-10-10). ``level``
+    defaults to the record's ``oot_level`` (0.99). Returns a dict: ``lower``, ``upper``,
+    ``centre``, ``value``, ``out``, ``terms``, ``scale`` ("raw"), ``level``, ``df``."""
+    import statsmodels.api as _sm
     lvl = 0.99 if level is None else float(level)
     full = rsm_data(key, "planned")
     rest = full[full["run"] != run].reset_index(drop=True)
     row = full[full["run"] == run].reset_index(drop=True)
     if row.empty:
         raise ValueError(f"run {run} is not a response-surface run of {key}")
-    sel = ad.select_model(rest, resp, rsm_factors(key), TH)
-    X = ad.matrix(row, sel["terms"], False)
-    sf = sel["model"].get_prediction(X).summary_frame(alpha=1.0 - lvl)
+    terms = ad.full_terms(rsm_factors(key))
+    m = _sm.OLS(rest[resp].astype(float), ad.matrix(rest, terms, False)).fit()
+    sf = m.get_prediction(ad.matrix(row, terms, False)).summary_frame(alpha=1.0 - lvl)
     c, lo, hi = (float(sf[k].iloc[0]) for k in ("mean", "obs_ci_lower", "obs_ci_upper"))
-    if sel["scale"] == "log":
-        c, lo, hi = float(np.exp(c)), float(np.exp(lo)), float(np.exp(hi))
     v = float(value)
     return {"lower": lo, "upper": hi, "centre": c, "value": v, "out": bool(v < lo or v > hi),
-            "terms": list(sel["terms"]), "scale": sel["scale"], "level": lvl}
+            "terms": list(terms), "scale": "raw", "level": lvl, "df": float(m.df_resid)}
 
 def governing_factor(key, resp):
     """The RSM factor with the largest absolute main effect on `resp` — its governing

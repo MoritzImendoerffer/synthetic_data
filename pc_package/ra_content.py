@@ -30,7 +30,7 @@ if _RA not in sys.path:
 
 import build_fmea as _F  # noqa: E402  curated CONTENT + severity maps
 
-from _pcpkg import CFG, cqa_reg, UNIT_OP_TITLES, st  # noqa: E402
+from _pcpkg import CFG, cqa_reg, UNIT_OP_TITLES, st, _acc_text  # noqa: E402
 
 CONTENT = _F.CONTENT
 CQA_SEVERITY = _F.CQA_SEVERITY
@@ -106,9 +106,13 @@ def cqa_table():
     record on its rendered row, which only works while the two agree exactly.
     """
     d = cqa_reg.copy()
-    d["Acceptance"] = d.apply(lambda r: f"{r.acc_low:g}–{r.acc_high:g} {r.unit}", axis=1)
+    # the criterion as its type reads (a clearance has a floor only): Version 1.0 printed both
+    # ends of the config range, so viral clearance read "16.7–30 log10" (RA-001 author, 2026-10-10)
+    d["Acceptance"] = d.apply(_acc_text, axis=1)
     d["Set by"] = d["set_by"].map(lambda k: UNIT_OP_TITLES.get(k, k))
-    d["Severity"] = d["key"].map(lambda k: CQA_SEVERITY.get(k, 4))
+    # an attribute the assessment never scored has no severity: fragments joined the register at
+    # Version 2.0, and the fallback of a process attribute (4) printed as if it had been assessed
+    d["Severity"] = d["key"].map(lambda k: CQA_SEVERITY.get(k))
     return d.rename(columns={"cqa": "Quality attribute", "category": "Category",
                              "criticality": "Criticality", "tool1_score": "Tool #1"})[
         ["Quality attribute", "Category", "Acceptance", "Criticality", "Tool #1",

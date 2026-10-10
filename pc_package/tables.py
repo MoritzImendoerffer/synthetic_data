@@ -479,7 +479,7 @@ def worst_case_verification(steps: Optional[List[str]] = None, label="tbl-iac-ve
 # 7. DoE results with method sub-columns and deviation footnotes
 # --------------------------------------------------------------------------------------
 RESP_LABEL = {
-    "afucosylation": "Afuc. (%)", "galactosylation": "Gal. (%)", "high_mannose": "Man5 (%)",
+    "afucosylation": "Afuc. (%)", "galactosylation": "Gal. (%)", "high_mannose": "High mannose (%)",
     "acidic_variants": "Acidic (%)", "aggregates_hmw": "HMW (%)", "aggregate_out_pct": "HMW (%)",
     "pool_hcp_ng_mg": "HCP (ng/mg)", "hcp_out_ng_mg": "HCP (ng/mg)", "step_yield": "Yield (%)",
     "leached_protein_a_ppm": "Leached PrA (ppm)", "xmulv_lrf": "XMuLV LRF", "mvm_lrf": "MVM LRF",
@@ -583,9 +583,15 @@ def doe_results(step: str, kind: str, label: Optional[str] = None, superseded: b
     import doe_report as D
     corr = {d_: (f_, v_) for _, f_, v_, d_ in D.setting_corrections(step, kind)} if not superseded else {}
     pname = {p.key: p.name for p in cfg.unit_op(step).parameters}
+    punit = {p.key: p.unit for p in cfg.unit_op(step).parameters}
+    # a unit printed after the value; a pH carries none
+    _unit_after = lambda u: "" if not u or u == "pH" else f" {u}"
+    # lower-case the first letter of a parameter name inside a sentence, but not of a formula or an
+    # acronym ("CO2 partial pressure" stays as it is)
+    lc = lambda n: n[:1].lower() + n[1:] if n[1:2].islower() else n
     notes = [(mk, f"{did}: {dev.loc[did, 'summary']}. Run retained"
-                  + (f", and analysed at the recorded {pname[corr[did][0]][:1].lower() + pname[corr[did][0]][1:]} "
-                     f"of {corr[did][1]:g} in Version 2.0" if did in corr else "") + ".")
+                  + (f", and analysed at the recorded {lc(pname[corr[did][0]])} "
+                     f"of {corr[did][1]:g}{_unit_after(punit[corr[did][0]])} in Version 2.0" if did in corr else "") + ".")
              for did, mk in marks.items()]
     notes.append(("", f"Factors: {factor_note}"))
     short = [f"{RESP_SHORT[r_]}, {RESP_SHORT_LEGEND[r_]}" for r_ in resps if r_ in RESP_SHORT]

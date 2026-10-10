@@ -2,7 +2,7 @@
 title: "Process Transfer Plan"
 subtitle: "A-Mab Drug Substance — PTP-001"
 author: "Process Development / Manufacturing Science & Technology (MSAT)"
-date: 2026-07-24
+date: 2026-09-30            # Version 2.0 effective date (INV-001 is 2026-09-18)
 format:
   docx:
     reference-doc: reference.docx
@@ -25,6 +25,7 @@ format:
     fig-pos: 'H'
     fig-cap-location: bottom
     tbl-cap-location: top
+    include-in-header: _tables.tex   # multirow, booktabs, threeparttable for complex tables
 bibliography: references.bib
 execute:
   echo: false
@@ -38,47 +39,366 @@ jupyter: python3
 import sys, os
 sys.path.insert(0, os.path.abspath("."))
 from _pcpkg import *  # noqa: F401,F403
+import _pcpkg as P
 import doe_report as D
+import tables as T          # complex tables: merged cells, footnotes (T.<builder>(...).show())
 import matplotlib.pyplot as plt
 import scipy.stats as sstat
 
 DOC = "PTP-001"
-UO = "None"
+UO = None
 UO_TITLE = "A-Mab Drug Substance"
 
-# --- doc-local derived scalars (pulled from the model; never typed) ---------------
-train      = process_steps_df()
-scope      = char_scope_df()
-cqa_tbl    = all_cqas()
-meth       = csv("dev_methods.csv")
+# --- revision, investigation and dates (config campaign:) ------------------------------
+ver, eff = doc_version(DOC)
+appr_v1 = str(rev1_date(DOC))                   # Version 1.0 of this plan was approved on this date
+pkg_date = str(REV1["effective"])               # the date the Version 1.0 title blocks carried
+ra_appr, pcmp_appr = str(PLAN_APPROVAL["RA-001"]), str(PLAN_APPROVAL["PCMP-001"])
+inv_id, inv2_id = INV["id"], INV2["id"]
+inv_opened, inv_closed, inv_class = str(INV["opened"]), str(INV["closed"]), INV["classification"]
+amd_id, amd_date = AMD["id"], str(AMD["date"])
+_ca3 = CAPA.set_index("id").loc["CA3", "action"]
+assert all(x in _ca3 for x in (DOC, "RA-001", "PCMR-001", "PCR-003"))   # CA3 reissues these at Version 2.0
+assert appr_v1 != pkg_date
 
-step_first = int(train["Step"].min())
-step_last  = int(train["Step"].max())
-n_steps    = len(train)
-n_cqas     = len(cqa_tbl)
-n_docs     = len(DOC_REGISTRY)
-n_methods  = len(meth)
+# --- the studies that Version 1.0 reported, and when they ran ----------------------------
+chron = csv("study_chronology.csv")
+_before = chron[chron["end"].astype(str) < pkg_date]
+# the method comparability study and the retests of retained samples gave fragment results only,
+# which Version 1.0 did not report (factual check of 2026-10-10, INV-001)
+_frag_only = _before[_before["kind"].isin(["comparability", "retest"])]
+assert set(_frag_only["id"]) == {"S-CEX-FRC", "S-PA-RET", "S-VI-RET"}
+v1 = _before.drop(index=_frag_only.index).copy()
+n_v1 = len(v1)
+first_start, last_end = str(v1["start"].min()), str(v1["end"].max())
+_first = v1.sort_values("start").iloc[0]
+first_study = _first["id"]
+assert (_first["kind"], _first["step"]) == ("qualification", "bioreactor")
+# this plan came before the risk basis, the master plan and every study
+assert appr_v1 < ra_appr < pcmp_appr < first_start
+assert last_end < pkg_date
 
-n_params        = int(V["n_parameters"])
-n_mv            = int(scope["Multivariate"].sum())
-n_uv            = int(scope["Univariate"].sum())
-n_steps_uv_only = int((scope["Multivariate"] == 0).sum())
+steps = list(CFG.train_order)
+def plan_of(k):
+    return f"PCP-{CFG.unit_op(k).step:03d}"
+def report_of(k):
+    return f"PCR-{CFG.unit_op(k).step:03d}"
 
-scale_l = f"{V['commercial_scale_l']:,}"
-ds_conc = f"{V['ds_conc_g_per_l']:g}"
-n_ppq   = int(V["n_ppq"])
+win_rows = []
+for k in steps:
+    g = v1[v1["step"] == k]
+    pa = str(PLAN_APPROVAL[plan_of(k)])
+    assert pa < str(g["start"].min())                       # each plan approved before its first study
+    win_rows.append([CFG.unit_op(k).step, UNIT_OP_TITLES[k], plan_of(k), pa, len(g),
+                     str(g["start"].min()), str(g["end"].max())])
+win = pd.DataFrame(win_rows, columns=["Step", "Unit operation", "Plan", "Plan approved", "Studies",
+                                      "First study start", "Last study end"])
+assert int(win["Studies"].sum()) == n_v1
+overlap = [(a[0], b[0]) for i, a in enumerate(win_rows) for b in win_rows[i + 1:]
+           if not (a[6] < b[5] or b[6] < a[5])]
+assert overlap                                               # some steps were studied in parallel
 
-hcp_prec = f"{amv_3012_precision:g}"
+# --- package, product and process ------------------------------------------------------
+n_docs = len(DOC_REGISTRY)
+assert set(INVESTIGATIONS) <= set(DOC_REGISTRY)
+meta = CFG.raw()["meta"]
+scale_l, ds_conc, n_ppq = meta["commercial_scale_l"], meta["drug_substance_target_g_per_l"], meta["n_ppq_batches"]
+n_steps = len(steps)
+step_first, step_last = CFG.unit_op(steps[0]).step, CFG.unit_op(steps[-1]).step
+s_har, s_ufdf = CFG.unit_op("harvest").step, CFG.unit_op("ufdf").step
 
-meth_tbl = meth.copy()
-meth_tbl["Limit of quantitation"] = meth_tbl.apply(
-    lambda r: f"{r.loq:g} {r.loq_unit}", axis=1)
-meth_tbl = meth_tbl.rename(columns={
-    "id": "Reference", "name": "Analytical method",
-    "precision_pct": "Intermediate precision", "accuracy_pct": "Accuracy (%)"})
-meth_tbl = meth_tbl[["Reference", "Analytical method", "Intermediate precision",
-                     "Limit of quantitation", "Accuracy (%)"]]
+train_rows = process_steps_df().values.tolist()
+
+cqa_tab = all_cqas()
+n_cqa = len(cqa_tab)
+_reg = cqa_reg.set_index("key")
+assert _reg.loc["fragments_lmw", "set_by"] == "harvest"     # the register assigns fragments to harvest
+assert "nrCE-SDS" in _reg.loc["fragments_lmw", "unit"]
+_cat_order = list(dict.fromkeys(cqa_tab["Category"]))
+cqa_frame = (cqa_tab.assign(_o=cqa_tab["Category"].map(_cat_order.index))
+             .sort_values("_o", kind="stable").drop(columns="_o"))
+cqa_frame = cqa_frame[["Category", "CQA", "Acceptance", "Criticality", "Tool #1"]].copy()
+cqa_frame["Category"] = cqa_frame["Category"].str.capitalize()
+tbl_cqa = T.frame(
+    cqa_frame, "Drug substance quality attributes, acceptance criteria and assigned criticality.",
+    "tbl-cqa", merge=["Category"], align=["P{2.6cm}", "P{4.8cm}", "P{3.8cm}", "c", "r"],
+    header={"Criticality": "Criticality\nlevel", "Tool #1": "Tool #1\nscore"},
+    notes=[("", "Acceptance criteria from the A-Mab case study, except the criterion for fragments, which the "
+                "sponsor set when fragments joined the register at Version 2.0 (PCMP-001 §3). VL, very low. "
+                "L, low. M, moderate. H, high. VH, very high. A level such as M-H lies between the two levels "
+                "it names. Tool #1, the criticality score of the case study, the product of impact and "
+                "uncertainty. The two viral clearance attributes carry very high criticality by rule, because "
+                "a viral contamination would directly harm the patient (PCMP-001 §3).")])
+
+# --- characterization scope and classification ------------------------------------------
+scope = char_scope_df()
+n_par, n_mv, n_uv = int(scope["Parameters"].sum()), int(scope["Multivariate"].sum()), int(scope["Univariate"].sum())
+nodoe_steps = set(scope.loc[scope["Multivariate"] == 0, "Step"])
+assert nodoe_steps == {s_har, s_ufdf}                       # harvest and UF/DF carry no designed experiment
+n_nodoe = len(nodoe_steps)
+scope_rows = scope.astype(str).values.tolist()
+
+cc = class_counts()
+n_cpp, n_wc, n_kpp, n_gpp = (int(cc.get(c, 0)) for c in ("CPP", "WC-CPP", "KPP", "GPP"))
+assert n_cpp + n_wc + n_kpp + n_gpp == n_par
+n_crit = n_cpp + n_wc
+cls_txt = join_and([f"{n} {c}" + ("s" if n != 1 else "") for c, n in
+                    (("CPP", n_cpp), ("WC-CPP", n_wc), ("KPP", n_kpp), ("GPP", n_gpp))])
+
+# every NOR in force lies within the characterized range of its parameter
+for k in steps:
+    _uo = CFG.unit_op(k)
+    for q in _uo.parameters:
+        _p = _uo.param(q.key)
+        assert float(_p.prange[0]) <= float(_p.nor[0]) and float(_p.nor[1]) <= float(_p.prange[1])
+
+# --- set-points and NORs changed at Version 2.0 by the report of their step -------------
+def _lc(s):
+    return s if s[:2].isupper() else s[0].lower() + s[1:]
+
+def _phrase(name, nc, spm):
+    n = _lc(name)
+    if nc == "moved" and spm:
+        return f"the NOR and the set-point of {n} were moved"
+    if nc and spm:
+        return f"the NOR of {n} was {nc} and its set-point moved"
+    if nc:
+        return f"the NOR of {n} was {nc}"
+    return f"the set-point of {n} was moved"
+
+def _serial(xs):
+    if len(xs) == 1:
+        return xs[0]
+    if len(xs) == 2:
+        return f"{xs[0]} and {xs[1]}"
+    return ", ".join(xs[:-1]) + ", and " + xs[-1]
+
+chg = []
+for k in steps:
+    _uo = CFG.unit_op(k)
+    for q in _uo.parameters:
+        _p = _uo.param(q.key)
+        nc = T.nor_change(_p)
+        spm = _p.setpoint_characterized is not None and float(_p.setpoint) != float(_p.setpoint_characterized)
+        if nc or spm:
+            chg.append((k, _p.name, nc, spm))
+chg_steps = list(dict.fromkeys(c[0] for c in chg))
+assert chg_steps
+chg_reports = join_and([f"the {T.step_mid(k)} report {report_of(k)}" for k in chg_steps])
+chg_text = " ".join(
+    f"For {T.step_mid(k)}, " + _serial([_phrase(n, nc, spm) for kk, n, nc, spm in chg if kk == k])
+    + f" ({report_of(k)})." for k in chg_steps)
+
+# --- procedures, method validations and methods -----------------------------------------
+_sops, _amvs = {}, {}
+for _n, _v in vars(P).items():
+    if _n.endswith("SOP_REFS") and isinstance(_v, list):
+        _sops.update(dict(_v))
+    elif _n.endswith("AMV_REFS") and isinstance(_v, list):
+        _amvs.update(dict(_v))
+for _id in ("SOP-1001", "SOP-1002", "SOP-4001", "SOP-3015", "SOP-3016"):
+    assert _id in _sops
+for _id in ("AMV-3012", "AMV-3013", "AMV-3014", "AMV-3019", "AMV-3020", "AMV-3021"):
+    assert _id in _amvs
+meth = csv("dev_methods.csv").sort_values("id").reset_index(drop=True)
+_mi = meth.set_index("id")
+_amvs_t2 = dict(_amvs)
+_amvs_t2["AMV-3221"] = _mi.loc["AMV-3221", "name"]          # the SEC method for aggregate, as the record titles it
+tbl_sops = T.sop_references(sorted(_sops.items()), sorted(_amvs_t2.items()), label="tbl-sops")
+
+titre = meth[meth["loq_unit"].str.startswith("log10")]
+assert set(titre["id"]) == {"AMV-3017", "AMV-3018"}         # the two infectivity titre assays
+# the methods the receiving site transfers: the record without the titre assays of the spiking studies
+meth_t = meth[~meth["id"].isin(titre["id"])].reset_index(drop=True)
+n_meth_t = len(meth_t)
+quant = meth_t.sort_values("precision_pct", ascending=False).reset_index(drop=True)
+hcp_rank = int(quant.index[quant["id"] == "AMV-3012"][0]) + 1
+hcp_prec = quant.loc[hcp_rank - 1, "precision_pct"]
+hcp_rank_txt = {1: "the least precise method", 2: "the second least precise method",
+                3: "the third least precise method"}[hcp_rank]
+assert "AMV-3020" not in set(meth["id"])                    # no record of nrCE-SDS performance here
+for _id in ("AMV-3013", "AMV-3014", "AMV-3021"):
+    assert _id in set(meth["id"])
+# the two records that cover SEC: size variants (AMV-3011) and aggregate (AMV-3221, the one transferred)
+assert "SEC" in _amvs["AMV-3011"] and "SEC" in _mi.loc["AMV-3221", "name"] and "AMV-3221" in set(meth_t["id"])
+assert "AMV-3011" not in set(meth_t["id"])
+meth_frame = pd.DataFrame({
+    "Reference": meth_t["id"],
+    "Analytical method": meth_t["name"],
+    "Intermediate precision": meth_t["precision_pct"].map(lambda v: f"{v:g} %"),
+    "Limit of quantitation": [f"{a:g} {u}" for a, u in zip(meth_t["loq"], meth_t["loq_unit"])],
+    "Accuracy (%)": meth_t["accuracy_pct"].map(lambda v: f"{v:g}"),
+})
+tbl_meth = T.frame(
+    meth_frame, "Analytical methods to be transferred, with the performance each demonstrated at "
+    "qualification.", "tbl-methods",
+    header={"Intermediate precision": "Intermediate\nprecision",
+            "Limit of quantitation": "Limit of\nquantitation", "Accuracy (%)": "Accuracy\n(%)"},
+    align=["l", "P{6.0cm}", "c", "P{3.4cm}", "c"],
+    notes=[("", "Intermediate precision is a relative standard deviation.")])
+
+# residual DNA: a criterion per dose, met through clearance (A-Mab p.47), below what qPCR can quantify
+dna_crit = float(_reg.loc["residual_dna", "acc_high"])
+assert "dose" in str(_reg.loc["residual_dna", "unit"])
+dose_mgkg, dose_bw = DOSE["mg_per_kg"], DOSE["body_weight_kg"]
+assert str(DOSE["source"]).endswith("26")                   # the dose is A-Mab p.26
+dna_loq = float(_mi.loc["AMV-3014", "loq"])
+assert _mi.loc["AMV-3014", "loq_unit"] == "pg/mg"
+dna_loq_dose = dna_ng_per_dose(dna_loq)
+assert dna_loq_dose > dna_crit                               # a release test could not show the criterion
+dna_loq_x = dna_loq_dose / dna_crit
+
+
+# the host cell protein ELISA supports the criteria of all three chromatography steps
+iac = csv("iac.csv")
+n_iac, n_iac_steps = len(iac), int(iac["step"].nunique())
+assert set(iac.loc[iac["cqa"] == "hcp", "step_key"]) == {"protein_a", "cex", "aex"}
+
+# --- scale-down models and viral clearance ----------------------------------------------
+offset_ci = int(round(100 * float(CFG.raw()["analytics"]["sdm"]["offset_ci"])))
+_sdm_cols = csv("sdm_qualification.csv").columns
+assert not any(c.startswith("lmw") or "lrf" in c for c in _sdm_cols)   # fragments and LRF not compared
+
+vc = csv("iac_viral_cumulative.csv").set_index("cqa")
+x_sum, x_req = float(vc.loc["lrv_xmulv", "claimed_sum"]), float(vc.loc["lrv_xmulv", "required"])
+m_sum, m_req = float(vc.loc["lrv_mvm", "claimed_sum"]), float(vc.loc["lrv_mvm", "required"])
+assert bool(vc.loc["lrv_xmulv", "met"]) and bool(vc.loc["lrv_mvm", "met"])
+x_margin, m_margin = x_sum - x_req, m_sum - m_req
+x_prec, m_prec = float(_mi.loc["AMV-3017", "precision_pct"]), float(_mi.loc["AMV-3018", "precision_pct"])
+assert 0 <= x_margin < x_prec and 0 <= m_margin < m_prec    # the margin is smaller than the assay precision
+_xm, _mm = f"{x_margin:.2f}", f"{m_margin:.2f}"
+margin_txt = (f"a margin of {_xm} log10 for each virus" if _xm == _mm
+              else f"a margin of {_xm} log10 for XMuLV and {_mm} log10 for MVM")
+_vir = iac[iac["cqa"].isin(["lrv_xmulv", "lrv_mvm"])]
+def _claims(cqa):
+    r = _vir[_vir["cqa"] == cqa]
+    return sorted(((k, float(v)) for k, v in zip(r["step_key"], r["iac_low"])), key=lambda kv: steps.index(kv[0]))
+x_claims, m_claims = _claims("lrv_xmulv"), _claims("lrv_mvm")
+assert abs(sum(v for _, v in x_claims) - x_sum) < 1e-9 and abs(sum(v for _, v in m_claims) - m_sum) < 1e-9
+assert "viral_inactivation" not in [k for k, _ in m_claims]          # low pH carries no MVM claim
+# with these margins every claimed step is needed
+assert min(v for _, v in x_claims) > x_margin and min(v for _, v in m_claims) > m_margin
+_words = {1: "one", 2: "two", 3: "three", 4: "four"}
+n_x, n_m = _words[len(x_claims)], _words[len(m_claims)]
+def _claim_txt(cl):
+    (k0, v0), rest = cl[0], cl[1:]
+    return join_and([f"{T.step_mid(k0)} claims {v0:g} log10"] + [f"{T.step_mid(k)} {v:g}" for k, v in rest])
+x_claim_txt, m_claim_txt = _claim_txt(x_claims), _claim_txt(m_claims)
+x_set_by, m_set_by = T.step_mid(_reg.loc["lrv_xmulv", "set_by"]), T.step_mid(_reg.loc["lrv_mvm", "set_by"])
+viral_steps_txt = join_and([T.step_mid(k) for k in steps if k in set(_vir["step_key"])])
+# post-clarification turbidity is measured, not set: the response of the other two harvest parameters
+assert {"Centrifugation (rcf)", "Depth filter load", "Post-clarification turbidity"} <= {
+    q.name for q in CFG.unit_op("harvest").parameters}
+
+# --- the tables of this plan written as text ---------------------------------------------
+equiv_rows = [
+    ["Equipment train and scale", "Scale-down models of the unit operations, and the development train",
+     "Commercial equipment train at full working volume",
+     "Each model is qualified for each output by its offset from the batches of the development train "
+     "(PCMP-001 Version 2.0 §7.1, @sec-sdm). The commercial train is compared with the development "
+     "train on the engineering batches (@tbl-gaps)"],
+    ["Process control capability", "Laboratory controllers, with manual intervention available",
+     "Automated control with recorded sequences and alarms",
+     "Control capability is assessed parameter by parameter against the NOR of each parameter "
+     "(@tbl-parameters-by-step)"],
+    ["Utilities and buffer supply", "Buffers prepared for each experiment at laboratory scale",
+     "Central buffer preparation and hold, with water and clean steam from the site utilities",
+     "Buffer identity, concentration, pH and conductivity are controlled to one specification at both "
+     "sites, and buffer hold times are qualified at the receiving site"],
+    ["Analytical capability", "Methods qualified and in routine use for characterization",
+     "Methods to be transferred and requalified before comparability material is tested",
+     "Method transfer and requalification (@sec-methods)"],
+    ["Raw materials", "Development lots released against the common specifications",
+     "Commercial lots under supplier qualification",
+     "Specifications are common, and a change of vendor is assessed through the shared change "
+     "control procedure"],
+    ["Personnel and training", "Study scientists trained on the scale-down models",
+     "Operators trained on the master batch record",
+     "Training is completed and verified before the engineering batches are run"],
+]
+
+gap_rows = [
+    ["Scale-down models are qualified against the development train only",
+     "Characterization conclusions reach commercial scale only through the models",
+     "Compare the engineering batches with the development-train batches on which the models were "
+     "qualified, and record the comparison in the engineering batch reports",
+     "MSAT, sending site"],
+    ["Analytical methods are not qualified at the receiving site",
+     "Comparability results and in-process results cannot be generated or interpreted at the "
+     "receiving site",
+     "Transfer and requalify every method in @tbl-methods, and nrCE-SDS for fragments, under a "
+     "written protocol",
+     "Analytical Development"],
+    ["Harvest and UF/DF carry no multivariate design",
+     "The operating ranges of these two steps rest on univariate work and platform experience",
+     "State the limitation in the harvest and UF/DF plans PCP-004 and PCP-010, and support the ranges "
+     "with univariate data and prior knowledge",
+     "MSAT, sending site"],
+    ["Parameter classification is not established until PCMR-001 is approved",
+     "The master batch record cannot be finalized",
+     "Draft the master batch record after PCMR-001 is approved, and run the engineering batches under it",
+     "MSAT, receiving site"],
+    ["Buffer preparation moves from preparation for each experiment to central preparation and hold",
+     "Buffer hold time and stability are not covered by development data",
+     "Qualify buffer hold times at the receiving site before the engineering batches",
+     "MSAT, receiving site"],
+    ["Viral clearance claims are established at small scale only",
+     "The claims cannot be verified at commercial scale",
+     "Keep the modular claims from small scale, and control the load conditions they depend on "
+     "through the batch record",
+     "MSAT, sending site"],
+    ["Operators at the receiving site have not run this process",
+     "An execution error during qualification would invalidate a batch",
+     "Train the operators on the master batch record, and run engineering batches before "
+     "qualification",
+     "Manufacturing, receiving site"],
+]
+
+roles = pd.DataFrame([
+    ["Sending", "Process Development / MSAT",
+     "Owns the process description, the scale-down models, the characterization plans and reports, "
+     "and the justification of the ranges"],
+    ["Sending", "Analytical Development",
+     "Owns the method transfer protocols and the comparison of the data sets of the two sites"],
+    ["Sending", "Statistics", "Owns the design and the statistical analysis of the characterization studies"],
+    ["Receiving", "MSAT",
+     "Owns the master batch record, the equipment and utility qualification, the engineering batches "
+     "and the qualification campaign"],
+    ["Receiving", "Quality Control",
+     "Executes the transferred methods and performs in-process and release testing"],
+    ["Receiving", "Manufacturing",
+     "Executes the engineering and qualification batches under the master batch record"],
+    ["Both", "Quality Assurance",
+     "Approves the plans, the reports, each handover and the disposition of any open gap"],
+], columns=["Site", "Function", "Responsibility"])
+tbl_roles = T.frame(roles, "Functions, sites and the responsibility this plan assigns to each.",
+                    "tbl-roles", merge=["Site"], align=["P{2.2cm}", "P{4.4cm}", "P{8.6cm}"])
+
+deliv_rows = [
+    ["RA-001, the pre-characterization risk assessment", "MSAT, sending site", "This plan"],
+    ["PCMP-001, the characterization master plan", "MSAT, sending site", "RA-001"],
+    ["One characterization plan per unit operation, PCP-003 to PCP-010", "MSAT, sending site", "PCMP-001"],
+    ["Scale-down model qualification records", "MSAT, sending site", "The characterization plan of the step"],
+    ["Method transfer protocols and reports", "Analytical Development", "This plan"],
+    ["One characterization report per unit operation, PCR-003 to PCR-010", "MSAT, sending site",
+     "Execution of the corresponding plan"],
+    ["PCMR-001, the characterization master report", "MSAT, sending site", "Every characterization report"],
+    ["Revised process description with confirmed ranges", "MSAT, sending site", "PCMR-001"],
+    ["Master batch record", "MSAT, receiving site", "The revised process description"],
+    ["Equipment and utility qualification records", "MSAT, receiving site", "This plan"],
+    ["Engineering batch reports", "MSAT, receiving site", "Master batch record and method transfer"],
+    ["Qualification protocol", "MSAT, receiving site", "PCMR-001 and the engineering batch reports"],
+]
+
+tbl_chron = T.frame(
+    win, "Approval date of each step plan and execution window of the studies that Version 1.0 "
+    "reported.", "tbl-chronology",
+    header={"Plan approved": "Approved", "First study start": "First study\nstart",
+            "Last study end": "Last study\nend"},
+    align=["r", "l", "l", "l", "r", "l", "l"])
 ```
+
+{{< pagebreak >}}
 
 ```{python}
 #| output: asis
@@ -90,492 +410,336 @@ print(SYN_BANNER)
 ## Approvals {.unnumbered}
 
 | Role | Function | Name (synthetic) | Signature | Date |
-|---|---|---|---|---|
+|:-----------|:---------------------------------------|:-------------------|:---------------|:-----------|
 | Author | Process Development / MSAT | — | — | — |
 | Reviewer | Analytical Development | — | — | — |
 | Reviewer | Manufacturing Science | — | — | — |
 | Reviewer | Statistics | — | — | — |
 | Approver | Quality Assurance | — | — | — |
 
-: Approval record (synthetic; signatures not applied). {#tbl-appr}
-
-## Abbreviations {.unnumbered}
-
-ADCC, antibody dependent cellular cytotoxicity; AEX, anion exchange chromatography; AMV,
-analytical method validation; CEX, cation exchange chromatography; CPP, critical process
-parameter; CQA, critical quality attribute; DoE, design of experiments; DS, drug substance;
-ELISA, enzyme-linked immunosorbent assay; GMP, good manufacturing practice; GPP, general
-process parameter; HCP, host cell protein; HILIC, hydrophilic interaction liquid
-chromatography; HMW, high molecular weight; ICH, International Council for Harmonisation;
-icIEF, imaged capillary isoelectric focusing; IgG1, a subclass of immunoglobulin G; KPP, key
-process parameter; LOQ, limit of quantitation; MSAT, Manufacturing Science and Technology;
-MVM, minute virus of mice; NOR, normal operating range; NTU, nephelometric turbidity unit;
-PAR, proven acceptable range; PCMP, Process Characterization Master Plan; PCMR, Process
-Characterization Master Report; PCP, Process Characterization Plan; PCR, Process
-Characterization Report; PPQ, process performance qualification; PTP, Process Transfer Plan;
-qPCR, quantitative polymerase chain reaction; QA, quality assurance; RA, risk assessment;
-RSD, relative standard deviation; SEC, size exclusion chromatography; SDM, scale-down model;
-SOP, standard operating procedure; TCID50, median tissue culture infectious dose; UF/DF,
-ultrafiltration and diafiltration; WC-CPP, well-controlled critical process parameter;
-XMuLV, xenotropic murine leukaemia virus.
+Synthetic record. Signatures are not applied.
 
 {{< pagebreak >}}
 
-<!-- ========================= BODY START ====================================== -->
+## Revision history {.unnumbered}
 
-# Purpose and scope
+```{python}
+#| output: asis
+print(revision_history(DOC))
+```
 
-This plan governs the transfer of the `{python} PRODUCT` drug substance manufacturing
-process from the development site to the commercial manufacturing site. The two sites and
-the work each one holds are named in §3. The process to be transferred is the fed-batch
-cell culture and platform purification train described in §2. The transfer covers the
-manufacturing process, the analytical methods that test the intermediates and the drug
-substance, and the control strategy that connects the two.
+## Abbreviations {.unnumbered}
 
-This plan is the parent document of the `{python} PRODUCT` process characterization
-package. The package has `{python} n_docs` documents and is listed in @tbl-corpus. Each
-plan in it commits a study, each report records what that study found, and the set as a
-whole exists to justify the operating ranges and the control strategy that the receiving
-site will run. A reader who wants the risk basis for the study scope should start at
-RA-001. A reader who wants the consolidated outcome should start at PCMR-001.
+```{python}
+#| output: asis
+print(abbreviations_table([
+    ("2-AB", "2-aminobenzamide"),
+    ("A280", "absorbance at 280 nm"),
+    ("ADCC", "antibody-dependent cellular cytotoxicity"),
+    ("AMD", "analytical method decision"),
+    ("AMV", "analytical method validation"),
+    ("AU", "absorbance unit"),
+    ("BLA", "Biologics License Application"),
+    ("CDC", "complement-dependent cytotoxicity"),
+    ("CE-SDS", "capillary electrophoresis with sodium dodecyl sulfate"),
+    ("CEX", "cation exchange chromatography"),
+    ("CH2, CH3", "second and third constant domains of the antibody heavy chain"),
+    ("CO2", "carbon dioxide"),
+    ("CPP", "critical process parameter"),
+    ("CQA", "critical quality attribute"),
+    ("CV", "column volume"),
+    ("DoE", "design of experiments"),
+    ("DS", "drug substance"),
+    ("DV", "diavolume"),
+    ("ELISA", "enzyme-linked immunosorbent assay"),
+    ("Fc", "crystallizable fragment of the antibody"),
+    ("FcγRIIIa", "Fcγ receptor IIIa"),
+    ("GPP", "general process parameter"),
+    ("HCP", "host cell protein"),
+    ("HILIC", "hydrophilic interaction liquid chromatography"),
+    ("HMW", "high molecular weight species"),
+    ("HPLC", "high-performance liquid chromatography"),
+    ("ICH", "International Council for Harmonisation"),
+    ("icIEF", "imaged capillary isoelectric focusing"),
+    ("IgG1", "immunoglobulin G, subclass 1"),
+    ("INV", "investigation report"),
+    ("kLa", "volumetric mass transfer coefficient"),
+    ("KPP", "key process parameter"),
+    ("LMW", "low molecular weight species"),
+    ("MSAT", "Manufacturing Science and Technology"),
+    ("MVM", "minute virus of mice"),
+    ("NOR", "normal operating range"),
+    ("nrCE-SDS", "non-reduced capillary electrophoresis with sodium dodecyl sulfate"),
+    ("NTU", "nephelometric turbidity unit"),
+    ("OD280", "optical density at 280 nm"),
+    ("PA", "Protein A"),
+    ("PAR", "proven acceptable range"),
+    ("pCO2", "CO2 partial pressure"),
+    ("PCMP", "Process Characterization Master Plan"),
+    ("PCMR", "Process Characterization Master Report"),
+    ("PCP", "Process Characterization Plan"),
+    ("PCR", "Process Characterization Report"),
+    ("PPQ", "process performance qualification"),
+    ("PTP", "Process Transfer Plan"),
+    ("QA", "Quality Assurance"),
+    ("qPCR", "quantitative polymerase chain reaction"),
+    ("RA", "risk assessment"),
+    ("rcf", "relative centrifugal force"),
+    ("SEC", "size exclusion chromatography"),
+    ("SOP", "standard operating procedure"),
+    ("TCID50", "median tissue culture infectious dose"),
+    ("UF/DF", "ultrafiltration and diafiltration"),
+    ("UPLC", "ultra-performance liquid chromatography"),
+    ("UV", "ultraviolet"),
+    ("WC-CPP", "well-controlled critical process parameter"),
+    ("XMuLV", "xenotropic murine leukemia virus"),
+]))
+```
+
+{{< pagebreak >}}
+
+<!-- ========================= BODY START ===================================== -->
+
+# Purpose and scope {#sec-purpose}
+
+This plan governs the transfer of the `{python} PRODUCT` drug substance manufacturing process from the development site of `{python} COMPANY` in `{python} SENDING_LOCATION` to its commercial drug substance site in `{python} RECEIVING_LOCATION`. The transfer covers the manufacturing process, the analytical methods that test the intermediates and the drug substance, and the control strategy that connects them. @sec-product describes the process, and @sec-sites names the work that each site holds.
+
+This plan is the parent document of the `{python} PRODUCT` process characterization package. The package has `{python} n_docs` documents, including this plan, and @tbl-package lists the others. The risk assessment RA-001 sets the scope of each study. Each Process Characterization Plan (PCP-003 to PCP-010) commits the studies of its step, and each paired Process Characterization Report (PCR-003 to PCR-010) records what they found. The master plan PCMP-001 sets the framework that the step plans apply, and the master report PCMR-001 consolidates the reports. Together these documents justify the operating ranges and the control strategy that the receiving site will run. The package also holds two investigation reports of Quality Assurance. The investigation `{python} inv_id` is the reason for this revision (@sec-changes), and the investigation `{python} inv2_id` concerns the adequacy of the response-surface models in the step reports.
 
 ```{python}
 #| output: asis
 print(corpus_docs_md(DOC))
 print()
-print(": The A-Mab document package that this plan parents. {#tbl-corpus}")
+print(": The other documents of the A-Mab characterization package. {#tbl-package}")
 ```
 
-Three activities are outside the scope of this plan. Drug product manufacture, filling and
-finishing are transferred under a separate plan. Cell bank manufacture and testing are
-governed by their own records and are not repeated here. The execution of the process
-performance qualification campaign is also outside this plan, which sets the conditions the
-campaign must meet before it may start and the strategy it will follow (§7). The campaign
-itself will be executed under its own protocol and reported separately.
+Three activities are outside the scope of this plan. Drug product manufacture, filling and finishing are transferred under a separate plan. Cell bank manufacture and testing are governed by their own records. The execution of the process performance qualification (PPQ) campaign is also outside this plan. This plan sets the conditions the campaign must meet before it may start and the strategy it will follow (@sec-ppq). The campaign will be executed under its own protocol and reported separately.
 
-The transfer follows the quality system expectations for technology transfer in ICH Q10
-[@ichq10] and the lifecycle approach to process validation described by FDA [@fda2011].
-Characterization is the Stage 1 process design work of that lifecycle, and process
-performance qualification is Stage 2. The enhanced development approach of ICH Q8 [@ichq8]
-and ICH Q11 [@ichq11] governs how the design space and the control strategy are defined.
-ICH Q9 [@ichq9] governs the risk assessment that scopes the studies, and ICH Q5A [@ichq5a]
-governs the evaluation of viral safety. The process model, the quality attribute framework
-and the risk methodology follow the published case study [@amab2009].
+The transfer follows ICH Q10, which places technology transfer within the pharmaceutical quality system [@ichq10], and the lifecycle approach to process validation [@fda2011]. In that lifecycle, process characterization belongs to Stage 1 (process design). Stage 2 (process qualification) covers the qualification of the facility, equipment and utilities and the process performance qualification. The enhanced development approach of ICH Q8 and ICH Q11 governs how the design space and the control strategy are defined [@ichq8; @ichq11]. ICH Q9 governs the risk assessment that scopes the studies [@ichq9], and ICH Q5A governs the evaluation of viral safety [@ichq5a]. The process model, the quality attribute framework and the risk method follow the published A-Mab case study [@amab2009].
 
-# Product and process description
+## Changes in this revision {#sec-changes}
 
-`{python} PRODUCT` is a humanized IgG1 monoclonal antibody. Its primary mechanism of action
-is antibody dependent cellular cytotoxicity, so the fucose and galactose content of the
-N-linked glycan are linked to efficacy and are treated as quality attributes of the drug
-substance. The glycan is formed in the production bioreactor and is not modified by the
-purification train, because none of the platform purification steps separates glycosylation
-variants under the conditions used here [@amab2009]. Control of the glycan attributes
-therefore sits in cell culture, and the transfer of the cell culture step carries more
-product quality risk than the transfer of any single purification step.
+Version 1.0 of this plan was approved on `{python} appr_v1`, before the risk assessment RA-001 (`{python} ra_appr`), the master plan PCMP-001 (`{python} pcmp_appr`) and the first characterization study, the qualification of the production bioreactor scale-down model (`{python} first_study`), which started on `{python} first_start`. Version 2.0 replaces it under corrective action CA3 of the QA investigation `{python} inv_id`, which reissues this plan, the risk assessment RA-001, the step reports PCR-003 to PCR-010 and the master report PCMR-001 at Version 2.0. Quality Assurance opened the investigation on `{python} inv_opened`, after a review of the master report PCMR-001 Version 1.0 for readiness for the Biologics License Application (BLA), and closed it on `{python} inv_closed` with the classification `{python} inv_class`. The investigation found that the criteria used to judge each step in the proven acceptable range (PAR) analysis had been set after the data were seen and were in no approved protocol (`{python} inv_id` finding 1). This plan set no step criteria. This revision makes the following changes:
 
-The drug substance is manufactured at a production bioreactor working volume of
-`{python} scale_l` L and is delivered by the final formulation step at a target
-concentration of `{python} ds_conc` g/L. The train has `{python} n_steps` unit operations,
-numbered Step `{python} step_first` through Step `{python} step_last`. @tbl-train lists them
-with the role each plays in the control strategy.
+1. The title block of Version 1.0 carried `{python} pkg_date`, the date on which the Version 1.0 package was compiled, in place of the date on which this plan was approved (`{python} inv_id` finding 5). The revision history now gives the approval date. @sec-schedule records the approval date of each step plan and the execution window of the studies that Version 1.0 reported (@tbl-chronology).
+2. Where this plan states what an intermediate is judged against, it now refers to the intermediate acceptance criteria of the master plan PCMP-001 Version 2.0 §7.3. This applies to the comparison of the sites (@sec-sdm), the control strategy (@sec-control) and the qualification campaign (@sec-ppq). These criteria are derived a priori from the drug substance criteria and the platform worst case of each downstream step. Version 1.0 referred to the limit that each characterization report would establish for its own step. The investigation found that the step limits had been set after the data were seen and were in no approved protocol (finding 1), that the aggregate and host cell protein limits carried the drug substance limit back through the nominal clearance of this campaign and divided it by a margin that differed by step (finding 2), and that the bioreactor limits for the glycans and acidic variants were computed from the capability data they were then used to judge (finding 3). The viral clearance claims of `{python} viral_steps_txt` now refer to PCMP-001 Version 2.0 §7.4.
+3. Where this plan describes the qualification of the scale-down models (@sec-equivalency, @sec-sdm and @tbl-gaps), it now refers to the offset rule of PCMP-001 Version 2.0 §7.1. Under that rule a model is qualified for each output by its offset, the scale-down mean minus the manufacturing-scale mean, and not by a test of equivalence. For the outputs that the qualification compares at both scales, every judgement against a criterion is stated at manufacturing scale. The manufacturing-scale reference is the development train at the sending site (@sec-sdm). Version 1.0 said in @tbl-equivalency that the models are qualified against the commercial train before any study is run, which the order of @tbl-deliverables rules out. Its gap action recorded that comparison in the step plans, which were approved before their studies. The commercial train is now compared with the development train on the engineering batches, and the comparison is recorded in the engineering batch reports (@tbl-gaps).
+4. The quality attributes in @tbl-cqa now include fragments (low molecular weight species). The sponsor set the criterion for fragments, measured by non-reduced capillary electrophoresis with sodium dodecyl sulfate (nrCE-SDS), when fragments joined the CQA register of PCMP-001 Version 2.0. The A-Mab case study lists fragmentation among the typical quality attributes of an antibody but gives it no limit (PCMP-001 §3). That register assigns fragments to harvest, so the description of harvest in @tbl-train and the basis on which the harvest gap is accepted (@sec-gaps) are restated. The nrCE-SDS method (SOP-3015, AMV-3020) is added to the methods to transfer (@sec-methods and @tbl-gaps), following the analytical method decision `{python} amd_id` of `{python} amd_date` as PCMP-001 Version 2.0 §7.8 sets it. This answers `{python} inv_id` finding 6, that size exclusion chromatography (SEC) reads fragments high in samples that still carry host cell protein.
+5. The procedures and method validations in @tbl-sops now also include the product titre method by Protein A affinity HPLC (SOP-3016, AMV-3021), because the titre sets the protein load of a capture run, and the method for aggregate by SEC-HPLC (AMV-3221). @tbl-methods lists the methods to be transferred with their qualified performance. Beside the methods of the Version 1.0 table, it now includes the charge variant method by icIEF (AMV-3013), the residual DNA method by qPCR (AMV-3014) and the product titre method (AMV-3021). It no longer includes the two infectivity titre assays (AMV-3017 and AMV-3018), which stay with the virus spiking studies at small scale (@sec-methods).
+6. @sec-process now carries the parameter table as it stands at this revision (@tbl-parameters-by-step), with the set-point, NOR, characterized range and class of every parameter. It includes the set-points and NORs that `{python} chg_reports` changed at Version 2.0, and its footnotes give the value the studies were planned against.
+7. @tbl-package lists the two investigation reports, `{python} inv_id` and `{python} inv2_id`, beside the plans and reports of the package.
+8. Statements of Version 1.0 about the product, the sites and the scale-down models that were wrong, or that the record now contradicts, are corrected. Version 1.0 linked both glycan attributes to ADCC, but galactose content raises the complement-dependent cytotoxicity of A-Mab, not its ADCC, and aggregate also forms at low pH (@sec-product). Protein A and cation exchange bind the antibody, and only anion exchange binds the impurities while the antibody flows through (@sec-product). The CQA register assigns each viral clearance requirement to one step, where Version 1.0 said that the requirements belong to no single step (@sec-product). The step roles in @tbl-train are those of the register at this revision. The statement that a common quality system is a condition ICH Q10 places on the transfer is removed, and the handovers that Quality Assurance approves are the deliverables of @tbl-deliverables (@sec-sites). Bed height, linear velocity and the load per membrane area are held constant across scale, and the virus filter and the UF/DF step run at a set pressure (@sec-equivalency and @sec-sdm). A narrower distribution of a parameter does not invalidate its range because every NOR lies within its characterized range, as @tbl-parameters-by-step shows (@sec-equivalency). The other elements of @tbl-equivalency differ between the sites in ways that can affect the process, not only in documentation, and method transfer needs laboratory work as buffer preparation does (@sec-equivalency). Version 1.0 judged comparability against the acceptance criteria alone. As ICH Q5E expects, the engineering batches are now also compared with the development-train batches (@sec-sdm).
+9. Statements of Version 1.0 about the transfer elements, the qualification campaign and the gaps are corrected in the same way. A method transfer succeeds on accuracy within the limits the transfer protocol sets, not within a qualified range, and the protocol also sets the allowed difference between the sites (@sec-methods). Release testing does not test residual DNA or viral clearance against their criteria (@sec-control). XMuLV clearance rests on `{python} n_x` claimed steps and MVM clearance on `{python} n_m`, where Version 1.0 said that viral safety rests on three independent steps (@sec-control). Stage 2 of the lifecycle also covers the qualification of the facility, equipment and utilities (@sec-purpose and @sec-ppq). The qualification protocol, not the step plans, sets the sampling plan of the campaign, and post-clarification turbidity is measured, not set (@sec-ppq). In @tbl-gaps the first two gaps no longer set the schedule, which @sec-schedule gives, and the gaps on harvest and UF/DF and on viral clearance are managed, not closed.
+10. The engineering batches are run under the master batch record, which follows PCMR-001, as the deliverables of Version 1.0 have it (@tbl-deliverables). Version 1.0 also said that the engineering batches could run against the current process description (@sec-control and @tbl-gaps) and that operator training did not wait for PCMR-001 (@sec-schedule). These statements now follow the order of @tbl-deliverables.
+
+The scope of the transfer, the site analysis, the transfer elements, the gap analysis and the strategy for process performance qualification are otherwise as Version 1.0 stated them.
+
+# Product and process description {#sec-product}
+
+`{python} PRODUCT` is a humanized IgG1 monoclonal antibody. Its primary mechanism of action is antibody-dependent cellular cytotoxicity (ADCC). An antibody without core fucose on its N-linked glycan binds the Fcγ receptor IIIa (FcγRIIIa) of natural killer cells more strongly, so the ADCC activity of A-Mab rises with afucosylation [@amab2009, p. 38]. Galactose content does not change the ADCC of A-Mab, but its complement-dependent cytotoxicity (CDC) rises with galactose content [@amab2009, p. 38]. Afucosylation and galactosylation are therefore quality attributes of the drug substance. The glycan is formed in the production bioreactor. None of the platform purification steps separates glycosylation variants under the conditions used here [@amab2009]. Protein A binds the Fc region at the interface of the CH2 and CH3 domains. The glycan takes no part in that binding, so Protein A captures every glycan variant alike. Fucose, galactose and mannose carry no charge, so the two ion exchange steps, which separate by charge, do not resolve these variants either. Control of the glycan attributes therefore sits in cell culture. For this reason the transfer of the cell culture step carries more risk to product quality than the transfer of any single purification step.
+
+The drug substance is made at a production bioreactor working volume of `{python} f"{scale_l:,}"` L. It leaves the final formulation step at a target concentration of `{python} ds_conc` g/L. The train has `{python} n_steps` unit operations, numbered Step `{python} step_first` to Step `{python} step_last` (@tbl-train).
 
 ```{python}
 #| output: asis
-show(train)
+print(md_table(["Step", "Unit operation", "Principal role"], train_rows, [8, 30, 62]))
 print()
 print(": The A-Mab drug substance process train and the principal role of each step. {#tbl-train}")
 ```
 
-The purification sequence is the platform sequence used for the sponsor's earlier humanized
-IgG1 products. Capture on Protein A is followed by a low pH hold, cation exchange, anion
-exchange, small virus retentive filtration and ultrafiltration with diafiltration. The low
-pH hold, the anion exchange step and the small virus retentive filter each carry a viral
-clearance claim, and the three claims are modular in the sense of ICH Q5A [@ichq5a]. Each
-step is studied and claimed on its own. The cumulative clearance across the train is stated
-only in PCMR-001, and no single step report claims it.
+The purification sequence is the platform sequence of the earlier humanized IgG1 products of `{python} COMPANY`, X-Mab, Y-Mab and Z-Mab. Capture on Protein A is followed by a low-pH hold, cation exchange, anion exchange, small virus retentive filtration, and ultrafiltration with diafiltration (UF/DF). The low-pH hold, the anion exchange step and the virus filter each carry a viral clearance claim. The three claims are modular in the sense of ICH Q5A [@ichq5a]. Each step is studied and claimed on its own, and no single step report claims the cumulative clearance of the train. The master report PCMR-001 states the cumulative clearance.
 
-@tbl-cqa lists the `{python} n_cqas` quality attributes that the transfer must preserve, with the
-acceptance criterion and the criticality assigned to each. Criticality is expressed as a
-continuum, not as a binary split into critical and non-critical, following the case study
-[@amab2009] and the risk principles of ICH Q9 [@ichq9]. The attributes ranked high and
-very high drive the study scope. Afucosylation, galactosylation and high mannose are set
-by the glycosyltransferase activity of the cell, which rises and falls with the nutrient
-supply and the dissolved gas concentrations the bioreactor holds. Acidic charge variants
-accumulate through deamidation. The rate rises with pH and with temperature, and the
-extent reached rises with the time the product spends in the culture at those
-conditions. Aggregate forms in the culture and is reduced again by cation
-exchange, which binds the high molecular weight species more strongly than the monomer and
-leaves them on the column when the pool is cut. Host cell protein, residual DNA and
-leached Protein A are removed by the chromatography steps, which either bind them while
-the antibody flows past or elute them away from the product peak. The two viral clearance
-attributes are cumulative across the train and belong to no single step.
+@tbl-cqa lists the `{python} n_cqa` quality attributes that the transfer must preserve. Criticality is a continuum, not a binary split into critical and non-critical, as in the case study [@amab2009] and the risk principles of ICH Q9 [@ichq9]. The attributes ranked high and very high drive the scope of the studies.
+
+Afucosylation, galactosylation and high mannose depend on how far the cell processes the glycan in the Golgi. That processing changes with the nutrient supply and with the dissolved gas concentrations in the bioreactor. Acidic charge variants accumulate through the deamidation of asparagine residues. The rate of deamidation rises with pH and temperature, and the extent rises with the time the product spends at those conditions. Aggregate forms in the culture and again at low pH, during the elution from Protein A and the viral inactivation hold. Cation exchange reduces it, because the resin binds the high molecular weight species more strongly than the monomer, and these species stay on the column when the pool is cut. The CQA register of PCMP-001 Version 2.0 assigns fragments to harvest, because proteases released from lysed cells clip the antibody in culture and during the harvest hold (PCMP-001 §3). Fragments are judged at the downstream steps. Host cell protein, residual DNA and leached Protein A are removed by the chromatography steps. Protein A and cation exchange bind the antibody and elute it away from most of these impurities. Anion exchange works the other way, binding the impurities while the antibody flows through. The two viral clearance requirements are cumulative. The register assigns the XMuLV requirement to `{python} x_set_by` and the MVM requirement to `{python} m_set_by`, but each requirement is met by the sum of the claims of several steps (@sec-control).
 
 ```{python}
 #| output: asis
-show(cqa_tbl)
-print()
-print(": Drug substance quality attributes, acceptance criteria and assigned criticality. {#tbl-cqa}")
+tbl_cqa.show()
 ```
 
-# Sending and receiving sites
+# Sending and receiving sites {#sec-sites}
 
-The sending site is `{python} SENDING_SITE`. The receiving site is
-`{python} RECEIVING_SITE`. Both belong to the same sponsor, and both operate under one
-pharmaceutical quality system and one change control procedure. That common quality system
-is the condition ICH Q10 places on a transfer of this kind [@ichq10]. A change to a
-set-point, a range or an analytical method during the transfer will therefore be assessed
-once and applied at both sites.
+The sending site is the development site of `{python} COMPANY` in `{python} SENDING_LOCATION`. The receiving site is the commercial drug substance site of `{python} COMPANY` in `{python} RECEIVING_LOCATION`. Both sites belong to the same sponsor and work under one pharmaceutical quality system and one change control procedure. A change to a set-point, a range or an analytical method during the transfer is therefore assessed once and applied at both sites.
 
-Development retains the qualified scale-down models, the execution and the statistical
-analysis of the characterization studies, and the authorship of the characterization plans
-and reports. It also retains the process description and the justification of the operating
-ranges until those are approved. The receiving site takes ownership of commercial
-manufacture. That ownership covers the master batch record, the operation of the equipment
-train at commercial scale, the engineering and qualification batches, and the routine
-testing that supports batch release.
+The development site keeps the qualified scale-down models, the execution and the statistical analysis of the characterization studies, and the authorship of the characterization plans and reports. It also keeps the process description and the justification of the operating ranges until those are approved. The receiving site takes ownership of commercial manufacture. That ownership covers the master batch record, the operation of the equipment train at commercial scale, the engineering and qualification batches, and the routine testing that supports batch release.
 
-The division is a division of work rather than of accountability. Both sites review and
-approve the process description, and Quality Assurance at both sites approves each handover
-listed in §10. Where a characterization study produces a range the receiving site cannot
-hold, the two sites resolve it together before the range is written into a batch record.
+The division between the sites is one of work, not of accountability. Both sites review and approve the process description, and Quality Assurance at both sites approves each handover, that is each deliverable in @tbl-deliverables. Where a characterization study supports a range that the receiving site cannot hold, the two sites resolve it together before the range is written into a batch record.
 
-# Site equivalency analysis
+# Site equivalency analysis {#sec-equivalency}
 
-Equivalency was assessed for the elements that can carry a process difference between the
-two sites. @tbl-equiv gives the assessment. The comparison is prospective, so each row
-states what will be compared and how a difference will be managed rather than a measured
-outcome.
-
-| Element | Sending site | Receiving site | How the difference is managed |
-|---|---|---|---|
-| Equipment train and scale | Qualified scale-down models of every unit operation | Commercial equipment train at full working volume | The models are qualified against the commercial train before any study is run (§5) |
-| Process control capability | Laboratory controllers with manual intervention available | Automated control with recorded sequences and alarms | Control capability is assessed parameter by parameter against the NOR that each parameter is given |
-| Utilities and buffer supply | Buffers prepared per experiment at laboratory scale | Central buffer preparation and hold, water and clean steam from site utilities | Buffer identity, concentration, pH and conductivity are controlled to one specification at both sites, and hold times are qualified at the receiving site |
-| Analytical capability | Methods qualified and in routine use for characterization | Methods to be transferred and requalified before comparability material is tested | Method transfer and requalification under §6.2 |
-| Raw materials | Development lots, released against the same specifications | Commercial lots under supplier qualification | Specifications are common, and any vendor change is assessed through the shared change control procedure |
-| Personnel and training | Study scientists trained on the scale-down models | Operators trained on the master batch record | Training is completed and verified before the engineering batches are run |
-
-: Site equivalency assessment for the elements that can carry a process difference. {#tbl-equiv}
-
-The largest difference between the sites is scale. The receiving site operates the
-production bioreactor at `{python} scale_l` L, while the characterization studies run at the scale-down
-volumes qualified under SOP-1001. In cell culture, scale acts through mixing and through
-gas transfer. Mixing time rises with vessel volume at constant power per unit volume, so a
-bolus feed takes longer to disperse and the cells near the addition point sit in a higher
-local concentration for longer. Carbon dioxide stripping falls as the liquid column
-deepens, because a sparge bubble that rises through more liquid comes closer to
-equilibrium with the culture before it reaches the surface. Oxygen crosses the same interface in the
-opposite direction, from the bubble into the culture, so a change in the gas path does
-not act on the two transfers in the same way. Oxygen supply and carbon dioxide removal
-are therefore matched separately when a model is qualified.
-
-In the purification steps, scale acts through packing and through pressure. A
-chromatography column is scaled by holding bed height and linear velocity constant, which
-preserves the residence time of the mobile phase but not the wall support that stabilizes
-a narrow bed, so a wide commercial column can lose plate count at a pressure drop the
-model tolerates. A filter is scaled by area at constant flux, which holds the
-transmembrane pressure only while the feed carries the same particle load. §5 describes how a
-model is qualified against these differences.
-
-The second difference sits in process control. Automated control at the receiving site
-holds a parameter closer to its set-point than manual control does, which narrows the
-distribution the commercial process will deliver. A narrower distribution does not
-invalidate a range, because the characterized ranges are wider than the control capability
-of either site. The reverse case matters more. Where the receiving site cannot hold a
-parameter inside the NOR that characterization assumes, either the range must be widened
-by further study or the equipment must be changed.
-
-The remaining elements in @tbl-equiv carry a documentation difference and not a process
-difference. Buffer preparation is the one element in that group where a study is still
-required, because central preparation introduces a hold before use that laboratory
-preparation does not have. That study is listed in §8 and belongs to the receiving site.
-
-# Scale-down model and comparability strategy
-
-The characterization studies do not run at commercial scale. They run on scale-down models,
-and every conclusion drawn from them reaches the commercial process through the qualification
-of those models. Qualification is performed under SOP-1001. It follows the principle stated
-in the lifecycle guidance, that a laboratory model supports a commercial claim only when the
-adequacy of the model has been verified and justified [@fda2011].
-
-A model is qualified in two parts. Scale-independent variables such as pH, temperature and
-dissolved oxygen are operated at the values proposed for commercial manufacture. Scale
-dependent variables such as agitation, gas flow, column bed height, linear velocity and
-filtration flux are set so that the model reproduces the performance of the commercial train
-rather than its dimensions. The comparison is then made on the outputs the step controls. For
-a chromatography step those outputs are step yield, pool volume and the impurity levels in
-the pool. For the production bioreactor they are viable cell concentration, titre and the
-product quality attributes the step forms.
-
-@tbl-scope gives the characterization scope. It lists, for each unit operation, how many
-parameters enter the campaign, how the study type splits between multivariate and univariate
-work, and which plan and report cover the step.
+Equivalency was assessed for each element that can carry a process difference between the two sites (@tbl-equivalency). The assessment is prospective. Each row therefore states what is compared and how a difference is managed, not a measured outcome.
 
 ```{python}
 #| output: asis
-show(scope)
+print(md_table(["Element", "Sending site", "Receiving site", "How the difference is managed"],
+               equiv_rows, [17, 22, 24, 37]))
+print()
+print(": Site equivalency assessment for the elements that can carry a process difference. {#tbl-equivalency}")
+```
+
+The largest difference between the sites is scale. The receiving site runs the production bioreactor at `{python} f"{scale_l:,}"` L, while the characterization studies run at the scale-down volumes qualified under SOP-1001 (Qualification of Scale-Down Models). In cell culture, scale acts through mixing and through gas transfer. At constant power per unit volume, mixing time rises with vessel volume. A bolus of feed therefore takes longer to disperse, and cells near the addition point spend longer at a high local concentration. Carbon dioxide is stripped less efficiently as the liquid column deepens, because a sparge bubble that rises through more liquid comes closer to equilibrium with the culture before it leaves. Oxygen crosses the same interface in the other direction, from the bubble into the culture. Carbon dioxide is far more soluble in the culture than oxygen. Its removal is therefore limited by the volume of gas that passes through the culture, while the oxygen supply is limited by the volumetric mass transfer coefficient (kLa) of the vessel. For this reason oxygen supply and carbon dioxide removal are matched separately when a bioreactor model is qualified.
+
+In the purification steps, scale acts through column packing and through pressure. A chromatography column is scaled by holding the bed height and the linear velocity constant. This keeps the residence time of the mobile phase, but not the wall support that stabilizes a narrow bed. A wide commercial column can therefore lose plate count at a pressure drop that the model tolerates. A filter is scaled by membrane area. The virus filter runs at a set filtration pressure, and the UF/DF step at a set transmembrane pressure. In UF/DF the protein concentrates at the membrane surface (concentration polarization), and in the virus filter aggregates plug the pores. At a set pressure, a feed that carries more protein or more aggregate therefore gives a lower flux and, in the virus filter, a lower capacity. @sec-sdm describes how a model is qualified against these differences.
+
+The second difference is process control. Automated control at the receiving site holds a parameter closer to its set-point than manual control does, and so narrows the distribution that the commercial process will deliver. A narrower distribution does not invalidate a range, because every NOR lies within the characterized range of its parameter (@tbl-parameters-by-step). The reverse case matters more. Where the receiving site cannot hold a parameter inside the NOR that the characterization assumes, either the range must be widened by further study or the equipment must be changed.
+
+The remaining elements in @tbl-equivalency differ between the sites in ways that can affect the process, and each is managed as the table states. Central preparation adds a hold before use, during which a buffer can take up carbon dioxide, which lowers its pH, and its bioburden can grow. Commercial raw material lots are a known source of variation in culture performance and glycosylation. The transferred methods are run by other analysts on other instruments. Buffer preparation and method transfer both need laboratory work at the receiving site, a study of buffer hold times and a transfer exercise for each method, and both are listed in @sec-gaps.
+
+# Scale-down model and comparability strategy {#sec-sdm}
+
+The characterization studies do not run at commercial scale. They run on scale-down models, and every conclusion drawn from them reaches the commercial process through the qualification of those models. Qualification is performed under SOP-1001 (Qualification of Scale-Down Models). The lifecycle guidance expects a manufacturer to understand how far a laboratory model represents the commercial process [@fda2011].
+
+A model is set up in two parts. Parameters that do not depend on scale, such as pH, temperature and dissolved oxygen, are run at the values proposed for commercial manufacture. Parameters that depend on scale are set so that the model reproduces the performance of the commercial train. In the production bioreactor these are agitation and gas flow, which are set to match the oxygen transfer and the carbon dioxide stripping of the commercial vessel. For the chromatography steps the model keeps the bed height and the linear velocity of the manufacturing column, and so its residence time. Load, wash and elution volumes are normalized to column volumes, and column efficiency is checked by plate count and peak asymmetry. The virus filter model uses the same filter type at the same filtration pressure and load per membrane area. The UF/DF model scales membrane loading and cross flow by membrane area at the same transmembrane pressure. The model is then compared with manufacturing scale on the outputs the step controls. For a chromatography step those outputs are step yield, pool volume and the impurity levels in the pool. For the production bioreactor they are viable cell concentration, titre and the product quality attributes the step forms.
+
+Each model is qualified for each output separately, by the offset rule of the master plan PCMP-001 Version 2.0 §7.1. The offset of an output is the mean of the scale-down runs at set-point minus the mean of the manufacturing-scale batches, with its two-sided `{python} offset_ci` % confidence interval. These batches come from the development train, the manufacturing-scale train at the sending site whose batches are the manufacturing-scale reference of each step's qualification (PCMP-001 §7.1). A model may differ in mean from manufacturing scale, provided the offset is known precisely enough. For an output compared at both scales, every judgement of a scale-down result against a criterion therefore subtracts the offset first, so ranges and conclusions are stated at manufacturing scale. A model is qualified for an output when the conclusion over the NOR is the same with the offset at either end of its interval.
+
+The qualification runs are made, and the offset of each output is estimated, before the first characterization run of the step. For a step with a response-surface design, the decision whether the model is qualified for an output is made at analysis, because the conclusion over the NOR comes from that model. The qualification does not compare fragments or viral clearance at both scales. Their offset is unknown, not zero. Their representativeness rests on the mechanism of each step for fragments, such as clipping by proteases released from lysed cells during the harvest hold, and on the virus spiking studies for viral clearance (PCMP-001 §7.1).
+
+@tbl-scope gives the scope of the characterization by unit operation.
+
+```{python}
+#| output: asis
+print(md_table(["Step", "Unit operation", "Parameters", "Multivariate", "Univariate", "Documents"],
+               scope_rows, [7, 33, 13, 14, 13, 20]))
 print()
 print(": Characterization scope per unit operation and the documents that cover it. {#tbl-scope}")
 ```
 
-`{python} n_params` parameters are in scope across the train. `{python} n_mv` of them will be studied in multivariate
-designs and `{python} n_uv` in univariate studies. `{python} n_steps_uv_only` of the `{python} n_steps` unit operations carry no
-multivariate design at all. Harvest and clarification forms no product quality attribute,
-and ultrafiltration with diafiltration concentrates the pool and exchanges the buffer
-without forming or clearing one. For these two steps the ranges will rest on univariate
-work and on platform experience, so no interaction between two of their parameters will be
-estimated (§8).
+Across the train, `{python} n_par` parameters are in scope. Of these, `{python} n_mv` are studied in multivariate designs and `{python} n_uv` one factor at a time. The risk assessment RA-001 assigned no parameter of harvest (Step `{python} s_har`) or UF/DF (Step `{python} s_ufdf`) to multivariate study, so neither step carries a designed experiment. Their ranges rest on univariate work and on platform experience, and no interaction between two of their parameters is estimated (@sec-gaps).
 
-Comparability between the two sites will be demonstrated on material, not on
-documentation. The receiving site will run engineering batches on the commercial train
-before the qualification campaign starts. Each batch will be sampled at every step and
-tested by the transferred methods. The drug substance from those batches will be compared
-against the acceptance criteria in @tbl-cqa, and each intermediate will be compared
-against the in-process limit that the corresponding characterization report establishes
-for its step.
+Comparability between the two sites is demonstrated on material, not on documents. The receiving site will run engineering batches on the commercial train before the qualification campaign starts. Each batch will be sampled at every step and tested by the transferred methods. Under ICH Q5E a change of manufacturing site is judged by comparing the quality attributes before and after the change, and meeting the acceptance criteria alone is generally not enough [@ichq5e]. The drug substance from the engineering batches will therefore be compared with the drug substance of the development-train batches on the attributes of @tbl-cqa that a batch test measures. Each batch must also meet the acceptance criteria in @tbl-cqa, except residual DNA and viral clearance, whose criteria are met through clearance (@sec-control). Each intermediate will be compared with its intermediate acceptance criterion from PCMP-001 §7.3, where one is defined.
 
-Comparability is judged against those criteria and not against the mean values observed in
-development. A development mean is a property of the scale-down model and of the small
-number of batches behind it, and a commercial batch that differs from it is not thereby
-different in quality. Prior knowledge from the sponsor's earlier humanized IgG1 products
-supports the expectation that the platform purification steps behave the same way at both
-scales [@amab2009]. However, that expectation is confirmed by the engineering batches rather
-than assumed from the platform.
+Prior knowledge from the earlier humanized IgG1 products supports the expectation that the platform purification steps behave the same way at both scales [@amab2009]. The comparison of the engineering batches with the development-train batches tests that expectation.
 
-# Transfer of the process, methods and control strategy
+# Transfer of the process, methods and control strategy {#sec-transfer}
 
-The transfer is delivered in three parts. §6.1 covers the manufacturing process, §6.2 the
-analytical methods and §6.3 the control strategy. Each part names what is handed over, what
-condition the handover must satisfy and who approves it.
+The transfer is delivered in three parts. @sec-process covers the manufacturing process, @sec-methods the analytical methods and @sec-control the control strategy.
 
-## The manufacturing process
+## The manufacturing process {#sec-process}
 
-The process description is the source document for the transfer. It states the sequence of
-unit operations, the materials, the set-point of every parameter and the range each
-parameter may move within. The set-points and ranges in it are not final when this plan is
-approved. They will be confirmed, and in some cases narrowed, by the characterization
-studies, and the confirmed values will be issued as a revision of the process description
-before the master batch record is drafted.
+The process description is the source document of the transfer. It states the sequence of unit operations, the materials, the set-point of every parameter and the range within which each parameter may move. The characterization studies confirm the set-points and ranges, and in some cases narrow or move them. The confirmed values are issued as a revision of the process description before the master batch record is drafted.
 
-The receiving site will draft the master batch record from the approved process description.
-The batch record must carry every parameter the control strategy classifies as critical or
-well controlled critical, together with its set-point and its NOR, and it must carry the
-in-process controls and the sampling points that support them. Where a parameter is
-monitored but not held to a limit, the batch record should record the measured value without
-an acceptance criterion attached, so that a change in the value is visible without
-generating a deviation.
-
-The controlled procedures and method validations that support the transfer are listed in
-@tbl-docs. The procedures that describe the operation of an individual unit operation will
-be reissued in the receiving site's document system before the engineering batches are run.
-SOP-1001, SOP-1002 and SOP-4001 govern scale-down model qualification, the design and
-analysis of the characterization studies, and parameter classification. These three remain
-development procedures, because the work they govern stays at the sending site.
+@tbl-parameters-by-step gives every process parameter with its set-point, NOR, characterized range and class as they stand at this revision. The class is the one assigned in the report of the step under the parameter classification procedure SOP-4001. The set-point and the NOR are those in force. Some of them were changed at Version 2.0 by the report of their step, after the studies. `{python} chg_text` The report of the step gives the reason for each change.
 
 ```{python}
 #| output: asis
-print(all_sop_table())
-print()
-print(": Controlled procedures and analytical method validations in scope for the transfer. {#tbl-docs}")
+T.parameters_by_step().show()
 ```
 
-Handover of the manufacturing process is complete when the process description, the master
-batch record, the bill of materials and the operator training records have been approved at
-the receiving site. MSAT at the receiving site owns that approval. Quality Assurance at both
-sites countersigns it.
+The receiving site will draft the master batch record from the approved process description. The batch record must carry every parameter classified as a critical or a well-controlled critical process parameter, `{python} n_crit` in all, with its set-point and its NOR. It must also carry the in-process controls and the sampling points that support them. Where a parameter is monitored but not held to a limit, the batch record should record the measured value without an acceptance criterion. A change in the value is then visible without generating a deviation.
 
-## The analytical methods
-
-The methods in scope are the release and characterization methods for the drug substance and
-the in-process methods that support the control of the intermediates. @tbl-methods lists the
-`{python} n_methods` methods with the performance each one demonstrated at qualification.
+@tbl-sops lists the procedures and method validations referenced in this plan, which are the documents that support the transfer. The procedures for the operation of each unit operation will be reissued in the document system of the receiving site before the engineering batches are run. Three procedures stay with development, because the work they govern stays at the sending site. SOP-1001 governs scale-down model qualification, SOP-1002 the design and statistical analysis of the characterization studies, and SOP-4001 parameter classification.
 
 ```{python}
 #| output: asis
-show(meth_tbl)
-print()
-print(": Analytical methods in scope for transfer, with qualified performance. {#tbl-methods}")
+tbl_sops.show()
 ```
 
-The precision column is the intermediate precision of the method. For the quantitative
-assays it is a relative standard deviation in per cent. For the two infectivity titre assays
-it is a standard deviation in log10 units, which is the form the viral clearance calculation
-uses. The host cell protein ELISA is the least precise of the quantitative methods at
-`{python} hcp_prec` per cent, and it is the method that supports the host cell protein
-clearance argument across all three chromatography steps. Method transfer for that assay
-should therefore be completed and reviewed before the engineering batches are run.
+Handover of the manufacturing process is complete when the process description, the master batch record, the bill of materials and the operator training records have been approved at the receiving site. MSAT at the receiving site owns that approval, and Quality Assurance at both sites countersigns it.
 
-Each method will be transferred under a written protocol and requalified at the receiving
-site before it is used to test comparability material. A transfer is successful when the
-receiving site reproduces the qualified intermediate precision of the method and returns
-accuracy within the qualified range on a common sample set. Where the receiving site cannot
-meet the qualified precision, the cause should be investigated and corrected before the
-exercise is repeated. The method may not be used for in-process or release testing until the
-exercise has passed.
+## The analytical methods {#sec-methods}
 
-Analytical Development at the sending site owns the transfer protocol and the comparison of
-the two data sets. Quality Control at the receiving site executes the transfer. Quality
-Assurance approves the outcome. The person who executes a method transfer may not approve
-it.
+The methods in scope are the release and characterization methods for the drug substance and the in-process methods that support the control of the intermediates. @tbl-methods lists the `{python} n_meth_t` methods to be transferred and the performance each demonstrated at qualification, from the record of qualified method performance (the method record). The two infectivity titre assays of that record (AMV-3017 and AMV-3018) are not transferred. They measure viral clearance in the virus spiking studies, which stay at small scale at the sending site (@tbl-gaps).
 
-## The control strategy
+```{python}
+#| output: asis
+tbl_meth.show()
+```
 
-The control strategy is the set of controls that together assure the quality of the drug
-substance. It has three layers in this transfer. Parameter classification places every
-process parameter in a class and attaches a control to it. In-process limits bound what each
-intermediate may deliver to the next step. Release testing confirms the attributes of the
-drug substance against @tbl-cqa.
+The host cell protein ELISA (AMV-3012) supports the host cell protein clearance argument across all three chromatography steps, and every judgement of host cell protein against an intermediate acceptance criterion rests on its results. It is also `{python} hcp_rank_txt` in @tbl-methods, at `{python} f"{hcp_prec:g}"` %. Its transfer should therefore be completed and reviewed before the engineering batches are run.
 
-Classification is performed under SOP-4001 on the evidence from the characterization
-studies, so the classes are not known when this plan is approved. Each report classifies the
-parameters of its own step, and PCMR-001 consolidates the classification for the whole
-train. A parameter whose variability affects a quality attribute is a critical process
-parameter, and it is a well controlled critical process parameter where the risk of leaving
-the design space is low. A parameter that affects process consistency without affecting
-quality is a key process parameter. The remaining parameters are general process parameters
-and are controlled by the batch record without a criticality claim [@amab2009].
+Two records cover SEC, AMV-3011 for size variants and AMV-3221 for aggregate (@tbl-sops). AMV-3221 is the one transferred, and @tbl-methods gives its qualified performance.
 
-Viral safety rests on three independent steps and not on any one of them. The low pH hold
-inactivates enveloped virus, the anion exchange step removes both enveloped and small
-virus in flow-through mode, and the small virus retentive filter removes small virus by
-size. Inactivation by pH, removal by charge and removal by size act on three different
-properties of the virus particle, so a particle that survives one step is no more likely
-to survive the next, and the log reductions are added [@ichq5a]. The load conditions each
-claim depends on, such as the pH and the conductivity of the anion exchange load, are
-controlled by the batch record. The cumulative clearance is stated in PCMR-001 and
-compared there with the acceptance criteria in @tbl-cqa.
+The product titre method by Protein A affinity HPLC (AMV-3021, under SOP-3016) measures the antibody in a clarified harvest. It is transferred because the titre sets the protein load of a capture run.
 
-The control strategy is transferred when PCMR-001 has been approved and the classifications
-it consolidates have been written into the master batch record. Until that point the
-receiving site operates against the ranges in the current process description. That basis is
-appropriate for engineering batches and is not sufficient for qualification batches.
+The master plan PCMP-001 Version 2.0 sets nrCE-SDS (AMV-3020, under SOP-3015) as the method for fragments, following the analytical method decision `{python} amd_id` of `{python} amd_date`, and keeps SEC as the method for aggregate (PCMP-001 §7.8). The receiving site therefore needs nrCE-SDS for fragments and SEC for aggregate. The nrCE-SDS method is transferred and requalified like the methods in @tbl-methods. The method record holds no performance row for it. Its validation is AMV-3020 in @tbl-sops, from which the transfer protocol takes the values to be reproduced.
 
-# Process performance qualification strategy
+Each method will be transferred under a written protocol and requalified at the receiving site before it is used to test comparability material. A transfer is successful when the receiving site reproduces the qualified intermediate precision of the method and returns accuracy within the limits the transfer protocol sets, on a common set of samples. The protocol also sets the allowed difference between the results of the two sites. If the receiving site cannot meet the qualified precision, the cause should be investigated and corrected before the exercise is repeated. A method may not be used for in-process or release testing until its transfer has passed.
 
-Process performance qualification is the Stage 2 activity that follows this transfer
-[@fda2011]. It demonstrates that the commercial process, operated by the receiving site with
-the transferred methods and the transferred control strategy, reproducibly delivers drug
-substance of the required quality. This plan does not execute that demonstration. It states
-what must be in place before the campaign may start and the strategy the campaign will
-follow.
+Analytical Development at the sending site owns the transfer protocols and the comparison of the two data sets. Quality Control at the receiving site executes the transfers. Quality Assurance approves the outcome. The person who executes a method transfer may not approve it.
 
-`{python} n_ppq` consecutive batches will be manufactured at commercial scale under the approved master
-batch record. Every parameter will be held at its set-point, and no deliberate excursion
-will be run. The campaign will not challenge the edges of the characterized ranges,
-because those edges are established at small scale and a qualification batch is not a
-characterization experiment. However, it is recognized that a campaign of this size cannot
-capture the variability that commercial manufacture will show over its life.
+## The control strategy {#sec-control}
 
-The campaign may start when the following conditions are met.
+The control strategy is the set of controls that together assure the quality of the drug substance. In this transfer it has three layers. Parameter classification places every process parameter in a class and attaches a control to it. In-process limits bound what each intermediate may deliver to the next step. Release testing confirms the attributes of the drug substance against @tbl-cqa, with two exceptions. Residual DNA and viral clearance are met through the clearance that the characterization demonstrates, and no batch test measures them against their criteria.
 
-- The characterization package is complete and PCMR-001 has been approved.
-- Every method used for in-process and release testing has been transferred and requalified
-  at the receiving site.
-- The commercial equipment train and the utilities that serve it are qualified.
-- The master batch record carries the confirmed set-points, the confirmed ranges and the
-  in-process controls.
-- The gaps recorded in §8 are closed, or the residual risk of an open gap has been assessed
-  and accepted in writing by Quality Assurance.
+Classification is performed under the parameter classification procedure SOP-4001 on the evidence of the characterization studies. Each report classifies the parameters of its own step, and the master report PCMR-001 consolidates the classification for the whole train. A parameter whose variability affects a quality attribute is a critical process parameter (CPP). It is a well-controlled critical process parameter (WC-CPP) where the risk of leaving the design space is low. A parameter that affects process consistency without affecting quality is a key process parameter (KPP). The remaining parameters are general process parameters (GPPs), which the batch record controls without a claim of criticality [@amab2009]. At this revision the train has `{python} cls_txt` (@tbl-parameters-by-step).
 
-Sampling during the campaign will follow the sampling plans in the per step
-characterization plans, so that each intermediate is tested against the same in-process
-limit that characterization established for it. The acceptance criteria for the campaign
-will be stated in the qualification protocol and are not restated here. PCMP-001 plans the
-characterization campaign that produces the evidence, and PCMR-001 consolidates it. Both
-are approved before the campaign starts.
+In the characterization, each step output on which a drug substance criterion depends is judged against an intermediate acceptance criterion, where PCMP-001 Version 2.0 §7.3 defines one. The criterion is the drug substance criterion carried backward through the train, using the worst case that each downstream step showed on the platform products X-Mab, Y-Mab and Z-Mab. No margin is applied. The derivation uses no data from the studies it judges. Each step report checks the platform worst cases of its own step, and PCMP-001 §7.5 states when that check tightens or widens a criterion upstream. The master plan gives `{python} n_iac` such criteria across `{python} n_iac_steps` steps.
 
-Continued process verification begins when the qualification campaign is complete. The
-monitoring plan for it will be drafted by the receiving site during the campaign. It may not
-be finalized until the campaign data are available, because the control limits it applies
-are derived from the performance the commercial process actually shows [@fda2011].
+Residual DNA has a drug substance criterion but no intermediate acceptance criterion (PCMP-001 §7.3). Its criterion, no more than `{python} f"{dna_crit:g}"` ng per dose, is the acceptable range that the A-Mab case study claims, and the case study notes that DNA is consistently cleared from the process [@amab2009, p. 47]. The criterion is expressed per dose. The dose is the weekly A-Mab dose of `{python} dose_mgkg` mg/kg [@amab2009, p. 26], or `{python} f"{DOSE_MG:g}"` mg for a reference adult of `{python} dose_bw` kg, a body weight that this package assumes. The criterion is met through the clearance that the step reports show, and the master report PCMR-001 assesses the capability of the drug substance against it (PCMP-001 §7.3). It is not tested at release. A release test could not show it, because the qPCR method (AMV-3014) quantifies DNA only down to `{python} f"{dna_loq:g}"` pg/mg, which is `{python} f"{dna_loq_dose:g}"` ng per dose, `{python} f"{dna_loq_x:,.0f}"` times the criterion.
 
-# Gap analysis
+XMuLV clearance rests on `{python} n_x` claimed steps and MVM clearance on `{python} n_m`, because the low-pH step carries no MVM claim. Low pH disrupts the lipid envelope of an enveloped virus such as XMuLV, and a parvovirus such as MVM has no envelope. The anion exchange step binds both viruses by their surface charge in flow-through mode, and the virus filter retains both by their size. These mechanisms act on different properties of the virus particle. A particle that survives one step is therefore no more likely to survive the next, and the log reductions are added [@ichq5a]. Each claimed step is held to its platform claim (PCMP-001 §7.4). For XMuLV, `{python} x_claim_txt`, a sum of `{python} f"{x_sum:g}"` against a cumulative requirement of `{python} f"{x_req:g}"`. For MVM, `{python} m_claim_txt`, a sum of `{python} f"{m_sum:g}"` against `{python} f"{m_req:g}"`. Both requirements are met by the claims alone, with `{python} margin_txt`. No step is credited above its claim (PCMP-001 §7.4). With these margins every claimed step is therefore needed, and a step that falls short of its claim cannot be made up by the others. The margin is also smaller than the intermediate precision of the infectivity titre assays, `{python} f"{x_prec:g}"` log10 for XMuLV (AMV-3017) and `{python} f"{m_prec:g}"` log10 for MVM (AMV-3018). The load conditions on which each claim depends, such as the pH and the conductivity of the anion exchange load, are controlled by the batch record. The master report PCMR-001 states the cumulative clearance and compares it with the acceptance criteria in @tbl-cqa.
 
-Gaps were identified by comparing what the receiving site holds today against what the
-qualification campaign requires. @tbl-gaps lists each gap with its impact, the action that
-closes it and the function that owns the action. A gap must be closed before the
-qualification campaign starts, or its residual risk must be assessed and accepted under the
-quality system [@ichq9].
+The control strategy is transferred when PCMR-001 has been approved and the classes it consolidates have been written into the master batch record. The engineering batches and the qualification batches are both run under that batch record (@tbl-deliverables).
 
-| Gap | Impact | Action that closes it | Owner |
-|---|---|---|---|
-| Scale-down models are qualified against the development train only | Characterization conclusions reach commercial scale only through the model | Qualify each model against the receiving site equipment train, and record the comparison in the characterization plan for the step | MSAT, sending site |
-| Analytical methods are not qualified at the receiving site | Comparability results and in-process results cannot be generated or interpreted at the receiving site | Transfer and requalify every method in @tbl-methods under a written protocol | Analytical Development |
-| Harvest and UF/DF carry no multivariate design | Operating ranges for these two steps rest on univariate work and platform experience | State the limitation in PCP-004 and PCP-010, and support the ranges with univariate data and prior knowledge | MSAT, sending site |
-| Parameter classification is not established until PCMR-001 is approved | The master batch record cannot be finalized | Draft the batch record after PCMR-001 is approved, and run engineering batches against the process description | MSAT, receiving site |
-| Buffer preparation moves from per experiment preparation to central preparation and hold | Buffer hold time and stability are not covered by development data | Qualify buffer hold times at the receiving site before the engineering batches | MSAT, receiving site |
-| Viral clearance claims are established at small scale only | The claims cannot be verified at commercial scale | Retain the modular small scale claims, and control the load conditions they depend on through the batch record | MSAT, sending site |
-| Operators at the receiving site have not run this process | An execution error during qualification would invalidate a batch | Train operators on the master batch record and run engineering batches before qualification | Manufacturing, receiving site |
+# Process performance qualification strategy {#sec-ppq}
 
-: Transfer gaps, their impact, the closing action and the owning function. {#tbl-gaps}
+Process performance qualification is the part of Stage 2 that follows this transfer [@fda2011]. Stage 2 also covers the qualification of the facility, equipment and utilities, which condition 3 below requires before the campaign starts. Process performance qualification demonstrates that the commercial process, run by the receiving site with the transferred methods and control strategy, reproducibly delivers drug substance of the required quality. This plan does not execute that demonstration. It states what must be in place before the campaign may start and the strategy the campaign will follow.
 
-The first two gaps set the schedule, because each requires laboratory work at a site that
-has not yet performed it and neither can be closed by a document review. The remaining
-gaps are closed by sequencing, by training or by a bounded qualification study, and none
-of them requires a change to the process itself. The gap on harvest and UF/DF will still
-be open when the campaign ends, because no multivariate design is planned for either step
-at any point in the programme. It is accepted because neither step forms or clears a
-quality attribute, so an unestimated interaction between two of their parameters cannot
-move a result in @tbl-cqa.
+The campaign will manufacture `{python} n_ppq` consecutive batches at commercial scale under the approved master batch record. Every parameter will be held at its set-point in @tbl-parameters-by-step, and no deliberate excursion will be run. Post-clarification turbidity is the exception. It is measured, not set, because it is the response of centrifugation (rcf) and depth filter load. The campaign will not challenge the edges of the characterized ranges. Those edges are established at small scale, and a qualification batch is not a characterization experiment. However, a campaign of this size cannot capture the variability that commercial manufacture will show over its life.
 
-# Roles and responsibilities
+The campaign may start when the following conditions are met:
 
-The transfer is run by a joint team drawn from both sites. MSAT leads the team at each site,
-and Quality Assurance approves each handover. @tbl-roles gives the responsibilities this
-plan assigns.
+1. The characterization package is complete and PCMR-001 has been approved.
+2. Every method used for in-process and release testing has been transferred and requalified at the receiving site.
+3. The commercial equipment train and the utilities that serve it are qualified.
+4. The master batch record carries the confirmed set-points, the confirmed ranges and the in-process controls.
+5. The gaps in @sec-gaps are closed, or Quality Assurance has assessed and accepted in writing the residual risk of an open gap.
 
-| Function | Site | Responsibility |
-|---|---|---|
-| Process Development / MSAT | Sending | Owns the process description, the scale-down models, the characterization plans and reports, and the justification of the ranges |
-| MSAT | Receiving | Owns the master batch record, the equipment and utility qualification, the engineering batches and the qualification campaign |
-| Analytical Development | Sending | Owns the method transfer protocols and the comparison of the sending and receiving data sets |
-| Quality Control | Receiving | Executes the transferred methods and performs in-process and release testing |
-| Statistics | Sending | Owns the design and the statistical analysis of the characterization studies |
-| Manufacturing | Receiving | Executes the engineering and qualification batches under the master batch record |
-| Quality Assurance | Both | Approves the plans, the reports, each handover and the disposition of any open gap |
+The qualification protocol will set the sampling plan of the campaign, with more sampling and testing than routine manufacture, as the lifecycle guidance expects [@fda2011]. The sampling plans of the step plans are for small-scale runs. Each intermediate for which PCMP-001 Version 2.0 §7.3 defines an intermediate acceptance criterion will be tested against it, as in the characterization. The acceptance criteria of the campaign will also be stated in the qualification protocol. The master plan PCMP-001 plans the characterization campaign that produces the evidence, and the master report PCMR-001 consolidates it. Both are approved before the qualification campaign starts.
 
-: Functions, sites and the responsibility this plan assigns to each. {#tbl-roles}
+Continued process verification begins when the qualification campaign is complete. The receiving site will draft the monitoring plan during the campaign. The plan may not be finalized until the campaign data are available, because its control limits are derived from the performance that the commercial process actually shows [@fda2011].
 
-A named individual is assigned to each function in the transfer team roster, which is
-maintained outside this plan and revised as the team changes. Depending on the size of the
-receiving site team, one person may hold more than one function. The separations recorded in
-§6.2 and §11 are the exception and are not waived.
+# Gap analysis {#sec-gaps}
 
-# Deliverables and schedule
+The gaps in @tbl-gaps were identified at the approval of Version 1.0 of this plan, by comparing what the receiving site held with what the qualification campaign requires. At this revision, the action on the scale-down models compares the engineering batches with the development train, the action on the analytical methods adds nrCE-SDS and leaves out the infectivity titre assays, and the action on parameter classification runs the engineering batches under the master batch record (@sec-changes). A gap must be closed before the qualification campaign starts, or its residual risk must be assessed and accepted under the quality system [@ichq9].
 
-@tbl-deliv lists what this plan commits to and the order in which the deliverables arrive.
-The order is a dependency order rather than a calendar. Dates are held in the transfer
-project schedule, which is revised as the work proceeds and is not reproduced here.
+```{python}
+#| output: asis
+print(md_table(["Gap", "Impact", "Action that closes or manages it", "Owner"], gap_rows, [24, 24, 33, 19]))
+print()
+print(": Transfer gaps, their impact, the action that closes or manages each and the function that owns it. {#tbl-gaps}")
+```
 
-| Deliverable | Owner | Depends on |
-|---|---|---|
-| RA-001, the pre-characterization risk assessment | MSAT, sending | This plan |
-| PCMP-001, the characterization master plan | MSAT, sending | RA-001 |
-| One characterization plan per unit operation, PCP-003 to PCP-010 | MSAT, sending | PCMP-001 |
-| Scale-down model qualification records | MSAT, sending | The characterization plan for the step |
-| Method transfer protocols and reports | Analytical Development | This plan |
-| One characterization report per unit operation, PCR-003 to PCR-010 | MSAT, sending | Execution of the corresponding plan |
-| PCMR-001, the characterization master report | MSAT, sending | Every characterization report |
-| Revised process description with confirmed ranges | MSAT, sending | PCMR-001 |
-| Master batch record | MSAT, receiving | The revised process description |
-| Equipment and utility qualification records | MSAT, receiving | This plan |
-| Engineering batch reports | MSAT, receiving | Master batch record and method transfer |
-| Qualification protocol | MSAT, receiving | PCMR-001 and the engineering batch reports |
+The first two gaps, on the scale-down models and on the analytical methods, each need laboratory work at a site that has not yet done it. The gaps on parameter classification, buffer preparation and operator training are closed by sequencing, by a bounded qualification study and by training, and none of them needs a change to the process itself. The gaps on harvest and UF/DF and on viral clearance are not closed but managed, by the stated limitation and by keeping the claims made at small scale.
 
-: Deliverables of the transfer and the dependency order in which they arrive. {#tbl-deliv}
+The gap on harvest and UF/DF will still be open when the characterization campaign ends, because no multivariate design is planned for either step at any point in the programme. It is accepted because the risk assessment RA-001 ranked none of the parameters of either step high and expected none of them to interact with another parameter (PCMP-001 Version 2.0 §4). An interaction between two of them is therefore not expected to affect a quality attribute in @tbl-cqa.
 
-The characterization work sets the duration of the transfer, because the qualification
-campaign cannot start until PCMR-001 is approved and PCMR-001 cannot be written until
-every characterization report is complete. Equipment qualification, utility qualification,
-method transfer and operator training do not wait on that chain. Each of them can start
-when this plan is approved, and @tbl-deliv gives this plan as the dependency for all four.
+# Roles and responsibilities {#sec-roles}
 
-# Approvals
+The transfer is run by a joint team drawn from both sites. MSAT leads the team at each site, and Quality Assurance approves each handover. @tbl-roles gives the responsibilities that this plan assigns.
 
-This plan takes effect when the functions listed in @tbl-appr have approved it. A revision is
-required where the scope of the transfer changes, where a unit operation is added to the
-train or removed from it, or where a gap in §8 is closed by a route other than the action
-recorded against it. The author of a revision may not approve it.
+```{python}
+#| output: asis
+tbl_roles.show()
+```
+
+A named person is assigned to each function in the roster of the transfer team, which is kept outside this plan and revised as the team changes. Depending on the size of the team at the receiving site, one person may hold more than one function. The separations of duty in @sec-methods and @sec-approvals are the exception and are not waived.
+
+# Deliverables and schedule {#sec-schedule}
+
+@tbl-deliverables lists what this plan commits to and the order in which the deliverables arrive. The order is one of dependency, not a calendar. The transfer project schedule holds the planned dates and is revised as the work proceeds.
+
+```{python}
+#| output: asis
+print(md_table(["Deliverable", "Owner", "Depends on"], deliv_rows, [44, 24, 32]))
+print()
+print(": Deliverables of the transfer and the dependency order in which they arrive. {#tbl-deliverables}")
+```
+
+The characterization work sets the duration of the transfer. Neither the engineering batches nor the qualification campaign can start until PCMR-001 is approved, and PCMR-001 cannot be written until every characterization report is complete. Equipment and utility qualification and method transfer do not wait on that chain. Each can start when this plan is approved (@tbl-deliverables). Operator training on the master batch record follows that record and is completed before the engineering batches (@tbl-equivalency).
+
+This plan was approved on `{python} appr_v1`. The risk assessment RA-001 followed on `{python} ra_appr` and the master plan PCMP-001 on `{python} pcmp_appr`. @tbl-chronology gives, for each step, the approval date of its plan and the execution window of the studies that Version 1.0 reported. A window runs from the first day of the first study of the step to the last day of its last study. Each step plan was approved before the first study of its step began. The windows of several steps overlap. The `{python} n_v1` studies ran from `{python} first_start` to `{python} last_end`, and the Version 1.0 reports are dated `{python} pkg_date`.
+
+```{python}
+#| output: asis
+tbl_chron.show()
+```
+
+# Approvals {#sec-approvals}
+
+This plan takes effect when the functions in the approval record at the front of this document have approved it. A revision is required when the scope of the transfer changes, when a unit operation is added to the train or removed from it, or when a gap in @sec-gaps is closed by a route other than the action recorded against it. The author of a revision may not approve it.
 
 <!-- ========================= BODY END ======================================== -->
 

@@ -82,3 +82,41 @@ Same author, same draft. Pre-revision copy: scratch/PTP-001.pre-run2.qmd.
   closing check_render OK (incl. new page-foot check). PDF 35 pp. 335 sentences, 5977 words. No <<NEEDS:>>.
 - Table images read: 2.1, 2.2, 6.1 (now fits its page), 6.3, 8.1 (both pages), 10.2.
 - Extract refreshed: .claude/work/2026-10-08_01_rev2-campaign/PTP-001_transfer.DRAFT.txt.
+
+## Final pass (2026-10-10, after content-review-PTP-001.run2.md and feedback-PTP-001.final.md)
+Same author, same draft. Pre-pass copy: scratch/PTP-001.pre-final.qmd. Shared file touched: references.bib
+(one ichq5e entry, ICH style). Coordinator's adjustment to A1 applied: one pointer to PCMP-001 V2 §7.8 as the
+rule, no Table 7.3 reference.
+- A1: Table 6.4 and every sentence of fragment-method history dropped (retests, re-executed design, S-CEX-FRC
+  as basis, "Where the characterization reports base a decision ..."); §6.2 points once to PCMP-001 §7.8;
+  the change (nrCE-SDS added, finding 6 answered) kept in §1.1 item 4. A2: PD-005-06 cut (§6.2, item 5); the
+  titre is transferred because it sets the protein load of a capture run. A3: "studied in parallel" cut.
+- B1: development train defined once in §5 (manufacturing-scale train at the sending site whose batches are
+  the reference of each qualification); Table 4.1 row 1 and item 3 agree; V1.0 Table 4.1 row 1 correction
+  listed (item 3). No batch count given. B2: gap 1 action = compare engineering batches with the
+  development-train batches, recorded in the engineering batch reports (item 3). B3/B4: "set the schedule"
+  replaced; closed vs managed gaps named; column "Action that closes or manages it" and caption (item 9).
+  B5: ICH Q5E comparison with development-train batches + criteria; "A development mean ..." and the next
+  sentence cut (item 8). B6: XMuLV three claimed steps, MVM two (computed from iac.csv), claims per step,
+  premise "no step is credited above its claim", margin vs titre precision; lipid envelope named (item 9).
+  B7: item 3 limits manufacturing-scale judgements to compared outputs. B8: titre assays out of Table 6.3
+  (stay with the spiking studies); Table 8.1 row 2 and §6.2 agree; nrCE-SDS has no performance row,
+  validation AMV-3020 in Table 6.2 (item 5). B9: other Table 4.1 elements can affect the process (CO2 uptake
+  lowers buffer pH, bioburden; raw-material lots; methods); both buffer preparation and method transfer need
+  laboratory work (item 8). B10: fragments assignment attributed to the CQA register of PCMP-001 V2 with the
+  §3 basis; judged downstream. B11: AMV-3221 added to Table 6.2 (doc-side list, record title); Stage 2
+  covers facility/equipment/utilities (§1, §7); turbidity measured, not set (PCP-004 wording); PPQ sampling
+  set by the qualification protocol (FDA 2011); handovers = deliverables of Table 10.1 (items 8, 9).
+- C: fragments origin as PCMP-001 §3 words it; claims per step beside the sums; DNA clearance shown in the
+  step reports, capability assessed in PCMR-001 (PCMP-001 §7.3); transfer accuracy "within the limits the
+  transfer protocol sets", protocol sets the allowed difference between sites.
+- D: concentration polarization (UF/DF), pore plugging by aggregates (virus filter), buffer CO2 uptake/pH,
+  lipid envelope; "verification-qualified" not in prose; SEC records named (AMV-3221 transferred); §3 ICH Q10
+  gloss cut; qPCR ranking sentence cut; "for the reason that" circularity fixed; CA3, findings 1-3 and the
+  step of each viral requirement named. V1.0 sentences kept as instructed.
+- E: Table 6.4 dropped; Table 10.2 "Approved" header, unit operation column unwrapped (rows on one line);
+  Table 2.2 "Criticality level" / "Tool #1 score"; Table 6.1 stray "a)" is a pdftotext artefact (the image
+  shows the superscript on the "Number of diavolumes" line), not the builder.
+- Gate: check_render --render final pass 1 OK; explicit pdf/docx renders; closing check_render OK.
+  PDF 36 pp. 346 sentences, 6432 words. No <<NEEDS:>>. Table images read: 2.2, 4.1 (both pages), 6.1, 6.2,
+  6.3, 8.1 (both pages), 10.2. Extract refreshed. Not committed.

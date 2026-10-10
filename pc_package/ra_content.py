@@ -11,7 +11,7 @@ Only *initial* (pre-characterization) scoring and the study-type decision are us
 the residual RPN and the CPP/WC-CPP classification are OUTPUTS of the studies, not
 inputs to this assessment. The study-type decision (multivariate vs univariate) is
 the RRF decision recorded in ``config/parameters.yaml`` (the ``study`` field); the
-CQA(s) at risk, prospective failure mode and effect come from ``CONTENT``; the
+Attribute(s) at risk, prospective failure mode and effect come from ``CONTENT``; the
 severity comes from the A-Mab CQA severity map; the initial occurrence/detection
 follow the same pre-characterization logic as the FMEA source.
 """
@@ -89,12 +89,12 @@ def ra_rows():
 
 
 def ra_scope_df():
-    """Risk-ranking + study-type table: parameter -> CQA(s) at risk -> severity -> RPN -> study type."""
+    """Risk-ranking + study-type table: parameter -> Attribute(s) at risk -> severity -> RPN -> study type."""
     rows = ra_rows()
     return pd.DataFrame(
         [[r["step"], r["unit_op"], r["param"], r["cqa_label"], r["severity"],
           r["rpn_init"], r["study"], r["priority"]] for r in rows],
-        columns=["Step", "Unit operation", "Parameter", "CQA(s) at risk",
+        columns=["Step", "Unit operation", "Parameter", "Attribute(s) at risk",
                  "Sev.", "Init. RPN", "Study type", "Priority"])
 
 
@@ -124,7 +124,7 @@ def ra_detail_df():
     rows = ra_rows()
     return pd.DataFrame(
         [[r["step"], r["param"], r["fm"], r["eff"], r["cqa_label"]] for r in rows],
-        columns=["Step", "Parameter", "Potential failure mode", "Potential effect", "CQA(s) at risk"])
+        columns=["Step", "Parameter", "Potential failure mode", "Potential effect", "Attribute(s) at risk"])
 
 
 def ra_summary():

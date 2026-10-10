@@ -30,9 +30,9 @@ Scratch: /tmp/claude-1000/-home-moritz-github-repos-synthetic-data/be14bf3c-e46a
 ## Progress
 - [x] setup chunk with computed scalars and assertions
 - [x] body sections written (all, one pass; assembled 2026-10-10)
-- [ ] check_render passes
-- [ ] pdf + docx render
-- [ ] visual check of complex tables / figures
+- [ ] check_render passes (run 1: inline KeyError; run 2: all hard checks OK except unresolved @tbl-par-margins, fixed; self-review fixes for claims beyond the record applied; run 3 pending)
+- [x] pdf + docx render (explicit quarto renders OK; PDF 74 pp)
+- [x] visual check of complex tables / figures (all pages with a complex table or figure viewed once; fixes applied and re-checked)
 
 ## Hand-back items (departures in neither register, NOR changes, helper issues)
 - PCP-006 Table 5.3 input-pool samples (aggregate, acidic, A-Mab conc.) on every design run: record holds none (no load columns in doe_viral_inactivation_*.csv). Not in either register.
@@ -43,3 +43,36 @@ Scratch: /tmp/claude-1000/-home-moritz-github-repos-synthetic-data/be14bf3c-e46a
 - model_adequacy.csv marks the exact-fit acidic full quadratic 'adequate: True'.
 - D.ofat_analysis / D.vi_worst_case_summary judge scale-down results against criteria without the offset (verdict unchanged; report states mfg-scale check).
 
+
+## Self-review fixes after run 2 (2026-10-10)
+- Restored margins table + 2 paragraphs lost in an earlier replace; minus sign as one expression.
+- Removed claims the record does not hold: cause of screening/RSM pH-effect difference; executed spiking/operation details (now the plan's procedure, present tense); input-pool sampling (record holds none -> stated in sampling plan); DEV-006-01/02 embellishments; in-process controls; jacket/control-system details; A-Mab case-study comparison for pH class; harvest in-process test in the verification risk paragraph; 'additive because no interaction entered'; icIEF-resolution explanation of the zero scatter (record gives no reason; OFAT repeatability 0.41 points).
+- Counts typed as words now computed (W()) and asserted; no sentence opens on an inline number.
+- Run 3: all hard checks OK except table-fit false positive on tbl-vi-ofat-effects (note "Holm's" rendered with typographic apostrophe; table complete on its landscape page, checked visually p.45).
+- Visual pass over every complex table/figure of run 3: rebuilt flat tables (params, screening fit, coefficients, ANOVA, capability) as T.frame; p-values formatted; Tables 7.5/7.6 headers broken; App C limited to modelled responses; prose precision aligned with tables; residual/run-order + Cook's figure added (PCP-006 §5.5); verification wording (a failing model confirms nothing).
+
+## Final state (2026-10-10)
+- check_render: 5 runs. Run 1 inline KeyError; run 2 unresolved @tbl-par-margins; runs 3-5 every hard check OK
+  (chunks, 0 <<NEEDS>>, tic gate, docx, pdf, glyphs, cross-refs) except the table-fit false positive on
+  tbl-vi-ofat-effects (straight vs typographic apostrophe in "Holm's"; table complete, p.45). Exit code 1 for that reason only.
+- Body: 768 sentences, 16,577 words (check_render). PDF 74 pages. No <<NEEDS:>>.
+- Not committed (coordinator: do not commit). Draft only: pc_package/PCR-006_viral_inactivation.DRAFT.{qmd,pdf,docx}.
+- Annex (build_ground_truth) not started: separate step per RUNNER.
+
+## Revision pass 1 (after content review + factual check), started 2026-10-10 afternoon
+Inputs read: feedback-PCR-006.run1.md, factual-PCR-006.md, content-review-PCR-006.md, REPORT-LESSONS.md (unchanged),
+brief regenerated (DEV-006-04; PD-006-03 relabelled, reason fixed), rendered PCP-006 of 16:32 (§7.4 rule 2: first
+three criteria, fourth does not decide, PCR-006 states whether the bound depends on a single run; new §7.6
+operating-region decision criteria and objectives-met conditions).
+
+## Revision pass 1: done (2026-10-10, late)
+- Owner's Cook's decision folded in: both modelled outputs meet criterion 4 (4/n flags, F median decides);
+  flagged runs examined as PCP-006 §7.1 requires (not a discrepancy); PD-006-07 withdrawn (6 discrepancies);
+  widening rests on a model meeting all four criteria; run-5 dependence of the XMuLV PARs and temperature effect stated.
+- DEV-006-04 recorded (§3.4 sampling, §4.3, §7.7 verification, deviations subsection); four deviations.
+- NOR decisions: three stages with engine-replica margins (0.04 / 0.04 / 0.11); intermediate stage values derived
+  from structured values (characterized set-point, NOR high), 105 min asserted against the S-VI-OFAT hold times.
+- Factual items 1-17 + minor and content-review items resolved (see report); font floor fixed (Tables 5.10, 7.4, 7.12, D.1).
+- Gate (check_render --render, venv on PATH): exit 0, all checks OK. Explicit pdf + docx renders OK. PDF 77 pp.
+  849 sentences, 18,576 words. No <<NEEDS:>>. Page images of every changed table/figure read.
+- Text extract refreshed: PCR-006_viral_inactivation.DRAFT.txt. Not committed.

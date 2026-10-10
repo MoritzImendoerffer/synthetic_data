@@ -1517,12 +1517,17 @@ def fig_par(key, resp, factor):
     ax[1].plot(pn["xs_nat"], mfg(pn["med"]), color="#2a78d6", lw=1.6, label="median")
     # a viral clearance band is the spread of mean predictions over the NOR draws, not a prediction
     # interval of a single batch (PCR-006 author, 2026-10-10)
-    band = ("95 % prediction interval, single batch" if decision_statistic(resp) == "batch"
+    # viral clearance is judged on the mean at the NOR combinations of the other factors, with no draws: its band is
+    # the range of those mean predictions (PCR-006 factual check, 2026-10-10)
+    worst = decision_statistic(resp) == "worst_case"
+    band = ("range of mean predictions over the NOR combinations" if worst
+            else "95 % prediction interval, single batch" if decision_statistic(resp) == "batch"
             else "central 95 % of mean predictions")
     ax[1].fill_between(pn["xs_nat"], mfg(pn["p_lo"]), mfg(pn["p_hi"]), color="#2a78d6", alpha=0.18,
                        lw=0, label=band)
     _limits(ax[1]); _shade(ax[1], pn["par_nat"]); _marks(ax[1])
-    ax[1].set_title("Others varying within NOR (Monte-Carlo)", fontsize=10)
+    ax[1].set_title("Others at their NOR combinations" if worst else "Others varying within NOR (Monte-Carlo)",
+                    fontsize=10)
     ax[1].set_xlabel(f"{pname} ({unit})")
 
     h, l = ax[1].get_legend_handles_labels()

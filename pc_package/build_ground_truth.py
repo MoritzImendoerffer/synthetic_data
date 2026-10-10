@@ -219,7 +219,8 @@ def revision_layer(doc_id, file_name, section="Revision history"):
             revision=cells[0], effective_date=cells[1], description=cells[2],
             source=ref(doc_id, file_name, f"{doc_id}_rev", section, _join_cells(cells),
                        table_header=_join_cells(["Version", "Effective date", "Description of change"]))))
-    sup = None if doc_id == P.INV["id"] else f"{doc_id} Version {P.REV1['rev']}"
+    # an investigation supersedes nothing: its title block reads "Supersedes —" (INV-002 annex, 2026-10-10)
+    sup = None if doc_id in P.INVESTIGATIONS else f"{doc_id} Version {P.REV1['rev']}"
     return sup, entries
 
 
@@ -10761,7 +10762,7 @@ BUILDERS = [(d, _builder(d, b)) for d, b in _LEGACY_BUILDERS]
 #: skipped and its annex kept as it is. This keeps check_grounding green at every step of the
 #: Rev 2.0 campaign (work unit 2026-10-08_01_rev2-campaign). When every document is in the set,
 #: delete this mechanism.
-REV2_READY: set = {"INV-001", "PCMP-001", "PCP-003", "PCP-005", "PCP-006", "PCR-005"}
+REV2_READY: set = {"INV-001", "INV-002", "PCMP-001", "PCP-003", "PCP-005", "PCP-006", "PCR-005"}
 
 
 def main(argv=None):

@@ -251,7 +251,7 @@ priori:
   bound replaces the platform value and the
   criteria upstream widen (owner's decision 2026-10-08: "if the data supports it, a criterion
   could be widened, but it needs good arguments"). A widening also needs a downstream model that
-  passes the adequacy tests of PCMP-001 (R² minus predicted R², lack of fit): a model that fails
+  passes the first three adequacy criteria of PCMP-001 §7.2 (a significant model, no significant lack of fit, R² minus predicted R² within its limit) and is not an exact fit; the fourth, on residuals and influential runs, does not decide a widening and is examined by the report that gives the bound (PCMP-001 §7.5, made precise on 2026-10-10 after the PCP-007 and PCP-008 factual checks): a model that fails
   them is not a good argument. Tightening needs no such test. Both directions use the one-sided
   95 % prediction bound of a single batch, never the point prediction and never a confidence bound
   of the mean (the rule of 2026-10-09 below; `iac_verification.csv`: `model_adequate`).

@@ -31,9 +31,11 @@ went wrong when applying them.
 4. **Model adequacy.** Name the conditions of PCMP-001 §7.2 as tests a result passes or fails: the
    model F-test, lack of fit against pure error, R² less predicted R² against its limit, and the tests
    on the residuals and on influence (state the statistic and the cut-off, and the basis of the
-   cut-off). State the remedy for a failing model exactly as the rendered PCMP-001 states it, and what
-   follows when the remedy fails (no range from that model; the output judged on its measured results,
-   `D.nor_met`). Do not describe the model selection of INV-002 corrective action CA3 as the plan's
+   cut-off). State the remedy for a failing model exactly as the rendered PCMP-001 states it ("either
+   refitted with a justified change of terms or transformation, or it is not used to set a range").
+   PCMP-001 says nothing more: judging such an output on its measured results is INV-002 corrective
+   action CA2, which the reports apply, so a plan does not state it as its own rule (PCP-007 factual
+   check, 2026-10-10). Do not describe the model selection of INV-002 corrective action CA3 as the plan's
    method: PCMP-001 does not adopt it, and each report records it as a discrepancy from its plan.
 5. **Classification.** PCMP-001 and SOP-4001 set no numerical threshold for "practically relevant" or
    "wide". Do not let an undefined magnitude word decide a class. Say that the report states the

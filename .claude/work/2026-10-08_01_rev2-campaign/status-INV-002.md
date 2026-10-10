@@ -106,3 +106,25 @@ Scratch: `/tmp/claude-1000/-home-moritz-github-repos-synthetic-data/be14bf3c-e46
   doe_report `fig_assurance` docstring likewise (not rendered).
 - Which NOR the integrated model (p_oos) draws from is not stated in doe_report, tables or the brief; the
   text now attributes the draw to PCMP-001 §6.4/§6.5 ("its NOR"), without "in force".
+
+## Verifier pass (2026-10-10, after the final pass)
+
+Coordinator's message, 5 items: (1) §11 to the corrected record (part 2 = first three criteria; PA1 = LOF +
+overfitting); (2) Summary: exact fit plainly besides the 14, one tense; (3) recorded-pH paragraph after
+Table 3.1 (page 13 near empty); (4) Table 9.1 note: run 23 at design pH; (5) §8.4: computed sentences that the
+two bounds behind the widenings do not depend on a single run (Cook's distance > 4/n deleted, selection
+repeated, bound vs platform, three tests met). Then re-render pdf + docx, gate, page images, log.
+Backup before this pass: `INV-002_model_adequacy.DRAFT.pre-verifier.qmd` (this folder).
+- [x] 12:45 facts (scratch s3.py): record part 2 = "the first three model-adequacy criteria of PCMP-001 §7.2 (...)",
+      PA1 = "...meet the lack-of-fit test and the limit on overfitting"; eff. check still splits into 3 parts.
+      Single-run check reproduces the verification in force (AEX HCP 4.2673, VI aggregate 0.5586) via
+      iac.verification on doe_<step>_rsm.csv with process_summary.csv feeds (as D.verification_all_runs).
+      Cook > 4/n on the planned runs (D.residual_influence, runs="planned"): AEX HCP runs 2, 9 -> 4.56, 4.33
+      (platform 4); VI aggregate runs 3, 7, 8 -> 0.551, 0.546, 0.549 (platform 0.70). All reduced selected
+      models meet the three tests, none exact.
+- [x] 12:55 edits: setup chunk DROP block (asserts: widened set = the two bounds, repro = csv, each reduced bound
+      better than platform, three tests met, not exact) + eff. check assert "first three"; Summary P1 (exact fit
+      beside the 14, past tense); recorded-pH paragraph moved after Table 3.1; §8.4 rule "and is not an exact
+      fit" + new paragraph (fourth criterion does not decide; Cook's distance runs; bounds 4.33-4.56 vs 4,
+      0.546-0.551 vs 0.70); Table 9.1 note (run 23 at design pH); §11 first sentence = the three tests.
+- [ ] gate, explicit renders, page images

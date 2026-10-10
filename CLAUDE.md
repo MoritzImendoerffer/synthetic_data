@@ -157,7 +157,7 @@ differ only in their `UO` key and unit-specific narrative:
   step does worse than the platform worst case, and widens it only by the rule stated in advance:
   the one-sided 95 % prediction bound of a single batch at the A-Mab worst case (the least
   favourable NOR combination of the downstream step) beats the platform value and the downstream
-  model passes the PCMP-001 adequacy tests (`iac.allow_widening`, owner's decision 2026-10-08;
+  model meets the first three adequacy criteria of PCMP-001 §7.2 (F-test, lack of fit, limit on overfitting; never an exact fit) (`iac.allow_widening`, owner's decision 2026-10-08;
   single-batch bound `iac.BOUND_CONFIDENCE`, owner's decision 2026-10-09), and the report argues
   it by its risk: whose risk, how it is detected, and its impact downstream and on the drug
   substance. Tightening also uses the bound. Version 1.0

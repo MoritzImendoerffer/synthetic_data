@@ -53,7 +53,15 @@ went wrong when applying them.
    replacement there reflects the shorter hold, not a more stable product (STORY_BIBLE §9b).
 8. **No defensive glosses.** State once, where the criteria are given, that the Version 1.0 limit was
    set at analysis and was in no approved plan. Do not add a sentence that the wider criterion "does
-   not loosen" anything.
+   not loosen" anything. The frozen Version 1.0 plan PDF in `superseded/rev1/` is the July 2026
+   compilation of the package, and the plans with a design carry those criteria in it (a Table 7.1 of
+   step criteria): INV-001 root cause 1, "criteria set after execution could therefore be added to the
+   plan text when the package was compiled, without a revision of the approved plan". Say that the
+   compiled text carried them; never that only the title-block date of Version 1.0 was wrong
+   (PCP-009 factual check, 2026-10-10).
+10. **The residual test regresses the ABSOLUTE residuals on the predicted values** (and the residuals
+   on run order). Raw least-squares residuals have zero slope against the fitted values by
+   construction, so that test detects nothing (`D.residual_influence`; PCP-007 and PCP-009 drafts).
 
 9. **What an amendment may add** (STORY_BIBLE §9b, after the PCP-006 factual check). A Version 2.0
    plan is issued after its studies ran. It may state, and list as changes, what PCMP-001 Version 2.0

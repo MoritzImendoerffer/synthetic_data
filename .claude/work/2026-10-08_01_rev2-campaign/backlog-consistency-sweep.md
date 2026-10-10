@@ -308,3 +308,16 @@ calls to check: engineering batches under the master batch record after PCMR-001
 as change 9); the reason a narrower distribution does not invalidate a range (computed: every NOR inside its
 characterized range); manufacturing-scale batches placed at the sending site (no record field). nrCE-SDS has no
 performance row in dev_methods.csv; citation page locators render without "p.".
+
+### After the usage-limit reset (2026-10-10, late)
+Done since the handoff: the owner's influence rule in all six designed-experiment plans (PCP-003, 005, 006,
+007, 008, 009), annexes re-anchored (1698/1698 for five; PCP-007's annex pending); PCP-004 annex (682 quotes)
+in REV2_READY (now INV-001, INV-002, PCMP-001, PCP-003, PCP-004, PCP-005, PCP-006, PCP-008, PCP-009, PCP-010,
+PCR-005). RA-001 and PTP-001 revisions committed.
+Running: PCP-007 annex builder a5ff49d64bdb26d82 (then add PCP-007 to REV2_READY); PCR-003 a927024c4bf0fc18f,
+PCR-005 abadf6256c0fc7077, PCR-006 afabf170561291d76 (revisions); RA-001 review run 2 a8941b311f4658f0a;
+PTP-001 review run 2 abd749d8ac6dfed97.
+For the sweep: PCP-004 change 2 types "α = 0.05" (Version 1.0's level; pull it); harvest qualification has no
+study id (PCR-004 deviation, owner Q8); shared annex helpers duplicated in the builder modules (rows_once,
+_cells, _smart, _walk, _gate, md_caption, head_of, _check_sections, q/_render) belong in build_ground_truth;
+pcp_010's `cells` splits on " | " and misreads continuation rows.

@@ -79,9 +79,15 @@ def _response_value(res, name: str) -> float:
     return float("nan")
 
 
+# Recorded on every design run but not modelled (no response-surface model, no effect fit): results a
+# Version 1.0 plan required and the seeded record lacked (owner's decision Q5, 2026-10-10). Read from the
+# step result, so no draw of the shared design stream moves. (column, step-result key)
+EXTRA_RESPONSES = {"bioreactor": (("harvest_hcp_ng_mg", "hcp"), ("harvest_dna_pg_mg", "residual_dna"))}
+
+
 def _run_design(proc: Process, key: str, design: pd.DataFrame,
                 responses: Sequence[str], feed: Optional[Stream],
-                rng: np.random.Generator) -> pd.DataFrame:
+                rng: np.random.Generator, extra: Sequence = ()) -> pd.DataFrame:
     uo = _unit(proc, key)
     factors = [c for c in design.columns if c != "run_type"]
     ranges = {f: uo.uo.param(f).prange for f in factors}
@@ -95,6 +101,8 @@ def _run_design(proc: Process, key: str, design: pd.DataFrame,
         row.update({f"coded_{f}": float(design.iloc[i][f]) for f in factors})
         for r in responses:
             row[r] = _response_value(res, r)
+        for col, src in extra:
+            row[col] = _response_value(res, src)
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -109,7 +117,8 @@ def screening_doe(proc: Process, key: str, feed: Optional[Stream],
             base_factors=factors[:4], center_points=center_points)
     else:
         design = full_factorial(factors, center_points=center_points)
-    return _run_design(proc, key, design, DOE_RESPONSES[key], feed, rng)
+    return _run_design(proc, key, design, DOE_RESPONSES[key], feed, rng,
+                       extra=EXTRA_RESPONSES.get(key, ()))
 
 
 def rsm_doe(proc: Process, key: str, feed: Optional[Stream],
@@ -118,7 +127,8 @@ def rsm_doe(proc: Process, key: str, feed: Optional[Stream],
     """Face-centred central-composite response-surface design."""
     factors = list(top_factors) if top_factors else DOE_FACTORS[key][:4]
     design = central_composite(factors, center_points=center_points, face_centered=True)
-    return _run_design(proc, key, design, DOE_RESPONSES[key], feed, rng)
+    return _run_design(proc, key, design, DOE_RESPONSES[key], feed, rng,
+                       extra=EXTRA_RESPONSES.get(key, ()))
 
 
 def superseded_doe(proc: Process, key: str, feed: Optional[Stream],

@@ -396,8 +396,176 @@ def univariate_studies(cfg: Config, proc, feeds) -> pd.DataFrame:
                            "value": float(val), "replicate": rep}
                     for r in resps:
                         row[r] = _response_value(res, r)
+                    # read from the run, no draw (studies.EXTRA_RESPONSES; owner's decision Q5)
+                    for col, src in EXTRA_RESPONSES_UNI.get(step, ()):
+                        row[col] = _response_value(res, src)
                     rows.append(row)
-    return pd.DataFrame(rows)
+    out = pd.DataFrame(rows)
+    # the repeatability of each method on those results, from a stream of its own (key 33)
+    return _assay_cols(out, {"harvest_hcp_ng_mg": _assay_cv(cfg, "AMV-3012"),
+                             "harvest_dna_pg_mg": _assay_cv(cfg, "AMV-3014")}, _rng(cfg, 33, 2))
+
+
+# --------------------------------------------------------------------------------------
+# Results a Version 1.0 plan required and the seeded record lacked (owner's decision Q5, 2026-10-10:
+# "Attributes in scope should be measured unless justified"). Each is a NEW column from a NEW stream
+# (keys 30 to 36), drawn after the results it sits beside, so no existing value moves.
+# --------------------------------------------------------------------------------------
+EXTRA_RESPONSES_UNI = {"bioreactor": (("harvest_hcp_ng_mg", "hcp"), ("harvest_dna_pg_mg", "residual_dna"))}
+# the univariate studies of the designed steps whose size variants a Version 1.0 plan required, measured
+# by the methods analytics.plan lists for them (only S-PA-UNI has an entry: SEC, before the method decision
+# AMD-001; its samples were not retained beyond 30 days, so the April 2026 retests could not cover them)
+UNI_SIZE_STUDIES = {"S-PA-UNI": "protein_a", "S-VI-UNI": "viral_inactivation", "S-CEX-UNI": "cex",
+                    "S-AEX-UNI": "aex"}
+
+
+def _assay_cols(df: pd.DataFrame, cvs: Dict[str, float], rng: np.random.Generator) -> pd.DataFrame:
+    """Each column of ``cvs`` (name -> CV) times its method's lognormal repeatability, in the order
+    given, from ``rng``; a NaN stays NaN and still takes its draw, so the draws do not depend on
+    which rows carry a result."""
+    out = df.copy()
+    for col, cv in cvs.items():
+        if col in out.columns:
+            v = out[col].to_numpy(dtype=float)
+            out[col] = v * rng.lognormal(0.0, float(cv), size=len(v))
+    return out
+
+
+def bioreactor_impurities(cfg: Config, df: pd.DataFrame, sub: int) -> pd.DataFrame:
+    """Host cell protein (ELISA, AMV-3012) and residual DNA (qPCR, AMV-3014) in the clarified broth
+    of every bioreactor design run, which PCP-003 Version 1.0 required: the model's values (recorded
+    by ``studies.EXTRA_RESPONSES``) with each method's repeatability, from stream 33."""
+    return _assay_cols(df, {"harvest_hcp_ng_mg": _assay_cv(cfg, "AMV-3012"),
+                            "harvest_dna_pg_mg": _assay_cv(cfg, "AMV-3014")}, _rng(cfg, 33, sub))
+
+
+def univariate_size_variants(cfg: Config, uni: pd.DataFrame, ps: pd.DataFrame, feeds) -> pd.DataFrame:
+    """Size variants of the univariate studies of the designed steps, which their Version 1.0 plans
+    required ("the same responses measured as in the multivariate designs", PCP-005 §6.4): fragments
+    by the methods ``analytics.plan`` lists for the study, and at Protein A aggregate by SEC, as the
+    designs record it. The parameters these studies vary do not act on fragments in the model, so the
+    true level is the step's set-point value; SEC carries the host cell protein of the run's pool in
+    its LMW window (``sec_bias``). Stream 30."""
+    plan = _a(cfg)["plan"]
+    nom = nominal_train(cfg)
+    out = uni.copy()
+    for c in (LMW_SEC, LMW_CE, "hmw_sec_pct"):
+        if c not in out.columns:
+            out[c] = np.nan
+    for si, (sid, step) in enumerate(UNI_SIZE_STUDIES.items()):
+        sel = out["study"] == sid
+        if "spiked" in out.columns:
+            sel &= out["spiked"].fillna(False).astype(bool) == False    # a spiked run reports clearance only
+        idx = out.index[sel]
+        m = plan.get(sid, [])
+        if not len(idx) or not m:
+            continue
+        rows = out.loc[idx]
+        mcols = [c for c in ("pool_hcp_ng_mg", "hcp_out_ng_mg", "leached_protein_a_ppm")
+                 if c in rows.columns and rows[c].notna().all()]
+        hcp, lpa = _matrix(step, ps, rows[mcols])
+        true = np.full(len(idx), float(nom[step]))
+        if "sec" in m:
+            out.loc[idx, LMW_SEC] = measure(cfg, "sec", true, _rng(cfg, 30, si, 0), hcp, lpa)
+        if "cesds" in m:
+            out.loc[idx, LMW_CE] = measure(cfg, "cesds", true, _rng(cfg, 30, si, 1))
+        if step == "protein_a" and "sec" in m:
+            bio_hmw = float(feeds["protein_a"].cqas.get("aggregates_hmw", 1.5))
+            out.loc[idx, "hmw_sec_pct"] = bio_hmw + _rng(cfg, 30, si, 2).normal(0.0, 0.05, len(idx))
+    return out
+
+
+def aex_univariate_viral(cfg: Config, proc, feeds) -> pd.DataFrame:
+    """The spiked run of the anion exchange flow-rate study at the high end of the range, which PCP-008
+    Version 1.0 planned: XMuLV and MVM log reduction, from its own stream (key 31). One row, appended
+    to the univariate study (``spiked``); the unspiked responses are not reported for it."""
+    from .studies import _response_value, _unit
+    p = cfg.unit_op("aex").param("flow")
+    res = _unit(proc, "aex").run(feeds["aex"].copy(), _rng(cfg, 31, 0), setpoints={"flow": float(p.prange[1])})
+    return pd.DataFrame([{"study": "S-AEX-UNI", "step": "aex", "parameter": "flow", "level": "high",
+                          "value": float(p.prange[1]), "replicate": 3, "spiked": True,
+                          "xmulv_lrf": _response_value(res, "xmulv_lrf"),
+                          "mvm_lrf": _response_value(res, "mvm_lrf")}])
+
+
+def ion_exchange_impurities(cfg: Config, df: pd.DataFrame, step: str, feeds, stream: int) -> pd.DataFrame:
+    """Residual DNA (qPCR, AMV-3014) and leached Protein A (ELISA, AMV-3016) in the load and the pool of
+    each run, which PCP-007 and PCP-008 Version 1.0 required on every response-surface pool and in the
+    qualification. The step clears both by its log reduction (``process.<step>.model`` dna_lrv,
+    leached_pa_lrv), independent of the parameters of the design (A-Mab: DNA and Protein A largely
+    insensitive), with a run-to-run SD of 0.15 log, and each result carries its method's repeatability.
+    A result below the method's LOQ is reported as below it (NaN, and ``*_lt_loq`` True). Stream 32."""
+    rng = _rng(cfg, 32, stream)
+    n = len(df)
+    m = cfg.process[step]["model"]
+    meth = {x["id"]: x for x in cfg.raw()["deviations"]["methods"]}
+    feed = feeds[step]
+    out = df.copy()
+    for name, unit, src, lrv, amv in (("dna", "pg_mg", "residual_dna", m["dna_lrv"], "AMV-3014"),
+                                      ("lpa", "ppm", "leached_protein_a", m["leached_pa_lrv"], "AMV-3016")):
+        cv, loq = float(meth[amv]["precision_pct"]) / 100.0, float(meth[amv]["loq"])
+        true = float(feed.cqas.get(src, 0.0))
+        load = true * rng.lognormal(0.0, cv, n)
+        pool = true / 10 ** (float(lrv) + rng.normal(0.0, 0.15, n)) * rng.lognormal(0.0, cv, n)
+        out[f"{name}_load_{unit}"] = np.where(load >= loq, load, np.nan)
+        out[f"{name}_load_lt_loq"] = load < loq
+        out[f"{name}_pool_{unit}"] = np.where(pool >= loq, pool, np.nan)
+        out[f"{name}_pool_lt_loq"] = pool < loq
+    return out
+
+
+def sdm_impurities(cfg: Config, sdm: pd.DataFrame, feeds) -> pd.DataFrame:
+    """Residual DNA and leached Protein A in the cation and anion exchange pools of the qualification
+    runs at both scales (``ion_exchange_impurities``, streams 34 and 35): the outputs PCP-007 and PCP-008
+    Version 1.0 compared beside the others. Pools below the LOQ carry no value."""
+    out = sdm.copy()
+    for k, step in enumerate(("cex", "aex")):
+        idx = out.index[out["step"] == step]
+        if not len(idx):
+            continue
+        sub = ion_exchange_impurities(cfg, out.loc[idx].reset_index(drop=True), step, feeds, 34 + k)
+        for c in ("dna_pool_pg_mg", "dna_pool_lt_loq", "lpa_pool_ppm", "lpa_pool_lt_loq"):
+            out.loc[idx, c] = sub[c].to_numpy()
+    return out
+
+
+def cex_univariate_impurities(cfg: Config, uni: pd.DataFrame, feeds) -> pd.DataFrame:
+    """Residual DNA and leached Protein A in the load and the pool of each run of the cation exchange
+    flow-rate study, which PCP-007 Version 1.0 required ("the responses of §5.3 will be measured on
+    each"; §5.3 lists residual DNA and leached Protein A). As ``ion_exchange_impurities``, stream 37."""
+    out = uni.copy()
+    idx = out.index[out["study"] == "S-CEX-UNI"]
+    if not len(idx):
+        return out
+    sub = ion_exchange_impurities(cfg, out.loc[idx].reset_index(drop=True), "cex", feeds, 37)
+    for c in ("dna_load_pg_mg", "dna_load_lt_loq", "dna_pool_pg_mg", "dna_pool_lt_loq",
+              "lpa_load_ppm", "lpa_load_lt_loq", "lpa_pool_ppm", "lpa_pool_lt_loq"):
+        out.loc[idx, c] = sub[c].to_numpy()
+    return out
+
+
+def nodoe_extras(cfg: Config, uni: pd.DataFrame, feeds) -> pd.DataFrame:
+    """Attributes in scope of the Version 2.0 univariate studies of harvest and UF/DF that their plans
+    list and the record lacked: fragments by nrCE-SDS (AMV-3020) and residual DNA by qPCR (AMV-3014) in
+    the clarified harvest, acidic variants by icIEF (AMV-3013) in the UF/DF retentate. The harvest
+    parameters do not act on them (A-Mab's no-impact assumption) and the UF/DF model has no charge-variant
+    effect, so each is the feed value with its method's repeatability. Fragments are those of the
+    harvest at the end of culture, sampled at clarification. Stream 36."""
+    out = uni.copy()
+    for c in (LMW_CE, "dna_out_pg_mg"):
+        if c not in out.columns:
+            out[c] = np.nan
+    studies = _a(cfg)["univariate_nodoe"]["studies"]
+    h = out.index[out["study"] == studies.get("harvest")]
+    if len(h):
+        out.loc[h, LMW_CE] = measure(cfg, "cesds", np.full(len(h), float(frag_harvest(cfg))), _rng(cfg, 36, 0))
+        dna = float(feeds["harvest"].cqas.get("residual_dna", 0.0))
+        out.loc[h, "dna_out_pg_mg"] = dna * _rng(cfg, 36, 1).lognormal(0.0, _assay_cv(cfg, "AMV-3014"), len(h))
+    u = out.index[out["study"] == studies.get("ufdf")]
+    if len(u):
+        av = float(feeds["ufdf"].cqas.get("acidic_variants", np.nan))
+        out.loc[u, "acidic_variants"] = av * _rng(cfg, 36, 2).lognormal(0.0, _assay_cv(cfg, "AMV-3013"), len(u))
+    return out
 
 
 def _nodoe_levels(p) -> list:

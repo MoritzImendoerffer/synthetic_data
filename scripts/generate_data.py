@@ -96,6 +96,13 @@ def main() -> None:
             bio_hmw = float(feeds["protein_a"].cqas.get("aggregates_hmw", 1.5))
             scr = an.protein_a_extras(cfg, scr, "screening", bio_hmw)
             rsm = an.protein_a_extras(cfg, rsm, "rsm", bio_hmw)
+        # results the Version 1.0 plans required and the record lacked (owner's decision Q5, 2026-10-10),
+        # each from a stream of its own after the designs ran
+        if key == "bioreactor":
+            scr = an.bioreactor_impurities(cfg, scr, 0)
+            rsm = an.bioreactor_impurities(cfg, rsm, 1)
+        if key in ("cex", "aex"):
+            rsm = an.ion_exchange_impurities(cfg, rsm, key, feeds, {"cex": 0, "aex": 1}[key])
         save(scr, f"doe_{key}_screening.csv")
         save(rsm, f"doe_{key}_rsm.csv")
         # fit effects for every response (screening for main effects)
@@ -213,11 +220,16 @@ def main() -> None:
     for pool in cfg.raw()["analytics"]["holds"]:
         save(an.hold_study(cfg, pool, ps).round(4), f"hold_{pool}.csv")
     save(an.comparability(cfg, ps).round(4), "cex_fraction_comparability.csv")
-    save(an.sdm_qualification(cfg, proc, feeds), "sdm_qualification.csv")
-    # S-VI-UNI2 (PD-006-06) appended last: XMuLV clearance at the ends of the A-Mab concentration range
-    save(pd.concat([an.univariate_studies(cfg, proc, feeds), an.univariate_nodoe(cfg, proc, feeds),
-                    an.vi_concentration_xmulv(cfg, proc, feeds)], ignore_index=True),
-         "univariate_studies.csv")
+    save(an.sdm_impurities(cfg, an.sdm_qualification(cfg, proc, feeds), feeds), "sdm_qualification.csv")
+    # S-VI-UNI2 (PD-006-06) appended last: XMuLV clearance at the ends of the A-Mab concentration range;
+    # then the spiked anion exchange run of the flow-rate study, and the size variants and attributes the
+    # Version 1.0 plans required (owner's decision Q5, 2026-10-10)
+    uni = pd.concat([an.univariate_studies(cfg, proc, feeds), an.univariate_nodoe(cfg, proc, feeds),
+                     an.vi_concentration_xmulv(cfg, proc, feeds), an.aex_univariate_viral(cfg, proc, feeds)],
+                    ignore_index=True)
+    uni = an.nodoe_extras(cfg, an.univariate_size_variants(cfg, uni, ps, feeds), feeds)
+    uni = an.cex_univariate_impurities(cfg, uni, feeds)
+    save(uni, "univariate_studies.csv")
     values["fragments_nominal"] = {k: round(v, 3) for k, v in an.nominal_train(cfg).items()}
 
     # -- 12. Rev 2.0 intermediate acceptance criteria (config only), Rev 1.0 criteria (data),

@@ -288,16 +288,25 @@ WRITING_GUIDE §2 rule 11 is the owner's rule. PCR-005 broke it in these ways.
    opens a paragraph without content, states an aphorism, or recommends without a basis. A sentence
    frame repeated across sections reads as templated.
 
-## Not rules: open owner questions
+## 6. The owner's decisions of 2026-10-10 (were open questions; `data-state-2026-10-10.md`)
 
-- **The criteria of a held pool.** PCR-005 used the criteria in force for the next step's load
-  (tightened and widened on verification). An earlier coordinator note said a priori.
-- **The statistic of the design space.** It is drawn on the mean (median) prediction, while the PARs
-  and conclusions are per batch (PCP-003 review).
-- **Detectability of host cell protein.** The record has no coverage figure for the ELISA, so a risk
-  argument can name only the release test and its limit of quantitation.
-- **Residual DNA.** The unit of the drug substance criterion (ng/dose), and no intermediate criterion.
-- **The class of a parameter for an attribute its study did not measure** (Protein A, fragments).
-- **A qualification that depends on the choice among near-equivalent models** (two of the nine
-  Protein A models within 2 AICc units would not qualify the scale-down model).
-- **An out-of-trend result with no out-of-trend limit in the deviation record** (DEV-005-02).
+1. **A held pool is judged against the criteria in force** for the next step's load (tightened and
+   widened on verification), not the a priori values.
+2. **The design space is drawn on the single-batch limit** (`D.design_space_grid`, default
+   `basis="batch"`): quality attributes on both ends of the single-run prediction interval, viral
+   clearance on the mean. Name the statistic; the mean-based region is a comparison only.
+3. **Detection of host cell protein:** the ELISA record carries its coverage (AMV-3012
+   `coverage_pct`, 2D western blot). A risk argument names the release test, its LOQ and its coverage.
+4. **Residual DNA** is carried in pg/mg and judged in ng/dose with the dose of `meta.dose`
+   (`DOSE_MG`, `dna_ng_per_dose`); the 70 kg body weight is an assumption and is called one. The
+   drug substance has no intermediate DNA criterion (PCMP-001 gives why).
+5. **Among near-equivalent models the selected model decides;** the others are a sensitivity.
+6. **An attribute in scope that a study did not measure** is measured unless the gap is justified.
+   Where it cannot be (the Protein A and low-pH univariate samples were not retained, so fragments
+   were never measured by nrCE-SDS there; SEC is biased in those matrices), the report states the
+   gap, its reason, and what the class of the parameter then rests on for that attribute (the
+   mechanism and the response-surface model), and claims no fragment result from that study.
+7. **DEV-005-02's out-of-trend rule is in the record** (`oot_rule`, `D.oot_check`); state the trigger
+   with its numbers when the deviation is described.
+8. **Criterion 4** (residuals and influence) is tested by `D.residual_influence` in every report, and
+   the influence analysis is the registered discrepancy of each DoE report.

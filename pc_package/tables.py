@@ -780,6 +780,9 @@ SDM_OUTPUT = {
     "pool_hcp_ng_mg": ("Host cell protein", "ng/mg", 0), "hcp_out_ng_mg": ("Host cell protein", "ng/mg", 1),
     "leached_protein_a_ppm": ("Leached Protein A", "ppm", 2), "step_yield": ("Step yield", "%", 1),
     "plates_per_m": ("Column efficiency", "plates/m", 0), "asymmetry": ("Peak asymmetry", "", 2),
+    # 2026-10-10 (owner's decisions Q5 and Q8): the further outputs the Version 1.0 plans compared
+    "dna_pool_pg_mg": ("Residual DNA", "pg/mg", 1), "lpa_pool_ppm": ("Leached Protein A", "ppm", 2),
+    "ds_concentration_g_per_l": ("Final concentration", "g/L", 1), "flux_lmh": ("Permeate flux", "LMH", 1),
 }
 
 

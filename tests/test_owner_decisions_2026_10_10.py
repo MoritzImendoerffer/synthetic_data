@@ -108,3 +108,39 @@ def test_q8_ufdf_qualification_and_offsets():
     for col in ("step_yield", "aggregate_out_pct", "ds_concentration_g_per_l", "flux_lmh"):
         assert u[col].notna().all(), col
     assert D.sdm_offset("ufdf", "aggregate_out_pct") is not None
+
+
+def test_q5_univariate_studies_measure_what_their_plans_required():
+    """Q5: size variants by the method of the time (analytics.plan) in the univariate studies of the
+    designed steps; the spiked AEX run at the high flow rate; the harvest and UF/DF attributes in scope."""
+    u = _csv("univariate_studies.csv")
+    plan = CFG.raw()["analytics"]["plan"]
+    col = {"sec": "lmw_sec_pct", "cesds": "lmw_cesds_pct"}
+    for sid in ("S-PA-UNI", "S-VI-UNI", "S-CEX-UNI", "S-AEX-UNI"):
+        plan.setdefault(sid, [])
+        rows = u[(u["study"] == sid) & ~(u["spiked"].fillna(False).astype(bool))]
+        for meth in ("sec", "cesds"):
+            has = rows[col[meth]].notna()
+            assert has.all() if meth in plan[sid] else not has.any(), (sid, meth)
+    sp = u[u["spiked"].fillna(False).astype(bool)]
+    assert len(sp) == 1 and sp["study"].iloc[0] == "S-AEX-UNI" and sp["level"].iloc[0] == "high"
+    assert sp[["xmulv_lrf", "mvm_lrf"]].notna().all(axis=None)
+    har = u[u["study"] == "S-HAR-UNI2"]
+    assert har[["lmw_cesds_pct", "dna_out_pg_mg"]].notna().all(axis=None)
+    assert u.loc[u["study"] == "S-UFDF-UNI2", "acidic_variants"].notna().all()
+    assert u.loc[u["study"] == "S-BRX-UNI", ["harvest_hcp_ng_mg", "harvest_dna_pg_mg"]].notna().all(axis=None)
+    cx = u[u["study"] == "S-CEX-UNI"]
+    assert (cx["dna_pool_pg_mg"].isna() == cx["dna_pool_lt_loq"].astype(bool)).all()
+    assert cx["dna_load_pg_mg"].notna().all()
+
+
+def test_q5_ion_exchange_impurities_and_loq():
+    """Q5: DNA and leached Protein A on every response-surface pool of CEX and AEX; a pool below the
+    method's LOQ carries no value and is flagged."""
+    for step in ("cex", "aex"):
+        d = _csv(f"doe_{step}_rsm.csv")
+        for name, unit in (("dna", "pg_mg"), ("lpa", "ppm")):
+            v, flag = d[f"{name}_pool_{unit}"], d[f"{name}_pool_lt_loq"].astype(bool)
+            assert (v.isna() == flag).all(), (step, name)
+    aex = _csv("doe_aex_rsm.csv")
+    assert aex["dna_pool_lt_loq"].astype(bool).all(), "5 logs of AEX DNA clearance leave the pools below the LOQ"

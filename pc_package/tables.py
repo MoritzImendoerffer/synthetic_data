@@ -786,6 +786,12 @@ SDM_OUTPUT = {
 }
 
 
+def _DOE_STEPS():
+    """The steps with a response-surface design."""
+    from amab_process import studies as _st
+    return set(_st.DOE_FACTORS)
+
+
 def sdm_offsets_data(steps: Optional[List[str]] = None, studies: Optional[List[str]] = None) -> pd.DataFrame:
     """One row per step and output of the scale-down qualification: the offset (scale-down minus
     manufacturing), its interval, and the qualification of doe_report.offset_qualification.
@@ -830,6 +836,11 @@ def sdm_offsets(steps: Optional[List[str]] = None, studies: Optional[List[str]] 
             if r["judged"]:
                 concl = [f"{yn(r['met_lo'])} / {yn(r['met_point'])} / {yn(r['met_hi'])}"]
                 q = yn(r["qualified"])
+            elif sk not in _DOE_STEPS():
+                # a step with no designed experiment (UF/DF): its outputs may carry a criterion, but
+                # PCMP-001 §7.1 decides qualification on the response-surface model (PCP-010 author)
+                concl = ["no model^c)^"]
+                q = "n.a.^c)^"
             else:
                 concl = ["no criterion^a)^"]
                 q = "n.a.^a)^"
@@ -851,8 +862,12 @@ def sdm_offsets(steps: Optional[List[str]] = None, studies: Optional[List[str]] 
                     "on its offset and qualification does not apply. The offset is recorded."),
              ("b)", "Modelled on the log scale: geometric means, and the offset as the ratio of the "
                     "scale-down to the manufacturing geometric mean. The manufacturing-scale value is "
-                    "the scale-down value divided by the ratio.")]
-    used = any(not j for j in t["judged"])
+                    "the scale-down value divided by the ratio."),
+             ("c)", "The step has no response-surface model, and PCMP-001 §7.1 decides the qualification "
+                    "on that model. The offset is recorded, and the report states how it is used.")]
+    doe = _DOE_STEPS()
+    used = any((not j) and k in doe for j, k in zip(t["judged"], t["step_key"]))
+    used_nomodel = any((not j) and k not in doe for j, k in zip(t["judged"], t["step_key"]))
     used_ratio = bool(t.get("ratio", pd.Series(dtype=bool)).fillna(False).astype(bool).any())
     from amab_process.config import _NOR_MODE
     which = "the NOR as characterized" if _NOR_MODE["mode"] == "characterized" else "the NOR in force"
@@ -874,7 +889,8 @@ def sdm_offsets(steps: Optional[List[str]] = None, studies: Optional[List[str]] 
     return CTable(
         header=header, body=body, align=align,
         size="footnotesize",
-        notes=[n for n in notes if (n[0] == "a)" and used) or (n[0] == "b)" and used_ratio)] + legend,
+        notes=[n for n in notes if (n[0] == "a)" and used) or (n[0] == "b)" and used_ratio)
+               or (n[0] == "c)" and used_nomodel)] + legend,
         notes_per_row=True,
         caption=caption or ("Offsets of the scale-down models (scale-down minus manufacturing scale) "
                             f"and the qualification of each model for each output{sub}."),

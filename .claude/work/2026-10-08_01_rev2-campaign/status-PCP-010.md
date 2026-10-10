@@ -69,3 +69,28 @@ Scratch: /tmp/claude-1000/-home-moritz-github-repos-synthetic-data/be14bf3c-e46a
    states this and that PCR-010 reports the increment; no verification exists for a step without a DoE.
 4. PCMP-001 §7.8 wording "nrCE-SDS in every study at every step" vs UF/DF studies measuring no fragments.
 5. Config analytics.univariate_nodoe.assay.aggregate_out_pct = "AMV-3221" (not in AMV registry).
+
+## REVISION run 1 (2026-10-10), same author
+Inputs read: feedback-PCP-010.run1.md, factual-PCP-010.md, content-review-PCP-010.md, data-state-2026-10-10.md,
+rebuilt brief; rendered PCMP-001 re-read (§5 now lists UF/DF outputs: step yield, aggregate, final conc, flux).
+Data probed: S-UFDF-SDM rows exist (3 SD + 5 mfg); D.to_mfg now subtracts the aggregate offset;
+revision_history now "Reissued under INV-001: the rules of PCMP-001 Version 2.0 applied..." (no INV-002);
+V1.0 acidic read upper-only computable via D.rev1_criteria_in_force(); NOR_SD_DIVISOR 6; SDM_RESPONSES[ufdf].
+Plan of fixes: A1 requirement wording + aggregate offset per PCMP-001 §7.1 (relation change/level -> PCR-010);
+A2 drop INV-002; B1-9 per factual; C: restore V1.0 rule wording (mark as V1.0), science corrections, terms,
+causes, glosses, restatements, codes; tables: drop methods_by_study, no constant columns (6.1, 11.1),
+Table 4.1 rebuilt (no Category, no CEX, Tool #1 legend), Appendix A as run schedule.
+Note: T.sdm_offsets(["ufdf"]) note a) says aggregate has "no acceptance criterion at this step" (helper wording;
+the real reason is no response-surface model) -> flag for PCR-010 / coordinator.
+- revision draft written (full rewrite of body per fix list); gating
+- revision gate runs: 4 check_render --render runs, all HARD gates OK each time (run 1 after the rewrite;
+  run 2 after "run-to-run" -> "between runs"; run 3 after Table 6.1 formatting and §7.4 dedup; run 4 final
+  after explicit quarto pdf/docx renders). PDF 30 pp. 327 sentences, 6,494 words of prose (check_render).
+  No <<NEEDS:>>. Own digit audit: only identifiers.
+- table pages viewed (pp. 12, 15, 17, 18, 26, 29): Table 4.1 (rebuilt), 5.1, 5.2 sampling (note a), 6.1 (no
+  study-type column), 11.1 (no equipment/calibration columns), A.1 (run schedule, merged series). All correct.
+## REVISION run 1 DONE (2026-10-10). Left for the coordinator
+- annex: Table 4.1 and 6.1 are now own T.frame tables (criterion+method columns; plan_params minus Study type,
+  set-points via g()); T.methods_by_study dropped although the brief still lists it.
+- T.sdm_offsets(["ufdf"]) note a) says aggregate has no criterion at the step (real reason: no RSM model).
+- A-Mab p.86 citation unverified by me (brief, bible, CLAUDE.md say p.86; a config comment says p.140).

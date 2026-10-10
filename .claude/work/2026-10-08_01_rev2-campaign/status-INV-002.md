@@ -115,16 +115,23 @@ Table 3.1 (page 13 near empty); (4) Table 9.1 note: run 23 at design pH; (5) §8
 two bounds behind the widenings do not depend on a single run (Cook's distance > 4/n deleted, selection
 repeated, bound vs platform, three tests met). Then re-render pdf + docx, gate, page images, log.
 Backup before this pass: `INV-002_model_adequacy.DRAFT.pre-verifier.qmd` (this folder).
-- [x] 12:45 facts (scratch s3.py): record part 2 = "the first three model-adequacy criteria of PCMP-001 §7.2 (...)",
+- [x] ~12:30 facts (scratch s3.py): record part 2 = "the first three model-adequacy criteria of PCMP-001 §7.2 (...)",
       PA1 = "...meet the lack-of-fit test and the limit on overfitting"; eff. check still splits into 3 parts.
       Single-run check reproduces the verification in force (AEX HCP 4.2673, VI aggregate 0.5586) via
       iac.verification on doe_<step>_rsm.csv with process_summary.csv feeds (as D.verification_all_runs).
       Cook > 4/n on the planned runs (D.residual_influence, runs="planned"): AEX HCP runs 2, 9 -> 4.56, 4.33
       (platform 4); VI aggregate runs 3, 7, 8 -> 0.551, 0.546, 0.549 (platform 0.70). All reduced selected
       models meet the three tests, none exact.
-- [x] 12:55 edits: setup chunk DROP block (asserts: widened set = the two bounds, repro = csv, each reduced bound
+- [x] ~12:36 edits: setup chunk DROP block (asserts: widened set = the two bounds, repro = csv, each reduced bound
       better than platform, three tests met, not exact) + eff. check assert "first three"; Summary P1 (exact fit
       beside the 14, past tense); recorded-pH paragraph moved after Table 3.1; §8.4 rule "and is not an exact
       fit" + new paragraph (fourth criterion does not decide; Cook's distance runs; bounds 4.33-4.56 vs 4,
       0.546-0.551 vs 0.70); Table 9.1 note (run 23 at design pH); §11 first sentence = the three tests.
-- [ ] gate, explicit renders, page images
+- [x] 12:3x gate (--render) green; 12:40-12:44 explicit pdf + docx renders, check_render green. PDF 54 pp
+      (moving the recorded-pH paragraph removed the near-empty page 13).
+- [x] page images read: p6 (Summary), p12-14 (Section 3: Finding text, Table 3.1 on p13, moved paragraph
+      after it), p36 (8.4 rule + single-run paragraph), p45 (Table 9.1 note), p52 (Section 11); Table 10.1
+      PA1 row checked in the PDF text (record verbatim).
+- [x] API drop at ~12:45; resumed 15:08. All edits were on disk; no input changed after the 12:44 renders.
+      Final run: check_render --render green, explicit pdf (15:12) + docx (15:13) renders, check_render green.
+      PDF 54 pp, no <<NEEDS:>>. Not committed. DONE.

@@ -8028,10 +8028,10 @@ def build_plan_viral_inactivation():
        f"than its own a priori value of {ns['agg_apriori']} % HMW.", chg,
        f"The Version 2.0 aggregate criterion is wider than that limit, and stricter than its own a "
        f"priori value of {ns['agg_apriori']} % HMW")
-    st("The Version 1.0 aggregate limit was never an approved criterion; it was applied in the report "
-       "at analysis and appeared in no approved plan.", chg,
-       "The Version 1.0 limit was never an approved criterion, because it was applied in the report at "
-       "analysis and appeared in no approved plan.")
+    st("The Version 1.0 limits were applied in the report at analysis and written into the compiled text "
+       "of the plan, and neither was approved with the plan.", chg,
+       "They were written into the compiled text of this plan when the package was compiled, and neither "
+       "was approved with the plan (INV-001 finding 1).")
     st("For XMuLV clearance, Version 2.0 holds the step to its platform claim, which is stricter than "
        "the Version 1.0 criterion.", chg,
        "Version 2.0 holds the step to its platform claim, which is the stricter criterion.")
@@ -8818,7 +8818,7 @@ def build_plan_bioreactor():
     st(f"The Version 1.0 title block carried {ns['REV1_EFF']}, the approval date of the Version 1.0 "
        f"reports, in place of the approval date of the plan.", chg,
        f"The Version 1.0 title block carried {ns['REV1_EFF']}, the date on which the Version 1.0 "
-       f"reports were approved, in place of the date on which this plan was approved.")
+       f"reports were approved, in place of the date on which this plan was approved")
     st(f"The pCO2 parameter is named {NAME['co2']}, and the units are given in full; no value "
        f"changes.", chg,
        f"The pCO2 parameter is named {NAME['co2']}, and the units are given in full for "

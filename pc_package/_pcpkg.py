@@ -663,14 +663,24 @@ def abbreviations_table(pairs):
     return md_table(["Abbreviation", "Meaning"], rows, [20, 80])
 
 
+def _revision_reason_key(doc_id):
+    """Which ``campaign.revisions`` reason a document prints (config comment): reports and plans, and
+    the steps with or without a designed experiment, were reissued for different reasons."""
+    nodoe = {f"{t}-{CFG.unit_op(k).step:03d}" for k in ("harvest", "ufdf") for t in ("PCP", "PCR")}
+    if doc_id in ("PTP-001", "RA-001"):
+        return "reason_parent"
+    if doc_id.startswith(("PCR-", "PCMR-")):
+        return "reason_report_nodoe" if doc_id in nodoe else "reason"
+    return "reason_plan_nodoe" if doc_id in nodoe else "reason_plan"
+
+
 def revision_history(doc_id):
     """The revision-history table: every revision of the document, oldest first."""
     if doc_id in INVESTIGATIONS:
         rows = [["1.0", INVESTIGATIONS[doc_id]["closed"], "Initial issue"]]
     else:
-        report = doc_id.startswith(("PCR-", "PCMR-"))
         rows = [[r["rev"], rev1_date(doc_id) if r is REV1 else r["effective"],
-                 (r["reason"] if report else r.get("reason_plan", r["reason"]))
+                 r.get(_revision_reason_key(doc_id), r["reason"])
                  + (f" (see {INV['id']})" if r is not REV1 else "")] for r in REVISIONS]
     return md_table(["Version", "Effective date", "Description of change"], rows, [12, 18, 70])
 

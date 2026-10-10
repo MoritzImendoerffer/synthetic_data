@@ -98,6 +98,7 @@ it did once, before that rule existed.
 | `build_ground_truth.py` | builds every annex from the same seeded CSVs the documents render |
 | `validate_annex.py` | validates every `ground_truth/*.json` against the schema |
 | `check_grounding.py` | asserts every annex quote appears verbatim in its rendered document |
+| `render_variant.py`, `table_rules.lua`, `table_rules.tex`, `table_rules.yml` | the corpus again with ruled tables, in `variants/<rules>/` (`make corpus-variant RULES=rows` or `grid`); see [`TASKS.md`](TASKS.md) |
 
 ## Build, render, validate
 

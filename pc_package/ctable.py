@@ -5,12 +5,35 @@ One :class:`CTable` spec renders to two twins inside one Quarto cross-reference 
 
 * an **HTML table** for DOCX. Quarto parses it into a pandoc table, and the DOCX writer emits real
   merged cells (``w:gridSpan`` across, ``w:vMerge`` down);
-* a **raw LaTeX table** for PDF (``booktabs`` + ``multirow``, or ruled ``|l|l|`` with
-  ``\\cline``). Pandoc's own LaTeX writer collapses spanned tables (tested 2026-10-08), so the
-  PDF twin is written here.
+* a **raw LaTeX table** for PDF (``booktabs`` + ``multirow``, or one of the ruled styles below).
+  Pandoc's own LaTeX writer collapses spanned tables (tested 2026-10-08), so the PDF twin is
+  written here.
 
 Both sit in ``::: {#tbl-x}`` with the caption as its last paragraph, so ``@tbl-x`` resolves in
 both formats.
+
+Table rules
+-----------
+Three styles of rules, for the PDF twin only (the HTML twin, and so the DOCX text that the
+grounding check reads, is the same in all three):
+
+* ``booktabs`` (the default): top, header and bottom rules, a ``\\cmidrule`` under a header cell
+  that spans columns, and a ``\\midrule`` before each group of a table whose first column merges;
+* ``rows``: the same top, header and bottom rules, and a thin rule between any two rows, header
+  rows included (booktabs' group rule where a group opens). Where a row span continues into the
+  next row the rule is cut into ``\\cline`` (``\\cmidrule`` in the header) segments, so it never
+  runs through a merged cell, and it runs along the lower border of the merged cell where the span
+  ends;
+* ``grid``: every cell ruled (``|l|l|`` and a rule under every row), the horizontal rules cut the
+  same way and no vertical rule through a cell that spans columns.
+
+A table sets its own style (``CTable(style="grid")``). A whole rendering pass can override every
+table with the environment variable ``PC_TABLE_RULES`` (``rows`` or ``grid``; unset or
+``booktabs`` keeps each table's own style, today's layout). Quarto's Python kernel inherits the
+environment of ``quarto render``, so the variable is read when :meth:`CTable.latex` runs.
+``render_variant.py`` (``make corpus-variant RULES=rows``) renders a whole corpus this way, with
+the same rules for the plain pipe tables (``table_rules.lua``) and in the DOCX (a reference
+document derived from ``reference.docx``); see ``TASKS.md``.
 
 Cells
 -----
@@ -28,6 +51,7 @@ run, so ``SEC^a)^`` reads as ``SEC a)``.
 from __future__ import annotations
 
 import html
+import os
 import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Sequence, Tuple, Union
@@ -35,6 +59,23 @@ from typing import List, Optional, Sequence, Tuple, Union
 CELL_SEP = " | "
 _MARK = re.compile(r"\^([^^]+)\^")
 _XREF = re.compile(r"@(?:sec|tbl|fig|eq|apx)-[\w-]+")
+
+#: the styles of table rules (see the module docstring)
+STYLES = ("booktabs", "rows", "grid")
+#: the environment variable that sets the rules of every table in a rendering pass
+RULES_ENV = "PC_TABLE_RULES"
+
+
+def table_rules() -> str:
+    """The rules of this rendering pass, from ``PC_TABLE_RULES``: "booktabs" when it is unset or
+    "booktabs" (each table keeps its own style), else "rows" or "grid", which override every
+    table. Read on each call, so a test can set the variable."""
+    v = os.environ.get(RULES_ENV, "").strip().lower()
+    if v in ("", "booktabs"):
+        return "booktabs"
+    if v not in STYLES:
+        raise ValueError(f"{RULES_ENV}={v!r}: use one of {', '.join(STYLES)}")
+    return v
 
 
 @dataclass
@@ -136,7 +177,7 @@ class CTable:
     align: Optional[str] = None                  # LaTeX column spec letters, e.g. "llrrr"
     notes: Sequence[Tuple[str, str]] = ()        # (marker, text), e.g. ("a)", "Retained samples.")
     notes_per_row: bool = False                  # one footnote row per note (else one row)
-    style: str = "booktabs"                      # "booktabs" or "grid"
+    style: str = "booktabs"                      # "booktabs", "rows" or "grid" (PC_TABLE_RULES overrides)
     group_rule: bool = True                      # a rule before each body row that opens a group
     size: str = "small"                          # LaTeX size command for the table body
     resize: bool = True                          # shrink to \linewidth if wider (never enlarges)
@@ -156,6 +197,8 @@ class CTable:
         self.ncols = sum(c.cs for c in self.header[0])
         if not self.label.startswith("tbl-"):
             raise ValueError("label must start with 'tbl-'")
+        if self.style not in STYLES:
+            raise ValueError(f"{self.label}: style {self.style!r} is not one of {', '.join(STYLES)}")
         self._grid(self.header)
         self._grid(self.body)
 
@@ -240,11 +283,22 @@ class CTable:
                 + self._html_rows(self.body, "td") + "\n</tbody>\n" + foot + "</table>")
 
     # -- PDF twin ---------------------------------------------------------------------------
-    def _latex_rows(self, rows, rule_groups):
+    def _style(self) -> str:
+        """The style the PDF twin is set in: the table's own, unless ``PC_TABLE_RULES`` sets the
+        rules of the whole pass."""
+        rules = table_rules()
+        return self.style if rules == "booktabs" else rules
+
+    def _latex_rows(self, rows, rule_groups, style="booktabs", rule_rows=False):
+        """The LaTeX lines of ``rows`` (the header or the body). ``rule_rows`` (the body in the rows
+        style): a rule under every row but the last, cut around a row span that continues."""
         placed, covered = self._grid(rows)
+        origin = self._origins(placed)
+        down = self._spanned_down(origin)
         aligns = self._aligns()
         lines = []
-        grid = self.style == "grid"
+        grid = style == "grid"
+        ruled = style == "rows"
         # a table is grouped when its first column has a row span somewhere
         grouped = any(c.rs > 1 for cells in placed for col, c in cells if col == 0)
         # the lines each row takes, from its own cells, so that a merged cell whose text needs more
@@ -258,8 +312,9 @@ class CTable:
                      for cells in placed]
         for r, cells in enumerate(placed):
             starts = dict(cells)
-            # the grid style already rules every row, so only booktabs needs a group rule
-            if rule_groups and grouped and not grid and r > 0 and (r, 0) not in covered:
+            # the grid style already rules every row, and the rows style sets the group rule under
+            # the row before, so only booktabs needs a group rule here
+            if rule_groups and grouped and not grid and not ruled and r > 0 and (r, 0) not in covered:
                 lines.append(r"\hline" if grid else r"\midrule")
             parts, col = [], 0
             while col < self.ncols:
@@ -285,25 +340,86 @@ class CTable:
                     parts.append(txt)
                     col += c.cs
                 else:
-                    parts.append("")
-                    col += 1
+                    # a position covered by a row span from above. In the grid style the rows below
+                    # the first of a cell that also spans columns are one empty cell across those
+                    # columns: an empty cell per column drew the vertical rules of the tabular
+                    # through the merged cell
+                    orow, ocol = origin[(r, col)]
+                    width = next(c.cs for cc, c in placed[orow] if cc == ocol) if grid and ocol == col else 1
+                    if width > 1:
+                        parts.append(r"\multicolumn{" + str(width) + "}{" + ("|" if col == 0 else "")
+                                     + "l|}{}")
+                    else:
+                        parts.append("")
+                    col += width
             lines.append(" & ".join(parts) + r" \\")
             if grid:
-                # \cline under every column that does not continue a row span into the next row
-                spans = [cc for cc in range(self.ncols) if (r + 1, cc) not in covered]
+                # \cline under every column that does not continue a row span into the next row (a
+                # cell of the next row that spans columns does not continue anything: the rule runs
+                # above all of its columns)
+                spans = [cc for cc in range(self.ncols) if (r + 1, cc) not in down]
                 lines.append(self._clines(spans) if len(spans) < self.ncols else r"\hline")
+            elif ruled and rule_rows and r + 1 < len(placed):
+                # a thin rule under the row, cut into segments where a row span continues: it never
+                # runs through a merged cell, and it runs along the lower border of one that ends.
+                # Where a group opens, booktabs' group rule instead, cut the same way.
+                free = [cc for cc in range(self.ncols) if (r + 1, cc) not in down]
+                if rule_groups and grouped and (r + 1, 0) not in down:
+                    lines.append(r"\midrule" if len(free) == self.ncols else self._cmidrules(free))
+                else:
+                    lines.append(r"\hline" if len(free) == self.ncols else self._clines(free))
         return lines, placed
 
     @staticmethod
-    def _clines(cols):
+    def _origins(placed):
+        """Each position a span covers -> the (row, col) of the cell the span starts at."""
+        origin = {}
+        for r, cells in enumerate(placed):
+            for col, c in cells:
+                for dr in range(c.rs):
+                    for dc in range(c.cs):
+                        if dr or dc:
+                            origin[(r + dr, col + dc)] = (r, col)
+        return origin
+
+    @staticmethod
+    def _spanned_down(origin):
+        """The positions covered by a cell that starts in a row above: where a row span continues.
+        ``_grid``'s covered set also holds the positions a cell covers to its right in its own row,
+        and a rule cut at those left a gap above every cell that spans columns but its first."""
+        return {pos for pos, (orow, _) in origin.items() if orow < pos[0]}
+
+    @staticmethod
+    def _runs(cols):
+        """Consecutive column indices as (first, last) runs: [0, 1, 3] -> [(0, 1), (3, 3)]."""
         out, start = [], None
         for i, c in enumerate(cols):
             if start is None:
                 start = c
             if i + 1 == len(cols) or cols[i + 1] != c + 1:
-                out.append(rf"\cline{{{start + 1}-{c + 1}}}")
+                out.append((start, c))
                 start = None
-        return " ".join(out)
+        return out
+
+    @classmethod
+    def _clines(cls, cols):
+        return " ".join(rf"\cline{{{a + 1}-{b + 1}}}" for a, b in cls._runs(cols))
+
+    @classmethod
+    def _cmidrules(cls, cols):
+        return " ".join(rf"\cmidrule{{{a + 1}-{b + 1}}}" for a, b in cls._runs(cols))
+
+    def _header_rules(self, placed, r):
+        """The rows style: the rule under header row ``r``, along every column that does not
+        continue a row span into the next header row. Under a cell that spans columns it is trimmed
+        at both ends, as booktabs sets it, so that two groups side by side stay apart."""
+        down = self._spanned_down(self._origins(placed))
+        free = [cc for cc in range(self.ncols) if (r + 1, cc) not in down]
+        groups = [(col, col + c.cs - 1) for col, c in placed[r] if c.cs > 1 and col in free]
+        in_group = {cc for a, b in groups for cc in range(a, b + 1)}
+        segs = [(a, b, "(lr)") for a, b in groups]
+        segs += [(a, b, "") for a, b in self._runs([cc for cc in free if cc not in in_group])]
+        return [rf"\cmidrule{t}{{{a + 1}-{b + 1}}}" for a, b, t in sorted(segs)]
 
     def _aligns(self):
         """Column specs. ``align`` is a string of l/c/r letters, or a list whose entries may also
@@ -319,7 +435,8 @@ class CTable:
         return out
 
     def latex(self) -> str:
-        grid = self.style == "grid"
+        style = self._style()
+        grid, ruled = style == "grid", style == "rows"
         spec = "|" + "|".join(self._aligns()) + "|" if grid else "".join(self._aligns())
         L = [r"{\%s" % self.size, r"\setlength{\tabcolsep}{4pt}"]
         if self.resize:
@@ -331,20 +448,24 @@ class CTable:
         L.append(r"\begin{tabular}{" + spec + "}")
         L.append(r"\hline" if grid else r"\toprule")
         # header, with \cmidrule under every column-spanning header cell that has a row below it
+        # (the rows style: under every header cell that ends above the next header row)
         hplaced, _ = self._grid(self.header)
-        hl, _ = self._latex_rows(self.header, rule_groups=False)
+        hl, _ = self._latex_rows(self.header, rule_groups=False, style=style)
         if not grid:
             out = []
             for r, line in enumerate(hl):
                 out.append(line)
                 if r + 1 < len(self.header):
-                    mids = [rf"\cmidrule(lr){{{col + 1}-{col + c.cs}}}" for col, c in hplaced[r] if c.cs > 1]
+                    if ruled:
+                        mids = self._header_rules(hplaced, r)
+                    else:
+                        mids = [rf"\cmidrule(lr){{{col + 1}-{col + c.cs}}}" for col, c in hplaced[r] if c.cs > 1]
                     if mids:
                         out.append(" ".join(mids))
             hl = out
         L += hl
         L.append("" if grid else r"\midrule")
-        bl, _ = self._latex_rows(self.body, rule_groups=self.group_rule)
+        bl, _ = self._latex_rows(self.body, rule_groups=self.group_rule, style=style, rule_rows=ruled)
         L += bl
         if not grid:
             L.append(r"\bottomrule")

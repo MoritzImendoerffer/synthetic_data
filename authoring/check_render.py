@@ -117,6 +117,17 @@ def dry_run(qmd: str):
 # call that uses the document's own variables (T.frame(design_tab, ...))
 _LAST_NS: dict = {}
 
+# Where the rendered .pdf/.docx of a document are read from: beside the .qmd (the default), or the
+# folder given with --out-dir, e.g. a variant corpus with other table rules (pc_package/variants/rows,
+# make corpus-variant). The gates are the same either way.
+OUT_DIR: str | None = None
+
+
+def rendered(qmd: str, ext: str) -> str:
+    """The rendered file of ``qmd`` with extension ``ext`` (".pdf", ".docx")."""
+    base = os.path.splitext(os.path.basename(qmd))[0] + ext
+    return os.path.join(os.path.abspath(OUT_DIR) if OUT_DIR else os.path.dirname(os.path.abspath(qmd)), base)
+
 
 def run_lint(qmd: str) -> int:
     if not os.path.exists(LINT):
@@ -157,7 +168,7 @@ def check_pdf_glyphs(qmd: str) -> int:
     PDF after rendering. The fix is the Unicode font block in the document's pdf format
     (mainfont/sansfont/monofont/mathfont); this check makes its absence loud.
     """
-    pdf = os.path.splitext(os.path.abspath(qmd))[0] + ".pdf"
+    pdf = rendered(qmd, ".pdf")
     if not os.path.exists(pdf):
         return 0
     try:
@@ -183,7 +194,7 @@ def check_unresolved_refs(qmd: str) -> int:
     resolve as "?@sec-x", and a reference inside an inline expression is not resolved at all:
     citeproc then reads "@sec" as a citation and prints "(sec?)-x". PCMP-001 Version 2.0 shipped
     two of them (§7.3, found by the PCP-006 author on 2026-10-09)."""
-    pdf = os.path.splitext(os.path.abspath(qmd))[0] + ".pdf"
+    pdf = rendered(qmd, ".pdf")
     if not os.path.exists(pdf):
         return 0
     try:
@@ -223,7 +234,7 @@ def check_tables_fit(qmd: str) -> int:
     the document prints and requires the text of its last body row and of its last footnote
     to appear in the PDF. The DOCX is unaffected, so only the PDF is checked.
     """
-    pdf = os.path.splitext(os.path.abspath(qmd))[0] + ".pdf"
+    pdf = rendered(qmd, ".pdf")
     if not os.path.exists(pdf) or os.path.getmtime(pdf) < os.path.getmtime(qmd):
         return 0
     calls = re.findall(r"(T\.\w+\((?:[^()]|\([^()]*\))*\))\.show\(\)", open(qmd, encoding="utf-8").read())
@@ -289,7 +300,7 @@ def check_font_floor(qmd: str) -> int:
     the table needs abbreviated headers (defined in its note and in the Abbreviations table), line
     breaks in its headers, fewer or narrower columns, or a landscape page of its own
     (``CTable(landscape=True)``). Superscripts (footnote markers) are exempt."""
-    pdf = os.path.splitext(os.path.abspath(qmd))[0] + ".pdf"
+    pdf = rendered(qmd, ".pdf")
     if not os.path.exists(pdf) or os.path.getmtime(pdf) < os.path.getmtime(qmd):
         return 0
     try:
@@ -350,7 +361,7 @@ def check_table_merges(qmd: str) -> int:
     them. A pipe table (``df.to_markdown()``, ``md()``) cannot merge, so a table whose first column
     repeats is built with ``T.frame(df, merge=[...])`` or a builder in tables.py. Reads the DOCX,
     where a merged continuation cell is empty."""
-    docx = os.path.splitext(os.path.abspath(qmd))[0] + ".docx"
+    docx = rendered(qmd, ".docx")
     if not os.path.exists(docx) or os.path.getmtime(docx) < os.path.getmtime(qmd):
         return 0
     bad = []
@@ -464,7 +475,16 @@ def main() -> int:
                     help="promote the numeral lint to a hard gate (default: advisory)")
     ap.add_argument("--lax-style", action="store_true",
                     help="demote the register gate to advisory (default: hard gate)")
+    ap.add_argument("--out-dir", metavar="DIR",
+                    help="read the rendered .pdf/.docx from DIR instead of beside the .qmd (a variant "
+                         "corpus, e.g. pc_package/variants/rows); not with --render, which renders in place")
     args = ap.parse_args()
+    if args.out_dir:
+        if args.render:
+            ap.error("--out-dir checks outputs rendered elsewhere; render them there first "
+                     "(make corpus-variant), without --render")
+        global OUT_DIR
+        OUT_DIR = args.out_dir
     rc = 0
     for q in args.qmd:
         if not os.path.exists(q):

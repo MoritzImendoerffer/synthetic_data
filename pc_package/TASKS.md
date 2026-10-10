@@ -176,6 +176,49 @@ Straight from `config/parameters.yaml`. "DoE?" decides whether `doe_report.py` a
     `check_discourse`, `measure_` and sentence-listing scripts before the draft is read
     (`docs/results/2026-08-19-fourth-round-PCR-007.md` §2).
 
+## Rendering a variant corpus (table rules)
+
+The corpus can be rendered again with ruled tables, without touching the default one (owner,
+2026-10-10). The default pass is `make corpus`, and it stays as it is: booktabs rules, and the
+grid that `hold_stability` and `pp_cqa_matrix` set for their own tables.
+
+```bash
+PATH="$PWD/.venv/bin:$PATH" make corpus-variant RULES=rows PY="uv run python"
+PATH="$PWD/.venv/bin:$PATH" make corpus-variant RULES=grid PY="uv run python"
+make corpus-variant RULES=rows DOCS="PCP-006_viral_inactivation.qmd" JOBS=4   # a subset, in parallel
+make corpus-variants                                                          # rows, then grid
+```
+
+| `RULES` | What every table gets |
+|---|---|
+| `rows` | the booktabs top, header and bottom rules, and a thin rule under every row, header rows included |
+| `grid` | every cell ruled, horizontal and vertical |
+
+In both, a rule never runs through a merged cell, and it runs along the lower border of a merged
+cell where the span ends.
+
+- **Where it goes.** `pc_package/variants/<rules>/<name>.docx` and `.pdf`, a copy of the annexes in
+  `variants/<rules>/ground_truth/`, and the reference document `variants/reference_<rules>.docx`.
+  The folder is ignored by git and removed by `make clean`.
+- **One switch.** The environment variable `PC_TABLE_RULES` (`rows` or `grid`; unset or
+  `booktabs` is the default), which `render_variant.py` sets for the whole pass. The complex tables
+  read it in `ctable.py`. The pipe tables get their rules from `table_rules.lua` and
+  `table_rules.tex`, which only a variant pass loads (`--metadata-file table_rules.yml`). The DOCX
+  gets a reference document derived from `reference.docx`, with borders on its table style.
+- **Grounding.** The rules change no text. The pass grounds the annexes against the variant DOCX
+  files (`check_grounding.py --dir variants/<rules>`), and every quote must ground. Run it after
+  `make corpus`, so that the annexes are current.
+- **Gates.** `check_render.py <doc>.qmd --out-dir pc_package/variants/<rules>` runs the PDF and
+  DOCX gates on the variant outputs.
+- **Time.** A plan of 40 pages takes about 15 s (DOCX and PDF), INV-002 with its figures about
+  110 s.
+- **Traps.** Quarto renders next to its input and then moves the output, and both `--output-dir`
+  and `--output` overwrite and then move away a default output of the same name. Each document is
+  therefore rendered from a staged copy, `_variant_<rules>_<name>.qmd`, which is deleted
+  afterwards. In the DOCX, Quarto wraps a captioned table or figure in a one-cell table of the same
+  style, and a style with borders would frame caption and table. `render_variant.py` gives these
+  containers empty borders.
+
 ## Open items
 
 They live in [`../docs/ROADMAP.md`](../docs/ROADMAP.md), with one proposal per item in

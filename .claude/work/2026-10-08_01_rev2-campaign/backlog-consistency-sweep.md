@@ -176,3 +176,22 @@ Agents launched (fresh contexts; resume with SendMessage if the session survives
 Coordinator default taken (owner may override): INV-002 Table 3.1 counts the full quadratic models as
 Version 1.0 fitted them (Protein A run 23 at its design pH); 14 failing stays; the recorded-pH failure
 of pool HCP (lack of fit p = 0.024) is stated beside it. This keeps the promoted PCR-005 sentence true.
+
+### Third session, continued (2026-10-10, late morning)
+Owner's answers Q1-Q8 (seven open questions of REPORT-LESSONS plus the harvest/UF-DF scale-down gap) and
+"go ahead with the data batch": implemented in 7768d43 (stage 1) and a0feef0 (stage 2); see
+`data-batch-2026-10-10.md` and the authors' note `data-state-2026-10-10.md`. Afterwards (uncommitted):
+PCR-003 register entries DEV-003-03..06 and PD-003-05/06 (from pcr003-departures.md; the initial
+viable cell concentration effect on acidic variants, +3.4 points p = 0.029, is the PCR-003 author's
+judgement and goes into its hand-back); revision reason per document class (`_revision_reason_key`).
+Owner's table request: default layout unchanged; two optional passes (a rule under every row; x/y grid),
+merged cells respected. Agent a23e63d9df374f2cd building it (ctable.py, table_rules.lua,
+reference_rows/grid.docx, Makefile corpus-variant, variants/ folder). Do not render in pc_package/ while
+it edits ctable.py.
+Plan drafts written: PCP-004 (34 pp), PCP-007 (42), PCP-008 (37), PCP-009 (35), PCP-010 (29).
+Reviews in: PCP-004 and PCP-010 (factual + content); fix lists `feedback-PCP-004.run1.md`,
+`feedback-PCP-010.run1.md` go to the SAME authors (resume a4f22fc16c1edba54 and ae1369f68bedfad4e).
+Not yet reviewed: PCP-007 (author ac165794047144c20), PCP-008 (a85321c9cc5db62b4), PCP-009
+(a8386d13c874ea937). INV-002: last fix pass done (55 pp); next a short verification, promotion,
+annex builder (`procedures/ANNEX-A-DOCUMENT.md`). PCR-005 re-opened: `feedback-PCR-005.datastate-2026-10-10.md`.
+Next after the table agent: re-render promoted plans; launch PCR-003 and PCR-006 authors.

@@ -6,7 +6,7 @@
 PY ?= python3
 PKG_DIR := pc_package
 
-.PHONY: all data figures fmea corpus style discourse test clean env help pm
+.PHONY: all data figures fmea corpus corpus-variant corpus-variants style discourse test clean env help pm
 
 help:
 	@echo "Targets:"
@@ -14,6 +14,9 @@ help:
 	@echo "  make data     - generate datasets       -> outputs/data/"
 	@echo "  make figures  - render figures          -> outputs/figures/"
 	@echo "  make corpus   - render pc_package docs + build/validate ground-truth annexes"
+	@echo "  make corpus-variant RULES=rows|grid [DOCS=\"a.qmd b.qmd\"] [JOBS=n]"
+	@echo "                - the corpus again with ruled tables -> pc_package/variants/<rules>/"
+	@echo "  make corpus-variants - both variant passes (rows, then grid)"
 	@echo "  make style    - register gate (plain technical English) over every corpus doc"
 	@echo "  make discourse- advisory discourse diagnostics (needs: uv sync --extra discourse)"
 	@echo "  make fmea     - build the post-PC FMEA workbook (content source for RA-001)"
@@ -75,6 +78,24 @@ corpus: figures
 	cd $(PKG_DIR) && $(PY) build_ground_truth.py && $(PY) validate_annex.py && $(PY) check_grounding.py
 	@echo "corpus built."
 
+# The same corpus a second time with other table rules (owner, 2026-10-10): RULES=rows sets a thin
+# rule under every table row, RULES=grid rules every cell, and neither runs through a merged cell.
+# The outputs go to pc_package/variants/<rules>/ with a copy of the annexes, which are grounded
+# against the variant DOCX files; the default outputs in pc_package/ are never touched. Run it after
+# `make corpus`, so the annexes are current. DOCS names a subset (qmd file names), JOBS renders
+# documents in parallel. The one switch is the environment variable PC_TABLE_RULES; see
+# pc_package/render_variant.py and the "Rendering a variant corpus" section of pc_package/TASKS.md.
+RULES ?=
+DOCS ?=
+JOBS ?= 1
+corpus-variant:
+	@test -n "$(RULES)" || { echo "usage: make corpus-variant RULES=rows|grid [DOCS=\"a.qmd b.qmd\"] [JOBS=n]"; exit 2; }
+	cd $(PKG_DIR) && $(PY) render_variant.py $(RULES) $(DOCS) --jobs $(JOBS)
+
+corpus-variants:
+	$(MAKE) corpus-variant RULES=rows
+	$(MAKE) corpus-variant RULES=grid
+
 test:
 	$(PY) -m pytest -q tests/
 
@@ -93,7 +114,7 @@ clean:
 	@# found in resource path". Delete rendered documents by name, never by glob.
 	find $(PKG_DIR) -maxdepth 1 -name '*.docx' ! -name 'reference.docx' -delete
 	rm -f $(PKG_DIR)/*.pdf
-	rm -rf $(PKG_DIR)/.quarto $(PKG_DIR)/*_files $(PKG_DIR)/__pycache__
+	rm -rf $(PKG_DIR)/.quarto $(PKG_DIR)/*_files $(PKG_DIR)/__pycache__ $(PKG_DIR)/variants
 	@test -f $(PKG_DIR)/reference.docx || { echo "ERROR: clean removed reference.docx"; exit 1; }
 	@echo "cleaned."
 

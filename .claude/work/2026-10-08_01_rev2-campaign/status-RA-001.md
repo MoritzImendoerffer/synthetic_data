@@ -100,3 +100,33 @@ Scratch: `/tmp/claude-1000/-home-moritz-github-repos-synthetic-data/be14bf3c-e46
   worst corner at high pH). PCR-003 must report the measured direction as contradicting RA-001.
 - "≤ 2 %" in Table 3.1: the cell prints the helper string; pdftotext merges it to "≤2%" on that
   wrapped line only (word boxes identical to "≤ 5 %"); the DOCX text is the helper string.
+
+## Final pass (2026-10-10, feedback-RA-001.final.md after content-review-RA-001.run2.md)
+- [x] A1 Table 5.2: per-row marks and the superseded notes dropped; one note (values the assessment
+      was made against, PCMP-001 V2.0 Table 4.2 gives the values in force); §5 sentence adapted.
+- [x] A2 §4.3: Version 1.0 sentence on leached Protein A restored.
+- [x] A3 §1.1 item 2: "PCMP-001 Version 2.0 §7.8 sets nrCE-SDS as the method for fragments, following
+      the decision of 2026-03-20 to change the fragment method (AMD-001)"; the §3 Table 7.3 pointer cut.
+- [x] A4 cut: spiking-model sentence (§4.4), the PAR sentence (§5; PAR dropped from abbreviations),
+      the CA2 sentence (§7, with its restatement of §1.1 item 3; one reference sentence to PCMP-001
+      §7.1 and §7.3 kept).
+- [x] A5 §6 augmentation sentence corrected; A6 §4.4 hold-time clause made an expectation (both listed).
+- [x] B1 to B10 as the fix list resolves them (B2 §3 viral severity; B3 §6; B4 §5; B5 §4 intro and §5;
+      B6 builder; B7 §4.8; B8 builder header; B9 §4.7; B10 §4.1 twice and §5); listed where they change
+      Version 1.0 text. B11: Q5.14 in §3 (harvest hold not a parameter of the list), Q5.15 listed.
+- [x] C: fragments origin once (§3, as PCMP-001 §3); residual DNA dose note in Table 3.1 (DOSE).
+- [x] D: own sentences fixed (bioreactor causal clause cut, Protein A host cell protein cause, pressure
+      clause back to Version 1.0 wording, concentration polarization layer, AMD-001 named by subject,
+      CA3 named in Table 8.1, §6 restatement of §2 cut).
+- [x] E: Table 4.1 drop uses "Attribute(s) at risk"; builder texts re-rendered.
+- [x] Corrections table split into Table 1.3 (Sections 2 to 4.4, 13 rows) and Table 1.4 (Sections 4.5
+      to 6, 11 rows): 24 rows in one CTable cannot fit a page.
+- [x] check_render: all HARD gates OK (326 sentences, 5931 words); pdf + docx rendered; 34 pp. Page
+      images read: Tables 1.3, 1.4, 3.1, 4.7, 4.8, 5.2, 8.1. .txt extract refreshed.
+
+### Annex notes for this pass
+- tbl-corrections (Sections 2 to 4.4) and tbl-corrections-2 (Sections 4.5 to 6): T.frame in their
+  chunks, merge=["Section"], style="rows", size="footnotesize".
+- tbl-cqa: residual DNA acceptance carries ^d)^ (dose note); relabelled a) origin, b) not scored,
+  c) dose, d) cumulative requirement.
+- tbl-params: no superseded markers; a) turbidity, b) justified univariate, plain note.

@@ -250,7 +250,11 @@ def acceptance_criteria_layer(doc_id, file_name, section, table, steps=None):
         o = old[(old["step_key"] == sk) & (old["response"] == resp)]
         nrow = new[(new["step_key"] == sk) & (new["response"] == resp)]
         cqa = (nrow.iloc[0]["cqa"] if not nrow.empty else o.iloc[0]["cqa"])
+        # a step criterion of viral clearance is that step's claim, in log10; the register unit "log10
+        # (cumulative)" belongs to the drug substance requirement (PCP-008 annex builder, 2026-10-10)
         unit = P.CFG.cqa(cqa)["unit"]
+        if str(cqa).startswith("lrv"):
+            unit = unit.replace(" (cumulative)", "")
         if not o.empty:
             r = o.iloc[0]
             out.append(S.AcceptanceCriterionRecord(
@@ -10764,7 +10768,7 @@ BUILDERS = [(d, _builder(d, b)) for d, b in _LEGACY_BUILDERS]
 #: skipped and its annex kept as it is. This keeps check_grounding green at every step of the
 #: Rev 2.0 campaign (work unit 2026-10-08_01_rev2-campaign). When every document is in the set,
 #: delete this mechanism.
-REV2_READY: set = {"INV-001", "INV-002", "PCMP-001", "PCP-003", "PCP-005", "PCP-006", "PCP-009", "PCP-010", "PCR-005"}
+REV2_READY: set = {"INV-001", "INV-002", "PCMP-001", "PCP-003", "PCP-005", "PCP-006", "PCP-008", "PCP-009", "PCP-010", "PCR-005"}
 
 
 def main(argv=None):

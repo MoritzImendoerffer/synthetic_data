@@ -62,3 +62,48 @@ Gate with `check_render.py --render`; render the pdf and the docx; read the page
 and figure you changed. Keep `status-PCR-005.md` in this folder current (append a "Re-opened
 2026-10-10" log). Report: which model you are, each item with where it was resolved, the check_render
 passes, the page count, and any `<<NEEDS:>>` left (there should be none).
+
+## Resolution (author pass, 2026-10-10, Claude Opus 5.5)
+
+All eight items are done in `pc_package/PCR-005_protein_a.qmd`. The backup is
+`PCR-005_protein_a.pre-datastate.qmd` in this folder. Section numbers are those of the rendered PDF
+(69 pp). Details and values are in `status-PCR-005.md` §4.
+
+1. Done. §6 is rewritten on the single-batch limit and names the statistic where the region is defined.
+   The mean-based region (97.5 %) is given once, as a comparison. Every fraction, the binding output and
+   the excluded region are recomputed on the grid of 41. The setup assert now checks the single-batch
+   definition independently through `D.prediction_interval` for all three outputs with a criterion.
+   Fragments are judged too, because the helper's response list leaves them out. The statistic is also
+   named in F7, §3.5, §5.8, §7.3 and Conclusion 6. No figure or table draws the region.
+2. Done. §13.2 gives the rule from the record with its 99 % level and the interval at the run's settings
+   (`D.oot_check`, 1.38–5.12 ppm). The first result lies outside it and the re-assay inside. The first
+   result now lies above the range of the other runs, and the asserts follow the data. The analysis with
+   the first result in place was recomputed: an adequate, significant end-of-pool-collect model, with the
+   judgement, the PARs and the class unchanged. §5.3.3 follows.
+3. Done. §7.1, risk item 2 names the release test (ELISA, AMV-3012), its LOQ and its coverage (80 %, 2D
+   western blot against the platform CHO antigen).
+4. Done. §2.2 and §8 give DNA in pg/mg up to the drug substance and in ng/dose at it. The dose and the
+   70 kg assumption are stated. The drug substance level, the Cpk and the count out of specification come
+   from the data. The 5-log anion exchange reduction is stated as not measured (pools < LOQ).
+5. Done. §3.3, §4.4, §5.6 (Table 5.15 gains HMW and LMW by SEC, and a new paragraph), §9 (the classes of
+   temperature and bed height rest for fragments on the mechanism and the response-surface model), F10 and
+   the Discussion. No sentence now says that the univariate study measured no size variant, and no nrCE-SDS
+   fragment result is claimed from it.
+6. Done. §3.1 item 4, §5.3.1, F1, the Discussion and Conclusion 2 say that the selected model decides, as
+   the rule states, and that the others are a sensitivity.
+7. Done. Every criterion-5 result now comes from `D.residual_influence`. Its exact agreement with the own
+   computation was asserted and gated before the own computation was removed. The thresholds come from
+   `THRESHOLDS`, and the deletion analysis is unchanged.
+8. Done. §4.5 states that the held eluate is judged against the criteria in force, not the a priori values.
+
+Gate: final `check_render.py` green (no `<<NEEDS:>>`). The pdf and docx render with exit 0. The page
+images of the changed tables were read.
+
+Raised for the coordinator (not changed, outside this list):
+- PCR-005 §7.1 paraphrases the widening rule without the F-test and exact-fit conditions that PCMP-001 §7.5
+  now states. This is wording only, because the anion exchange model has F-test p = 2.7e-13.
+- `D.design_space_grid` ignores fragments.
+- PCP-005 Version 2.0 §6.4 lists no SEC responses for S-PA-UNI.
+- The DEV-005-02 `oot_rule` names "the selected model", which is anachronistic for a review made in
+  January to February 2026.
+- The annex needs re-anchoring.

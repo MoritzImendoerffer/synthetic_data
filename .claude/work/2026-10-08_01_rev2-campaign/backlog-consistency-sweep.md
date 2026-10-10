@@ -321,3 +321,16 @@ For the sweep: PCP-004 change 2 types "α = 0.05" (Version 1.0's level; pull it)
 study id (PCR-004 deviation, owner Q8); shared annex helpers duplicated in the builder modules (rows_once,
 _cells, _smart, _walk, _gate, md_caption, head_of, _check_sections, q/_render) belong in build_ground_truth;
 pcp_010's `cells` splits on " | " and misreads continuation rows.
+
+### After the PCR-005 follow-up (2026-10-10, night)
+PCR-005 follow-up DONE (abadf6256c0fc7077; 73 pp, gates green): all ten items, DEV-005-03/04/05 in §13,
+classification argued by PCMP-001 §6.2 and §7.7, the owner's influence rule (Table 5.13 "F median" and "Met").
+Register dispositions that named an ID printed mangled through `dev_register`'s underscore replacement ("offset rule
+of pcmp 001 version 2 0", "osmolality study S BRX OSM", "producers risk"): DEV-003-03, DEV-003-04, DEV-003-09 and
+DEV-005-04 are now words in quotes in the config. DEV-008-01 keeps its token `invalidated_and_re_executed`, which
+PCP-008 (line 169) and the Version 1.0 PCMR-001 (line 232) match on, and so prints "re executed": the PCR-008 author
+writes it as words and changes both queries in the same pass.
+PCR-005 flags: the load flow rate and end of pool collect stay KPPs on a judgement (significant effects on pool host
+cell protein, 6 % and 7 % of the criterion across the PAR; no threshold exists, and the report says so) — an owner
+question; the held-eluate aggregate criterion rests on the widened low-pH aggregate bound (INV-002 §8.4), not named
+in §4.5 (PCR-006 owns that widening; check the cross-reference at the sweep).

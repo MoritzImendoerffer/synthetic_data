@@ -1,4 +1,4 @@
-# PCR-005 status, 2026-10-09 (follow-up pass 2 complete)
+# PCR-005 status, 2026-10-10 (follow-up pass after the record changed, complete; see §5)
 
 Draft: `pc_package/PCR-005_protein_a.DRAFT.qmd`. Nothing committed. No shared code changed in the run-3 cycle or in this follow-up.
 
@@ -179,3 +179,231 @@ The numbers render from the data, but these sentences still state the old facts 
   - the residual DNA criterion of ≤ 0.001 ng/dose;
   - no ELISA coverage figure in the record;
   - new: the qualification depends on the choice among near-AICc models.
+
+## 4. Re-opened 2026-10-10 (data state of 2026-10-10, fix list `feedback-PCR-005.datastate-2026-10-10.md`)
+
+Author for this pass: Claude Opus 5.5 (model id claude-opus-5-5). Backup before any edit:
+`PCR-005_protein_a.pre-datastate.qmd` (this folder). Nothing committed. No shared module, config or engine
+file edited. Scratch work in the session scratchpad (`pcr005/`).
+
+**Start.** The setup chunk stopped on three asserts: the design-space fraction (recomputed on the mean),
+DEV-005-02 with the first result in place (the selection now gives an adequate, significant model), and the
+first result "inside the range of the other runs" (it is now above it).
+
+**Fix list, item by item** (sections as numbered in the rendered PDF):
+1. Design space on the single-batch limit: §6 rewritten. The setup block "design space, on the single-batch
+   limit" takes `D.design_space_grid(UO, n=41)` (basis "batch", 90.2 % of the grid) and checks it
+   independently through `D.prediction_interval` at manufacturing scale for all three outputs with a
+   criterion. Fragments are judged too, because the helper's response list leaves them out. They exclude no
+   point, and neither does leached Protein A. The mean-based region (97.5 %) is given once, named as a
+   comparison. Plane at the set-points of flow and end of pool collect: 91.7 %. At their NOR corners
+   88.5–92.8 %, at their range corners 81.4–91.9 %. The corner is excluded above 31.8 g/L resin at pH 3.2
+   and below pH 3.44 at 50 g/L resin. It reaches into each NOR but never into both: at the load NOR edge
+   (39) it begins below pH 3.29, at the pH NOR edge (3.4) above 47.2 g/L. No grid point is excluded with
+   every factor in its NOR. With flow and end of pool collect in their NORs, each excluded point lies outside
+   the load NOR or the pH NOR. Inside both, a point is excluded only with flow ≤ 105 cm/hr and end of pool
+   collect ≤ 2.09 CV, both below their NORs. The old mean-based asserts are replaced. The statistic is
+   restated in F7, §3.5, §5.8, §7.3 (corner sentence) and Conclusion 6.
+2. DEV-005-02: §13.2. The rule is quoted from `deviations.csv` `oot_rule`, and its 99 % level is asserted
+   against `dev_005_02_oot_level`. `D.oot_check` gives 1.38–5.12 ppm (scale-down) from the model selected
+   on the other 27 runs, which keeps end of pool collect. The first result, 5.31 ppm (2.5 × the re-assay),
+   lies outside the interval and above the other runs (1.70–4.61). The re-assay, 2.12 ppm, lies inside
+   both. The analysis was recomputed with the first result in place: the selection keeps end of pool
+   collect, adequate and significant (F-test p 0.034, lack of fit p 0.844, gap 0.136), −0.77 ppm across the
+   range. The limit over the NOR is 5.98 ppm against 5.52 ppm on the re-assay, and every PAR still spans the
+   range studied. The run-order trend is not significant (p 0.174). The judgement and the class of end of
+   pool collect are unchanged. The §5.3.3 sentence follows.
+3. Detection of host cell protein: §7.1, risk item 2. The release test is the ELISA (AMV-3012), its LOQ
+   1 ng/mg, its coverage 80 % by 2D western blot against the platform CHO antigen (`amv_3012_coverage`,
+   `dev_methods.csv`), and the report states what lies outside that share. The abbreviations 2D and CHO
+   were added.
+4. Residual DNA: §2.2 (pg/mg measured, ng/dose judged) and §8. The dose is 10 mg/kg (A-Mab) for a 70 kg
+   adult, 700 mg (`DOSE_MG`), and the body weight is stated as an assumption. The drug substance carries at
+   most 0.0004 ng/dose against ≤ 0.001, a Cpk of 7.30 (`capability.csv`, recomputed by the engine), with no
+   batch out of specification (asserted). The anion exchange reduction is a nominal 5 log. Every anion
+   exchange pool is below the qPCR LOQ (1 pg/mg), so the data show only more than 1.2–1.5 log10, and the
+   Cpk rests on an unmeasured reduction (said).
+5. Univariate SEC results: §4.4 (the responses PCP-005 Version 1.0 required; nrCE-SDS not measured
+   because the samples were not retained, so S-PA-RET covered the retained response-surface pools). §3.3
+   (S-PA-UNI fragments by SEC only). §5.6: Table 5.15 gains HMW and LMW by SEC, with n.t. for the reference
+   runs. A new paragraph gives aggregate 1.49–1.60 % (inside the designs' range, below ≤ 6.46 %) and
+   fragments by SEC 1.24–1.42 % for information only, with no difference because the reference was not
+   tested by SEC. No nrCE-SDS fragment result is claimed. §9: for fragments the GPP classes of temperature
+   and bed height rest on the mechanism and the response-surface model. For temperature: hydrolysis is
+   expected faster when warm, the pH effect is 0.11 points over the whole pH range, the margin is 1.36
+   points, and the assumption is untested. For bed height: no flow effect was detected over residence
+   times of 4–12 min, and the 3 min of the shortest bed is unsupported. F10 and the Discussion say
+   "not measured by nrCE-SDS".
+6. Near-equivalent models: §3.1 item 4, §5.3.1, F1, the Discussion and Conclusion 2. The selected model
+   decides, as the selection rule states. The others are a sensitivity, and 2 of the 9 would not qualify
+   the scale-down model.
+7. Criterion 5 by `D.residual_influence`: the setup takes every criterion-5 result from the helper. Its
+   exact agreement with the document's own computation was asserted (rtol 1e-12) and gated (dry run)
+   before the own computation was removed. The thresholds come from `THRESHOLDS` (`residual_alpha`,
+   `cook_factor`/n) in §3.5, Table 5.13 header and note, §5.5 and §13.1, and the Cook's distance simulation
+   uses `cook_factor`. The deletion analysis (PD-005-02) is unchanged.
+8. Held pools: §4.5 now says that the held eluate is judged against the criteria in force for the low-pH
+   load (PCMP-001 §7.3 after the verification of §7.5), not the a priori values.
+
+**Length.** The first render was 72 pp. Four of the five added pages were chapter ends spilling by 2–10
+lines. Only my own new text was tightened (F1, F7, F10, §6, the Discussion sentence, §13.2: one merged
+sentence, two redundant clauses dropped). The deviations chapter stays one page longer: §13.2 grew by the
+rule and its numbers.
+
+**Gate** (`check_render.py`, run with `.venv/bin/python` because `uv run` once tried a network sync of the
+optional discourse extra; same venv):
+- dry run 1: all 53 chunks exec, no `<<NEEDS:>>`, style gate 0;
+- `--render` pass 1: green, 72 pp;
+- explicit quarto pdf and docx;
+- `--render` pass 2: green, 71 pp, colon 0.1/1k from one new sentence, fixed;
+- `--render` pass 3: green, 69 pp, 29 complex tables complete, no page-foot overrun, nothing below 7.9 pt;
+- final explicit `quarto render --to pdf` and `--to docx` (venv on PATH): both exit 0;
+- final `check_render.py`: green (724 inline expressions, no `<<NEEDS:>>`, all PDF checks OK). **69 pages.**
+
+Page images read: Abbreviations (p. 5), Tables 5.13, 5.14 and 5.15 (pp. 38–40). Text pages read: §6 (p. 44)
+and §13.2 (pp. 59–60). No figure changed.
+
+**For the coordinator:**
+- PCMP-001 §7.5, as re-rendered today (12:25), requires the first three adequacy criteria for a widening (a
+  significant model, no significant lack of fit, the limit on overfitting) and no exact fit. PCR-005 §7.1
+  still paraphrases the rule as "the adequacy tests of PCMP-001 §7.2 on lack of fit and predictive power",
+  and its anion exchange sentence names only the gap and the lack of fit. The data are fine: the anion
+  exchange HCP model behind the widening has F-test p = 2.7e-13 on the planned runs and is not exact, so
+  the criterion stands. This is wording only, and it was not changed because it is outside this fix list.
+- `D.design_space_grid` loops over `D.responses(key)`, which for Protein A lacks `lmw_cesds_pct`, so the
+  helper ignores fragments. PCR-005 checks them itself, and they exclude nothing here. Other steps may be
+  affected.
+- PCP-005 Version 2.0 §6.4 and Table 5.1 list only pool HCP, step yield and leached Protein A for S-PA-UNI
+  and say "Fragments are not measured in the univariate study". The data now hold SEC aggregate and SEC
+  fragments for it, as Version 1.0 required. PCR-005 cites Version 1.0 for this.
+- The DEV-005-02 `oot_rule` names "the selected model of the design", yet model selection (CA3) was adopted
+  on 2026-09-15 and the review was made when S-PA-RSM ran (2026-01-12 to 2026-02-06). PCR-005 states the
+  rule as recorded and computes the interval with `D.oot_check`. The record's wording may need a look.
+- The 30-day sample retention exists only as a config comment. PCR-005 says "not retained", with no number.
+- The drug substance DNA capability rests on the nominal 5-log anion exchange reduction, which the anion
+  exchange data cannot measure (pools < LOQ, more than 1.2–1.5 log10 only). PCR-005 says so. PCR-008 and
+  PCMR-001 may need the same.
+- The annex `ground_truth/PCR-005.json` (2026-10-09) quotes text that changed in §2.2, §3.1, §3.3, §3.5,
+  §4.4, §4.5, §5.3, §5.5, §5.6, §6, §7.1, §7.3, §8, §9, §11, §12 and §13. `build_report_protein_a`
+  needs re-anchoring before promotion. Not done here.
+
+## 5. Follow-up 2026-10-10 afternoon (`feedback-PCR-005.followup-2026-10-10.md`)
+
+Author: Claude Opus 5.5. Backup before this pass: `PCR-005_protein_a.pre-followup.qmd` (this folder).
+Edited in place, nothing committed, the annex left to the coordinator. Only the five items were touched. The
+setup chunk stopped on three asserts: the deviation count (DEV-005-03 is new), and the two DEV-005-02 asserts
+on selected models.
+
+1. DEV-005-02 (§13.2). The rule is now the record's: the full quadratic model fitted to the other runs. The
+   setup asserts the record text and the 99 % level, checks that `D.oot_check` uses the full quadratic, and
+   asserts that selection (2026-09-15) came after S-PA-RSM ended. The interval is −1.46 to 5.38 ppm on 12
+   residual df. The text says its lower end lies below zero, so only a high result could be out of trend at
+   run 11. The first result is 6.37 ppm (3.0 × the re-assay, 7.55 ppm at manufacturing scale), above the
+   interval and above every other result of both designs (asserted against both). The re-assay, 2.12 ppm,
+   lies inside the interval and the range of the other runs. With the first result in place the selection
+   takes the log scale and keeps end of pool collect. The model meets criteria 2 to 4: F-test p printed as
+   0.0495, because three decimals would read 0.050; lack of fit p 0.894; gap 0.137. Leached Protein A falls
+   22 % across the range of end of pool collect. The limit over the NOR is 6.60 ppm, back-transformed,
+   against 5.52 ppm on the re-assay, and every PAR still spans the range. The run-order trend is not
+   significant (p 0.198). The judgement and the class do not change.
+2. The widening rule (§7.1). It is stated as PCMP-001 §7.5 rule 2: the first three criteria, not an exact
+   fit, the fourth not deciding, and the report giving the bound examines whether it depends on a single
+   run. The anion exchange paragraph now gives the F-test (p < 0.001), the lack of fit (0.824), the gap
+   (0.02 against 0.20) and no exact fit. It says the fourth criterion fails on Cook's distance (runs 2 and
+   9, trends met) and that, with each run deleted, the model still meets the three criteria and the bound
+   is 4.33–4.56 against 4 (INV-002 §8.4). These values are computed in the setup by reproducing the
+   verification bound (asserted equal to the table, 4.2673) and `D.residual_influence("aex", ...,
+   runs="planned")`. The CA3 sentence now names the failing test (overfitting, gap 0.27). The phrase
+   "passes the adequacy tests" is gone.
+3. DEV-005-03 (new §13.3). Also recorded in §4.4 (merged into the reference sentence), §5.6 (why the
+   qualification runs are the reference; the step-yield sentence cross-referenced), the Discussion,
+   change item 10 in §1.4, and the executive summary deviation sentence ("DEV-005-01 to DEV-005-03", "none
+   changes"). The §13 introduction now defines a deviation as a departure from the approved plan,
+   procedure or GMP requirement, and says "each was investigated". The setup asserts three deviations, the
+   DEV-005-03 record and the absence of any centre level in `univariate_studies.csv`. §4.4 now cites
+   PCP-005 §6.4 for the responses ("as PCP-005 §6.4 requires"), as restored.
+4. Builders. The design-space assert now includes fragments in `per_response` (0 excluded), and the stale
+   comment is gone. `T.criteria_results` has no no-model note here, because every output has an adequate
+   model. The true minus signs, the font floor and the table fit were checked on the render.
+5. Annex: not touched.
+6. DEV-005-04 (added by the coordinator during the pass): new §13.4. It is also recorded in §3.1 beside the
+   offsets table, in change item 10 of §1.4 (merged with DEV-005-03 to keep the chapter on its pages), in the executive summary deviation sentence ("DEV-005-01 to
+   DEV-005-04 were assessed, and none changes the judgement"), in the §13 introduction (the runs of
+   DEV-005-01 to -03 retained, DEV-005-04 judged through its offset) and in Conclusion 11. The p-value is
+   computed in the setup from `sdm_qualification.csv`, S-PA-SDM runs only (3 scale-down against 5
+   manufacturing), with a two-sided pooled t test: p = 0.037. The setup asserts that no other compared output
+   differs at that level (pool HCP 0.43, yield 0.68, plates 0.12, asymmetry 0.96) and that leached Protein A
+   is qualified through its offset on the planned runs and on all runs. The offset analysis is unchanged.
+7. Classification (from the re-open of PCP-005): §9 rewritten without the removed PCP-005 rule ("practically
+   relevant when the NOR-propagated PAR is narrower than its range studied"). It now applies PCMP-001 §6.2 (an
+   attribute is affected when a term containing the parameter is significant at α 0.05) and §7.7 (a
+   significant effect too small to move the attribute appreciably within the PAR does not by itself make a
+   parameter critical; no numerical threshold), as PCP-005 §7 criterion 7 applies them. Each bullet gives:
+   - its significant terms with p, computed from the selected models (`AFF`, `termp`);
+   - the change of pool HCP across the NOR-propagated PAR, others at set-point, manufacturing scale, in ng/mg
+     and as a share of the criterion (`CLE`): load 38 %, pH 52 %, flow 6 %, end of pool collect 7 %;
+   - fragments on pH: 0.11 points, 4 % of the criterion;
+   - yield: end of pool collect 7.3 points; flow 3.6 points at 50 g/L, about 0 at 10 g/L;
+   - the margin of the PAR to the NOR: load 10/11 g/L, pH 0.19/0.20, flow 50/50 cm/hr, end of pool collect
+     0.3/0.3 CV, temperature 3/4 °C, bed height 5/5 cm;
+   - the reason for the class.
+   The DEV-005-01 buffer (pH 3.38) lay below the NOR and inside the PAR (asserted). The DEV-005-02 class
+   sentence now uses the size of the effect (0.74 ppm against ≤ 158 ppm), not the removed rule. Every class of
+   the config is supported. The KPP classes of load flow rate and end of pool collect rest on judging their
+   significant effects on pool HCP (C² p 0.025; D p 0.003) as too small, at 6 % and 7 % of the criterion
+   across the PAR, which is a judgement with no threshold.
+8. DEV-005-05 (univariate study before the response-surface design, against PCP-005 §11): new §13.5. It is
+   also in §4.1 at the chronology (the order of PCP-005 §11 and the departure), in §1.4 item 10, in the
+   executive summary ("DEV-005-01 to DEV-005-05") and in the §13 introduction (its runs retained). The dates
+   come from `study_chronology.csv`, and S-PA-SCR end < S-PA-UNI < S-PA-RSM start is asserted.
+9. Objectives (from the last re-open of PCP-005): §1.2 now quotes the seven objectives of the re-rendered
+   PCP-005 §2 word for word. Only the plan's internal references are written as "PCP-005 §6.1" and "PCP-005
+   §5.1". The plan's note is carried in one sentence: objectives 1 to 5 are Version 1.0's, 6 and 7 were added
+   at Version 2.0, fragments were added to 1 and 3, and the ranges of 3 are at manufacturing scale. One
+   sentence names the section that answers each objective (1: §5.3 and §5.6; 2: §6; 3: §7; 4: §9; 5: §7 and
+   §10; 6: §3.1; 7: §5.3). No other part of the report numbers an objective.
+10. Owner's decision "4/n flags, F decides" (data-state §5). §3.5 criterion 5: a run above 4/n is examined by
+   deleting it and repeating the judgement, and the model fails only above the median of F(p, n − p), worded
+   from `THRESHOLDS["cook_f_quantile"]`. The §3.5 follow-up paragraph now treats the deletion as part of the
+   criterion and PD-005-02 as the use of the failing models. Table 5.13 gains "F median" and "Met" columns:
+   - limits 0.47–0.92 against a largest Cook's distance of 0.26;
+   - met for pool HCP and step yield, not met for leached Protein A (run-order trend) and fragments (spread
+     trend);
+   - all asserted from `D.residual_influence` (`over`, `over_f`, `f_limit`, `met`).
+   Also updated: the §5.5 text, F8, Conclusion 3, the Discussion and the §13.6 discrepancy introduction. The
+   §7.1 anion exchange sentence now says the model meets the fourth criterion (no run above 0.81), with runs
+   2 and 9 above 4/n examined by deletion (INV-002 §8.4, 4.33–4.56). The PD-005-02 register entry renders
+   from the record with its new wording.
+
+Length and layout: renders ran between 69 and 77 pp as items arrived. Chapter-end spills were pulled
+back by tightening only my own new text: change item 10 now points to §13; one restatement was removed from
+§4.4; and F8, the Discussion sentences and Conclusions 2, 3 and 6 were shortened (the near-model sensitivity
+stays in §3.1 and §5.3.1). The deviation register (PD-005-02's new text) ran into the page foot in portrait,
+so it is set landscape (`landscape=True`), with columns widened to the landscape width so that it fits one
+page with no empty page before it. The deviation register's disposition column wraps (font floor). **Final:
+73 pp.** The growth over 69 pp is the new content: the classification argument, DEV-005-04/05, the
+objectives and the landscape register.
+
+Gate (`.venv/bin/python`, venv on PATH), the last runs:
+- `check_render --render` passes 19 and 20: green;
+- explicit `quarto render --to pdf` and `--to docx`: both exit 0;
+- final `check_render`: exit 0, 798 inline expressions, no `<<NEEDS:>>`, 29 complex tables complete, no page-foot
+  overrun, nothing below 7.9 pt.
+
+Page images read: Table 3.1 (true minus), Table 5.13 (F median and Met), Table 13.1 (five deviations) and
+Table 13.4 (landscape register).
+
+For the coordinator:
+- The DEV-005-04 disposition code renders in the register as "judged through its offset under the offset rule
+  of pcmp 001 version 2 0". This is the record or the `dev_register` underscore handling, so it was not
+  retyped. DEV-003-09 has the same code.
+- PCP-005 §7 criterion 5 (plan PDF of 17:33) still reads "No run has a Cook's distance above 4/n". PCR-005
+  §3.5 states the rule as the owner decided it ("4/n flags, F decides") and as PD-005-02 now words the plan.
+  The plan needs the same wording.
+- The classes all follow from the new argument. The KPP classes of load flow rate and end of pool collect
+  rest on judging their significant effects on pool HCP (C² p 0.025; D p 0.003) as too small within the PAR,
+  at 6 % and 7 % of the criterion. That is a judgement with no threshold, and it is stated as such.
+- The aggregate criterion of the held eluate (§4.5) also rests on a widened value, the low-pH aggregate bound
+  (INV-002 §8.4: 0.546–0.551 against 0.70). The fix list named only host cell protein, so §4.5 was not
+  extended.
+- The annex needs re-anchoring (many quoted sentences and three tables changed).

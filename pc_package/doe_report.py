@@ -141,10 +141,21 @@ def setting_corrections(key, kind="rsm"):
     at a recorded setting rather than the design setting (config ``campaign.setting_corrections``;
     the value is read from the deviation record)."""
     events = {e["id"]: e for evs in CFG.raw()["deviations"]["events"].values() for e in evs}
-    return [(int(c["run"]), c["factor"], float(events[c["deviation"]]["values"][c["value_from"]]),
-             c["deviation"])
-            for c in CFG.raw()["campaign"].get("setting_corrections", [])
-            if c["step"] == key and c["kind"] == kind]
+    out = []
+    for c in CFG.raw()["campaign"].get("setting_corrections", []):
+        if c["step"] != key or c["kind"] != kind:
+            continue
+        vals = events[c["deviation"]]["values"]
+        if "value_from" in c:
+            v = float(vals[c["value_from"]])
+        else:
+            # the record gives the offset of a measurement, not the setting (DEV-003-01: the pCO2 probe read
+            # high), so the setting actually run is the design setting moved by that offset
+            d = csv(f"doe_{key}_{kind}.csv")
+            v = (float(d.loc[d["run"] == int(c["run"]), c["factor"]].iloc[0])
+                 + float(c.get("sign", 1)) * float(vals[c["offset_from"]]))
+        out.append((int(c["run"]), c["factor"], v, c["deviation"]))
+    return out
 
 
 def rsm_data(key, runs="all", corrected=True):
@@ -234,6 +245,14 @@ def fit(key, kind, resp, superseded=False, runs=None, form=None):
         return _FIT_CACHE[ck]
     suffix = "_superseded" if superseded else ""
     df = csv(f"doe_{key}_{kind}{suffix}.csv")
+    if kind == "screening" and not superseded and _MODELS["corrected"] and _CRITERIA["rev"] != "1.0":
+        # a screening run recorded off its design setting is analysed at the recorded setting, as the
+        # response-surface runs are (REPORT-LESSONS §2 rule 3; DEV-003-01, PCR-003 factual check 2026-10-10)
+        df = df.copy()
+        for run, factor, value, _ in setting_corrections(key, "screening"):
+            i = df.index[df["run"] == run]
+            df.loc[i, factor] = value
+            df.loc[i, "coded_" + factor] = float(_to_coded(value, key, factor))
     factors = rsm_factors(key) if kind == "rsm" else screening_factors(key)
     quad = kind == "rsm"
     Xc, names = _design(df, factors, quad)

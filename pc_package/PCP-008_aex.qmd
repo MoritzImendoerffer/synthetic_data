@@ -2,7 +2,7 @@
 title: "Process Characterization Plan"
 subtitle: "A-Mab Drug Substance — Anion Exchange Chromatography (Step 8) — PCP-008"
 author: "Process Development / Manufacturing Science & Technology (MSAT)"
-date: 2026-07-24
+date: 2026-09-30            # Version 2.0 effective date (INV-001 is 2026-09-18)
 format:
   docx:
     reference-doc: reference.docx
@@ -25,6 +25,7 @@ format:
     fig-pos: 'H'
     fig-cap-location: bottom
     tbl-cap-location: top
+    include-in-header: _tables.tex   # multirow, booktabs, threeparttable for complex tables
 bibliography: references.bib
 execute:
   echo: false
@@ -39,51 +40,205 @@ import sys, os
 sys.path.insert(0, os.path.abspath("."))
 from _pcpkg import *  # noqa: F401,F403
 import doe_report as D
+import tables as T          # complex tables: merged cells, footnotes (T.<builder>(...).show())
 import matplotlib.pyplot as plt
 import scipy.stats as sstat
+import pandas as pd
 
 DOC = "PCP-008"
 UO = "aex"
 UO_TITLE = "Anion Exchange Chromatography (Step 8)"
 
-# --- doc-local derived scalars (pulled from the model; never typed) ---
-STEP = CFG.unit_op(UO).step
-pars = plan_params(UO)
-n_par = len(pars)
-n_mv = int((pars["Study type"] == "multivariate").sum())
-n_uv = n_par - n_mv
+# --- doc-local derived scalars (pulled from the model; no number is typed) ---------------------
+W = lambda n: ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+               "ten"][n] if 0 <= n <= 10 else f"{n}"
 
-resps = D.responses(UO)
-n_resp = len(resps)
-scr_f = D.screening_factors(UO)
-rsm_f = D.rsm_factors(UO)
+# the step and its parameters, as characterized (the values the studies were planned against)
+uo = CFG.unit_op(UO)
+P = {p.key: p for p in uo.parameters}
 
-n_scr = doe_runs(UO, "screening")
-n_rsm = doe_runs(UO, "rsm")
-cp_scr = doe_centre_points(UO, "screening")
-cp_rsm = doe_centre_points(UO, "rsm")
-n_fact_pts = n_scr - cp_scr
-n_axial = n_rsm - cp_rsm - n_fact_pts
 
-# criteria the planned analysis will judge each response against
-acc_hcp = D.effective_acceptance(UO, "hcp_out_ng_mg")
-acc_xmulv = D.acceptance_for(UO, "xmulv_lrf")
-acc_mvm = D.acceptance_for(UO, "mvm_lrf")
-hcp_ds = float(cqa_reg[cqa_reg.key == "hcp"].iloc[0]["acc_high"])
-hcp_sf = float(CFG.ipc_limits["steps"][UO]["hcp_out_ng_mg"]["from_ds_backcalc"]["margin"])
-mvm_req = float(cqa_reg[cqa_reg.key == "lrv_mvm"].iloc[0]["acc_low"])
-xmulv_req = float(cqa_reg[cqa_reg.key == "lrv_xmulv"].iloc[0]["acc_low"])
+def mid(name):
+    """A parameter name inside a sentence: 'load pH', but 'Equil/Wash-1 conductivity' as it stands."""
+    first = name.split()[0]
+    keep = "/" in first or "-" in first or first[1:] != first[1:].lower()
+    return name if keep else name[0].lower() + name[1:]
 
-# parameter records, for range bounds quoted in the prose
-p_ph = CFG.unit_op(UO).param("load_ph")
-p_w1 = CFG.unit_op(UO).param("wash1_cond")
-p_lc = CFG.unit_op(UO).param("load_cond")
-p_load = CFG.unit_op(UO).param("load")
-p_flow = CFG.unit_op(UO).param("flow")
 
-eq_aex = equipment_df()
-eq_aex = eq_aex[eq_aex["Equipment"] == "EQ-CHR-118"]
+N = {k: mid(p.name) for k, p in P.items()}
+MV = list(D.rsm_factors(UO))
+assert MV == list(D.screening_factors(UO))                    # one factor set in both designs
+assert [p.key for p in uo.parameters if p.study == "multivariate"] == MV
+UV = [p.key for p in uo.parameters if p.study == "univariate"]
+n_par, n_mv, n_uv = len(P), len(MV), len(UV)
+uv_mid = join_and([N[k] for k in UV])
+uv_verb = "is" if n_uv == 1 else "are"
+# every range studied is wider than the NOR at both ends
+assert all(P[k].prange[0] < P[k].nor_characterized[0] and P[k].prange[1] > P[k].nor_characterized[1]
+           for k in P)
+# every set-point lies in the middle of its NOR, so the NOR-propagated draw spans the NOR symmetrically
+assert all(abs(P[k].setpoint_characterized - sum(P[k].nor_characterized) / 2) < 1e-9 for k in P)
+
+# the two designs (planned matrices: no result may appear in a plan)
+scr = D.planned_matrix_df(UO, "screening")
+rsm = D.planned_matrix_df(UO, "rsm")
+n_scr, n_rsm = doe_runs(UO, "screening"), doe_runs(UO, "rsm")
+c_scr, c_rsm = doe_centre_points(UO, "screening"), doe_centre_points(UO, "rsm")
+n_fact = int((rsm["Type"] == "factorial").sum())
+n_axial = int((rsm["Type"] == "axial").sum())
+assert n_fact == int((scr["Type"] == "factorial").sum()) == 2 ** n_mv     # a full factorial in both
+assert n_scr == n_fact + c_scr and n_rsm == n_fact + n_axial + c_rsm
+assert n_axial == 2 * n_mv                                                  # one axial pair per factor
+
+# the criteria of this step (PCMP-001 Version 2.0 §7.3)
+R = {"hcp": "hcp_out_ng_mg", "lmw": "lmw_cesds_pct", "x": "xmulv_lrf", "m": "mvm_lrf"}
+ACC = {k: D.effective_acceptance(UO, r) for k, r in R.items()}
+BASIS = {k: D.acceptance_basis(UO, r) for k, r in R.items()}
+assert BASIS["hcp"] == BASIS["lmw"] == "drug substance" and BASIS["x"] == BASIS["m"] == "platform claim"
+assert ACC["hcp"][2] == ACC["lmw"][2] == "upper" and ACC["x"][2] == ACC["m"][2] == "lower"
+hcp_lim, lmw_lim, x_claim, m_claim = ACC["hcp"][1], ACC["lmw"][1], ACC["x"][0], ACC["m"][0]
+CRIT = {"hcp": f"≤ {hcp_lim:g} ng/mg", "lmw": f"≤ {lmw_lim:g} %",
+        "x": f"≥ {x_claim:g} log10", "m": f"≥ {m_claim:g} log10"}
+assert D.acceptance_for(UO, R["hcp"])[1] == hcp_lim and D.acceptance_for(UO, R["lmw"])[1] == lmw_lim
+assert D.effective_acceptance(UO, "step_yield") is None                    # no criterion for yield
+iac_here = D.iac_table(UO)
+assert set(iac_here["response"]) == set(R.values())                        # no aggregate criterion here
+assert not iac_here["tightened"].any() and not iac_here["widened"].any()   # no verified value in them
+assert ((iac_here["iac_low"] == iac_here["iac_low_apriori"]) &
+        (iac_here["iac_high"] == iac_here["iac_high_apriori"])).all()      # in force = a priori
+assert {D.decision_statistic(R[k]) for k in ("hcp", "lmw")} == {"batch"}
+assert {D.decision_statistic(R[k]) for k in ("x", "m")} == {"worst_case"}
+
+# the Version 1.0 limits (criteria_rev1.csv, data for INV-001)
+r1 = D.rev1_criteria(UO).set_index("response")
+r1_hcp, r1_margin = float(r1.loc[R["hcp"], "high"]), float(r1.loc[R["hcp"], "margin"])
+r1_x, r1_m = float(r1.loc[R["x"], "low"]), float(r1.loc[R["m"], "low"])
+assert R["lmw"] not in r1.index                                  # fragments were not judged
+assert hcp_lim > r1_hcp and x_claim > r1_x and m_claim > r1_m    # wider for HCP, stricter for virus
+
+# the viral claims and their sum against the cumulative requirement (PCMP-001 §7.4)
+iac_all = D.iac_table()
+vcum = csv("iac_viral_cumulative.csv").set_index("cqa")
+assert bool(vcum.loc["lrv_xmulv", "met"]) and bool(vcum.loc["lrv_mvm", "met"])
+x_sum, x_req = vcum.loc["lrv_xmulv", "claimed_sum"], vcum.loc["lrv_xmulv", "required"]
+m_sum, m_req = vcum.loc["lrv_mvm", "claimed_sum"], vcum.loc["lrv_mvm", "required"]
+x_steps = join_and([T.step_mid(k) for k in
+                    iac_all[iac_all["cqa"] == "lrv_xmulv"].sort_values("step")["step_key"]])
+m_steps = join_and([T.step_mid(k) for k in
+                    iac_all[iac_all["cqa"] == "lrv_mvm"].sort_values("step")["step_key"]])
+assert "anion exchange" in x_steps and "anion exchange" in m_steps
+
+# the platform worst cases of this step that the upstream criteria rely on (PCMP-001 §7.5)
+ver = D.iac_verification(UO).set_index("cqa")
+assert set(ver.index) == {"hcp", "leached_protein_a"} and (ver["assumption"] == "fold_min").all()
+hcp_fold, lpa_fold = ver.loc["hcp", "assumed"], ver.loc["leached_protein_a", "assumed"]
+up = iac_all[(iac_all["step"] < uo.step) & ~iac_all["basis"].isin(["drug substance", "platform claim"])]
+hcp_up = join_and([T.step_mid(k) for k in up[up["cqa"] == "hcp"].sort_values("step")["step_key"]])
+lpa_up_l = [T.step_mid(k) for k in up[up["cqa"] == "leached_protein_a"].sort_values("step")["step_key"]]
+assert hcp_up and len(lpa_up_l) == 1
+lpa_up = lpa_up_l[0]
+vb = round(100 * D.VERIFICATION_BOUND)
+
+# the scale-down qualification (PCMP-001 §7.1 asks each plan for the runs at each scale)
+off = D.sdm_offset(UO, R["hcp"])
+n_sd, n_m = off["n_sd"], off["n_m"]
+ci_pct = round(100 * off["ci"])
+ci_one = round(100 - (100 - ci_pct) / 2)
+assert all(D.sdm_offset(UO, R[k]) is None for k in ("lmw", "x", "m"))   # not compared at both scales
+
+# the chamber Version 1.0 named for these runs (identification only; the record of execution names
+# no instrumented system for the anion exchange studies)
+CHR = "EQ-CHR-118"
+eq = equipment_df()
+eq_tab = eq.loc[eq["Equipment"] == CHR, ["Equipment", "Description"]]
+assert len(eq_tab) == 1
+
+# the studies of this plan and their execution windows (study_chronology.csv, INV-001 PA3)
+chron = csv("study_chronology.csv")
+mine = chron[(chron["step"] == UO) & (chron["end"] < REV1["effective"])].sort_values("start")
+mine = mine.reset_index(drop=True)
+assert list(mine["kind"]) == ["qualification", "superseded", "screening", "rsm", "univariate"]
+assert mine["equipment"].isna().all()                          # the record names no instrumented system
+ids = dict(zip(mine["kind"], mine["id"]))
+v1_date = rev1_date(DOC)
+first_start, first_study = mine["start"].iloc[0], mine["id"].iloc[0]
+assert v1_date < first_start                                     # approved before the first study
+assert mine.loc[mine["kind"] == "screening", "start"].iloc[0] > AMD["date"]
+later = chron[(chron["step"] == UO) & (chron["end"] >= REV1["effective"])]
+assert list(later["kind"]) == ["augmentation"]                 # the only later study is not of this plan
+dev_sup = dev_facts("PCR-008").query("disposition == 'invalidated_and_re_executed'")["dev_id"].iloc[0]
+
+
+
+# INV-001 corrective and preventive actions this revision answers
+capa = CAPA.set_index("id")["action"]
+ver_n, ver_eff = doc_version(DOC)
+assert capa["CA2"].startswith("Amend PCP-003 to PCP-010") and "execution dates" in capa["PA3"]
+
+# the statistics (PCMP-001 §6 and §7.2, campaign thresholds)
+alpha = THRESHOLDS["effect_alpha"]
+alpha_lof = THRESHOLDS["lof_alpha"]
+gap_lim = THRESHOLDS["max_r2_minus_pred_r2"]
+res_alpha = THRESHOLDS["residual_alpha"]
+cook_factor = THRESHOLDS["cook_factor"]
+cook = cook_factor / n_rsm                  # Cook's distance cut-off for the response surface design
+pi = round(100 * D.PI_LEVEL)
+p_lo = 100 * (1 - D.PI_LEVEL) / 2
+p_hi = 100 - p_lo
+sd_div = D.NOR_SD_DIVISOR
+LEVELS = ["NOR low", "set-point", "NOR high"]
+n_comb = len(LEVELS) ** (n_mv - 1)          # combinations of the other factors in the viral judgement
+assert all(ACC[k][2] in ("upper", "lower") for k in ACC)   # one limit each, so capability is one-sided
+
+# the procedures and method validations (sorted by number)
+SOPS = sorted(AEX_SOP_REFS + [s for s in SOP_REFS if s[0] == "SOP-3015"])
+AMVS = sorted(AEX_AMV_REFS)
+
+# the quality attributes in scope, with the role of the step for each
+dose = CFG.raw()["meta"]["dose"]
+assert abs(DOSE_MG - dose["mg_per_kg"] * dose["body_weight_kg"]) < 1e-9
+DOSE_NOTE = (f"Per dose of {DOSE_MG:g} mg, the A-Mab weekly dose of {dose['mg_per_kg']:g} mg/kg for a "
+             f"reference adult of {dose['body_weight_kg']:g} kg. The body weight is an assumption of "
+             "this campaign.")
+ROLE = {"lrv_xmulv": "Contributes a claim", "lrv_mvm": "Contributes a claim", "hcp": "Clears",
+        "residual_dna": "Clears", "leached_protein_a": "Clears", "fragments_lmw": "Passes unchanged"}
+assert list(cqa_reg.loc[cqa_reg["set_by"] == UO, "key"]) == ["lrv_mvm"]
+cqa_tab = cqas_by_keys(list(ROLE)).reset_index(drop=True)
+cqa_tab.insert(0, "Role", [ROLE[k] for k in ROLE])
+_dna = list(ROLE).index("residual_dna")
+assert "ng/dose" in cqa_tab.loc[_dna, "Acceptance"]
+cqa_tab.loc[_dna, "Acceptance"] = cqa_tab.loc[_dna, "Acceptance"] + "^a)^"
+n_cleared = sum(v == "Clears" for v in ROLE.values())
+
+# the parameter table and the letter codes of the design matrices
+pp = plan_params(UO).copy()
+pp["Set-point"] = [f"{v:g}" for v in pp["Set-point"]]
+pp = pp[["Study type", "Parameter", "Unit", "Set-point", "Range studied", "NOR"]]
+codes = D.factor_legend_df(UO)
+assert (codes["Studied in"] == "screening + RSM").all()      # all four factors in both designs
+codes = codes[["Code", "Factor", "Unit"]]
+
+# the execution windows
+KIND = {"qualification": "Scale-down model qualification",
+        "superseded": "Screening and response surface designs, first execution^a)^",
+        "screening": "Screening design", "rsm": "Response surface design",
+        "univariate": f"Univariate assessment of {N['flow']}"}
+win = pd.DataFrame({"Study": mine["id"], "Study type": mine["kind"].map(KIND),
+                    "Start": mine["start"], "End": mine["end"]})
+WIN_NOTE = f"The first execution was invalidated. PCR-008 records the deviation ({dev_sup})."
+
+
+def coded(df):
+    """A planned matrix as the appendix sets it: run type first and merged, coded levels with signs."""
+    d = df.rename(columns={"Type": "Run type"}).copy()
+    d["Run type"] = d["Run type"].map({"factorial": "Factorial", "axial": "Axial", "center": "Centre"})
+    for c in codes["Code"]:
+        d[c] = d[c].map(lambda v: "−1" if v < 0 else ("+1" if v > 0 else "0"))
+    d["Run"] = d["Run"].astype(int).astype(str)
+    return d[["Run type", "Run"] + list(codes["Code"])]
 ```
+
+{{< pagebreak >}}
 
 ```{python}
 #| output: asis
@@ -102,669 +257,415 @@ print(SYN_BANNER)
 | Reviewer | Statistics | — | — | — |
 | Approver | Quality Assurance | — | — | — |
 
-: Approval record (synthetic; signatures not applied). {#tbl-appr}
-
-## Abbreviations {.unnumbered}
-
-AEX, anion exchange chromatography; ALCOA+, attributable, legible, contemporaneous,
-original and accurate, plus complete, consistent, enduring and available; AMV, analytical
-method validation; ANOVA, analysis of variance; BLA, Biologics License Application; CCD,
-central composite design; CEX, cation exchange chromatography; CPP, critical process
-parameter; CQA, critical quality attribute; CV, column volume; DNA, deoxyribonucleic acid;
-DoE, design of experiments; DS, drug substance; ELISA, enzyme-linked immunosorbent assay;
-GPP, general process parameter; HCP, host cell protein; icIEF, imaged capillary isoelectric
-focusing; IgG1, immunoglobulin G subclass one; KPP, key process parameter; LRF, log reduction
-factor; MSAT, Manufacturing Science and Technology; MVM, minute virus of mice; NOR, normal
-operating range; OLS, ordinary least squares; PAR, proven acceptable range; PD, Process
-Development; PPQ, process performance qualification; PRESS, prediction error sum of squares;
-qPCR, quantitative polymerase chain reaction; QA, Quality Assurance; RSM, response surface
-methodology; SDM, scale-down model; SOP, standard operating procedure; TCID50, fifty percent
-tissue culture infectious dose; WC-CPP, well-controlled critical process parameter; XMuLV,
-xenotropic murine leukaemia virus.
+Synthetic record. Signatures are not applied.
 
 {{< pagebreak >}}
 
-# Purpose and scope
+## Revision history {.unnumbered}
 
-This plan defines the Stage 1 process characterization study for the anion exchange
-chromatography step of the A-Mab drug substance process, Step `{python} STEP` of the
-purification train. The step is the last chromatographic step in the train and is operated
-in flow-through mode. Its characterization supports the transfer of the process from the
-development site to the commercial drug substance site under PTP-001, and it will be
-executed on a qualified scale-down model of the commercial column [@fda2011].
+```{python}
+#| output: asis
+print(revision_history(DOC))
+```
 
-The study covers the `{python} n_par` process parameters that RA-001 carried forward for
-this step and the `{python} n_resp` responses measured on the flow-through pool. Of those
-parameters, `{python} n_mv` will be studied in a multivariate design and `{python} n_uv`
-one at a time. The commercial process is operated at a bioreactor scale of
-`{python} f"{V['commercial_scale_l']:,}"` L, and the anion exchange step processes the
-cation exchange pool derived from a single batch at that scale.
+## Abbreviations {.unnumbered}
 
-Three activities are outside this plan. Resin packing, sanitization and life cycle are
-qualified under SOP-2008, and none of them is varied here. Confirmation of the ranges at
-commercial scale belongs to Stage 2 and will be performed during process performance
-qualification. The small virus retentive filter is characterized in PCP-009, and no
-clearance credited to that filter is claimed by this study.
+```{python}
+#| output: asis
+print(abbreviations_table([
+    ("ALCOA+", "attributable, legible, contemporaneous, original and accurate, plus complete, "
+               "consistent, enduring and available"),
+    ("AMD", "analytical method decision"),
+    ("AMV", "analytical method validation"),
+    ("BLA", "Biologics License Application"),
+    ("Cpk", "process capability index"),
+    ("DNA", "deoxyribonucleic acid"),
+    ("DS", "drug substance"),
+    ("ELISA", "enzyme-linked immunosorbent assay"),
+    ("Equil/Wash-1", "equilibration and first wash buffer"),
+    ("Fc", "crystallizable fragment of the antibody"),
+    ("HCP", "host cell protein"),
+    ("IAC", "intermediate acceptance criterion"),
+    ("icIEF", "imaged capillary isoelectric focusing"),
+    ("IgG1", "immunoglobulin G subclass 1"),
+    ("LMW", "low molecular weight species"),
+    ("MSAT", "Manufacturing Science and Technology"),
+    ("MVM", "minute virus of mice"),
+    ("NOR", "normal operating range"),
+    ("nrCE-SDS", "non-reduced capillary electrophoresis with sodium dodecyl sulfate"),
+    ("PPQ", "process performance qualification"),
+    ("QA", "Quality Assurance"),
+    ("qPCR", "quantitative polymerase chain reaction"),
+    ("SEC", "size exclusion chromatography"),
+    ("SOP", "standard operating procedure"),
+    ("TCID50", "fifty percent tissue culture infectious dose"),
+    ("XMuLV", "xenotropic murine leukaemia virus"),
+]))
+```
 
-# Objectives
+{{< pagebreak >}}
 
-The study has five objectives.
+<!-- ========================= BODY START ========================= -->
 
-1. Quantify the effect of each studied parameter on pool host cell protein, on the log
-   reduction factors for xenotropic murine leukaemia virus and minute virus of mice, and on
-   step yield, over the ranges given in §6.1.
-2. Define the multivariate operating region within which every governed quality attribute
-   meets its criterion, and state where the boundary of that region lies.
-3. Establish a proven acceptable range for each parameter and each attribute it governs,
-   and confirm that the normal operating range falls inside it.
-4. Classify each parameter under SOP-4001 from the effects demonstrated in the study and
-   from the capability with which the parameter can be held.
-5. Provide the log reduction claim this step contributes to the modular viral clearance
-   assessment, and justify the Stage 2 ranges and this step's part of the control strategy.
+# Purpose and scope {#sec-purpose}
 
-The designs in §6 meet the first three objectives. The classification rules in SOP-4001,
-applied to those results, meet the fourth, and the spiking runs described in §5.1 and §5.4
-meet the last. Every objective is reported in PCR-008.
+This plan sets out the Stage 1 process characterization of the anion exchange chromatography step of the A-Mab drug substance process [@fda2011]. The step is Step `{python} uo.step` of the train and the last chromatography step before virus filtration. It is operated in flow-through mode. The characterization supports the transfer of the process from the development site to the commercial drug substance site under the Process Transfer Plan PTP-001. It is executed on a scale-down model of the commercial column (@sec-sdm).
 
-# Related documents
+The study covers the `{python} W(n_par)` process parameters that the risk assessment RA-001 carried forward for this step. Of these, `{python} W(n_mv)` are studied in a screening design and a response surface design, and `{python} uv_mid` `{python} uv_verb` assessed one factor at a time. The responses measured on the flow-through pool are host cell protein, the log reduction factors of the two model viruses, step yield and fragments. Residual DNA and leached Protein A are measured on the pool of every response surface run and are monitored, not modelled (@sec-sampling). The commercial process is operated at a bioreactor scale of `{python} f"{V['commercial_scale_l']:,}"` L, and the anion exchange step processes the cation exchange pool derived from a single batch at that scale.
 
-The documents that scope this study and that consume its output are listed in
-@tbl-related. RA-001 fixes the parameters and the ranges carried into the study, and
-PCR-008 will report the executed study against this plan.
+Three activities lie outside this plan. Resin packing, sanitization and life cycle are qualified under the resin procedure SOP-2008, and none of them is varied here. Performance at commercial scale is confirmed in Stage 2, during process performance qualification (PPQ), whose batches run inside the NORs and do not test the edges of the ranges. The small-virus retentive filter is characterized under its own plan, PCP-009, and this study claims no clearance that belongs to that filter.
+
+## Changes in this revision {#sec-changes}
+
+Version 1.0 of this plan was approved on `{python} v1_date`, before the first study of this step began on `{python} first_start` (the scale-down model qualification study `{python} first_study`). Version 2.0 is the amendment of the step plans with the a priori criteria and the fragment method that the QA investigation INV-001 calls for in its corrective action CA2, and it is issued after the studies ran. QA opened INV-001 on `{python} INV["opened"]` after its review of the master report PCMR-001 Version 1.0 for BLA readiness, and closed it on `{python} INV["closed"]`. INV-001 found that the criteria used to judge each step in the proven acceptable range analysis had been set after the data were seen and were in no approved protocol (INV-001 finding 1). The revision is also issued under INV-002, which investigated response surface models that fell below the model adequacy criteria of PCMP-001 Version 2.0. Its corrective actions, the model selection and the refits of the response surface models below those criteria, are applied in the paired report PCR-008.
+
+Version 2.0 keeps the designs, the sampling, the spiking and the decision rules of Version 1.0 as Version 1.0 wrote them. Where the master plan PCMP-001 Version 2.0 sets a rule in place of one, the text gives the rule of PCMP-001 and says so, and the list below names the Version 1.0 rule it replaces. The changes are the following.
+
+1. The outputs of the step are judged against the intermediate acceptance criteria that PCMP-001 Version 2.0 derives a priori (its §7.3). Each drug substance criterion is carried back through the platform worst case of every later step, that is the lowest clearance or the largest increase that the step showed for X-Mab, Y-Mab and Z-Mab, with no margin. These criteria replace the limits of Version 1.0 (@tbl-criteria-change, discussed below), and objective 5 asks whether the step meets its platform claims for both viruses.
+2. A quality attribute is judged on a single batch, through the `{python} pi` % prediction interval of a single batch. Viral clearance is judged at the worst case within the NOR, on the mean predicted log reduction factor at the least favourable combination of NOR low, set-point and NOR high of the multivariate parameters (@sec-par). The multivariate operating region is drawn in the same way, on both ends of the `{python} pi` % prediction interval of a single run for each quality attribute and on the mean prediction for viral clearance (@sec-criteria). Version 1.0 judged every response on a single batch and did not say on which statistic the operating region was drawn.
+3. The scale-down model is qualified for each output by its offset from manufacturing scale (PCMP-001 §7.1), and whether it is qualified for an output is decided at analysis (@sec-sdm). Version 1.0 tested for a difference between the scales and accepted the model only where the test found no statistically significant difference, and it released no characterization run on a model that had not passed.
+4. Fragments are judged at this step against the drug substance criterion, on results by nrCE-SDS (AMV-3020), the method that the method decision `{python} AMD["id"]` of `{python} AMD["date"]` set for every step (@sec-analytical). Version 1.0 did not list fragments as a response of this step and did not judge them. Objective 1 includes them.
+5. A response surface model is adequate when it passes the four conditions of PCMP-001 §7.2. These are a significant model F-test, no significant lack of fit against pure error, a predicted R² within `{python} f"{gap_lim:.2f}"` of R² (the limit on overfitting), and residuals with no pattern and no run that dominates the fit. PCMP-001 sets the levels of the first two conditions and the limit of the third. For the fourth this plan applies the two tests that every plan of the campaign applies, a test for patterns in the residuals, by regressions of the absolute residuals on the predicted values and of the residuals on the run order, and a test for influence, by Cook's distance against `{python} f"{cook_factor:g}"`/n (@sec-stats). A model that fails the lack of fit test or the limit on overfitting is either refitted with a justified change of terms or transformation, or it is not used to set a range (@sec-criteria). Version 1.0 judged adequacy on the lack of fit test at p ≥ `{python} f"{alpha_lof:g}"` and an inspection of the residuals, and fixed no threshold for the coefficient of determination. It allowed a model with significant lack of fit to be used for prediction where its residual standard error was small against the margin to the limit, and it reported a response with neither an adequate nor a justified model without a predictive model.
+6. The criteria of the upstream steps rely on two platform worst cases of this step, a host cell protein clearance of at least `{python} f"{hcp_fold:g}"`-fold and a leached Protein A clearance of at least `{python} f"{lpa_fold:g}"`-fold. PCR-008 verifies the host cell protein worst case on the response surface model of this step, by the rule of PCMP-001 §7.5. The leached Protein A value stands under that rule, because leached Protein A is not a response of the designs (@sec-criteria). Objective 6 is added for the verification.
+7. The execution window of every study is recorded, as INV-001 preventive action PA3 requires of every study record (@sec-schedule), and the revision history gives the date on which Version 1.0 was approved. The Version 1.0 records gave no execution dates (INV-001 finding 5). The frozen Version 1.0 text of this plan, compiled with the package of the Version 1.0 reports, also differs from the approved plan in two ways. Its title block carries `{python} REV1["effective"]`, the date on which the Version 1.0 reports were approved. Its acceptance criteria carry the step limits of @tbl-criteria-change, which were added to the plan text when the package was compiled, without a revision of the approved plan (INV-001 root cause 1).
+8. Capability is no longer estimated for this step alone. Version 1.0 estimated it by simulating the fitted models of this step and reported a one-sided index for each governed attribute against the criterion at this step. PCMP-001 Version 2.0 estimates it from the integrated process model of the train, against the drug substance criterion, and judges it in PCMR-001 against a Cpk of `{python} f"{CPK_TARGET:g}"`, expected in routine manufacture, and a Cpk of `{python} f"{CPK_MIN:g}"`, below which the control strategy needs an action (@sec-stats).
+9. Classification keeps the rule of Version 1.0 and adds the rules of PCMP-001 Version 2.0 (@sec-criteria). An attribute is affected by a parameter when a term that contains the parameter is significant at α = `{python} f"{alpha:g}"` (PCMP-001 §6.2). The report states the size of each effect across the proven acceptable range and the margin between that range and the NOR, and gives the reason for each class from them (PCMP-001 §7.7). Version 1.0 did not define when a parameter acts on an attribute or when it is held well inside its acceptable range, and it had no class for a critical parameter that is not well controlled.
+10. Descriptive sentences of Version 1.0 that were scientifically wrong or imprecise are corrected, without change to the design. They state what the scaling of the scale-down model holds equal (@sec-sdm), what limits the smallest effect an assay can resolve (@sec-analytical), how residence time acts on virus particles (@sec-univariate), what Stage 2 confirms (@sec-purpose), what an unrepresentative load puts at risk and why platform knowledge applies to A-Mab (@sec-risks), and how load pH and conductivity together let host cell protein through and which step sets the attributes of the load (@sec-risk).
+
+@tbl-criteria-change compares the criteria. The compiled text of Version 1.0 (change 7) judged pool host cell protein against `{python} f"{r1_hcp:.1f}"` ng/mg, the drug substance limit carried back through the nominal clearance of the later steps of this campaign and then divided by a margin of `{python} f"{r1_margin:g}"`. Such margins differed by step and were chosen so that every step passed at its own set-point (INV-001 finding 2). It judged the two model viruses against minimum step log reduction factors, each the cumulative requirement minus the nominal clearance of the other steps of this campaign. The host cell protein criterion of Version 2.0 is wider than the Version 1.0 limit, and the two viral clearance criteria are stricter.
+
+```{python}
+#| output: asis
+T.criteria_change([UO]).show()
+```
+
+# Objectives {#sec-objectives}
+
+The study has the following objectives.
+
+1. Quantify the effect of each studied parameter on pool host cell protein, on the log reduction factors for xenotropic murine leukaemia virus and minute virus of mice, and on step yield, over the ranges given in @sec-factors, and the effect of each multivariate parameter on fragments.
+2. Define the multivariate operating region within which every governed quality attribute meets its criterion (a quality attribute on the single-batch limit and viral clearance on its mean prediction, as PCMP-001 Version 2.0 draws its design space), and state where the boundary of that region lies.
+3. Establish a proven acceptable range for each parameter and each attribute it governs, and confirm that the normal operating range falls inside it.
+4. Classify each parameter under the parameter classification procedure SOP-4001 from the effects demonstrated in the study and from the capability with which the parameter can be held.
+5. Determine whether the step meets its platform claims for both model viruses at the worst case within the NOR, and justify the Stage 2 ranges and this step's part of the control strategy.
+6. Verify the host cell protein clearance of this step against its platform worst case, `{python} f"{hcp_fold:g}"`-fold, on which the host cell protein criteria of the upstream steps rely.
+
+# Related documents {#sec-related}
+
+The documents that scope this study and that consume its output are listed in @tbl-related, with the investigation INV-001 that caused this revision. RA-001 fixes the parameters and the ranges carried into the study, and PCR-008 will report the executed study against this plan.
 
 ```{python}
 #| output: asis
 print(related_docs_md(DOC))
 print()
-print(": Related documents in the A-Mab characterization package. {#tbl-related}")
+print(": Documents related to this plan. {#tbl-related}")
 ```
 
-The controlled procedures and the validated analytical methods the study will follow are
-listed in @tbl-sops. SOP-1001 governs qualification of the scale-down model, SOP-1002 the
-design and the statistical analysis of the multivariate studies, and SOP-2011 the operation
-of the step itself.
+The controlled procedures and the validated analytical methods that the study will follow are listed in @tbl-sops. The scale-down model procedure SOP-1001 governs the qualification of the model, the design of experiments procedure SOP-1002 the design and the statistical analysis of the multivariate studies, and the operating procedure SOP-2011 the operation of the step itself.
 
 ```{python}
 #| output: asis
-print(sop_table(sops=AEX_SOP_REFS, amvs=AEX_AMV_REFS))
-print()
-print(": Controlled procedures and validated methods for the study. {#tbl-sops}")
+T.sop_references(sops=SOPS, amvs=AMVS).show()
 ```
 
-# Prior knowledge and quality risk basis
+# Prior knowledge and quality risk basis {#sec-prior}
 
-## Unit operation description and prior knowledge
+## Unit-operation description and prior knowledge {#sec-uo}
 
-Anion exchange chromatography is operated in flow-through mode on a resin carrying a
-quaternary amine ligand. At the load pH the antibody carries a net positive charge, because
-its isoelectric point lies well above the pH of the load, and it passes through the bed.
-Species that are negatively charged at that pH bind to the ligand instead. These include
-residual DNA, the acidic fraction of the host cell protein population, leached Protein A
-and virus particles, whose surfaces are acidic. The step therefore removes impurities by
-charge while the product is not retained, and yield in flow-through mode is high.
+Anion exchange chromatography is the last chromatography step of the A-Mab process and is operated in flow-through mode [@amab2009]. The resin carries a quaternary amine ligand with a fixed positive charge. At the load pH the antibody carries a net positive charge, because its isoelectric point lies well above the pH of the load, and it passes through the bed. Species that carry a net negative charge at that pH bind to the ligand. These are residual DNA, the acidic part of the host cell protein population, leached Protein A and virus particles. Yield in flow-through mode is high, because the ligand repels the positively charged antibody. Product is lost only where part of the antibody comes close enough to neutral charge at the load pH to bind, and the range of load pH is set to avoid that.
 
-Binding of an impurity depends on its net charge at the load pH and on how strongly the
-ionic strength of the buffer shields that charge. Raising the load pH moves more of the
-host cell protein population below its isoelectric point and into the bound fraction.
-Raising the conductivity of the equilibration and first wash buffer shields the
-electrostatic interaction, weakens the binding of the more weakly charged species and lets
-them through. Load pH and buffer conductivity therefore push the same binding equilibrium
-in opposite directions, and the clearance of the step is the balance between them. An
-interaction between the two is expected for that reason, and the design must be able to
-estimate it free of confounding.
+Whether an impurity binds depends on its net charge at the load pH and on how strongly the ionic strength of the buffer screens that charge. At a higher load pH the pH lies above the isoelectric point of more of the host cell proteins, so more of them carry a net negative charge and bind. A higher conductivity of the equilibration and first wash buffer, the `{python} P["wash1_cond"].name`, screens the electrostatic interaction and lets weakly bound host cell protein pass with the antibody. A higher load pH gives an acidic host cell protein more net negative charge, and the salt of the solution in contact with the bed while the protein binds screens that charge. The effect of conductivity therefore depends on the load pH, and an interaction between the two is expected. The design must be able to estimate it free of confounding (@sec-screening).
 
-The step also carries the anion exchange contribution to viral safety. Retrovirus-like
-particles present an acidic surface at the load pH and bind the quaternary amine ligand by
-the same electrostatic mechanism as the acidic impurities. The parvovirus model has no
-envelope and is small, and its capsid is acidic at the load pH, so it binds by that
-mechanism as well. Clearance of both is expected to fall as the load pH drops toward the
-point at which the particle surface loses its negative charge, and as conductivity rises.
-Minute virus of mice is not inactivated by low pH, so this step and the virus filter carry
-the whole cumulative claim for it [@ichq5a].
+The conductivity of the load acts by the same screening while the bed is being loaded. A higher load conductivity weakens the binding of the more weakly charged impurities, and as the ligand fills, more strongly charged species displace them, so weakly charged host cell protein is the first to pass into the pool. A higher protein load brings more impurity mass onto each litre of resin. Pool host cell protein is expressed per milligram of antibody, so a higher load raises it only where the bound impurity approaches the capacity of the ligand and starts to break through. Within the range studied the impurity mass is expected to stay below that capacity. Flow rate sets the residence time in the bed. Binding at equilibrium does not depend on residence time, but the time a species needs to reach the ligand does. Virus particles are large and diffuse slowly to the ligand, so their clearance is the most likely to fall at a short residence time.
 
-Residual DNA is a polyanion at every pH in the range studied and binds the resin strongly.
-Its clearance is expected to be robust to the operating parameters, and it is monitored
-across the step rather than modelled (§5.4). Leached Protein A is acidic and binds the
-resin while the antibody passes through, so the step is expected to clear the ligand
-fragments the capture step introduced. Fragments held in complex by the antibody Fc are
-removed only where the complex dissociates, and no clearance is claimed for that fraction.
+The step carries a modular viral clearance claim for an enveloped and a non-enveloped model virus [@ichq5a]. Particles of the retrovirus model, XMuLV, carry a net negative charge at the load pH and bind the ligand by the same electrostatic interaction as the acidic impurities. The parvovirus model, MVM, has no envelope and is small, and its capsid also carries a net negative charge at the load pH, so it binds by the same mechanism. For both viruses, clearance is expected to fall as the load pH drops toward the point at which the particle surface loses its negative charge, and as the conductivity rises [@amab2009]. The XMuLV claim of this step is orthogonal to that of low-pH inactivation, which acts on the viral envelope and not on the surface charge. MVM is not inactivated by low pH, so this step and the virus filter carry the whole claim for it.
 
-The platform anion exchange step has been used to manufacture three previously licensed
-humanized IgG1 antibodies (X-Mab, Y-Mab and Z-Mab) and through A-Mab clinical supply
-[@amab2009]. Prior product knowledge established the mode of operation, the buffer system
-and the order of magnitude of the clearance the step delivers, and the mechanism of
-separation is charge based and does not depend on the fine structure of the antibody. This
-study therefore confirms and bounds behaviour that is already understood. The ranges in
-§6.1 are wider than the ranges used in clinical manufacture, so that the edge of the
-operating region lies inside the data rather than beyond it.
+Residual DNA is a polyanion at every pH in the range studied and binds the ligand strongly. Its clearance is expected to be robust to the operating parameters, and it is monitored across the step rather than modelled (@sec-sampling). Leached Protein A carries a net negative charge at the load pH and binds while the antibody passes through, so the step is expected to clear the ligand fragments that the capture step releases. Fragments held in complex by the antibody Fc are removed only where the complex dissociates, and no clearance is claimed for that fraction. PCMP-001 Version 2.0 sets a criterion for antibody fragments (LMW) in the pool of this step and no aggregate criterion (Table 7.1 of PCMP-001). Antibody fragments are therefore measured and judged at this step (@sec-analytical), and aggregate is not a response of the designs.
 
-## Quality attributes in scope
+The platform anion exchange step has been used to manufacture three previously licensed humanized IgG1 antibodies, X-Mab, Y-Mab and Z-Mab, and through A-Mab clinical supply [@amab2009]. That experience established the mode of operation, the buffer system and the clearance the step delivers, including the platform worst cases of this step on which the criteria of the upstream steps rely (@sec-criteria) and the platform claims for both viruses (@sec-par).
 
-The step sets one critical quality attribute, which is listed in @tbl-cqa-sets. Cumulative
-clearance of minute virus of mice is a viral safety attribute of very high criticality, and
-it is the attribute expected to constrain the operating region of this step.
+## Quality attributes in scope {#sec-cqas}
+
+The step contributes to the cumulative clearance of both model viruses. It claims `{python} f"{x_claim:g}"` log10 for XMuLV, of a cumulative requirement of `{python} f"{x_req:g}"` log10, and `{python} f"{m_claim:g}"` log10 for MVM, of a cumulative requirement of `{python} f"{m_req:g}"` log10 (@tbl-iac). It clears `{python} W(n_cleared)` impurities that are formed upstream and cleared by more than one step, host cell protein, residual DNA and leached Protein A. Fragments pass through the step unchanged on the platform and are judged in its pool. @tbl-cqas lists these attributes with their drug substance criteria and their criticality.
+
+Criticality was assigned with Tool #1 of the A-Mab case study, from the impact of each attribute on safety and efficacy and the uncertainty in that impact [@amab2009; @ichq9]. The two viral clearance attributes carry very high criticality by rule, because a viral contamination would harm the patient directly, whatever their score (master plan PCMP-001 §3).
 
 ```{python}
 #| output: asis
-show(cqas_for(UO))
-print()
-print(": Critical quality attribute set by the anion exchange step. {#tbl-cqa-sets}")
+T.frame(cqa_tab, "Quality attributes to which the anion exchange step contributes, with their drug "
+        "substance criteria.", "tbl-cqas", merge=["Role"],
+        header={"CQA": "Attribute", "Acceptance": "Drug substance\ncriterion",
+                "Tool #1": "Tool #1\nscore"},
+        align=["P{2.4cm}", "P{3.9cm}", "P{2.5cm}", "P{3.0cm}", "c", "r"],
+        notes=[("a)", DOSE_NOTE),
+               ("", "Criticality from Tool #1 of the A-Mab case study, from impact and uncertainty. VL, "
+                    "very low. L, low. M, moderate. H, high. VH, very high. L-M and M-H lie between "
+                    "two levels. The viral clearance attributes are very high by rule.")],
+        notes_per_row=True, size="footnotesize").show()
 ```
 
-Further attributes are governed at this step without being set by it, and these are listed
-in @tbl-cqa-clears. Host cell protein, residual DNA and leached Protein A are formed
-upstream and are cleared by more than one step, so the criterion that applies to the anion
-exchange pool is an in-process limit and not the drug substance specification (§7).
-Clearance of xenotropic murine leukaemia virus is credited to the low-pH hold, to this step
-and to the virus filter, and each contributes an independent increment to the cumulative
-claim [@ichq5a].
+The criteria that apply to the outputs of this step are the intermediate acceptance criteria of @sec-par. For host cell protein and fragments they equal the drug substance criteria, and for viral clearance they are the claims of this step. Step yield is a process performance attribute rather than a quality attribute. It is measured on every run and reported, and no acceptance criterion is applied to it at this step.
+
+## Risk-based prioritization of parameters {#sec-risk}
+
+Each parameter of the step was ranked in the risk assessment RA-001 on its potential impact on a critical quality attribute and on its potential to interact with other parameters, and the study type was assigned from the ranking. Parameters ranked high on both counts were assigned to the multivariate design. Parameters ranked high on impact but low on interaction were assigned to a univariate assessment. Parameters held to a platform specification with no credible path to a quality attribute were not studied, and their ranges are carried from platform knowledge and from the modular claims established on prior products.
+
+The outcome for this step is `{python} n_mv` parameters in the multivariate design and `{python} n_uv` assessed one at a time (@tbl-params). The highest ranks went to `{python} N["load_ph"]`, `{python} N["wash1_cond"]` and `{python} N["load_cond"]`, because together they set how strongly an acidic host cell protein binds. A low load pH and a high conductivity both weaken that binding, and together they let host cell protein flow through with the antibody. The design also includes `{python} N["load"]`, because the impurity mass loaded onto the column scales with it, and the ligand has a finite capacity for the species it binds. `{python} P["flow"].name` was assigned to a univariate assessment, because binding of the small, highly charged impurities is fast relative to the residence time at every flow rate in the range.
+
+The material loaded onto the step is the cation exchange pool, whose attributes are set by the preceding step, characterized under the cation exchange plan PCP-007. This study varies the parameters of the anion exchange step and does not vary the quality of its load.
+
+# Materials and methods {#sec-methods}
+
+## Scale-down model and its qualification {#sec-sdm}
+
+The study will be executed on a scale-down model of the commercial anion exchange column, qualified under SOP-1001. The model keeps the bed height, the linear flow velocity, the protein load in grams of antibody per litre of resin, and the equilibration, load, wash and chase volumes expressed in column volumes. Scaling on these variables holds the residence time and the impurity mass per unit of ligand equal to the commercial step. These set how much time each species has to reach the ligand and how close the bed comes to its capacity. The resin, the buffers and the packing method are the same as at commercial scale.
+
+Qualification will compare the model against commercial-equivalent runs on step yield, pool host cell protein, residual DNA, leached Protein A, the pressure across the bed and the shape of the flow-through peak. PCMP-001 Version 2.0 replaces the acceptance rule of Version 1.0 by the offset rule of its §7.1. The offset of an output is the mean of the scale-down runs at set-point minus the mean of the manufacturing-scale batches, reported with its two-sided `{python} ci_pct` % confidence interval, each end of which is a one-sided `{python} ci_one` % confidence bound. The offset of each output with a criterion at this step is estimated in this way. The offsets of the other compared outputs are recorded where both scales measure them, and no conclusion depends on them. Of the outputs compared, pool host cell protein is the only one with a criterion at this step (@sec-par), so the qualification decision concerns it alone.
+
+The qualification compares `{python} n_sd` scale-down runs at set-point with `{python} n_m` batches made at manufacturing scale (study `{python} ids["qualification"]`), and these runs and the offset estimates come before the first characterization run of the step. Every judgement of a scale-down result for pool host cell protein against its criterion first subtracts the offset, so that ranges and conclusions are stated at manufacturing scale. The model is qualified for pool host cell protein when the conclusion against its criterion over the NOR is the same with the offset at either end of its interval. That conclusion is whether the output meets its criterion at every combination of NOR low, set-point and NOR high of the `{python} W(n_mv)` multivariate parameters. It comes from the response surface model, so the decision is made at analysis and reported in PCR-008. A model whose conclusion changes between the two ends of the interval is not used for that output. The qualification record is held with the study data and is cited in PCR-008.
+
+The qualification does not compare fragments or viral clearance at the two scales. Their offset is unknown, not zero, and they are judged as the scale-down model gives them (PCMP-001 §7.1). For viral clearance the representativeness rests on the spiked scale-down model described below. For fragments it rests on the mechanism of the step. On the platform no step after cation exchange changes the fragment level (PCMP-001 §7.3), so the pool is expected to carry the fragments of its load at either scale.
+
+The viral clearance runs will be executed on the same scale-down model in a dedicated containment laboratory, as a small-scale spiking study [@ichq5a]. The spiking model will be qualified separately, because adding a virus spike to the load changes the load itself. A spike adds cell culture medium, protein and salt, which can shift the protein concentration, the pH and the conductivity of the load. That qualification will confirm that the spiked load matches the unspiked load in protein concentration, in pH and in conductivity, and that the spike volume stays below the fraction at which those attributes move. Spiked and unspiked runs will be executed on matched load material, so that the clearance results and the impurity results describe the same step.
+
+The centre point of each design will be executed in replicate. The replicates estimate pure error, and pure error is the reference against which lack of fit is tested (@sec-stats). A replicate is a full independent execution of the step and not a repeat measurement of one pool, because a repeat injection estimates assay variability and lack of fit must be judged against the variability of the process.
+
+## Operation {#sec-operation}
+
+The step will be operated as it is operated at commercial scale, under SOP-2011. The column is equilibrated with the equilibration buffer, loaded with the cation exchange pool adjusted to the target pH and conductivity, and chased with the first wash buffer. The flow-through and the chase are collected as a single pool from the start of the load to the end of the chase. The pool is filtered and held for the virus filtration step, and the hold conditions are those of the commercial process.
+
+Resin, buffers and column packing are controlled to platform specification. Each resin lot will be released against its certificate of analysis and packed and tested under SOP-2008, and a packed column will be accepted on plate count and peak asymmetry before use. Buffer lots will be prepared and released under the site buffer preparation procedure and used within their assigned expiry. These inputs are identity and quality controlled, and they are not characterized in this study.
+
+The chromatography system will be operated in a temperature-controlled chamber under calibration and change control. The system is identified in @tbl-equipment, and its calibration status will be verified before the first run and confirmed at the end of the execution period.
 
 ```{python}
 #| output: asis
-show(cqas_by_keys(["lrv_xmulv", "hcp", "residual_dna", "leached_protein_a"]))
-print()
-print(": Quality attributes governed but not set by the anion exchange step. {#tbl-cqa-clears}")
+T.frame(eq_tab, "Instrumented system for the anion exchange characterization runs.", "tbl-equipment",
+        align="ll").show()
 ```
 
-Criticality was assigned in RA-001 from the impact of the attribute on safety and
-efficacy combined with the uncertainty in that impact, and attributes scoring high or
-very high on that combination are treated as critical [@amab2009; @ichq9]. Step yield is
-a process performance attribute rather than a quality attribute. It is measured on every
-run and reported, and no acceptance criterion is applied to it at this step.
+## Analytical methods {#sec-analytical}
 
-## Risk-based prioritization of parameters
+Every response will be measured by a validated method, and the methods are listed with their validation references in @tbl-sops. Pool host cell protein will be measured by ELISA (AMV-3012) and reported in nanograms per milligram of antibody. Residual DNA will be measured by qPCR (AMV-3014) and leached Protein A by ELISA (AMV-3016). Infectivity of xenotropic murine leukaemia virus will be measured by TCID50 (AMV-3017) and infectivity of minute virus of mice by TCID50 with a qPCR confirmation (AMV-3018). The charge variant profile of the load will be measured by icIEF (AMV-3013) and compared with the release profile of the cation exchange pool (@sec-criteria).
 
-RA-001 ranked every parameter of the step on its potential impact on a critical quality
-attribute and on its potential to interact with other parameters, and the ranking decided
-the study type. Parameters ranked high on both counts were assigned to the multivariate
-design. Parameters ranked high on impact but low on interaction were assigned to a
-univariate assessment. Parameters held to a platform specification with no credible path to
-a quality attribute were not studied, and their ranges are carried from platform knowledge
-and from the modular claims established on prior products.
+Fragments will be measured by nrCE-SDS (AMV-3020, under the nrCE-SDS procedure SOP-3015). The method decision `{python} AMD["id"]` of `{python} AMD["date"]` set this method for every study that measures fragments, at every step, so that one method spans the train (PCMP-001 §7.8). SEC reads fragments high in samples that still carry host cell protein, because part of the host cell protein elutes in its low molecular weight window (INV-001 finding 6). Fragments are judged on nrCE-SDS results only.
 
-The outcome for this step is `{python} n_mv` parameters in the multivariate design and
-`{python} n_uv` assessed one at a time (§6.1). Load pH, the conductivity of the
-equilibration and first wash buffer and the conductivity of the load were ranked highest,
-because they act on the same binding equilibrium and their interaction is the route by
-which impurity breakthrough occurs. Protein load was carried into the design because the
-impurity mass loaded onto the column scales with it, and the ligand has a finite capacity
-for the species it binds. Operating flow rate was assigned to a univariate assessment,
-because binding of the small, highly charged impurities is fast relative to the residence
-time at every flow rate in the range.
+An effect that is small against the variability of the method that measures it can be separated from that variability only with enough runs. The precision of each assay and the number of runs therefore bound the smallest effect the study can resolve on its response. Method variability enters the residual variance of the fitted models and is not separated from process variability by this design. An apparent effect on a log reduction factor that is small relative to the variability of the infectivity assay will be attributed to the assay rather than to the step. Performance characteristics of each method are held in the validation reports named in @tbl-sops.
 
-The material loaded onto the step is the cation exchange pool, whose attributes are
-controlled by the preceding step under PCP-007. This study varies the parameters of the
-anion exchange step and does not vary the quality of its load. The load material will be
-qualified against the release profile of that pool before execution (§7).
+## Sampling plan {#sec-sampling}
 
-# Materials and methods
+Samples will be taken from the load and from the flow-through pool of every run. The load sample supports the material qualification in @sec-criteria and provides the input concentration against which clearance is calculated. The pool sample carries the responses.
 
-## Scale-down model and its qualification
+The screening design includes `{python} c_scr` centre point replicates and the response surface design includes `{python} c_rsm`. Each replicate is executed as a separate run from a separate load aliquot, for the reason given in @sec-sdm. Load and pool samples will be retained frozen so that a response can be re-tested if an assay result is invalidated.
 
-The study will be executed on a scale-down model of the commercial anion exchange column,
-qualified under SOP-1001. The model keeps the bed height, the linear flow velocity, the
-protein load in grams of antibody per litre of resin, and the equilibration, load, wash and
-chase volumes expressed in column volumes. Scaling on these variables holds the residence
-time and the impurity mass per unit of ligand equal to the commercial step, and those are
-the two quantities on which the binding equilibrium depends. The resin, the buffers and the
-packing method are the same as at commercial scale.
+Viral clearance runs will be sampled at the spiked load and at the pool. The log reduction factor will be calculated from the total infectivity in the load and the total infectivity in the pool. Cytotoxicity and interference controls will be run for each matrix, and the detection limit of the assay will be reported with any result that reaches it [@ichq5a].
 
-Qualification will compare the model against commercial-equivalent runs on step yield, pool
-host cell protein, residual DNA, leached Protein A, the pressure across the bed and the
-shape of the flow-through peak. The model will be accepted where no statistically
-significant difference in these attributes is found between the scales. Where a difference
-is found, the model should be modified and requalified before the characterization runs
-begin, and no characterization run may be executed on an unqualified model [@fda2011]. The
-qualification record is held with the study data and is cited in PCR-008.
+Residual DNA and leached Protein A will be measured on the pool of every run in the response surface design. They are monitored to confirm the clearance the mechanism in @sec-uo predicts, and they are not fitted as responses of the design. Where either attribute moves with a parameter, the observation will be reported and carried into the risk assessment rather than used to set a range.
 
-The viral clearance runs will be executed on the same scale-down model in a dedicated
-containment laboratory, as a small-scale spiking study [@ichq5a]. The spiking model will be
-qualified separately, because adding a virus spike to the load changes the load itself.
-That qualification will confirm that the spiked load matches the unspiked load in protein
-concentration, in pH and in conductivity, and that the spike volume stays below the
-fraction at which those attributes move. Spiked and unspiked runs will be executed on
-matched load material, so that the clearance results and the impurity results describe the
-same step.
+## Statistical methods {#sec-stats}
 
-The centre point of each design will be executed in replicate. The replicates estimate pure
-error, and pure error is the reference against which lack of fit is tested (§5.5). A
-replicate is a full independent execution of the step and not a repeat measurement of one
-pool, because a repeat injection estimates assay variability and lack of fit must be
-judged against the variability of the process.
+Each parameter will be coded so that the set-point is 0 and the edges of the characterization range are ±1. Coding places the parameters on one scale, so that an effect estimated in coded units is comparable across parameters measured in different physical units. Effects will be converted back to natural units when a range is reported.
 
-## Operation
+The screening data will be analysed by ordinary least squares with every main effect and every two-factor interaction in the model. An effect will be reported as twice the coded coefficient, which is the change in the response across the full characterization range of the parameter. Terms significant at p < `{python} f"{alpha:g}"` will be identified as active. The screening model identifies which parameters act on which response, and it is not the model from which an operating region is derived.
 
-The step will be operated as it is operated at commercial scale, under SOP-2011. The column
-is equilibrated with the equilibration buffer, loaded with the cation exchange pool
-adjusted to the target pH and conductivity, and chased with the first wash buffer. The
-flow-through and the chase are collected as a single pool from the start of the load to the
-end of the chase. The pool is filtered and held for the virus filtration step, and the hold
-conditions are those of the commercial process.
+The response surface data will be analysed with a full quadratic model in the `{python} n_mv` multivariate parameters, fitted on the coded factors. This is the predictive model of the study. The operating region and the proven acceptable ranges of the multivariate parameters will be derived from it, and PCR-008 will report the coefficients, the analysis of variance and the diagnostics for each response. A quality attribute is judged on a single batch, because its criterion applies to each batch. The model predicts the mean response, and at the edge of a region drawn on mean predictions a single batch meets its criterion only about half the time if variability is symmetrical. The judgement of a quality attribute therefore uses the `{python} pi` % prediction interval of a single batch, and viral clearance is judged on the mean prediction at the worst case within the NOR (@sec-par).
 
-Resin, buffers and column packing are controlled to platform specification. Each resin lot
-will be released against its certificate of analysis and packed and tested under SOP-2008,
-and a packed column will be accepted on plate count and peak asymmetry before use. Buffer
-lots will be prepared and released under the site buffer preparation procedure and used
-within their assigned expiry. These inputs are identity and quality controlled, and they
-are not characterized in this study.
+Each response surface model is reported with R², adjusted R² and predicted R², computed from the prediction error sum of squares, with the model F-test, and with the lack of fit test against pure error from the centre point replicates. PCMP-001 Version 2.0 (§7.2) sets four conditions for a model to be adequate for prediction, and they replace the adequacy rule of Version 1.0:
 
-The chromatography system will be operated in a temperature-controlled chamber under
-calibration and change control. The system is identified in @tbl-equip, and its calibration
-status will be verified before the first run and confirmed at the end of the execution
-period.
+1. The model F-test is significant at α = `{python} f"{alpha:g}"`.
+2. Lack of fit against pure error is not significant at α = `{python} f"{alpha_lof:g}"`.
+3. Predicted R² falls short of R² by no more than `{python} f"{gap_lim:.2f}"`. This is the limit on overfitting, because a model that fits its own runs much better than it predicts runs left out of the fit has more terms than the data support.
+4. The residuals show no pattern against the predicted values or the run order, and no single run dominates the fit.
+
+PCMP-001 sets the levels and the limit of the first three conditions. The fourth carries no limit in PCMP-001, and this plan tests it by the two tests that every plan of the campaign applies. The absolute residuals are regressed on the predicted values, and the residuals are regressed on the run order, each at α = `{python} f"{res_alpha:g}"`. A significant slope shows a spread that grows with the level of the response in the first case and a drift over the execution in the second. A run whose Cook's distance exceeds `{python} f"{cook_factor:g}"`/n, where n is the number of runs in the design, is taken to dominate the fit. The factor of `{python} f"{cook_factor:g}"` is the usual convention, and for the `{python} n_rsm` runs of the response surface design the cut-off is `{python} f"{cook:.2f}"`.
+
+A parameter with no active term in either model will be described as having no detectable effect on that response over the range studied. The range studied bounds that statement, and it will be stated with the range attached.
+
+Capability at commercial scale is estimated from the integrated process model of the train (PCMP-001 §6.5). The model runs `{python} f"{V['n_monte_carlo']:,}"` simulated batches through every step in sequence, with each process parameter drawn from a normal distribution centred on its set-point, with a standard deviation of the width of its NOR divided by `{python} f"{sd_div:g}"` (@sec-par). Capability is reported as Cpk against the drug substance criterion, one-sided for each attribute of this step, since each of their criteria has one limit. It is judged in the master report PCMR-001 against two values (PCMP-001 §7.9). A Cpk of at least `{python} f"{CPK_TARGET:g}"` is expected in routine manufacture, and a Cpk below `{python} f"{CPK_MIN:g}"` needs an action in the control strategy. A Cpk between the two values is acceptable, and PCMR-001 then names the parameters that drive it. The same simulation gives, for each attribute, the probability that the drug substance is out of specification. The estimate carries no source of commercial variability that the scale-down model does not reproduce, and confirmation at commercial scale is a Stage 2 activity [@fda2011].
+
+# Study design {#sec-design}
+
+## Factors, ranges and study type {#sec-factors}
+
+@tbl-params lists the parameters, their set-points, the range that will be studied, the normal operating range and the study type assigned in RA-001.
 
 ```{python}
 #| output: asis
-show(eq_aex)
-print()
-print(": Instrumented system used for the anion exchange characterization runs. {#tbl-equip}")
+T.frame(pp, "Parameters, ranges and study type for the anion exchange characterization.", "tbl-params",
+        merge=["Study type"], align=["P{2.1cm}", "P{4.4cm}", "l", "r", "r", "r"],
+        notes=[("", "NOR, normal operating range.")], notes_per_row=True).show()
 ```
 
-## Analytical methods
+The range studied is wider than the normal operating range for every parameter. A study confined to the normal operating range would place the edge of the operating region outside the data, and a proven acceptable range may only be claimed over settings that were actually run [@amab2009].
 
-Every response will be measured by a validated method, and the methods are listed with
-their validation references in @tbl-sops. Pool host cell protein will be measured by ELISA
-(AMV-3012) and reported in nanograms per milligram of antibody. Residual DNA will be
-measured by qPCR (AMV-3014) and leached Protein A by ELISA (AMV-3016). Infectivity of
-xenotropic murine leukaemia virus will be measured by TCID50 (AMV-3017) and infectivity of
-minute virus of mice by TCID50 with a qPCR confirmation (AMV-3018). The charge variant
-profile of the load will be measured by icIEF (AMV-3013) and compared with the release
-profile of the cation exchange pool (§7).
+The load pH range is bounded above by the pH at which a fraction of the antibody would begin to bind and yield would fall. The range in @tbl-params sits below that pH, so product loss is not expected anywhere in the design. The conductivity of the equilibration and first wash buffer is set by buffer preparation and is the more closely controlled of the two conductivities, and its range reflects the spread that buffer preparation and column equilibration can produce. The conductivity of the load is set by the cation exchange pool and by its adjustment, so its range reflects what the preceding step delivers rather than a choice made at this step. The protein load range extends well above the set-point, because the impurity mass carried with the antibody scales with the load and the ligand has a finite capacity for the bound species.
 
-An effect smaller than the variability of the method that measures it cannot be
-separated from that variability. The precision of each assay therefore bounds the
-smallest effect the study can resolve on its response. Method variability enters the
-residual variance of the fitted models and is not separated from process variability by
-this design. An apparent effect on a log reduction factor that is small relative to the
-variability of the infectivity assay will be attributed to the assay rather than to the
-step. Performance characteristics of each method are held in the validation reports
-named in @tbl-sops and are not repeated here.
-
-## Sampling plan
-
-Samples will be taken from the load and from the flow-through pool of every run. The load
-sample supports the material qualification in §7 and provides the input concentration
-against which clearance is calculated. The pool sample carries the responses.
-
-The screening design includes `{python} cp_scr` centre point replicates and the response
-surface design includes `{python} cp_rsm`. Each replicate is executed as a separate run
-from a separate load aliquot, for the reason given in §5.1. Load and pool samples will be
-retained frozen so that a response can be re-tested if an assay result is invalidated.
-
-Viral clearance runs will be sampled at the spiked load and at the pool. The log reduction
-factor will be calculated from the total infectivity in the load and the total infectivity
-in the pool. Cytotoxicity and interference controls will be run for each matrix, and the
-detection limit of the assay will be reported with any result that reaches it [@ichq5a].
-
-Residual DNA and leached Protein A will be measured on the pool of every run in the
-response surface design. They are monitored to confirm the clearance the mechanism in §4.1
-predicts, and they are not fitted as responses of the design. Where either attribute moves
-with a parameter, the observation will be reported and carried into the risk assessment
-rather than used to set a range.
-
-## Statistical methods
-
-Each parameter will be coded so that the set-point is 0 and the edges of the
-characterization range are ±1. Coding places the parameters on one scale, so that an effect
-estimated in coded units is comparable across parameters measured in different physical
-units. Effects will be converted back to natural units when a range is reported.
-
-The screening data will be analysed by ordinary least squares with every main effect and
-every two-factor interaction in the model. An effect will be reported as twice the coded
-coefficient, which is the change in the response across the full characterization range of
-the parameter. Terms significant at p < 0.05 will be identified as active. The screening
-model identifies which parameters act on which response, and it is not the model from which
-an operating region is derived.
-
-The response surface data will be analysed with a full quadratic model in the
-`{python} n_mv` multivariate parameters, fitted on the coded factors. This is the
-predictive model of the study. The operating region, the proven acceptable ranges and the
-capability estimate will all be derived from it, and PCR-008 will report the coefficients,
-the analysis of variance and the diagnostics for each response.
-
-Model adequacy will be judged on four things. The coefficient of determination adjusted for
-the number of terms and the predicted coefficient of determination computed from the
-prediction error sum of squares will be reported together, because a large gap between them
-indicates a model that fits the data it was built on and predicts poorly away from them.
-The lack of fit sum of squares will be tested against pure error from the centre point
-replicates by an F test. Residuals will be inspected against the predicted values and on a
-normal quantile plot. No numeric threshold for the coefficient of determination is fixed in
-advance, because what an adequate fit means depends on the size of the effects the model
-must resolve relative to the pure error of the step, and the decision rules that do apply
-are stated in §7.
-
-A parameter with no active term in either model will be described as having no detectable
-effect on that response over the range studied. The range studied bounds that statement,
-and it will be stated with the range attached.
-
-Capability at commercial scale will be estimated by Monte-Carlo simulation of
-`{python} f"{V['n_monte_carlo']:,}"` batches, with every parameter drawn from within its
-normal operating range and propagated through the fitted models and their residual
-variance. A one-sided capability index will be reported for each governed attribute against
-the criterion that applies to it. The estimate carries the residual variance of the fitted
-models and the spread of the parameters inside their normal operating ranges, and it
-carries no source of commercial variability that the scale-down model does not reproduce.
-Confirmation at commercial scale is a Stage 2 activity [@fda2011].
-
-# Study design
-
-## Factors, ranges and study type
-
-@tbl-params lists the parameters, their set-points, the range that will be studied, the
-normal operating range and the study type assigned in RA-001.
+@tbl-codes gives the letter codes used for the multivariate parameters in the design matrices in Appendix A and Appendix B, and the same codes will be used for the model terms reported in PCR-008.
 
 ```{python}
 #| output: asis
-show(plan_params(UO))
-print()
-print(": Parameters, ranges and study type for the anion exchange characterization. {#tbl-params}")
+T.frame(codes, "Coded factor legend for the multivariate designs. All " + W(n_mv) + " factors are "
+        "studied in the screening and in the response surface design.", "tbl-codes", align="cll").show()
 ```
 
-The range studied is wider than the normal operating range for every parameter. A study
-confined to the normal operating range would place the edge of the operating region outside
-the data, and a proven acceptable range may only be claimed over settings that were
-actually run [@amab2009].
+## Screening design {#sec-screening}
 
-The load pH range is bounded above by the pH at which a fraction of the antibody would
-begin to bind and yield would fall. The range in @tbl-params sits below that pH, so product
-loss is not expected anywhere in the design. The conductivity of the equilibration and
-first wash buffer is set by buffer preparation and is the more closely controlled of the
-two conductivities, and its range reflects the spread that buffer preparation and column
-equilibration can produce. The conductivity of the load is set by the cation exchange pool
-and by its adjustment, so its range reflects what the preceding step delivers rather than a
-choice made at this step. The protein load range extends well above the set-point, because
-the impurity mass carried with the antibody scales with the load and the ligand has a
-finite capacity for the bound species.
+The `{python} n_mv` multivariate parameters will be studied in a two-level full factorial design of `{python} n_fact` runs, augmented with `{python} c_scr` centre points, for `{python} n_scr` runs in total. A full factorial in these parameters estimates every main effect and every two-factor interaction without confounding, which the interaction between `{python} N["load_ph"]` and `{python} P["wash1_cond"].name` requires. The centre points estimate pure error and give a test for curvature, and curvature at the centre indicates that a quadratic model is needed.
 
-@tbl-legend gives the letter codes used for the multivariate parameters in the design
-matrices in Appendix A and Appendix B, and the same codes will be used for the model terms
-reported in PCR-008.
+Runs will be executed in randomized order within one resin lot and one load lot. Randomization protects the estimates against drift in the load material, in the resin or in the assay over the execution period. Where the design cannot be completed within one load lot, the lots should be treated as a block and the block term reported with the effects. The planned matrix is given in Appendix A.
+
+## Response-surface design {#sec-rsm}
+
+The same parameters will be studied in a face-centred central composite design of `{python} n_rsm` runs. The design adds `{python} n_axial` axial runs at the faces of the cube to `{python} n_fact` factorial runs and `{python} c_rsm` centre points. Axial points placed at the faces keep every run inside the characterization range, which an axial distance beyond the faces would not.
+
+The quadratic terms this design supports are needed because the net charge on a protein or a capsid surface changes most steeply near its isoelectric point, so clearance rises more sharply over the part of the load pH range that lies nearest the isoelectric point of the bound species than over the rest of it. A design with two levels in each parameter would fit that curve as a straight line and would put the edge of the operating region at the wrong pH. The planned matrix is given in Appendix B.
+
+The response surface design will be executed on load material qualified under the criteria in @sec-criteria. Where it cannot be executed on the same load lot as the screening design, the second lot will be compared with the first on charge variant profile, host cell protein and protein concentration before the runs begin.
+
+## Univariate assessment {#sec-univariate}
+
+`{python} P["flow"].name` will be assessed one at a time over the range in @tbl-params, with every other parameter held at its set-point. The low, the centre and the high setting of the range will be executed, and pool host cell protein and step yield will be measured on each. A viral clearance run at the high setting will be included, because residence time is the mechanism by which flow rate could act on clearance and the high setting is the shortest residence time in the range.
+
+A univariate assessment cannot resolve an interaction between flow rate and another parameter, and the claim it supports is bounded by the assumption that the effect of flow rate does not depend on where the other parameters sit. Binding of the small, highly charged impurities is fast relative to the residence time at every flow rate in the range, so residence time is not expected to limit their clearance anywhere in the design. Virus particles reach the ligand more slowly (@sec-uo), and the viral clearance run at the high setting tests them. Should the assessment show an effect of flow rate on any response, the parameter will be carried into a multivariate design before its range is claimed.
+
+The result will support the range for flow rate as a proven acceptable range, and it will not enter the response surface model.
+
+# Acceptance and decision criteria {#sec-criteria}
+
+PCR-008 will report the executed study against each rule of this section, and a criterion that is not met will be dispositioned as a deviation rather than revised after the fact. The rules are those of Version 1.0, except where PCMP-001 Version 2.0 sets a rule in place of one, and each item below says which applies. Several rules set no numerical threshold, in Version 1.0 or in PCMP-001 Version 2.0, namely the load profile, the match of the spiked load, the comparison of a second load lot, an effect of flow rate, an effect attributed to the infectivity assay, how far inside its acceptable range a parameter must be held to be well controlled and when its risk of leaving that range is high. This revision adds none, and PCR-008 states the approach it applies to each.
+
+1. Scale-down model (PCMP-001 Version 2.0). The model is qualified for pool host cell protein when the conclusion over the NOR is the same with the offset at either end of its `{python} ci_pct` % confidence interval, and the decision is made at analysis (@sec-sdm). A model not qualified for an output is not used for that output. This replaces the Version 1.0 rule that accepted the model where a test found no statistically significant difference between the scales.
+2. Load material (Version 1.0). Load material will be accepted as representative where its charge variant profile by icIEF, its host cell protein content, its protein concentration, its pH and its conductivity fall within the release profile of the cation exchange pool. Load material outside that profile is not representative of routine operation, and a design executed on it will be invalidated for the definition of the operating region and re-executed in full on a qualified load. Data from an invalidated execution will be retained and may be used to investigate and confirm the cause, and they will not be used to set a range, a classification or a clearance claim.
+3. Model adequacy (PCMP-001 Version 2.0). A response surface model is adequate when it passes the four conditions of @sec-stats. A model that fails the lack of fit test or the limit on overfitting is either refitted with a justified change of terms or transformation, or it is not used to set a range (PCMP-001 §7.2). For the model behind a widening bound, PCMP-001 §7.5 asks only the first three conditions (item 7). This replaces the Version 1.0 rule that accepted a model on its lack of fit test and its residual diagnostics and allowed a model with significant lack of fit where its residual standard error was small against the margin to the limit.
+4. Outputs against their criteria (Version 1.0, with the criteria of PCMP-001 Version 2.0). Each governed response will be judged against the criterion that applies to it at this step. The criteria are the intermediate acceptance criteria of @tbl-iac, judged at manufacturing scale where the output has an offset. Pool host cell protein must meet `{python} CRIT["hcp"]` and fragments `{python} CRIT["lmw"]`, each judged on a single batch through the `{python} pi` % prediction interval. The log reduction factor of XMuLV must meet `{python} CRIT["x"]` and that of MVM `{python} CRIT["m"]`, each judged on the mean prediction at the least favourable combination of NOR low, set-point and NOR high of the multivariate parameters (@sec-par). Step yield carries no acceptance criterion at this step and will be reported as a performance attribute.
+5. Operating region (Version 1.0, with the statistic of PCMP-001 Version 2.0). The multivariate operating region will be declared over the part of the characterized region in which every governed response meets its criterion simultaneously. The normal operating range of every parameter must fall inside that region. Where it does not, the normal operating range will be narrowed in the control strategy and the change will be carried into PCMR-001. PCMP-001 Version 2.0 draws this region, its design space, on the single-batch limit. A setting lies inside it when every quality attribute meets its criterion at both ends of the `{python} pi` % prediction interval of a single run, and viral clearance meets its claim on its mean prediction.
+6. Classification (Version 1.0, with the rules of PCMP-001 Version 2.0). Each parameter will be classified under SOP-4001 from the effect demonstrated on a critical quality attribute and from the capability with which the parameter is held. A parameter that acts on a critical quality attribute and is held well inside its acceptable range is a well-controlled critical process parameter. A parameter that acts on process performance without acting on a quality attribute is a key process parameter. A parameter with no demonstrated effect on either is a general process parameter, and the range studied bounds that classification. PCMP-001 Version 2.0 adds that an attribute is affected by a parameter when a term that contains the parameter is significant at α = `{python} f"{alpha:g}"` (its §6.2). The report states the size of each effect across the proven acceptable range and the margin between that range and the NOR, and gives the reason for each class from them (its §7.7). Its §7.7 also classes a parameter with such an effect and a high risk of leaving its acceptable range as a critical process parameter.
+7. Verification of the platform worst cases (PCMP-001 Version 2.0). The criteria of the upstream steps assume that this step clears host cell protein at least `{python} f"{hcp_fold:g}"`-fold and leached Protein A at least `{python} f"{lpa_fold:g}"`-fold. The host cell protein criteria of the `{python} hcp_up` pools and the leached Protein A criterion of the `{python} lpa_up` pool are carried back through these values (PCMP-001 §7.3). The host cell protein assumption is checked in PCR-008 on the response surface model of pool host cell protein, with the clearance factor taken as the nominal host cell protein of the load divided by the predicted pool value, by the rule of PCMP-001 §7.5. The model is evaluated at every combination of NOR low, set-point and NOR high of the multivariate parameters, with the NOR and the set-point as characterized, so that a later change of a NOR does not move a criterion. Where the lowest clearance predicted within the NOR is below the platform value, the one-sided `{python} vb` % prediction bound of a single batch at the least favourable combination replaces the platform value, and the upstream criteria become stricter. Where that bound is better than the platform value, and the response surface model behind it meets the first three adequacy conditions of PCMP-001 §7.2 (a significant model, no significant lack of fit and the limit on overfitting) and is not an exact fit, the bound replaces the platform value and the upstream criteria become wider. The fourth condition, on the residuals and on influential runs, does not decide the change, and PCR-008 examines it and states whether the bound depends on a single run. Otherwise the platform value stands. Neither the point prediction nor a confidence bound of the mean ever replaces it. For leached Protein A, PCMP-001 §7.5 lets the platform value stand, because leached Protein A is monitored on the pools (@sec-sampling) and is not a response of the designs.
+8. Completion (Version 1.0, with the criteria of PCMP-001 Version 2.0). The study will be judged complete when the scale-down model is qualified for pool host cell protein, every planned run is executed or dispositioned, every response has an adequate model or a stated reason for the absence of one, the proven acceptable ranges bracket the normal operating ranges, and the clearance of both model viruses meets the claims of this step at the worst case within the NOR.
+
+A change of a criterion by the verification of item 7 is argued by its risk in PCR-008. The report states who bears the risk, the patient or the producer, and whether and where an excursion would be detected, by an in-process test or by a release test. It also states what the downstream steps must then clear, and the probability that the drug substance is out of specification (PCMP-001 §7.5).
+
+# Proven acceptable ranges (planned analysis) {#sec-par}
+
+Each proven acceptable range is judged against the intermediate acceptance criterion of its attribute (@tbl-iac). For host cell protein and fragments no step after anion exchange changes the attribute on the platform, so the drug substance criterion applies to the pool of this step. For the two model viruses the step is held to its platform claim, the log reduction that it delivered on the platform. The XMuLV claims of `{python} x_steps` sum to `{python} f"{x_sum:g}"` log10 against a cumulative requirement of `{python} f"{x_req:g}"` log10, and the MVM claims of `{python} m_steps` sum to `{python} f"{m_sum:g}"` log10 against `{python} f"{m_req:g}"` log10. A shortfall of this step against its claim therefore cannot be made up by the surplus of another step. No result of the studies under this plan enters the criteria of this step, and the basis column of @tbl-iac shows each criterion in force at its a priori value.
 
 ```{python}
 #| output: asis
-show(D.factor_legend_df(UO))
-print()
-print(": Coded factor legend for the multivariate designs. {#tbl-legend}")
+T.iac_derivation([UO]).show()
 ```
 
-## Screening design
+A proven acceptable range is the range of one parameter over which the attribute it governs stays within its criterion, with the other parameters held or varied as the analysis states. Two analyses will be run for every pair of a parameter and an attribute it governs, and both will be reported.
 
-The `{python} n_mv` multivariate parameters will be studied in a two-level full factorial
-design of `{python} n_fact_pts` runs, augmented with `{python} cp_scr` centre points, for
-`{python} n_scr` runs in total. A full factorial in these parameters estimates every main
-effect and every two-factor interaction without confounding, which the interaction between
-load pH and wash conductivity requires. The centre points estimate pure error and give a
-test for curvature, and curvature at the centre indicates that a quadratic model is needed.
+The first holds the other parameters at their set-points and evaluates the fitted response surface model across the parameter's characterization range. The second varies the other parameters within their normal operating ranges by Monte-Carlo simulation of the fitted model, including its residual variance, and reads the range over which the predictive interval of the response stays within the criterion. The interval used is two sided and covers the central `{python} pi` % of the simulated distribution. The normal operating ranges in the control strategy will be set from the second analysis, and the first will be reported beside it.
 
-Runs will be executed in randomized order within one resin lot and one load lot.
-Randomization protects the estimates against drift in the load material, in the resin or in
-the assay over the execution period. Where the design cannot be completed within one load
-lot, the lots should be treated as a block and the block term reported with the effects.
-The planned matrix is given in Appendix A.
+PCMP-001 Version 2.0 (§6.4) defines the second analysis, which it calls the NOR-propagated analysis, and what it compares with the criterion. Each other parameter is drawn from a normal distribution centred on its set-point, with a standard deviation equal to the width of its NOR divided by `{python} f"{sd_div:g}"`, and clipped to the characterization range. The draw treats each NOR as ±`{python} f"{sd_div / 2:g}"` standard deviations of the routine variation of its parameter. For pool host cell protein and fragments the analysis compares the `{python} pi` % prediction interval of a single batch, from the `{python} f"{p_lo:g}"`th to the `{python} f"{p_hi:g}"`th percentile of the simulated batches, which includes the model residual and the uncertainty of the fitted coefficients. For an upper limit the `{python} f"{p_hi:g}"`th percentile must not exceed the limit. For XMuLV and MVM it compares the worst case within the NOR. At each setting the other parameters are set to every combination of their NOR low, set-point and NOR high, `{python} n_comb` combinations in all, and the lowest mean predicted log reduction factor must meet the claim, because viral clearance is validated under worst-case conditions. For viral clearance this replaces the Version 1.0 rule, which judged clearance on the predictive interval of the simulated batches.
 
-## Response-surface design
+The analysis will be evaluated on a grid of `{python} D.PAR_GRID` settings across the characterization range, with `{python} f"{D.PAR_MC_N:,}"` Monte-Carlo draws at each setting, under a fixed random seed recorded with the analysis (@sec-data). A range will be reported only where the acceptable settings form one contiguous interval containing the set-point. Where they do not, the discontinuity will be reported as it stands and no range will be claimed for that pair.
 
-The same parameters will be studied in a face-centred central composite design of
-`{python} n_rsm` runs. The design adds `{python} n_axial` axial runs at the faces of the
-cube to `{python} n_fact_pts` factorial runs and `{python} cp_rsm` centre points. Axial
-points placed at the faces keep every run inside the characterization range, which an axial
-distance beyond the faces would not.
+Each range will be reported in the natural units of the parameter together with the criterion it was measured against (@sec-criteria). For each governed attribute the report will also carry a plot of the response against its governing parameter, with the acceptable region shaded green and the set-point and the normal operating range marked. The governing parameter is the multivariate parameter with the largest main effect on that attribute in the response surface model.
 
-The quadratic terms this design supports are needed because the net charge on a protein or
-a capsid surface changes most steeply near its isoelectric point, so clearance rises more
-sharply over the part of the load pH range that lies nearest the isoelectric point of the
-bound species than over the rest of it. A design with two levels in each parameter would
-fit that curve as a straight line and would put the edge of the operating region at the
-wrong pH. The planned matrix is given in Appendix B.
+PCMP-001 Version 2.0 (§7.6) adds three rules. A range is proven acceptable for an attribute when the NOR-propagated analysis meets the criterion across it, and for a parameter that affects several attributes the range carried into the control strategy is the intersection of its ranges. Where an output does not meet its criterion even at the set-point, PCR-008 reports that no proven acceptable range exists for that attribute and states the consequence for the NOR. A range that reaches the edge of the characterization range is reported as reaching it, and no claim is made beyond it.
 
-The response surface design will be executed on load material qualified under the criteria
-in §7. Where it cannot be executed on the same load lot as the screening design, the second
-lot will be compared with the first on charge variant profile, host cell protein and
-protein concentration before the runs begin.
+The univariate proven acceptable range for operating flow rate will be derived from the assessment in @sec-univariate and reported beside the multivariate ranges, with the assumption stated in @sec-univariate attached to it. Where a proven acceptable range does not contain the whole normal operating range, the normal operating range will be narrowed rather than the criterion relaxed.
 
-## Univariate assessment
+# Data management and integrity {#sec-data}
 
-Operating flow rate will be assessed one at a time over the range in @tbl-params, with
-every other parameter held at its set-point. The low, the centre and the high setting of
-the range will be executed, and pool host cell protein and step yield will be measured on
-each. A viral clearance run at the high setting will be included, because residence time is
-the mechanism by which flow rate could act on clearance and the high setting is the shortest
-residence time in the range.
+Data generated under this plan will follow the ALCOA+ principles. Raw data will be captured in the chromatography control system, in the laboratory information system and on the analytical instruments that generate them, with audit trails enabled.
 
-A univariate assessment cannot resolve an interaction between flow rate and another
-parameter, and the claim it supports is bounded by the assumption that the effect of
-flow rate does not depend on where the other parameters sit. Binding of the small,
-highly charged impurities is fast relative to the residence time at every flow rate in
-the range, so residence time is not expected to limit clearance anywhere in the design.
-Should the assessment show an effect of flow rate on any response, the parameter will be
-carried into a multivariate design before its range is claimed.
+Each run will carry the identity of the resin lot, the packed column, the load lot, the buffer lots, the instrument and the analyst. Chromatograms and instrument files will be retained in their original electronic form. A run that is aborted or that departs from SOP-2011 will be recorded with the reason, and the disposition of its data will be decided before the analysis begins.
 
-The result will support the range for flow rate as a proven acceptable range, and it will
-not enter the response surface model.
+The statistical analysis will be executed by a scripted analysis held under version control, and the script, its inputs and its outputs will be retained with the study record. The Monte-Carlo analyses use a fixed random seed of `{python} D.PAR_SEED`, so that a reported range can be reproduced exactly from the same data. Any change to the analysis after the first execution will be recorded with its reason.
 
-# Acceptance and decision criteria
+Data will be reviewed by a second qualified person against the raw records before the analysis is run, and the review will be documented. Deviations from this plan will be recorded and dispositioned in PCR-008 under the site deviation procedure, with an impact assessment for each.
 
-This section states the rules by which the study will be judged. PCR-008 will report the
-executed study against each of them, and a criterion that is not met will be dispositioned
-as a deviation rather than revised after the fact.
+# Roles and responsibilities {#sec-roles}
 
-The scale-down model will be accepted where the qualification in §5.1 finds no
-statistically significant difference between the model and commercial-equivalent operation
-on the compared attributes. An unqualified model releases no characterization run.
-
-Load material will be accepted as representative where its charge variant profile by
-icIEF, its host cell protein content, its protein concentration, its pH and its
-conductivity fall within the release profile of the cation exchange pool. Load material
-outside that profile is not representative of routine operation, and a design executed
-on it will be invalidated for the definition of the operating region and re-executed in
-full on a qualified load. Data from an invalidated execution will be retained and may be
-used to investigate and confirm the cause, and they will not be used to set a range, a
-classification or a clearance claim.
-
-A model will be accepted as adequate where the lack of fit test in §5.5 returns p ≥ 0.05
-against pure error and the residual diagnostics show no structure. Where lack of fit is
-significant, the model may still be used for prediction if the residual standard error is
-small relative to the margin between the predicted response and its limit, and the
-justification for using it will be recorded in PCR-008. A model that is neither adequate
-nor justified supports no range, and the affected response will be reported without a
-predictive model.
-
-Each governed response will be judged against the criterion that applies to it at this
-step. Pool host cell protein will be judged against the in-process limit of
-`{python} f"{acc_hcp[1]:.3g}"` ng/mg, which is carried back from the drug substance
-criterion of `{python} f"{hcp_ds:g}"` ng/mg through the clearance the downstream steps
-deliver and divided by a safety factor of `{python} f"{hcp_sf:g}"`. Clearance of
-xenotropic murine leukaemia virus will be judged against a step floor of
-`{python} f"{acc_xmulv[0]:.2f}"` log10, and clearance of minute virus of mice against a
-step floor of `{python} f"{acc_mvm[0]:.2f}"` log10. Each floor is the cumulative
-requirement for that virus, `{python} f"{xmulv_req:g}"` and `{python} f"{mvm_req:g}"`
-log10 respectively, less the clearance credited to the other contributing steps. Step
-yield carries no acceptance criterion at this step and will be reported as a performance
-attribute.
-
-The multivariate operating region will be declared over the part of the characterized
-region in which every governed response meets its criterion simultaneously. The normal
-operating range of every parameter must fall inside that region. Where it does not, the
-normal operating range will be narrowed in the control strategy and the change will be
-carried into PCMR-001.
-
-Each parameter will be classified under SOP-4001 from the effect demonstrated on a critical
-quality attribute and from the capability with which the parameter is held. A parameter
-that acts on a critical quality attribute and is held well inside its acceptable range is a
-well-controlled critical process parameter. A parameter that acts on process performance
-without acting on a quality attribute is a key process parameter. A parameter with no
-demonstrated effect on either is a general process parameter, and the range studied bounds
-that classification.
-
-The study will be judged complete when the scale-down model is qualified, every planned run
-is executed or dispositioned, every response has an adequate model or a stated reason for
-the absence of one, the proven acceptable ranges bracket the normal operating ranges, and
-the clearance measured for both model viruses meets the step floors given above.
-
-# Proven acceptable ranges (planned analysis)
-
-A proven acceptable range is the range of one parameter over which the attribute it governs
-stays within its criterion, with the other parameters held or varied as the analysis
-states. Two analyses will be run for every pair of a parameter and an attribute it governs,
-and both will be reported.
-
-The first holds the other parameters at their set-points and evaluates the fitted
-response surface model across the parameter's characterization range. The second varies
-the other parameters within their normal operating ranges by Monte-Carlo simulation of
-the fitted model, including its residual variance, and reads the range over which the
-predictive interval of the response stays within the criterion. The interval used is two
-sided and covers the central 95 % of the simulated distribution. The normal operating
-ranges in the control strategy will be set from the second analysis, and the first will
-be reported beside it.
-
-The analysis will be evaluated on a grid of `{python} D.PAR_GRID` settings across the
-characterization range, with `{python} f"{D.PAR_MC_N:,}"` Monte-Carlo draws at each
-setting, under a fixed random seed recorded with the analysis (§9). A range will be
-reported only where the acceptable settings form one contiguous interval containing the
-set-point. Where they do not, the discontinuity will be reported as it stands and no range
-will be claimed for that pair.
-
-Each range will be reported in the natural units of the parameter together with the
-criterion it was measured against (§7). For each governed attribute the report will also
-carry a plot of the response against its governing parameter, with the acceptable region
-shaded green and the set-point and the normal operating range marked. The governing
-parameter is the multivariate parameter with the largest main effect on that attribute
-in the response surface model.
-
-The univariate proven acceptable range for operating flow rate will be derived from the
-assessment in §6.4 and reported beside the multivariate ranges, with the assumption stated
-in §6.4 attached to it. Where a proven acceptable range does not contain the whole normal
-operating range, the normal operating range will be narrowed rather than the criterion
-relaxed.
-
-# Data management and integrity
-
-Data generated under this plan will be attributable, legible, contemporaneous, original and
-accurate, and the records will be complete, consistent, enduring and available. Raw data
-will be captured in the chromatography control system, in the laboratory information system
-and on the analytical instruments that generate them, with audit trails enabled.
-
-Each run will carry the identity of the resin lot, the packed column, the load lot, the
-buffer lots, the instrument and the analyst. Chromatograms and instrument files will be
-retained in their original electronic form. A run that is aborted or that departs from
-SOP-2011 will be recorded with the reason, and the disposition of its data will be decided
-before the analysis begins.
-
-The statistical analysis will be executed by a scripted analysis held under version
-control, and the script, its inputs and its outputs will be retained with the study record.
-The Monte-Carlo analyses use a fixed random seed of `{python} D.PAR_SEED`, so that a
-reported range can be reproduced exactly from the same data. Any change to the analysis
-after the first execution will be recorded with its reason.
-
-Data will be reviewed by a second qualified person against the raw records before the
-analysis is run, and the review will be documented. Deviations from this plan will be
-recorded and dispositioned in PCR-008 under the site deviation procedure, with an impact
-assessment for each.
-
-# Roles and responsibilities
-
-Responsibilities are assigned by function in @tbl-roles. The functions are those that
-approve this plan, with the addition of virology, which executes the spiking runs in
-containment.
-
-| Function | Responsibility |
-|---|---|
-| Process Development / MSAT | Owns this plan, qualifies the scale-down model, executes the characterization runs and authors PCR-008 |
-| Analytical Development | Performs the validated assays, maintains their validation status and releases the analytical data |
-| Virology | Executes the spiking runs, calculates the log reduction factors and reports the assay controls |
-| Statistics | Approves the designs, fits the models, performs the range and capability analyses and reviews the classification |
-| Manufacturing Science (receiving site) | Reviews the proposed ranges against the control capability of the commercial equipment |
-| Quality Assurance | Approves this plan and PCR-008 and dispositions deviations |
-
-: Responsibilities by function. {#tbl-roles}
-
-The receiving site reviews the ranges before they are fixed, because a range that the
-commercial equipment cannot hold is of no use in a control strategy. Statistics approves
-the designs before execution rather than after, since a design that cannot estimate the
-interaction between load pH and wash conductivity cannot be repaired by analysis.
-
-# Deliverables and schedule
-
-The deliverable of this plan is PCR-008, the process characterization report for the anion
-exchange step. It will report the executed designs, the fitted models and their adequacy,
-the operating region, the proven acceptable ranges, the classification of each parameter,
-the clearance claimed for the step and the contribution this step makes to the control
-strategy. PCR-008 rolls up into PCMR-001, which consolidates the cumulative viral clearance
-claim across the contributing steps.
-
-The study will run in four phases. The scale-down model is qualified first, because no
-characterization run may start on an unqualified model. The screening design is executed
-next, then the response surface design, then the univariate assessment. The viral clearance
-runs may run in parallel with the univariate assessment, because they use a separate
-laboratory and separate load aliquots.
-
-No calendar dates are committed in this plan. The sequence above is the dependency between
-the phases, and the campaign schedule is held in PTP-001.
-
-# Risks and assumptions
-
-The scale-down model may not represent the commercial column. Qualification under SOP-1001
-addresses this risk, and every claim made from the model is bounded by that qualification
-(§5.1). Design spaces are not confirmed at scale at the edges of the ranges, and
-confirmation at commercial scale is a Stage 2 activity.
-
-The load material may not be representative of the routine cation exchange pool. An
-extended neutralized hold of that pool raises its acidic charge variant burden, which
-changes the charge distribution of the species this step is asked to bind and can therefore
-change what the step clears. Load material will be qualified before execution against the
-criteria in §7, and a design executed on non-representative material will be re-executed.
-
-The virus spike may perturb the load. The spike volume will be bounded and the spiked load
-compared with the unspiked load, as §5.1 describes.
-
-Material supply may constrain the execution. The designs together require a large volume of
-cation exchange pool, and pooling several cation exchange batches to obtain it would blur
-the load attributes the study holds constant. Load lots will therefore be scheduled against
-the runs before execution begins.
-
-The study assumes that platform knowledge from X-Mab, Y-Mab and Z-Mab transfers to A-Mab at
-this step, because the separation is charge based and the platform buffer system is
-unchanged. It assumes the resin performs within its qualified life cycle over the execution
-period under SOP-2008. It assumes that parameters not carried into the study are held to
-platform specification, and an excursion in any of them will be recorded as a deviation and
-assessed for impact in PCR-008.
-
-# Approvals
-
-This plan will be executed after approval by the functions listed in the approval record in
-the front matter. Approval by Quality Assurance releases the study for execution. A change
-to this plan after approval will be made by revising the plan and will be approved by the
-same functions before the affected runs are executed.
-
-# Appendices
-
-The matrices below are the planned designs. No result is shown, and the executed matrices
-with their measured responses will be reported in the appendices of PCR-008.
-
-## Appendix A — Planned screening design matrix
-
-The runs are given in coded units, where the set-point is 0 and the edges of the
-characterization range are ±1. The letter codes are given in @tbl-legend and the natural
-settings follow from the ranges in @tbl-params. Run order will be randomized at execution.
+Responsibilities are assigned by function in @tbl-roles. The functions are those that approve this plan, with the addition of virology, which executes the spiking runs in containment.
 
 ```{python}
 #| output: asis
-show(D.planned_matrix_df(UO, "screening"))
+print(md_table(["Function", "Responsibility"], [
+    ["Process Development / MSAT", "Owns this plan, qualifies the scale-down model, executes the "
+     "characterization runs and authors PCR-008"],
+    ["Analytical Development", "Performs the validated assays, maintains their validation status and "
+     "releases the analytical data"],
+    ["Virology", "Executes the spiking runs, calculates the log reduction factors and reports the assay "
+     "controls"],
+    ["Statistics", "Approves the designs, fits the models, performs the range and capability analyses "
+     "and reviews the classification"],
+    ["Manufacturing Science (receiving site)", "Reviews the proposed ranges against the control "
+     "capability of the commercial equipment"],
+    ["Quality Assurance", "Approves this plan and PCR-008 and dispositions deviations"],
+], [32, 68]))
 print()
-print(": Planned screening design matrix, coded units. {#tbl-appa}")
+print(": Responsibilities by function. {#tbl-roles}")
 ```
 
-## Appendix B — Planned response-surface design matrix
+Statistics approves the designs before execution rather than after, since a design that cannot estimate the interaction between `{python} N["load_ph"]` and `{python} P["wash1_cond"].name` cannot be repaired by analysis.
 
-The face-centred central composite design is given in the same coded units. The axial runs
-sit at the faces of the cube, so no run lies outside the characterization range.
+# Deliverables and schedule {#sec-schedule}
+
+The deliverable of this plan is PCR-008, the process characterization report for the anion exchange step. It will report the executed designs, the fitted models and their adequacy, the operating region, the proven acceptable ranges, the classification of each parameter, the clearance of both model viruses against the claims of this step, the verification of the host cell protein clearance against its platform worst case and the contribution this step makes to the control strategy. PCR-008 rolls up into the master report PCMR-001, which consolidates the cumulative viral clearance claim across the contributing steps.
+
+The study will run in four phases. The scale-down model qualification runs come first (@sec-sdm). The screening design is executed next, then the response surface design, then the univariate assessment. The viral clearance runs may run in parallel with the univariate assessment, because they use a separate laboratory and separate load aliquots.
+
+Version 1.0 committed no calendar dates, and the campaign schedule is held in PTP-001. The studies under this plan ran in the windows of @tbl-windows, from the date of the first run of each to the date of its last, as INV-001 preventive action PA3 requires every study record to state. The record names none of the instrumented scale-down systems under calibration and change control of PCMP-001 Table 5.1 for these studies.
 
 ```{python}
 #| output: asis
-show(D.planned_matrix_df(UO, "rsm"))
-print()
-print(": Planned response-surface design matrix, coded units. {#tbl-appb}")
+T.frame(win, "Execution windows of the studies under this plan.", "tbl-windows",
+        align=["l", "P{7.2cm}", "l", "l"], notes=[("a)", WIN_NOTE)], notes_per_row=True).show()
 ```
+
+# Risks and assumptions {#sec-risks}
+
+The scale-down model may not represent the commercial column. The offset rule of @sec-sdm addresses this risk for pool host cell protein. The offsets of fragments and viral clearance are unknown, not zero, and their judgement rests on the spiked scale-down model and on the expectation that the step does not change the fragment level of its load. The operating region is not confirmed at scale at the edges of the ranges, and Stage 2 confirms performance at commercial scale inside the NORs only.
+
+The load material may not be representative of the routine cation exchange pool. A load with more acidic charge variants carries more antibody whose net charge at the load pH is close to neutral, and part of it can bind, so the yield is at risk. Load material will be qualified before execution against the criteria in @sec-criteria, and a design executed on non-representative material will be re-executed.
+
+The virus spike may perturb the load. The spike volume will be bounded and the spiked load compared with the unspiked load, as @sec-sdm describes.
+
+Material supply may constrain the execution. The designs together require a large volume of cation exchange pool, and pooling several cation exchange batches to obtain it would blur the load attributes the study holds constant. Load lots will therefore be scheduled against the runs before execution begins.
+
+The study assumes that platform knowledge from X-Mab, Y-Mab and Z-Mab transfers to A-Mab at this step, because A-Mab has an isoelectric point well above the load pH range and passes through the bed as the platform antibodies do, and the platform buffer system is unchanged. It assumes the resin performs within its qualified life cycle over the execution period under SOP-2008. It assumes that parameters not carried into the study are held to platform specification, and an excursion in any of them will be recorded as a deviation and assessed for impact in PCR-008.
+
+# Approvals {#sec-approvals}
+
+This plan will be executed after approval by the functions listed in the approval record in the front matter. Approval by Quality Assurance releases the study for execution. A change to this plan after approval will be made by revising the plan and will be approved by the same functions before the affected runs are executed. This Version 2.0 is the amendment that INV-001 required of each step plan in its corrective action CA2, the amendment of PCP-003 to PCP-010 with the criteria and the fragment method, and it was issued after the runs and approved on its effective date, `{python} ver_eff`.
+
+```{python}
+#| output: asis
+print(appendix_numbering("A"))
+```
+
+# Appendix A — Planned screening design matrix {.unnumbered}
+
+The matrices below are the planned designs. No result is shown, and the executed matrices with their measured responses will be reported in the appendices of PCR-008.
+
+The runs are given in coded units, where the set-point is 0 and the edges of the characterization range are ±1. The letter codes are given in @tbl-codes and the natural settings follow from the ranges in @tbl-params. Run order will be randomized at execution.
+
+```{python}
+#| output: asis
+T.frame(coded(scr), "Planned screening design matrix, coded units.", "tbl-matrix-screening",
+        merge=["Run type"], align="lrrrrr").show()
+```
+
+```{python}
+#| output: asis
+print(appendix_numbering("B"))
+```
+
+# Appendix B — Planned response-surface design matrix {.unnumbered}
+
+The face-centred central composite design is given in the same coded units. The axial runs sit at the faces of the cube, so no run lies outside the characterization range.
+
+```{python}
+#| output: asis
+T.frame(coded(rsm), "Planned response-surface design matrix, coded units.", "tbl-matrix-rsm",
+        merge=["Run type"], align="lrrrrr").show()
+```
+
+<!-- ========================= BODY END ========================= -->
 
 # References {.unnumbered}
 

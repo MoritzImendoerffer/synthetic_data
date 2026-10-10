@@ -47,3 +47,39 @@ Target: `pc_package/PCP-009_virus_filtration.DRAFT.qmd` (instantiated from templ
 3. V1 SDM qualification compares flux decay + integrity test too; record has step yield only (kept V1; PCR-009 records departure).
 4. V1 'unspiked filtrate pool' for protein resolved toward V1 5.2 'same run'.
 5. No helper/engine implementation of residual regressions or Cook's distance (generic tests); 4/n typed as a convention.
+
+## Revision run 2 (2026-10-10, after review run 1 + factual check)
+- Inputs read: feedback-plans-shared-2026-10-10.md, feedback-PCP-009.run1.md, factual-PCP-009.md,
+  content-review-PCP-009.md, data-state-2026-10-10.md, PLAN-LESSONS (rules 4, 8, 10), PCMP-001 re-render (7.2, 7.5, 6.2).
+- Draft unchanged since run 1 (qmd 09:47); run-1 copy saved to scratch PCP-009.run1.qmd.
+- Plan: rebuild body on V1 text verbatim for design/sampling/spiking/decision statements and expectations;
+  changes list keeps old items 1-7 (7 = record, names findings 1 and 5) and adds 8 design space, 9 classification,
+  10 corrections; D-001 sentence verbatim (§5c) in §8; drop Table 5.4 (V1 sampling prose verbatim) and
+  T.methods_by_study (execution record); Table 5.1 regrouped, caption 'under PCMP-001 §7.1'; Tables 6.1/6.2 no
+  constant column; appendix matrices two-level header; residual test via THRESHOLDS residual_alpha/cook_factor.
+- DONE (revision run 2). check_render --render: 3 passes, all hard gates OK each time; explicit quarto pdf + docx;
+  final check_render OK (glyphs, xrefs, 8 complex tables complete, no text into page foot, no repeated index cell,
+  no text < 7.9 pt). PDF 34 pp. 328 sentences, 7133 words of prose (check_render count). No <<NEEDS:>>.
+  D-001 sentence (§5c) verbatim in the rendered PDF text and the DOCX text. DRAFT.txt refreshed (pdftotext -layout).
+  Tables changed and inspected at 110 dpi: 5.1 (regrouped, merged, note c for the run counts), 6.1 and 6.2 (constant
+  columns dropped to captions), 10.1 (rows), 11.1 (unchanged design), A.1 and B.1 (two-level header, coded columns centred).
+  Dropped: Table 5.4 (V1 sampling prose restored verbatim) and T.methods_by_study (execution record; builder untouched).
+- Flags left: V1 word-for-word sentences the review called glosses or codes (phase criterion sentence; 'rather than
+  assert' design-space sentence); gloss tails trimmed from three V1 non-design sentences; shared builders untouched
+  (Table 3.2 type column, Table 7.1 spanner, Table 1.1 note); annex must not anchor on methods_by_study or on the
+  dropped constant columns of Tables 6.1/6.2.
+
+## Final pass (2026-10-10, after review run 2: feedback-PCP-009.final.md)
+- A1: §11 "Each phase begins..." and §12 "If the qualification in §5.1 fails..." quoted in change 3 as Version 1.0
+  gating rules replaced by PCMP-001 §7.1 and removed from the body; §12 keeps the V1 mitigation sentence; the
+  "no output with a criterion is compared at both scales" sentence now stands once, in §5.1.
+- A2: sentence after the V1 success criterion (§7). A3: integrity sentence corrected (§4.1), listed in change 10.
+- A4: yield mechanism restated as hold-up in the fouling layer that grows with volume (§4.1), listed in change 10;
+  V1 expectation unchanged. A5: output count replaced by naming the responses (§1). A6/A7: §11. A8: §7 "criteria in
+  force equal their a priori values (Table 7.1)", asserted in setup. A9: unspiked filtrate pool untouched.
+- B: Tables 3.1/3.2 restatements cut; Table 6.1/6.2 caption restatements cut; INV-002 CAs named; compared outputs
+  named in change 3; classification rule named in change 9; platform worst case defined in change 6; Table 5.1 one
+  criterion per row (only the comparison merged, counts in note b); log10 one way in my tables.
+- Gate: check_render --render with .venv/bin/python, 1 pass, all hard gates OK; quarto pdf + docx; final check_render
+  OK. PDF 34 pp; 331 sentences, 7285 words of prose. D-001 verbatim (PDF and DOCX). No <<NEEDS:>>. DRAFT.txt refreshed.
+  Table pages read at 110 dpi: 5.1 (p16), 5.2 (p17), 6.1 (p19), 6.2 (p20).

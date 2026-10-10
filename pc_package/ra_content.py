@@ -84,7 +84,7 @@ def ra_rows():
             rows.append(dict(step=uo.step, key=key, unit_op=title, param=p.name, pkey=p.key,
                              cqas=cqas, cqa_label=_cqa_label(cqas), severity=sev, quality=quality,
                              o_init=o_init, d_init=d_init, rpn_init=rpn_init,
-                             study=study, priority=prio, fm=c["fm"], eff=c["eff"]))
+                             study=study, priority=prio, fm=_F.fill(c["fm"], p), eff=_F.fill(c["eff"], p)))
     return rows
 
 

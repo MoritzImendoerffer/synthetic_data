@@ -702,6 +702,15 @@ def related_docs_md(doc_id):
                INV["id"]: "Reason for this revision",
                INV2["id"]: "Model adequacy of the response-surface designs",
                }.get(rid, "Sibling — paired document")
+        # the two documents that come first see the later ones as their consumers, not their parents
+        # (RA-001 factual check, 2026-10-10: PCMP-001 was "Parent — master plan" of the assessment it applies)
+        if doc_id == "PTP-001" and rid in ("RA-001", "PCMP-001", "PCMR-001"):
+            rel = {"RA-001": "Risk basis for the study scope, under this plan",
+                   "PCMP-001": "Master plan of the characterization, under this plan",
+                   "PCMR-001": "Master report of the characterization"}[rid]
+        elif doc_id == "RA-001" and rid in ("PCMP-001", "PCMR-001"):
+            rel = {"PCMP-001": "Applies this assessment at campaign level",
+                   "PCMR-001": "Master report of the characterization"}[rid]
         rows.append([rid, f"{cls} ({subject})", rel])
     return md_table(["Document ID", "Title", "Relationship"], rows, [16, 54, 30])
 

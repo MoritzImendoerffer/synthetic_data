@@ -522,8 +522,12 @@ def doe_results(step: str, kind: str, label: Optional[str] = None, superseded: b
     resps = [r for r in resps if r not in untested]
     lmw = [c for c in lmw if c not in untested]
     devs = {} if (superseded or kind == "aug") else _deviation_runs(step, kind)
-    # factors as letter codes with their units; the note gives the names (owner, 2026-10-08)
-    codes = [chr(ord("A") + i) for i in range(len(factors))]
+    # factors as letter codes with their units; the note gives the names (owner, 2026-10-08). The codes are the
+    # report's own (D.factor_letters, screening order), not the column positions: the bioreactor response-surface
+    # file orders duration before pCO2, so positions gave C and D where the report says E and C (PCR-003 check)
+    import doe_report as D
+    letters = D.factor_letters(step)
+    codes = [letters.get(f, chr(ord("A") + i)) for i, f in enumerate(factors)]
     fl, fu, fnote = [], [], []
     for k, f in zip(codes, factors):
         p = cfg.unit_op(step).param(f)

@@ -56,3 +56,29 @@ Scratch: `/tmp/claude-1000/-home-moritz-github-repos-synthetic-data/be14bf3c-e46
   test of the SDM -> offset rule), and list each change in §1.1.
 - Case-study assumption (no impact on product quality) stated as an assumption in §4.1 and §12.
 - Hold study / S-HAR-UNI2 named once in §1.1 as not studies of this plan; never described.
+
+## Revision run 1 (2026-10-10, same author), after feedback-PCP-004.run1.md
+Inputs read: feedback-PCP-004.run1.md, factual-PCP-004.md, content-review-PCP-004.md,
+data-state-2026-10-10.md, rebuilt brief; PCMP-001 re-rendered 11:39 (structure unchanged, section
+refs still valid). Table 3.2 is already merged in PDF (multirow) and DOCX (vMerge).
+Plan: restore V1.0 wording of objectives, qualification design, operation, sampling, statistics,
+criteria, PAR, phases (marking V1.0 text); offset rule per fix list B/err 1 ("would only be recorded";
+no rule for HCP/DNA/clarified turbidity, PCR-004 states approach; runs/data set not named by V1.0);
+no execution claims (A1); drop INV-002 (A2); no "forms"; mechanism corrections (discs, laminar flow,
+radius/sigma, L/m2 volume, centrate SV point, DNA LOQ claim); change list +6 (discrepancy) +7
+(corrections/gaps); tables: 4.1 source+dose notes & wider criterion col, 5.1 RSD/LOQ/analytical
+variance + AMV-3014 row, drop methods_by_study and Table 11.1, 6.1 one number format w/o constant
+column, A.1 planned levels per series (long form, doubled filter series), B.1 method names + legend.
+- [x] revision written (one pass, same author) - [x] gate: 4 runs, all HARD gates OK each time
+- [x] pdf/docx rendered (venv on PATH); changed tables inspected as images: 4.1, 5.1, 6.1, 10.1, A.1, B.1
+- DONE 2026-10-10 12:0x. PDF 35 pp. Gate prose count: 344 sentences, 7139 words. No <<NEEDS:>>.
+- Removed: T.methods_by_study (only "no DoE"), Table 11.1 (phases; prose as V1.0), AMD and DoE abbrevs.
+- Annex builder must now reproduce: tbl-cqas (Category first, merged, header "Quality attribute",
+  3 unmarked notes, notes_per_row); tbl-perf (AMV-3015/3012/3014, RSD/LOQ/accuracy/analytical
+  variance %); tbl-params (md_table, 5 columns, f0 numbers incl. ranges, no study-type column);
+  tbl-levels (long form: Series, Material, Level, Setting; merged Series+Material); tbl-sampling
+  (method names + AMV legend note); tbl-roles (cell text as V1.0).
+- Left (reported): V1.0 design criticisms per coordinator C (shear device single rate, SEC on crude
+  culture, clarified-vs-culture netting DNA adsorption, criterion 2 basis, blend bypassing the sterile
+  filter, <LOQ exclusion, turbidity-series PAR, time-held rule vs retained centrate); helper-defined
+  related_docs_md (no PCP-003/PCP-005/PCR-005) and revision-history cell; Table 3.2 already merged.

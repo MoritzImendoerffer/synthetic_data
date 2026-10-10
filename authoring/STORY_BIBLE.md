@@ -480,8 +480,8 @@ so no NOR or set-point decision moves a criterion or a Version 1.0 number.
   least favourable hold time and temperature. The decision was REVISED: hold-time NOR 100–120 min,
   set-point 110 min, which gives that edge a margin of about 0.11 (values from config and `D.par_margins`).
   Because the revision moves routine operation toward longer holds, confirmation runs were made at the
-  harshest combination within the PAR for the product: pH at the lower end of its range and PAR, hold time
-  and temperature at their NOR highs (S-VI-WC, PD-006-03; three runs, as many as S-CEX-VER;
+  least favourable combination for the product: pH at the lower end of its range and PAR, hold time
+  and temperature at their NOR highs (not "within the PAR": the hold-time and temperature PARs reach further) (S-VI-WC, PD-006-03; three runs, as many as S-CEX-VER;
   `D.vi_worst_case_summary()`). Product quality met every criterion of the step. Cation exchange cleared
   aggregate as required. For fragments every run cleared more than the fold the criteria rely on, but the
   one-sided 95 % lower bound of the three runs fell below it, so the pre-set rule is NOT met. Accepted on its

@@ -315,9 +315,11 @@ def criteria_change(steps: Optional[List[str]] = None, label="tbl-criteria-chang
              ("c)", "Version 1.0 did not report fragments. The attribute was added at Version 2.0."),
              ("d)", "Tightened on verification: a downstream step did worse within its NOR than the "
                     "platform worst case."),
+             # "an adequate model" read as all four criteria of PCMP-001 §7.2; the widening rule asks
+             # the first three (PCMP-001 §7.5 rule 2; PCP-007 review run 2, 2026-10-10)
              ("e)", "Widened on verification: a downstream step did better than the platform worst "
-                    "case at the one-sided 95 % prediction bound of a single batch, on an adequate "
-                    "model.")]
+                    "case at the one-sided 95 % prediction bound of a single batch, on a model that "
+                    "meets the first three adequacy criteria of PCMP-001 §7.2.")]
     old_rules = {_rule_code(r): r for r in old["rule"].unique()}
     # a subtraction in a recorded rule is shown with a minus sign, not a hyphen
     notes += [(c, f"Version 1.0 rule: {old_rules[c].replace(' - ', ' − ')}.") for c in sorted(old_rules)]
@@ -1621,7 +1623,8 @@ def cex_verification_runs(label="tbl-cex-verification") -> CTable:
 
 
 def vi_worst_case_runs(label="tbl-vi-worst-case") -> CTable:
-    """S-VI-WC (PD-006-03): each low-pH hold at the harshest combination within the PAR, followed by
+    """S-VI-WC (PD-006-03): each low-pH hold at the low end of the pH PAR with hold time and temperature at the
+    upper ends of their NORs, followed by
     a cation exchange run, and the decision on the clearance factor of each attribute."""
     import doe_report as D
     from amab_process.analytics import _position
@@ -1632,7 +1635,7 @@ def vi_worst_case_runs(label="tbl-vi-worst-case") -> CTable:
             "the hold-time and temperature NORs in force.")
     s, _ = D.vi_worst_case_summary()
     return _vi_cex_runs_table("vi_worst_case.csv", s, note,
-                              "Low-pH holds at the harshest combination within the PAR, each followed by "
+                              "Low-pH holds at the low end of the pH PAR, with hold time and temperature at the upper ends of their NORs, each followed by "
                               "a cation exchange run (study S-VI-WC).", label)
 
 

@@ -632,8 +632,8 @@ def _setpoint_section(doc_id, key, is_report, is_plan) -> str:
         w(c.drop(columns=["folds"]).round(4).to_markdown(index=False) + "\n\n")
         ws, wh = D.vi_worst_case_summary()
         w("- **The decision revised, and S-VI-WC (PD-006-03)** — the hold-time NOR in force was revised after "
-          "the margin analysis above (STORY_BIBLE §9b), and confirmation runs were made at the harshest "
-          "combination within the PAR for the product (`D.vi_worst_case_summary()`, table "
+          "the margin analysis above (STORY_BIBLE §9b), and confirmation runs were made at the low end of the "
+          "pH PAR with hold time and temperature at the upper ends of their NORs (`D.vi_worst_case_summary()`, table "
           "`T.vi_worst_case_runs()`). Hold output of each run against the step's criteria:\n\n")
         w(wh.round(3).to_markdown(index=False) + "\n\n")
         w("  Cation exchange on that material, by the same rule as S-CEX-VER:\n\n")

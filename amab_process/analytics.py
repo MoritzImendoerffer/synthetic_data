@@ -782,7 +782,8 @@ def cex_verification(cfg: Config, proc, feeds, n: int) -> pd.DataFrame:
 
 
 def vi_worst_case(cfg: Config, proc, feeds, n: int) -> pd.DataFrame:
-    """S-VI-WC (PD-006-03): the low-pH hold at the harshest combination within the PAR after the
+    """S-VI-WC (PD-006-03): the low-pH hold at the low end of the pH PAR, hold time and temperature at the upper
+    ends of their NORs, after the
     hold-time NOR was revised (``analytics.vi_worst_case.load_from``, named positions resolved in
     force), each run followed by a cation exchange run at set-point, from its own stream (key 18).
     As many runs as the cation exchange verification (``n``)."""

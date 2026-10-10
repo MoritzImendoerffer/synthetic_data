@@ -1692,7 +1692,7 @@ def cex_verification_summary(runs_file="cex_verification.csv"):
 
 
 def vi_worst_case_summary():
-    """S-VI-WC (PD-006-03): the cation exchange decision on the material of the harshest combination
+    """S-VI-WC (PD-006-03): the cation exchange decision on the material of the least favourable combination
     within the PAR, by the same rule as S-CEX-VER (``cex_verification_summary``), and the hold output
     of each run against the step's intermediate acceptance criteria."""
     s = cex_verification_summary("vi_worst_case.csv")

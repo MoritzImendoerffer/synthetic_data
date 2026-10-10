@@ -10387,10 +10387,12 @@ def build_investigation():
          f"Of the {ns['n_ver']} assumptions that could be tested, {ns['n_ver_met']} were confirmed, "
          f"because the prediction within the NOR was no worse than the platform value."),
         (f"For {ns['n_ver_wsup']} of them the single-batch bound was also better than the platform "
-         f"value, on an adequate model, and the criteria upstream were recalculated with the bound.",
+         f"value, on a model that meets the first three adequacy criteria of PCMP-001 §7.2, and the "
+         f"criteria upstream were recalculated with the bound.",
          "verif",
          f"For {ns['n_ver_wsup']} of them the single-batch bound was also better than the platform "
-         f"value, on an adequate model, and the criteria upstream were recalculated with the bound."),
+         f"value, on a model that meets the first three adequacy criteria of PCMP-001 §7.2, and the "
+         f"criteria upstream were recalculated with the bound."),
     ] + ([   # a bettered bound on a model that is not adequate (the exact fit, owner 2026-10-09)
         ("For the acidic-variant increase at low-pH viral inactivation the bound was better than the "
          "platform value, but the model fits the results exactly and the platform value stands.", "verif",
@@ -10762,7 +10764,7 @@ BUILDERS = [(d, _builder(d, b)) for d, b in _LEGACY_BUILDERS]
 #: skipped and its annex kept as it is. This keeps check_grounding green at every step of the
 #: Rev 2.0 campaign (work unit 2026-10-08_01_rev2-campaign). When every document is in the set,
 #: delete this mechanism.
-REV2_READY: set = {"INV-001", "INV-002", "PCMP-001", "PCP-003", "PCP-005", "PCP-006", "PCR-005"}
+REV2_READY: set = {"INV-001", "INV-002", "PCMP-001", "PCP-003", "PCP-005", "PCP-006", "PCP-010", "PCR-005"}
 
 
 def main(argv=None):

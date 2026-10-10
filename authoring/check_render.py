@@ -294,6 +294,53 @@ def check_tables_fit(qmd: str) -> int:
     return 0
 
 
+def check_footer_clear(qmd: str) -> int:
+    """Fail if text runs into the page foot of the rendered PDF.
+
+    A float a few lines taller than the text block keeps its text in the PDF: its last lines print
+    over the page number, so check_tables_fit, which looks for the text, passes. Found 2026-10-10 on
+    PCMP-001 Table 4.2, whose last two notes printed over the page number (reported by the PTP-001
+    author, whose draft carries the same table). On an upright page the page number is a centred line
+    of digits at the foot; any other line that reaches into its band is an overflow."""
+    pdf = rendered(qmd, ".pdf")
+    if not os.path.exists(pdf) or os.path.getmtime(pdf) < os.path.getmtime(qmd):
+        return 0
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        return 0
+    doc = fitz.open(pdf)
+    bad = []
+    for pno, page in enumerate(doc):
+        if page.rotation:
+            continue
+        w, h = page.rect.width, page.rect.height
+        lines = []
+        for b in page.get_text("dict")["blocks"]:
+            for ln in b.get("lines", []):
+                tx = "".join(sp["text"] for sp in ln["spans"]).strip()
+                if tx:
+                    lines.append((fitz.Rect(ln["bbox"]), tx))
+        # the page number: digits only, centred, in the bottom eighth of the page
+        nums = [l for l in lines if re.fullmatch(r"\d{1,3}|[ivxlc]{1,6}", l[1])
+                and abs((l[0].x0 + l[0].x1) / 2 - w / 2) < 20 and l[0].y0 > h * 7 / 8]
+        if not nums:
+            continue
+        pn = max(nums, key=lambda l: l[0].y1)
+        over = [tx for r, tx in lines if (r, tx) != pn and r.y1 > pn[0].y0 - 1.0]
+        if over:
+            bad.append((pno + 1, over[0][:50]))
+    doc.close()
+    if bad:
+        print(f"FAIL  text runs into the page foot on {len(bad)} page(s) (a table or figure taller "
+              "than the text block: shrink it, shorten its notes, or split it):")
+        for pg, tx in bad:
+            print(f"      p.{pg}: {tx!r}")
+        return 1
+    print("OK    no text runs into the page foot")
+    return 0
+
+
 # The smallest text a table may print, in points. Owner's comment 2026-10-08: "an acceptable level of
 # font reduction is used in Table 5.6 [of PCR-005] but it should not be more than that". That table
 # prints at 8.1 pt against 10.9 pt body text, which is \scriptsize with no further shrink.
@@ -459,6 +506,8 @@ def check(qmd: str, do_render: bool, strict_numerals: bool, lax_style: bool) -> 
         render_rc = check_unresolved_refs(qmd)
     if render_rc == 0:
         render_rc = check_tables_fit(qmd)
+    if render_rc == 0:
+        render_rc = check_footer_clear(qmd)
     if render_rc == 0:
         render_rc = check_table_merges(qmd)
     if render_rc == 0:

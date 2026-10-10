@@ -713,18 +713,22 @@ def parameters_by_step(steps: Optional[List[str]] = None, label="tbl-parameters-
                 wu = lambda v_: f"pH {v_}" if par.unit == "pH" else f"{v_} {par.unit}"
                 narrowed.append((m, f"Moved at Version 2.0 from {wu(pval(par.setpoint_characterized))}, "
                                     f"the set-point the studies were run around (PCR-{uo.step:03d})."))
-            study = "multivariate" if r["study"] == "multivariate" else "univariate^b)^"
+            # the study type as a mark on the parameter, not a column of its own: with that column
+            # the table for the whole train ran 58 pt into the page foot of PCMP-001 (2026-10-10)
+            pname = r["parameter"]
             if r["study"] != "multivariate":
+                pname += "^b)^"
                 used.add("b)")
             row = ([C(STEP_NAME[k], rs=len(g))] if i == 0 else []) + [
-                r["parameter"], r["unit"], sp_txt, *nor,
-                f"{pval(par.prange[0])}–{pval(par.prange[1])}", study, r["classification"]]
+                pname, r["unit"], sp_txt, *nor,
+                f"{pval(par.prange[0])}–{pval(par.prange[1])}", r["classification"]]
             body.append(row)
     notes = [("a)", "The normal operating range equals the characterized range."),
-             ("b)", "Studied one factor at a time.")] + narrowed
+             ("b)", "Studied one factor at a time. Every other parameter was studied in the designed "
+                    "experiments of its step.")] + narrowed
     return CTable(
-        header=[["Step", "Parameter", "Unit", "Set-point", "NOR", "Characterized\nrange", "Study", "Class"]],
-        body=body, align=["P{2.0cm}", "P{3.4cm}", "P{2.0cm}", "r", "P{1.9cm}", "l", "l", "l"],
+        header=[["Step", "Parameter", "Unit", "Set-point", "NOR", "Characterized\nrange", "Class"]],
+        body=body, align=["P{1.8cm}", "P{4.0cm}", "P{2.6cm}", "r", "P{2.2cm}", "l", "l"],
         notes=[n for n in notes if n[0] in used], notes_per_row=True,
         size="footnotesize", resize=True,
         caption="Process parameters by step: set-point, ranges and classification.", label=label)

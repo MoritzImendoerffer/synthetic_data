@@ -155,3 +155,24 @@ expression printed as source. Data-state note for authors: `data-state-2026-10-0
   fails LOF at the recorded pH: decide whether the count becomes 15); Table 9.2 footnotes swapped;
   Version 1.0 misdescribed; AICc constant; INV-001 misquoted; NOR of the worked example; SOP-1002 title;
   Table 10.1 quoting). Next: one fix pass by a fresh author, then promote and annex.
+
+## Third session (2026-10-10, owner upgraded the usage limits: "Proceed where you left off")
+Baseline at start: 174 tests pass; HEAD 61a2a75; promoted with Version 2.0 annexes: PCMP-001, INV-001,
+PCP-003, PCP-005, PCP-006, PCR-005.
+Coordinator changes (uncommitted until the next checkpoint):
+- `campaign.revisions[1].reason_plan`: plans and corpus documents no longer print "re-analysis of the
+  studies" in their revision history (`revision_history`, report-only clause). The promoted plans
+  PCMP-001, PCP-003, PCP-005 and PCP-006 must be re-rendered and their annexes rebuilt (the revision
+  layer reads the helper) before the next strict grounding run.
+- INV-002 config record: PA1 "for a probability of success of at least 0.90"; effectiveness check "the
+  sample-size calculation of preventive action PA1"; `assurance_basis` "an attribute with a criterion";
+  `D.fig_assurance` y-axis "Probability of success". INV-002 must drop its display-time substitutions.
+- Plan drafts instantiated for PCP-004, PCP-009, PCP-010 (PCP-007/008 were already).
+Agents launched (fresh contexts; resume with SendMessage if the session survives):
+- INV-002 final fix (`feedback-INV-002.final.md`): a81452ec590153bd7
+- PCP-007 author: ac165794047144c20; PCP-008: a85321c9cc5db62b4; PCP-009: a8386d13c874ea937;
+  PCP-004: a4f22fc16c1edba54; PCP-010: ae1369f68bedfad4e
+  (each keeps `status-<DOC>.md` in this folder; if cut off, a successor resumes from it).
+Coordinator default taken (owner may override): INV-002 Table 3.1 counts the full quadratic models as
+Version 1.0 fitted them (Protein A run 23 at its design pH); 14 failing stays; the recorded-pH failure
+of pool HCP (lack of fit p = 0.024) is stated beside it. This keeps the promoted PCR-005 sentence true.

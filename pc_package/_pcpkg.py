@@ -657,8 +657,10 @@ def revision_history(doc_id):
     if doc_id in INVESTIGATIONS:
         rows = [["1.0", INVESTIGATIONS[doc_id]["closed"], "Initial issue"]]
     else:
+        report = doc_id.startswith(("PCR-", "PCMR-"))
         rows = [[r["rev"], rev1_date(doc_id) if r is REV1 else r["effective"],
-                 r["reason"] + (f" (see {INV['id']})" if r is not REV1 else "")] for r in REVISIONS]
+                 (r["reason"] if report else r.get("reason_plan", r["reason"]))
+                 + (f" (see {INV['id']})" if r is not REV1 else "")] for r in REVISIONS]
     return md_table(["Version", "Effective date", "Description of change"], rows, [12, 18, 70])
 
 

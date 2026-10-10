@@ -1425,8 +1425,9 @@ def fig_par(key, resp, factor):
 
 
 def fig_assurance():
-    """INV-002: the assurance that the planned model meets PCMP-001 §7.2, against the number of
-    further runs, one line per failing model with an effect; the target as a dashed line."""
+    """INV-002: the probability of success (config key `assurance`) that the planned model meets
+    PCMP-001 §7.2, against the number of further runs, one line per failing model with an effect;
+    the target as a dashed line."""
     import matplotlib.pyplot as plt
     g = csv("augmentation_sample_size.csv")
     target = float(CFG.raw()["campaign"]["model_adequacy"]["assurance"])
@@ -1446,7 +1447,7 @@ def fig_assurance():
                 label=f"{names.get(step, step)}, {attr.get(resp, resp)}")
     ax.axhline(target, color="#c0392b", lw=1.0, ls="--", label=f"target {target:.2f}")
     ax.set_xlabel("Further runs (D-optimal augmentation)")
-    ax.set_ylabel("Assurance")
+    ax.set_ylabel("Probability of success")
     ax.set_ylim(-0.02, 1.02)
     ax.legend(fontsize=7, loc="upper center", bbox_to_anchor=(0.5, -0.14), ncol=3, frameon=False)
     fig.tight_layout()

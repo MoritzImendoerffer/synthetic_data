@@ -16,9 +16,15 @@ import os
 import re
 import numpy as np  # Rev 2.0 helpers (acceptance_criteria_layer)
 
+import sys
+
 import _pcpkg as P
 import schema_ext as S
 from check_grounding import CELL_SEP   # the one definition of a rendered cell boundary
+
+# Run as a script this module is ``__main__``. A builder module in annex_builders/ imports it as
+# ``build_ground_truth``; registering the running module under that name keeps one copy of it.
+sys.modules.setdefault("build_ground_truth", sys.modules[__name__])
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "ground_truth")
@@ -10701,8 +10707,36 @@ def build_investigation():
         acceptance_criteria=acrit)
 
 
+def _module_path(doc_id):
+    return os.path.join(HERE, "annex_builders", doc_id.lower().replace("-", "_") + ".py")
+
+
+def _builder(doc_id, legacy):
+    """The builder of ``doc_id``: ``annex_builders/<doc_id>.py`` (``build()``) where that module
+    exists, else the builder in this file.
+
+    Version 2.0 builders written from 2026-10-10 on live one per module, so that several
+    documents can be annexed at the same time without editing this file. A module imports what it
+    needs from here (``import build_ground_truth as G``, or ``from build_ground_truth import
+    ref, row_quotes, ...``) and defines ``build()`` returning the ``GroundTruthAnnex``."""
+    if not os.path.exists(_module_path(doc_id)):
+        return legacy
+
+    def build():
+        import importlib
+        return importlib.import_module("annex_builders." + doc_id.lower().replace("-", "_")).build()
+    return build
+
+
+def _no_builder(doc_id):
+    def build():
+        raise NotImplementedError(f"{doc_id} has no annex builder yet: write "
+                                  f"annex_builders/{doc_id.lower().replace('-', '_')}.py")
+    return build
+
+
 #: (document id, builder) for the whole corpus, in build order.
-BUILDERS = [
+_LEGACY_BUILDERS = [
     ("PCP-003", lambda: build_plan_bioreactor()), ("PCR-003", lambda: build_report()),
     ("PCP-004", lambda: build_plan_harvest()), ("PCR-004", lambda: build_report_harvest()),
     ("PCP-005", lambda: build_plan_protein_a()), ("PCR-005", lambda: build_report_protein_a()),
@@ -10716,8 +10750,10 @@ BUILDERS = [
     ("RA-001", lambda: build_risk_assessment()),
     ("PCMP-001", lambda: build_master_plan()),
     ("INV-001", lambda: build_investigation()),
+    ("INV-002", _no_builder("INV-002")),
     ("PCMR-001", lambda: build_master_report()),
 ]
+BUILDERS = [(d, _builder(d, b)) for d, b in _LEGACY_BUILDERS]
 
 #: Documents whose builder has been rewritten against the Rev 2.0 text. A document NOT in this
 #: set still has its Rev 1.0 .docx in pc_package/ and its Rev 1.0 annex in ground_truth/, and its
@@ -10728,10 +10764,20 @@ BUILDERS = [
 REV2_READY: set = {"INV-001", "PCMP-001", "PCP-003", "PCP-005", "PCP-006", "PCR-005"}
 
 
-def main():
+def main(argv=None):
+    """Build every annex in REV2_READY, or only the documents named on the command line
+    (``python build_ground_truth.py PCP-007``), which builds them whether or not they are in
+    REV2_READY yet: that is how a new builder is developed before its document joins the set."""
+    argv = sys.argv[1:] if argv is None else argv
+    known = [d for d, _ in BUILDERS]
+    for d in argv:
+        if d not in known:
+            raise SystemExit(f"unknown document {d!r}; one of {', '.join(known)}")
     os.makedirs(OUT, exist_ok=True)
     for doc_id, build in BUILDERS:
-        if doc_id not in REV2_READY:
+        if argv and doc_id not in argv:
+            continue
+        if not argv and doc_id not in REV2_READY:
             print(f"kept {doc_id}: Rev 1.0 annex (document not yet re-authored for Rev 2.0)")
             continue
         annex = build()

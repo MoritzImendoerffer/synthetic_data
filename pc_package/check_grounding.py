@@ -158,6 +158,10 @@ def main(argv=None) -> int:
     if "--dir" in argv:
         base = os.path.join(HERE, argv[argv.index("--dir") + 1])
     annexes = sorted(glob.glob(os.path.join(base, "ground_truth", "*.json")))
+    # ``--doc <ID>`` (repeatable) checks only the annexes of the documents named
+    docs = [argv[i + 1] for i, a in enumerate(argv) if a == "--doc" and i + 1 < len(argv)]
+    if docs:
+        annexes = [a for a in annexes if os.path.basename(a)[:-len(".json")] in docs]
     if not annexes:
         print("no annexes found in ground_truth/ — run build_ground_truth.py first")
         return 1

@@ -1350,18 +1350,22 @@ def residual_influence(key, resp, runs=None, form=None):
       level), at ``residual_alpha``; not tested for a model with no term, which predicts one value;
     * a regression of the residuals on the order of execution (a drift), at ``residual_alpha``; the
       runs of a second block continue the order of the first;
-    * Cook's distance against ``cook_factor``/n (a run that dominates the fit).
+    * Cook's distance: a run above ``cook_factor``/n is flagged and examined (the report deletes it and
+      repeats the judgement); the model fails only where a run's Cook's distance exceeds the
+      ``cook_f_quantile`` quantile of F(p, n - p) (owner's decision 2026-10-10, "4/n flags, F decides").
 
     One definition for every report (2026-10-10), so that two reports cannot test the criterion
     differently. Residuals are on the scale of the model. Returns a dict: ``p_spread``,
     ``spread_slope``, ``p_order``, ``order_slope`` (per run), ``order_range`` (runs), ``cook``
-    (array, in the row order of ``runs``), ``runs``, ``cook_max``, ``cook_run``, ``cook_limit``,
-    ``over`` (runs above the limit), ``n``, ``trends_met``, ``cook_met``, ``met``; ``testable`` is
-    False for an exact fit (no residual), whose criterion cannot be applied."""
+    (array, in the row order of ``runs``), ``runs``, ``cook_max``, ``cook_run``, ``cook_limit`` (4/n),
+    ``over`` (runs flagged above 4/n, to be examined), ``f_limit`` and ``over_f`` (runs above the F
+    quantile, which fail the model), ``p`` (parameters), ``n``, ``trends_met``, ``cook_met``, ``met``;
+    ``testable`` is False for an exact fit (no residual), whose criterion cannot be applied."""
     import statsmodels.api as sm
     th = CFG.raw()["campaign"]["thresholds"]
     alpha = float(th.get("residual_alpha", th["effect_alpha"]))
     k4 = float(th.get("cook_factor", 4.0))
+    fq = float(th.get("cook_f_quantile", 0.5))
     r = fit(key, "rsm", resp, runs=runs, form=form)
     if r.get("exact"):
         return {"testable": False, "met": None, "trends_met": None, "cook_met": None, "n": int(r["n"])}
@@ -1379,15 +1383,20 @@ def residual_influence(key, resp, runs=None, form=None):
         order[~first] += order[first].max()
     go = sm.OLS(np.asarray(m.resid, float), sm.add_constant(order)).fit()
     p_order, drift = float(go.pvalues[1]), float(go.params[1])
+    from scipy import stats as _st
     lim = k4 / n
+    p_par = int(round(m.df_model)) + 1
+    f_lim = float(_st.f.ppf(fq, p_par, n - p_par)) if n > p_par else float("nan")
     run_ids = d["run"].to_numpy()
     over = [int(x) for x in run_ids[cd > lim]]
+    over_f = [int(x) for x in run_ids[cd > f_lim]] if np.isfinite(f_lim) else []
     trends_met = bool((np.isnan(p_spread) or p_spread >= alpha) and p_order >= alpha)
-    cook_met = not over
+    cook_met = not over_f
     return {"testable": True, "p_spread": p_spread, "spread_slope": spread, "p_order": p_order,
             "order_slope": drift, "order_range": float(order.max() - order.min()), "cook": cd,
             "runs": [int(x) for x in run_ids], "cook_max": float(cd.max()),
-            "cook_run": int(run_ids[int(cd.argmax())]), "cook_limit": lim, "over": over, "n": n,
+            "cook_run": int(run_ids[int(cd.argmax())]), "cook_limit": lim, "over": over,
+            "f_limit": f_lim, "over_f": over_f, "f_quantile": fq, "p": p_par, "n": n,
             "alpha": alpha, "trends_met": trends_met, "cook_met": cook_met,
             "met": bool(trends_met and cook_met)}
 

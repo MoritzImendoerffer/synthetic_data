@@ -74,26 +74,54 @@ def test_q2_design_space_on_the_single_batch_limit_is_never_larger():
         assert b["fraction"] <= m["fraction"] + 1e-12, key
 
 
-def test_each_registered_influence_analysis_is_backed_by_the_data():
-    """Every 'influence analysis' discrepancy rests on at least one adequate selected model of an output
-    with a criterion that fails criterion 4 of PCMP-001 §7.2 (residual patterns, influential runs)."""
+def _failing_criterion_4(key):
+    """Outputs with a criterion whose selected model fails criterion 4 of PCMP-001 §7.2 under the rule of
+    the owner's decision of 2026-10-10: a residual trend at the level of the residual tests, or a run
+    whose Cook's distance exceeds the median of F(p, n - p). A run above 4/n only flags it."""
+    import doe_report as D
+    resps = list(D.responses(key)) + [c for c in D.fragment_responses(key)
+                                      if c == "lmw_cesds_pct" and c not in D.responses(key)]
+    out = []
+    for resp in resps:
+        if D._judging(key, resp) is None or D.fit(key, "rsm", resp)["status"] == "none":
+            continue
+        if D.residual_influence(key, resp)["met"] is False:
+            out.append(resp)
+    return out
+
+
+def test_residual_criterion_discrepancies_match_the_data():
+    """A report carries the discrepancy 'conclusions resting on models that do not meet the criterion on
+    residuals and influential runs' exactly where a selected model fails criterion 4 (owner's decision
+    2026-10-10, "4/n flags, F decides"): bioreactor, Protein A, cation exchange and virus filtration;
+    not low-pH inactivation or anion exchange, where every model passes."""
     import doe_report as D
     import _pcpkg as P
-    for doc, ds in P.PLAN_DISCREPANCIES.items():
-        for d in ds:
-            if "influence analysis" not in d["subject"]:
+    from amab_process import studies as st
+    for key in st.DOE_FACTORS:
+        doc = f"PCR-{CFG.unit_op(key).step:03d}"
+        has = any("residuals and influential runs" in d["subject"] for d in P.PLAN_DISCREPANCIES.get(doc, []))
+        fails = _failing_criterion_4(key)
+        assert has == bool(fails), f"{doc}: discrepancy {'present' if has else 'absent'}, failing models {fails}"
+
+
+def test_cook_rule_flags_at_4_over_n_and_fails_above_the_f_median():
+    """The flag and the decision are two limits: every flagged run lies below the F median except where the
+    model fails, and only virus filtration MVM has a run above it."""
+    import doe_report as D
+    over_f = {}
+    for key in ("bioreactor", "protein_a", "viral_inactivation", "cex", "aex", "virus_filtration"):
+        for resp in D.responses(key):
+            if D._judging(key, resp) is None or D.fit(key, "rsm", resp)["status"] == "none":
                 continue
-            key = d["step"]
-            failing = []
-            for resp in D.responses(key):
-                if D._judging(key, resp) is None:
-                    continue
-                r = D.fit(key, "rsm", resp)
-                if r["status"] == "none":
-                    continue
-                if D.residual_influence(key, resp)["met"] is False:
-                    failing.append(resp)
-            assert failing, f"{doc} {d['id']}: no selected model of {key} fails criterion 4"
+            ri = D.residual_influence(key, resp)
+            if not ri.get("testable"):
+                continue
+            assert ri["cook_limit"] < ri["f_limit"]
+            assert set(ri["over_f"]) <= set(ri["over"])
+            if ri["over_f"]:
+                over_f[(key, resp)] = ri["over_f"]
+    assert set(over_f) == {("virus_filtration", "mvm_lrf")}, over_f
 
 
 def test_q8_ufdf_qualification_and_offsets():

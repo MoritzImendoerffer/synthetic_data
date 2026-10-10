@@ -103,11 +103,16 @@ filtration. A rule marked "DoE steps" does not apply to harvest or UF/DF.
    against each of the four. A model with no term has no F-test, so that criterion is not applicable,
    never met. An exact fit (results with no scatter) is never adequate. Its output is judged on its
    measured results, sets no range, and its bound replaces no platform value (owner, 2026-10-09). The
-   residual and influence criterion is judged as the plan states it, per test at α = 0.05 and Cook's
-   distance against 4/n. Where it is not met, the report says so, and the analysis that carries the
-   conclusion (each flagged run deleted and the judgement of rule 1 repeated) is a discrepancy from the
-   plan. A 4/n flag is not explained away by leverage. Cook's distance already combines leverage and
-   residual, and the cut-off flags a run or two in most correct models of this size.
+   residual and influence criterion is judged as the plan states it (owner's decision 2026-10-10, "4/n
+   flags, F decides"): the residual regressions at α = 0.05; a run with a Cook's distance above 4/n is
+   examined by deleting it and repeating the judgement of rule 1 (planned, not a discrepancy); the model
+   fails only where a run's Cook's distance exceeds the median of F(p, n − p) (`D.residual_influence`:
+   `over` the flagged runs, `over_f` the failing ones). Where the criterion is not met (a trend, or a run
+   above the F median), the report says so, and using the model for ranges and the design space is the
+   registered discrepancy "Conclusions resting on models that do not meet the criterion on residuals and
+   influential runs" (bioreactor, Protein A, cation exchange, virus filtration; none at low-pH
+   inactivation or anion exchange). Every flagged run lies inside the range studied and none has leverage
+   above 2p/n, so a flag is evidence of nothing until the deletion shows a conclusion moving.
 9. **A rule chosen after the result never decides.** The decision is the rule the plan or PCMP-001
    stated: the level of each test, the interval, the runs. A multiplicity correction, a pooling with
    another study or a different interval chosen once a result is known is the pattern INV-001 was

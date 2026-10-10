@@ -68,7 +68,9 @@ went wrong when applying them.
 9. **What an amendment may add** (STORY_BIBLE §9b, after the PCP-006 factual check). A Version 2.0
    plan is issued after its studies ran. It may state, and list as changes, what PCMP-001 Version 2.0
    sets, plus generic tests applied the same way in every plan. Those tests are the residual regressions
-   at α = 0.05 and Cook's distance above 4/n. It must not add a step-specific decision rule, such as a
+   at α = 0.05, and Cook's distance: a run above 4/n is examined by deleting it and repeating the
+   judgement, and the model fails only where a run exceeds the median of F(p, n − p) (owner's decision
+   2026-10-10, "4/n flags, F decides"). It must not add a step-specific decision rule, such as a
    refit procedure, a NOR rule for one parameter or a test chosen for one study, and it never says a
    rule was "fixed before the data".
    - It keeps the design, sampling, spiking and every decision rule as Version 1.0 stated them, even

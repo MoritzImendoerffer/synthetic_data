@@ -85,3 +85,18 @@ New columns, each from its own random stream; no earlier result moved.
   fragments form during the harvest hold", as the CQA register and PCMP-001 say.
 - New method records in `dev_methods.csv`: AMV-3014 (qPCR) and AMV-3013 (icIEF).
 - The revision history of a plan no longer says "re-analysis of the studies" (reports keep it).
+
+## 5. The owner's decision on influential runs (2026-10-10, evening): "4/n flags, F decides"
+
+Criterion 4 of PCMP-001 §7.2 as every Version 2.0 plan tests it: the residual regressions at
+`THRESHOLDS["residual_alpha"]`; a run with a Cook's distance above `THRESHOLDS["cook_factor"]`/n is
+examined by deleting it and repeating the judgement (planned work, not a discrepancy); the model fails
+only where a run's Cook's distance exceeds the `THRESHOLDS["cook_f_quantile"]` (0.5) quantile of
+F(p, n − p). `D.residual_influence` returns `over` (flagged), `over_f` and `f_limit` (failing). Why: 4/n
+flagged a run in almost every correct model of these designs (about 99 % in two reviewers' simulations);
+all 46 flagged runs lie inside the range studied, none above 2p/n in leverage, with residuals of the size
+noise gives. Under the new rule only virus filtration MVM (run 5, an axial point of a 12-run design)
+fails on influence; residual trends still fail bioreactor galactosylation and acidic variants, Protein A
+leached Protein A and fragments, and cation exchange host cell protein. The register follows: PD-003-04,
+PD-005-02, PD-007-02 and PD-009-02 are now "Conclusions resting on models that do not meet the criterion
+on residuals and influential runs"; PD-006-07 and PD-008-03 are withdrawn.

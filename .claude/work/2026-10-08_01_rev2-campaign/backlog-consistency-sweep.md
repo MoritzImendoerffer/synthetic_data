@@ -195,3 +195,13 @@ Not yet reviewed: PCP-007 (author ac165794047144c20), PCP-008 (a85321c9cc5db62b4
 (a8386d13c874ea937). INV-002: last fix pass done (55 pp); next a short verification, promotion,
 annex builder (`procedures/ANNEX-A-DOCUMENT.md`). PCR-005 re-opened: `feedback-PCR-005.datastate-2026-10-10.md`.
 Next after the table agent: re-render promoted plans; launch PCR-003 and PCR-006 authors.
+Agents running (2026-10-10, after fb15f2b): PCP-004 fix (resumed a4f22fc16c1edba54), PCP-010 fix (resumed
+ae1369f68bedfad4e); PCR-003 author a927024c4bf0fc18f; PCR-006 author afabf170561291d76; PCR-005 data-state fix
+abadf6256c0fc7077; content reviews PCP-007 a24e2bd5c70772f54, PCP-008 a2f8329cb027d5845, PCP-009
+a57a2849aacbbd8ef; factual checks PCP-007 a5c7593f2fd5bff26, PCP-008 a33bf3aff8104fd1d, PCP-009
+af2012aac231135e2; INV-002 verification a028da9c3f3c42e09. Reviewers return text (the harness blocks
+subagent report files): save each as content-review-/factual-<DOC>.md.
+Table-agent findings for the owner: (1) every uncaptioned pipe table in the default carries an empty last
+row (the longtable counter patch in _tables.tex), fixed in the variants only; (2) INV-002 Table 5.1 note
+cut off (fixed: shorter note, gate now probes note ends); (3) Approvals tables of INV-001/INV-002 ran 16 pt
+past the margin (fixed: relative widths; template too); (4) row padding left out of the variants.

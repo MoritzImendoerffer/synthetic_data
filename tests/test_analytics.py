@@ -291,13 +291,16 @@ def test_hold_studies_are_version2_discrepancies_with_nrcesds_throughout():
         assert d["lmw_cesds_pct"].notna().all() and d["lmw_sec_pct"].isna().all(), pool
 
 
-def test_concentration_confirmation_study_closes_the_deviation():
-    """DEV-006-03: PCP-006 Version 1.0 required XMuLV clearance on every run of the A-Mab
-    concentration study and S-VI-UNI measured none. S-VI-UNI2 (PD-006-06) measures it at both ends
-    of the range in duplicate, and the inactivation does not depend on the concentration."""
+def test_concentration_confirmation_study_answers_the_discrepancy():
+    """PD-006-07 (was DEV-006-03): PCP-006 Version 1.0 required XMuLV clearance on every run of the
+    A-Mab concentration study and S-VI-UNI measured none, a discrepancy from the plan (a
+    characterization study raises no deviation, owner 2026-10-10). S-VI-UNI2 (PD-006-06) measures it
+    at both ends of the range in duplicate, and the inactivation does not depend on the concentration."""
     cfg = load_config()
-    devs = {e["id"]: e for e in cfg.raw()["deviations"]["events"]["PCR-006"]}
-    assert "DEV-006-03" in devs
+    pds = {e["id"]: e for e in cfg.raw()["campaign"]["plan_discrepancies"]["PCR-006"]}
+    assert "PD-006-07" in pds and "concentration study" in pds["PD-006-07"]["subject"]
+    devs = {e["id"] for e in cfg.raw()["deviations"]["events"]["PCR-006"]}
+    assert "DEV-006-03" not in devs
     u = pd.read_csv(os.path.join(DATA, "univariate_studies.csv"))
     old = u[u["study"] == "S-VI-UNI"]
     assert old.get("xmulv_lrf", pd.Series(dtype=float)).isna().all()      # the deviation itself

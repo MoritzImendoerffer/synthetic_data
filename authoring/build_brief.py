@@ -798,23 +798,26 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
                   "model.\n\n")
                 w(P.csv(f"hold_{key}.csv").round(3).to_markdown(index=False) + "\n\n")
         if key == "viral_inactivation":
-            dv = {e["id"]: e for e in P.CFG.raw()["deviations"]["events"]["PCR-006"]}["DEV-006-03"]
+            # the concentration study that measured no XMuLV clearance: a discrepancy from the plan, not a
+            # deviation (owner, 2026-10-10; it was DEV-006-03)
+            dv = next(e for e in P.PLAN_DISCREPANCIES["PCR-006"]
+                      if e["subject"].startswith("XMuLV clearance not measured in the concentration study"))
             vc = P.CFG.raw()["analytics"]["vi_concentration"]
             if is_plan:
                 w("### The A-Mab concentration study as Version 1.0 planned it\n\n- Version 1.0 of this "
                   "plan set the concentration study across the range studied, with the other three parameters "
                   "at their set-points, and required aggregate, acidic variants and XMuLV clearance on every "
                   "run. This amendment keeps that design. That S-VI-UNI measured no XMuLV clearance is a "
-                  f"deviation the report records ({dv['id']}); the plan does not change to match what was "
-                  "done.\n\n")
+                  f"discrepancy from the plan the report records ({dv['id']}); the plan does not change to match "
+                  "what was done.\n\n")
             else:
                 u = P.csv("univariate_studies.csv")
                 vu = u[u["study"] == vc["study"]][["level", "value", "replicate", "xmulv_lrf",
                                                      "aggregate_out_pct", "acidic_variants"]]
                 w(f"### {dv['id']} and the confirmation study {vc['study']}\n\n- {dv['id']}: "
-                  f"{dv['summary']}. Detected during the {dv['detected_during']}. Disposition: closed by "
-                  f"study {vc['study']} (`discrepancy_register(DOC)`). Version 1.0 of PCR-006 did not "
-                  "notice it.\n- The confirmation study, XMuLV-spiked holds at both ends of the concentration "
+                  f"{dv['subject']}. Planned: {dv['planned']}. Done: {dv['done']}. Found in the Version 2.0 "
+                  f"re-analysis; Version 1.0 of PCR-006 did not notice it (`discrepancy_register(DOC)`).\n"
+                  "- The confirmation study, XMuLV-spiked holds at both ends of the concentration "
                   "range, in duplicate, other parameters at their set-points as characterized:\n\n")
                 w(vu.round(3).to_markdown(index=False) + "\n\n")
         if key == "cex":

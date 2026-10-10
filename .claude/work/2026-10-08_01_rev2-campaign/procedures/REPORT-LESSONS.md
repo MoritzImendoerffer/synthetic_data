@@ -215,17 +215,23 @@ filtration. A rule marked "DoE steps" does not apply to harvest or UF/DF.
 
 ## 3. The record: deviations, discrepancies from the plan, chronology
 
-1. **One reference plan, the registers as the record.** section_plan defines the two words. A
-   departure from a rule of the approved plan (a required measurement not made, a sequence not
-   followed) is a deviation, and work the plan did not foresee is a discrepancy. The reference is the
-   approved Version 2.0 plan the report states results against, so every study made after Version 1.0
-   (hold, augmentation, confirmation and support studies, a second univariate study, added scale-down
-   runs) is a discrepancy. `dev_register(DOC)` and `discrepancy_register(DOC)` as they render are the
-   record. Every mention of an entry in the text matches the entry's scope, and where the brief words
-   an entry differently, the register wins.
+1. **One reference plan, the registers as the record.** A process characterization study is not GMP
+   manufacture, so it raises no deviation (owner, 2026-10-08 and 2026-10-10). The record has two parts.
+   The study events are the events of execution that Version 1.0 recorded (an expired buffer lot, a
+   temperature excursion, a probe that drifted, a result re-assayed), kept under the DEV numbers
+   Version 1.0 gave them and called study events (`dev_register(DOC)`). The discrepancies from the plan
+   are every departure from the approved Version 2.0 plan the report states results against
+   (`discrepancy_register(DOC)`): work the plan did not foresee (hold, augmentation, confirmation and
+   support studies, a second univariate study, added scale-down runs, model selection) and a plan
+   requirement that was not met (runs missing, an order not followed, a record not kept, a rule not
+   applied), however late it was found. The Version 1.0 plans call a departure a deviation, and the
+   report says once, where its record section opens, how it records departures instead. The two
+   registers as they render are the record. Every mention of an entry in the text matches the entry's
+   scope, and where the brief words an entry differently, the register wins. Never call an event or a
+   discrepancy a deviation.
 2. **Every departure is recorded, none silently.** Compare the study as run with every rule,
-   measurement, sequence and design of the rendered plan, and record each departure as a deviation or a
-   discrepancy (for PCR-003, the list in `pcr003-departures.md`). An unplanned replicate, a method the
+   measurement, sequence and design of the rendered plan, and record each departure as a discrepancy
+   from the plan (for PCR-003, the list in `pcr003-departures.md`). An unplanned replicate, a method the
    plan does not name and an analysis the plan does not contain are departures too. Where the plan sets
    no rule the report needs, the report states its approach, applies it and records it as a
    discrepancy, never as the plan's rule. A departure that is in neither register goes into your
@@ -313,5 +319,48 @@ WRITING_GUIDE §2 rule 11 is the owner's rule. PCR-005 broke it in these ways.
    mechanism and the response-surface model), and claims no fragment result from that study.
 7. **DEV-005-02's out-of-trend rule is in the record** (`oot_rule`, `D.oot_check`); state the trigger
    with its numbers when the deviation is described.
-8. **Criterion 4** (residuals and influence) is tested by `D.residual_influence` in every report, and
-   the influence analysis is the registered discrepancy of each DoE report.
+8. **Criterion 4** (residuals and influence) is tested by `D.residual_influence` in every report, as §1
+   rule 8 states it ("4/n flags, F decides"). Using a model that fails it for ranges and the design space
+   is the registered discrepancy "Conclusions resting on models that do not meet the criterion on
+   residuals and influential runs" (bioreactor, Protein A, cation exchange, virus filtration). The
+   deletion of a flagged run is planned work, not a discrepancy.
+9. **No deviations in a characterization report** (2026-10-10). See §3 rule 1. The 16 review findings
+   first filed as deviations (DEV-003-03 to -09, DEV-004-03, DEV-005-03 to -05, DEV-006-03 and -04,
+   DEV-007-03 and -04, DEV-008-04) are discrepancies from the plan (PD-003-07 to -13, PD-004-03,
+   PD-005-07 to -09, PD-006-07 and -08, PD-007-03 and -04, PD-008-03). The three scale-down entries
+   (PD-003-13, PD-005-08, PD-007-04) record that the Version 1.0 test, no significant difference at
+   p < 0.05, was stricter than the use of the model needs. The output is judged through its offset
+   where the offset is known precisely enough (PCMP-001 Version 2.0 §7.1).
+
+## 7. What the reviews of PCR-003 and PCR-006 added (2026-10-10)
+
+1. **"No conclusion changed" names what it covers.** A statement that a conclusion survives an
+   alternative analysis must be computed for each conclusion it covers. The alternatives are the
+   deletion of a run, the planned runs alone, the plan's full quadratic and a near-equivalent model. The
+   conclusions are the judgement over the NOR, every PAR edge, the design-space fraction, the classes
+   and the terms of the selected model. A conclusion that rests on runs added after the planned results
+   were known states what the planned runs alone give.
+2. **R², adjusted R² and predicted R²** are reported for every model, because the plans list all three.
+3. **Equal effects are not ranked.** Effects of the same size within their standard errors are not
+   "the largest" or "the dominant" one.
+4. **A mechanism predicts what the data must show.** A stated mechanism gives a sign and a dependence. A
+   first-order inactivation predicts a pH × time interaction. An acid-catalysed reaction speeds up at
+   lower pH and higher temperature. Where the data do not show what the mechanism predicts, report what
+   the data show and say that the mechanism does not explain it.
+5. **A significant difference is reported as significant.** Give its size against the criterion
+   (PCMP-001 §7.7 asks for the size beside the significance). A judgement that rests on that size is
+   named as a judgement, because no plan sets a threshold for it. A yardstick chosen after the result
+   never decides acceptance.
+6. **Register numbers are cited once with their subject.** Do not tag every mention (", the model
+   selection"), and write no sentence that files a finding ("which is discrepancy PD-…", "which is not
+   the claim failing", "which is a sensitivity and not a result", "which separates a discrepancy from a
+   deviation").
+7. **A column means one statistic.** A column headed "Mean predicted" holds predictions in every row,
+   and an offset footnote applies only to rows with a measured offset.
+8. **The viral requirement and the step claim are different numbers.** The cumulative requirement is
+   the register's value. The step contributes its claim, which is one of three for XMuLV and one of two
+   for MVM.
+9. **Studies keep their plan's names.** Coined labels ("stability study", "OFAT stability study") that
+   clash with another study of the report are not used. Use the terms of art: clearance factor and log
+   reduction value; the process model at set-point, with its value, for "the nominal load of the step
+   model".

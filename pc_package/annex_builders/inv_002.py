@@ -314,9 +314,9 @@ def build():
         source_references=[ref("summary", q_count), ref("summary", q_cls), ref("capa", q_capa_ca3),
                            ref("close", q_conf), ref("imp_other", q_noimp), ref("close", q_closed)],
         metadata=meta())
-    q_run23 = q("""The Version 2.0 analysis puts Protein A response-surface run `{python} run23` at the elution buffer pH recorded under deviation `{python} run23_dev`, `{python} f"{run23_ph:g}"` instead of the design pH of `{python} f"{run23_design:g}"` (discrepancy `{python} pd_ph`).""")
-    q_run23_log = q("""Every model of pool host cell protein in this section puts response-surface run `{python} run23` at the elution buffer pH recorded under deviation `{python} run23_dev`, as the Version 2.0 analysis does""")
-    q_run23_note = qn("""Protein A response-surface run `{python} run23` is at the elution buffer pH recorded under deviation `{python} run23_dev`.""")
+    q_run23 = q("""The Version 2.0 analysis puts Protein A response-surface run `{python} run23` at the elution buffer pH recorded under study event `{python} run23_dev`, `{python} f"{run23_ph:g}"` instead of the design pH of `{python} f"{run23_design:g}"` (discrepancy `{python} pd_ph`).""")
+    q_run23_log = q("""Every model of pool host cell protein in this section puts response-surface run `{python} run23` at the elution buffer pH recorded under study event `{python} run23_dev`, as the Version 2.0 analysis does""")
+    q_run23_note = qn("""Protein A response-surface run `{python} run23` is at the elution buffer pH recorded under study event `{python} run23_dev`.""")
     dev_pa = Deviation(
         deviation_id=run23_dev, unit_operation=UO["protein_a"],
         summary=q("""Protein A response-surface run `{python} run23` was made at an elution buffer pH of `{python} f"{run23_ph:g}"` instead of the design pH of `{python} f"{run23_design:g}"`."""),
@@ -518,7 +518,7 @@ def build():
     q_noaug = q("The master plan names no augmentation.")
     q_pcmp_same = q("The master plan is not changed for model selection, which each report records as a discrepancy from its plan.")
     q_pcmr = q("This investigation requires the process characterization master report (PCMR-001) Version 2.0 to consolidate the conclusions of the step reports as they stand after the remedies and the model selection.")
-    q_infl = q("""The Protein A report (PCR-005) Version 2.0, for example, is to record its analysis of influential runs as discrepancy `{python} pd_infl`.""")
+    q_infl = q("""The Protein A report (PCR-005) Version 2.0, for example, records as discrepancy `{python} pd_infl` that some of its conclusions rest on models that do not meet the fourth criterion.""")
     q_pcr6 = q("""On it the step claim is not met over the NOR as characterized, and the low-pH viral inactivation report (`{python} rep[vk]`) moves the NOR""")
     q_pcr3 = q("""The production bioreactor report (`{python} rep[bk]`) states how this result is handled.""")
     q_reeval = q("""The production bioreactor report (`{python} rep["bioreactor"]`) therefore re-evaluates every model of the step on all runs, including the `{python} n_bio_pass` models that met the three tests of the model-adequacy criteria""")
@@ -541,7 +541,8 @@ def build():
     extra_txt = {
         "bioreactor": " It re-evaluates every model of the step on all runs, and it states how the result for "
                       "acidic variants at the least favourable combination of the NOR is handled.",
-        "protein_a": f" It is to record its analysis of influential runs as discrepancy {ns['pd_infl']}.",
+        "protein_a": f" It records as discrepancy {ns['pd_infl']} that some of its conclusions rest on models "
+                     "that do not meet the fourth criterion.",
         "viral_inactivation": " It moves the NOR of low-pH viral inactivation, because the XMuLV step claim is "
                               "not met over the NOR as characterized.",
     }
@@ -606,8 +607,8 @@ def build():
         "finding": [nc("the fourth model-adequacy criterion (residual patterns, influential runs)",
                        "The investigation applies the first three criteria of PCMP-001 §7.2 as tests and states no "
                        "result for the fourth.", [("finding", q_fourth)],
-                       elsewhere=f"each step report, for its own models (the Protein A report records its analysis "
-                                 f"of influential runs as {ns['pd_infl']})")],
+                       elsewhere=f"each step report, for its own models (the Protein A report records as "
+                                 f"{ns['pd_infl']} the conclusions that rest on models failing it)")],
         "rule": [nc("augmentation runs for the viral clearance models",
                     "No augmentation runs were made for the viral clearance models, and no virus was spiked.",
                     [("rule", q_noruns), ("des_aex", q_nospike)],
@@ -903,7 +904,7 @@ def build():
     sq("finding", """Of the failing models, `{python} n_fail_F` also fail the model F-test, with p-values from `{python} f"{fail_F_lo:.3f}"` to `{python} f"{fail_F_hi:.3f}"`.""")
     sq("finding", """They are `{python} fail_F_phrase`.""",
        """The failing models that also fail the model F-test are `{python} fail_F_phrase`.""")
-    st("finding", q("""The Version 2.0 analysis puts Protein A response-surface run `{python} run23` at the elution buffer pH recorded under deviation `{python} run23_dev`, `{python} f"{run23_ph:g}"` instead of the design pH of `{python} f"{run23_design:g}"` (discrepancy `{python} pd_ph`)."""), [ref("finding", q_run23)])
+    st("finding", q("""The Version 2.0 analysis puts Protein A response-surface run `{python} run23` at the elution buffer pH recorded under study event `{python} run23_dev`, `{python} f"{run23_ph:g}"` instead of the design pH of `{python} f"{run23_design:g}"` (discrepancy `{python} pd_ph`)."""), [ref("finding", q_run23)])
     st("finding", q("""With run `{python} run23` at its recorded pH, the full quadratic model of pool host cell protein fails the lack-of-fit test (`{python} ptxt(fq_rec["p_lof"])`), while it meets the model F-test and the limit on overfitting."""), [ref("finding", q_fqrec)])
     sq("finding", """With run `{python} run23` at either pH, the same `{python} n_fail` models fail the limit on overfitting.""")
     sq("finding", """Model selection, corrective action CA3, covers every output""",
@@ -1114,7 +1115,7 @@ def build():
     sq("sel_proc", "An output whose selected model fails, or fits exactly, has no adequate model.",
        "An output whose selected model fails, or fits exactly, has no adequate model.")
     sq("sel_log", "Host cell protein in the Protein A pool shows what the log scale does.")
-    st("sel_log", q("""Every model of pool host cell protein in the section puts response-surface run `{python} run23` at the elution buffer pH recorded under deviation `{python} run23_dev`, as the Version 2.0 analysis does."""), [ref("sel_log", q_run23_log)])
+    st("sel_log", q("""Every model of pool host cell protein in the section puts response-surface run `{python} run23` at the elution buffer pH recorded under study event `{python} run23_dev`, as the Version 2.0 analysis does."""), [ref("sel_log", q_run23_log)])
     sq("sel_log", """Its range studied is `{python} f"{pl_ld.prange[0]:g}"` to `{python} f"{pl_ld.prange[1]:g}"` `{python} pl_ld.unit`, so one coded unit is `{python} f"{half_ld:g}"` `{python} pl_ld.unit`.""",
        """The range studied of protein load is `{python} f"{pl_ld.prange[0]:g}"` to `{python} f"{pl_ld.prange[1]:g}"` `{python} pl_ld.unit`, so one coded unit is `{python} f"{half_ld:g}"` `{python} pl_ld.unit`.""")
     sq("sel_log", """Its coefficient on the log scale is b = `{python} f3(b_ld)`.""",

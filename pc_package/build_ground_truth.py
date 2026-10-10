@@ -10296,11 +10296,11 @@ def build_investigation():
             source_references=[r_("scope", "The experiments themselves are not reviewed either.")],
             metadata=meta()),
         ExplicitNonClaim(
-            non_claim_id=f"{doc}-NC03", subject="study deviation dispositions",
-            statement="The study deviations recorded in the step reports keep the disposition those "
+            non_claim_id=f"{doc}-NC03", subject="study event outcomes",
+            statement="The study events recorded in the step reports keep the outcome those "
                       "reports give them.", handled_elsewhere="the step reports PCR-003 to PCR-010",
-            source_references=[r_("scope", "Finally, the study deviations recorded in the step "
-                                           "reports keep the disposition those reports give them.")],
+            source_references=[r_("scope", "Finally, the study events recorded in the step "
+                                           "reports keep the outcome those reports give them.")],
             metadata=meta()),
         ExplicitNonClaim(
             non_claim_id=f"{doc}-NC06", subject="adequacy of the response-surface models",

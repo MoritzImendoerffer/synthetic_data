@@ -163,8 +163,13 @@ Cite **only** existing `references.bib` keys. The standard basis, and what each 
 ## 9. The characterization campaign storyline (the "messy campaign")
 
 The corpus is not a clean paper exercise; it documents a **real campaign with recorded
-deviations** — this is deliberate, because narrated deviations are what make the corpus
-realistic and the benchmark hard. The seeded deviation world (`config/parameters.yaml`
+study events** — this is deliberate, because narrated events are what make the corpus
+realistic and the benchmark hard. Version 1.0 numbered them as deviations (`DEV-00N-0X`).
+Version 2.0 keeps the numbers and calls them **study events**, because a process
+characterization study is not GMP manufacture and raises no deviation (owner, 2026-10-10).
+A departure from a plan that a later review finds (runs missing, an order not followed, a
+record not kept, a plan rule not applied) is a **discrepancy from the plan**
+(`campaign.plan_discrepancies`), never an event and never a deviation. The seeded event world (`config/parameters.yaml`
 `deviations:` → `deviations.csv`, surfaced by `dev_register`, `dev_facts`, and the
 `dev_*` scalars) includes recurring world-level entities the author may reference:
 
@@ -173,11 +178,11 @@ realistic and the benchmark hard. The seeded deviation world (`config/parameters
 - **Prior campaign documents:** `RA-004` (Alternate Protein A Resin Risk Assessment —
   decided independent characterization is required, no platform bridging) and `SOP-2103`
   (Buffer Preparation / expiry control — authorises retained-sample re-test on expiry
-  deviations). These are cited where a deviation's investigation touches them.
+  deviations). These are cited where an event's investigation touches them.
 - **Lots / methods:** feed and buffer lots (e.g. `LOT-FED-3120`) and verification-qualified
-  methods appear per-deviation; the brief surfaces the ones relevant to each document.
+  methods appear per event; the brief surfaces the ones relevant to each document.
 
-**The superseded-study canon (important).** Where a deviation invalidated a study and
+**The superseded-study canon (important).** Where an event invalidated a study and
 forced re-execution, the campaign *actually ran the study twice* and both datasets are
 seeded. The paradigm case is **anion exchange (Step 8)**: the first DoE execution used a
 **non-representative, deamidated load** (an out-of-trend extended neutralized hold of the
@@ -190,7 +195,7 @@ execution; the first execution is retained as a real superseded dataset** and is
 *referenced* (to confirm root cause: the anomalous interaction is statistically absent in
 the requalified data), **not analysed**. A report of such a step tells this as an
 adverse-before-mitigation story (WRITING_GUIDE §2, rule 8), grounded entirely in the seeded
-scalars and the two datasets — never in invented numbers. Milder deviations (probe drift,
+scalars and the two datasets — never in invented numbers. Milder events (probe drift,
 feed under-delivery) are simply **retained** with a bounded-impact argument.
 
 ## 9b. Version 2.0: the investigation, the method decision, and the criteria (canon)
@@ -428,8 +433,8 @@ the plan says it has none, and the report states its approach and records it as 
   S-PA-RET and S-VI-RET covered the retained response-surface samples only.
 - **The A-Mab concentration study at low pH.** PCP-006 Version 1.0 required XMuLV clearance on every run
   of S-VI-UNI; the study measured aggregate and acidic variants only, and PCR-006 Version 1.0 did not
-  notice. Version 2.0: the plan keeps the Version 1.0 design; PCR-006 records the omission as deviation
-  DEV-006-03, found in the re-analysis, closed by the confirmation study S-VI-UNI2 (PD-006-06: XMuLV-spiked
+  notice. Version 2.0: the plan keeps the Version 1.0 design; PCR-006 records the omission as the
+  discrepancy from the plan PD-006-07, found in the re-analysis, answered by the confirmation study S-VI-UNI2 (PD-006-06: XMuLV-spiked
   holds at both ends of the concentration range, in duplicate, other parameters at their set-points as
   characterized). Concentration does not enter the inactivation in the step model, so the two levels
   differ by run-to-run variation only; PCR-006 judges that with the run-to-run SD of the design, and a
@@ -580,7 +585,7 @@ expression for the specific step — the "helper inventory".)
 | Figures (surfaces, contours, diagnostics) | `D.fig_rsm_contours(...)`, `D.fig_diagnostics(...)` |
 | Commercial-scale capability (Cpk) | `cap_for([keys])`, `cap` |
 | Monte-Carlo batch count, product targets, scale | `V['n_monte_carlo']`, `CFG` (`meta.*`) |
-| Deviation register + facts + scalars | `dev_register(DOC)`, `dev_facts(DOC)`, `dev_*` module globals |
+| Study-event register + facts + scalars | `dev_register(DOC)`, `dev_facts(DOC)`, `dev_*` module globals |
 | Whole-train control-strategy summaries | `cpp_params(...)`, `class_counts()` |
 | Revision, investigation, method decision, dates | `doc_version(DOC)`, `rev1_date(DOC)`, `revision_history(DOC)`, `REV1`, `REV2`, `INV`, `AMD`, `PLAN_APPROVAL`, `csv("study_chronology.csv")` |
 | CAPA, effectiveness check, thresholds | `CAPA` (DataFrame), `EFFECTIVENESS`, `THRESHOLDS`, `CPK_TARGET`, `CPK_MIN` |

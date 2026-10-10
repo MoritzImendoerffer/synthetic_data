@@ -458,22 +458,28 @@ def doe_centre_points(key, kind):
 # --------------------------------------------------------------------------- #
 # Deviation facts (density-pass narrated-deviation sections).                  #
 # --------------------------------------------------------------------------- #
-def dev_register(doc_id):
-    """Markdown register of a report's seeded deviations, for the deviations section to introduce and walk.
+# what was done with the data of an event, in words (config tokens otherwise print with spaces)
+_EVENT_OUTCOME = {"retained": "run retained in the analysis",
+                  "invalidated_and_re_executed": "designs invalidated and re-executed"}
 
-    Columns: Deviation, Summary, Detected during, Disposition — sourced from
-    outputs/data/deviations.csv (built from config/parameters.yaml). Returns an
-    empty string for a document with no seeded deviations."""
+
+def dev_register(doc_id):
+    """Markdown register of a report's study events, for the record section to introduce and walk.
+
+    The study events are the events of execution Version 1.0 recorded, under the DEV numbers it gave
+    them. A process characterization study is not GMP manufacture, so they are not called deviations
+    (owner, 2026-10-10); a departure from the plan is in ``discrepancy_register`` instead. Columns:
+    Event, Summary, Detected during, Outcome, from outputs/data/deviations.csv (built from
+    config/parameters.yaml). Returns an empty string for a document with no study event."""
     d = csv("deviations.csv")
     d = d[d["doc_id"] == doc_id].copy()
     if d.empty:
         return ""
-    d = d.rename(columns={"dev_id": "Deviation", "summary": "Summary",
-                          "detected_during": "Detected during", "disposition": "Disposition"})
-    # dispositions are config tokens (supplementary_runs_executed); print them as words
-    d["Disposition"] = d["Disposition"].astype(str).str.replace("_", " ")
-    return md_table(["Deviation", "Summary", "Detected during", "Disposition"],
-                    d[["Deviation", "Summary", "Detected during", "Disposition"]].astype(str).values.tolist(),
+    d = d.rename(columns={"dev_id": "Event", "summary": "Summary",
+                          "detected_during": "Detected during", "disposition": "Outcome"})
+    d["Outcome"] = [_EVENT_OUTCOME.get(str(x), str(x).replace("_", " ")) for x in d["Outcome"]]
+    return md_table(["Event", "Summary", "Detected during", "Outcome"],
+                    d[["Event", "Summary", "Detected during", "Outcome"]].astype(str).values.tolist(),
                     [16, 38, 30, 16])
 
 
@@ -560,8 +566,9 @@ PLAN_DISCREPANCIES = {k: sorted(v, key=lambda d: d["id"]) for k, v in PLAN_DISCR
 
 def discrepancy_register(doc_id):
     """Markdown register of a report's discrepancies from its plan: what the plan foresaw, what
-    was done, and why. A discrepancy is not a deviation (config ``campaign.plan_discrepancies``).
-    Returns an empty string for a document with none."""
+    was done, and why. Every departure from the plan is one, both work the plan did not foresee and
+    a plan requirement that was not met (config ``campaign.plan_discrepancies``); a characterization
+    study raises no deviation (owner, 2026-10-10). Returns an empty string for a document with none."""
     ds = PLAN_DISCREPANCIES.get(doc_id, [])
     if not ds:
         return ""
@@ -570,7 +577,7 @@ def discrepancy_register(doc_id):
 
 
 def dev_facts(doc_id):
-    """Row(s) of the deviation register for a document (structured access)."""
+    """Row(s) of the study-event register for a document (structured access)."""
     d = csv("deviations.csv")
     return d[d["doc_id"] == doc_id].reset_index(drop=True)
 

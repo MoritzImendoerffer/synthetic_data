@@ -629,7 +629,7 @@ def criteria_results(step: str, label: Optional[str] = None) -> CTable:
     cfg = _cfg()
     t = _csv("iac.csv")
     t = t[t["step_key"] == step]
-    body, any_off, any_meas, any_log, any_ratio = [], False, False, False, False
+    body, any_off, any_meas, any_log, any_ratio, any_mean = [], False, False, False, False, False
     for _, r in t.iterrows():
         resp = r["response"]
         try:
@@ -647,7 +647,7 @@ def criteria_results(step: str, label: Optional[str] = None) -> CTable:
             m = D.to_mfg(step, resp, D.measured_values(step, resp))
             any_meas = True
             body.append([ATTR_NAME[r["cqa"]], crit(r["iac_low"], r["iac_high"], r["spec_type"]),
-                         "n.a.^c)^", f"{num(m.min())} to {num(m.max())}^c)^", "Yes" if ok else "No"])
+                         "n.a.^c)^", f"{num(m.min())} to {num(m.max())}^c)^", "n.a.^c)^", "Yes" if ok else "No"])
             continue
         grid = list(itertools.product(*[[uo.param(f).nor[0], uo.param(f).setpoint, uo.param(f).nor[1]] for f in fac]))
         y = D.to_mfg(step, resp, D.predict(step, resp, natural={f: [g[i] for g in grid] for i, f in enumerate(fac)}))
@@ -656,8 +656,17 @@ def criteria_results(step: str, label: Optional[str] = None) -> CTable:
         lg = res.get("transform") == "log"
         any_log = any_log or lg
         mk = "^d)^" if lg else ""
+        # the statistic that decides the verdict, shown so that the verdict can be read from the row: for a
+        # quality attribute the lowest lower and the highest upper 95 % limit of a single run over the NOR
+        # (PCR-003 review run 2: a mean range inside the criterion beside "No" could not be read)
+        if D.decision_statistic(resp) == "batch":
+            plo, phi = D.nor_prediction_limit(step, resp, "lower"), D.nor_prediction_limit(step, resp, "upper")
+            lim = f"{num(plo)} to {num(phi)}" + mk
+        else:
+            any_mean = True
+            lim = "n.a.^e)^"
         body.append([ATTR_NAME[r["cqa"]], crit(r["iac_low"], r["iac_high"], r["spec_type"]),
-                     num(sp) + mk, f"{num(lo)} to {num(hi)}" + mk, "Yes" if ok else "No"])
+                     num(sp) + mk, f"{num(lo)} to {num(hi)}" + mk, lim, "Yes" if ok else "No"])
     notes = [("a)", "Judged at every combination of NOR low, set-point and NOR high. Quality "
                     "attributes: the 95 % prediction interval of a single run (t quantile, coefficient "
                     "and residual uncertainty)."
@@ -676,10 +685,13 @@ def criteria_results(step: str, label: Optional[str] = None) -> CTable:
     if any_log:
         notes.append(("d)", "Modelled on the log scale: the median, the back-transformed mean "
                             "prediction."))
+    if any_mean:
+        notes.append(("e)", "Judged on the mean prediction at the least favourable combination, the lower "
+                            "end of the range over the NOR."))
     return CTable(
-        header=[[C("Attribute", rs=2), C("Criterion", rs=2), C("Mean predicted by the response-surface model" + ("^b)^" if any_off else ""), cs=2), C("Met across\nthe NOR^a)^", rs=2)],
+        header=[[C("Attribute", rs=2), C("Criterion", rs=2), C("Mean predicted by the response-surface model" + ("^b)^" if any_off else ""), cs=2), C("95 % limits of a\nsingle run over\nthe NOR" + ("^b)^" if any_off else ""), rs=2), C("Met across\nthe NOR^a)^", rs=2)],
                 ["At the set-point", "Range over the NOR"]],
-        body=body, align="llrrl", notes=notes, notes_per_row=True,
+        body=body, align="llrrrl", notes=notes, notes_per_row=True,
         caption=f"{STEP_NAME[step]} outputs against their intermediate acceptance criteria.",
         label=label or f"tbl-criteria-{step.replace('_', '-')}")
 

@@ -2,7 +2,7 @@
 title: "Pre-Characterization Process Risk Assessment"
 subtitle: "A-Mab Drug Substance — RA-001"
 author: "Process Development / Manufacturing Science & Technology (MSAT)"
-date: 2026-07-24
+date: 2026-09-30            # Version 2.0 effective date (INV-001 is 2026-09-18)
 format:
   docx:
     reference-doc: reference.docx
@@ -25,6 +25,7 @@ format:
     fig-pos: 'H'
     fig-cap-location: bottom
     tbl-cap-location: top
+    include-in-header: _tables.tex   # multirow, booktabs, threeparttable for complex tables
 bibliography: references.bib
 execute:
   echo: false
@@ -39,144 +40,323 @@ import sys, os
 sys.path.insert(0, os.path.abspath("."))
 from _pcpkg import *  # noqa: F401,F403
 import doe_report as D
+import tables as T          # complex tables: merged cells, footnotes (T.<builder>(...).show())
+import ra_content as RC     # the curated pre-characterization risk content of this document
+import matplotlib.pyplot as plt
+import scipy.stats as sstat
 import pandas as pd
-import ra_content as RA
 
 DOC = "RA-001"
-UO = "None"
+UO = None
 UO_TITLE = "A-Mab Drug Substance"
 
-# --- pre-characterization risk content -------------------------------------------------
-# RA.ra_rows() joins the curated failure-mode / effect / attribute-at-risk content to the
-# initial (pre-characterization) severity, occurrence and detection scores and to the
-# study-type decision. Nothing here is a post-characterization result.
-ra_rows = RA.ra_rows()
-ra_sum = RA.ra_summary()
-rank_df = RA.ra_scope_df().drop(columns=["CQA(s) at risk"])
-detail_df = RA.ra_detail_df()
-cqa_df = RA.cqa_table()
+# ------------------------------------------------------------------ the record and its dates
+ver2, eff2 = doc_version(DOC)                 # this revision
+appr_v1 = rev1_date(DOC)                      # Version 1.0 approval (PLAN_APPROVAL)
+appr_ptp = rev1_date("PTP-001")
+appr_pcmp = rev1_date("PCMP-001")
+v1_block = REV1["effective"]                  # the date the Version 1.0 title block carried
+chron = csv("study_chronology.csv").sort_values(["start", "id"]).reset_index(drop=True)
+first_id, first_start = chron.loc[0, "id"], chron.loc[0, "start"]
+# the order of the package: transfer plan, this assessment, master plan, the first study, the
+# compilation of the Version 1.0 package
+assert appr_ptp < appr_v1 < appr_pcmp < first_start < v1_block
+assert chron.loc[0, "step"] == "bioreactor" and chron.loc[0, "kind"] == "qualification"
+assert (chron["start"] > appr_v1).all()       # every study started after this approval
+inv_id, inv_open, inv_close = INV["id"], INV["opened"], INV["closed"]
+amd_id, amd_date = AMD["id"], AMD["date"]
+assert amd_date < inv_open
+capa = CAPA.set_index("id")["action"]
+assert DOC in capa["CA3"]                     # CA3 reissues this assessment
+assert all(x in capa["CA3"] for x in ("PCR-003", "PCR-010", "PTP-001", "PCMR-001"))
+assert "criteria" in capa["CA2"] and "fragment" in capa["CA2"] and "PCP-003" in capa["CA2"]
+site_dev, site_com = SENDING_LOCATION, RECEIVING_LOCATION
 
-_by = {(r["key"], r["pkey"]): r for r in ra_rows}
-_step = {k: CFG.unit_op(k).step for k in CFG.train_order}
+# ------------------------------------------------------------------ the risk register
+rows = RC.ra_rows()
+summ = RC.ra_summary()
+n_par, n_q, n_perf = summ["n"], summ["n_quality"], summ["n_perf"]
+n_mv, n_uni, n_just = summ["n_multivariate"], summ["n_univariate"], summ["n_just_uni"]
+steps = list(CFG.train_order)
+n_steps = len(steps)
+name = {k: UNIT_OP_TITLES[k] for k in steps}
+mid = {k: T.step_mid(k) for k in steps}
 
 
 def _viral(r):
-    return ("lrv_xmulv" in r["cqas"]) or ("lrv_mvm" in r["cqas"])
+    return bool({"lrv_xmulv", "lrv_mvm"} & set(r["cqas"]))
 
 
-# --- the scoring scales, read back from the register they produced ---------------------
-sev_scale = sorted(set(RA.CQA_SEVERITY.values()))
-sev_lo, sev_hi = sev_scale[0], sev_scale[-1]
-sev_high = min(r["severity"] for r in ra_rows if r["priority"] == "High")
-o_qual = max(r["o_init"] for r in ra_rows if r["quality"])
-o_perf = max(r["o_init"] for r in ra_rows if not r["quality"])
-d_viral = max(r["d_init"] for r in ra_rows if _viral(r))
-d_qual = max(r["d_init"] for r in ra_rows if r["quality"] and not _viral(r))
-d_perf = max(r["d_init"] for r in ra_rows if not r["quality"])
-rpn_lo = min(r["rpn_init"] for r in ra_rows)
-rpn_hi = max(r["rpn_init"] for r in ra_rows)
-n_rpn_values = len(set(r["rpn_init"] for r in ra_rows))
-
-# --- register-level counts -------------------------------------------------------------
-n_steps = len(CFG.train_order)
-n_par_total = ra_sum["n"]
-n_quality = ra_sum["n_quality"]
-n_perf = ra_sum["n_perf"]
-n_mv_total = ra_sum["n_multivariate"]
-n_uv_total = ra_sum["n_univariate"]
-n_just_uni = ra_sum["n_just_uni"]
-n_doe_steps = ra_sum["n_doe_steps"]
-n_nodoe_steps = n_steps - n_doe_steps
-n_high = sum(1 for r in ra_rows if r["priority"] == "High")
-n_med = sum(1 for r in ra_rows if r["priority"] == "Medium")
-n_low = sum(1 for r in ra_rows if r["priority"] == "Low")
-
-# --- attribute register ----------------------------------------------------------------
-n_cqa = len(cqa_df)
-n_crit = int(cqa_df["Criticality"].isin(["H", "VH"]).sum())
-n_set_br = int((cqa_df["Set by"] == UNIT_OP_TITLES["bioreactor"]).sum())
-n_set_down = n_cqa - n_set_br
-n_sev_top = int((cqa_df["Severity"] == sev_hi).sum())
-t1_hi = int(cqa_df["Tool #1"].max())
-t1_lo = int(cqa_df["Tool #1"].min())
-sev_acidic = RA.CQA_SEVERITY["acidic_variants"]
-n_at_risk_max = max(len(r["cqas"]) for r in ra_rows if r["quality"])
-sev_perf = RA.CQA_SEVERITY["performance"]
-n_study_types = len(set(r["study"] for r in ra_rows))
-n_perf_in_doe_pa = sum(1 for r in ra_rows if r["key"] == "protein_a"
-                       and not r["quality"] and r["study"] == "multivariate DoE")
+def _one(values):
+    s = set(values)
+    assert len(s) == 1, s
+    return s.pop()
 
 
-# --- per-parameter and per-step accessors ----------------------------------------------
-def par_name(key, pkey):
-    return _by[(key, pkey)]["param"]
+def R(k, pkey):
+    """One parameter of the register."""
+    return next(r for r in rows if r["key"] == k and r["pkey"] == pkey)
 
 
-def par_sev(key, pkey):
-    return _by[(key, pkey)]["severity"]
+def _lc(s):
+    """A parameter name inside a sentence (A-Mab keeps its capital)."""
+    return s if s.startswith("A-Mab") else s[0].lower() + s[1:]
 
 
-def par_rpn(key, pkey):
-    return _by[(key, pkey)]["rpn_init"]
+# scoring by class (occurrence and detection are not scored parameter by parameter)
+sev_perf = RC.CQA_SEVERITY["performance"]
+occ_q = _one(r["o_init"] for r in rows if r["quality"])
+occ_p = _one(r["o_init"] for r in rows if not r["quality"])
+det_v = _one(r["d_init"] for r in rows if _viral(r))
+det_q = _one(r["d_init"] for r in rows if r["quality"] and not _viral(r))
+det_p = _one(r["d_init"] for r in rows if not r["quality"])
+assert all(r["severity"] == sev_perf for r in rows if not r["quality"])
+assert all(r["rpn_init"] == r["severity"] * r["o_init"] * r["d_init"] for r in rows)
+rpn_vals = sorted({r["rpn_init"] for r in rows})
+rpn_min, rpn_max, n_rpn = rpn_vals[0], rpn_vals[-1], len(rpn_vals)
+# priority: High where an attribute of severity sev_hi or above is at risk
+sev_hi = min(r["severity"] for r in rows if r["priority"] == "High")
+assert all((r["priority"] == "High") == (r["quality"] and r["severity"] >= sev_hi) for r in rows)
+assert all((r["priority"] == "Medium") == (r["quality"] and r["severity"] < sev_hi) for r in rows)
+assert all((r["priority"] == "Low") == (not r["quality"]) for r in rows)
+n_high = sum(r["priority"] == "High" for r in rows)
+n_med = sum(r["priority"] == "Medium" for r in rows)
+n_low = sum(r["priority"] == "Low" for r in rows)
+top_rows = [r for r in rows if r["rpn_init"] == rpn_max]
+n_top = len(top_rows)
+assert {r["key"] for r in top_rows} == {"viral_inactivation", "aex", "virus_filtration"}
+assert all(_viral(r) for r in top_rows)
+
+# the study-type rule: multivariate = a factor of the step's designed experiment
+study_types = list(dict.fromkeys(r["study"] for r in rows))
+n_types = len(study_types)
+assert set(study_types) == {"multivariate DoE", "univariate (justified)", "univariate"}
+assert all((r["study"] == "multivariate DoE") == (r["pkey"] in st.DOE_FACTORS.get(r["key"], []))
+           for r in rows)
+assert all(r["study"] == "univariate (justified)" for r in rows
+           if r["quality"] and r["study"] != "multivariate DoE")
+assert n_uni == n_par - n_mv
+doe_steps = [k for k in steps if any(r["key"] == k and r["study"] == "multivariate DoE" for r in rows)]
+nodoe_steps = [k for k in steps if k not in doe_steps]
+assert len(doe_steps) == summ["n_doe_steps"]
+assert nodoe_steps == ["harvest", "ufdf"]
+assert not any(r["quality"] for r in rows if r["key"] in nodoe_steps)
+perf_doe = [r for r in rows if r["study"] == "multivariate DoE" and not r["quality"]]
+n_perf_doe = len(perf_doe)
+assert {r["key"] for r in perf_doe} == {"protein_a"}
+assert sorted(r["pkey"] for r in perf_doe) == ["end_collect", "flow"]
+just = [r for r in rows if r["study"] == "univariate (justified)"]
+assert len(just) == n_just == 1 and (just[0]["key"], just[0]["pkey"]) == ("aex", "flow")
+assert set(just[0]["cqas"]) == {"lrv_xmulv", "lrv_mvm"}
 
 
-def n_at_risk(key, pkey):
-    return len(_by[(key, pkey)]["cqas"])
+def _stp(k):
+    g = [r for r in rows if r["key"] == k]
+    top = max(g, key=lambda r: r["rpn_init"])
+    return dict(n=len(g), nq=sum(r["quality"] for r in g), nperf=sum(not r["quality"] for r in g),
+                nmv=sum(r["study"] == "multivariate DoE" for r in g), rpn_max=top["rpn_init"],
+                top=top["pkey"], sev_max=max(r["severity"] for r in g))
 
 
-def rows_for(key):
-    return [r for r in ra_rows if r["key"] == key]
+ST = {k: _stp(k) for k in steps}
+
+# production bioreactor
+bq = [r["pkey"] for r in rows if r["key"] == "bioreactor" and r["quality"]]
+assert bq == ["pH", "temperature", "co2", "osmolality", "duration"]
+assert all(R("bioreactor", k)["study"] == "multivariate DoE" for k in bq)
+assert all(r["study"] == "univariate" for r in rows if r["key"] == "bioreactor" and not r["quality"])
+assert ST["bioreactor"]["top"] == "pH"
+n_attr_max = max(len(r["cqas"]) for r in rows)
+assert sorted(r["pkey"] for r in rows if len(r["cqas"]) == n_attr_max) == ["duration", "pH"]
+assert all(r["key"] == "bioreactor" for r in rows if len(r["cqas"]) == n_attr_max)
+assert "high_mannose" in R("bioreactor", "pH")["cqas"]
+assert R("bioreactor", "pH")["severity"] == RC.CQA_SEVERITY["high_mannose"]
+sev_bph = R("bioreactor", "pH")["severity"]
+for _k in ("temperature", "co2", "osmolality"):
+    assert {"galactosylation", "acidic_variants"} <= set(R("bioreactor", _k)["cqas"])
+assert "afucosylation" in R("bioreactor", "temperature")["cqas"]
+assert set(R("bioreactor", "duration")["cqas"]) == {"afucosylation", "galactosylation",
+                                                   "aggregates_hmw", "hcp", "residual_dna"}
+assert set(R("bioreactor", "pH")["cqas"]) == {"afucosylation", "galactosylation", "high_mannose",
+                                             "acidic_variants", "aggregates_hmw"}
+# harvest: no hold parameter among those assessed
+assert not any("hold" in p.key for p in CFG.unit_op("harvest").parameters)
+# Protein A
+pa_q = [r["pkey"] for r in rows if r["key"] == "protein_a" and r["quality"]]
+assert pa_q == ["load", "elution_ph"] and all(R("protein_a", k)["cqas"] == ["hcp"] for k in pa_q)
+sev_pa = R("protein_a", "load")["severity"]
+assert not any("leached_protein_a" in r["cqas"] for r in rows)
+assert sorted(r["pkey"] for r in rows if r["key"] == "protein_a" and r["study"] == "univariate") \
+    == ["bed_height", "temperature"]
+# low-pH viral inactivation
+vi_top = [r["pkey"] for r in rows if r["key"] == "viral_inactivation" and r["rpn_init"] == rpn_max]
+assert vi_top == ["ph", "hold_time", "temperature"]
+n_vi_top = len(vi_top)
+assert {"aggregates_hmw"} <= set(R("viral_inactivation", "ph")["cqas"])
+assert {"aggregates_hmw"} <= set(R("viral_inactivation", "hold_time")["cqas"])
+assert not any("lrv_mvm" in r["cqas"] for r in rows if r["key"] == "viral_inactivation")
+assert not R("viral_inactivation", "protein_conc")["quality"]
+# cation exchange
+cex_q = [r["pkey"] for r in rows if r["key"] == "cex" and r["quality"]]
+assert cex_q == ["load", "wash_cond", "elution_ph", "stop_collect"]
+sev_agg = RC.CQA_SEVERITY["aggregates_hmw"]
+assert all("aggregates_hmw" in R("cex", k)["cqas"] for k in ("load", "elution_ph", "stop_collect"))
+assert set(R("cex", "load")["cqas"]) == {"aggregates_hmw", "hcp"}
+assert R("cex", "wash_cond")["cqas"] == ["hcp"] and not R("cex", "flow")["quality"]
+# anion exchange
+assert ST["aex"]["nq"] == ST["aex"]["n"]
+n_aex_ph = len(R("aex", "load_ph")["cqas"])
+assert R("aex", "load_ph")["rpn_init"] == rpn_max
+assert set(R("aex", "load_cond")["cqas"]) == {"lrv_xmulv", "lrv_mvm"}
+assert R("aex", "wash1_cond")["cqas"] == ["hcp"] and R("aex", "load")["cqas"] == ["hcp"]
+# virus filtration
+assert ST["virus_filtration"]["nq"] == ST["virus_filtration"]["n"]
+assert all(r["rpn_init"] == rpn_max for r in rows if r["key"] == "virus_filtration")
+assert R("virus_filtration", "filtration_volume")["cqas"] == ["lrv_mvm"]
+assert set(R("virus_filtration", "pressure")["cqas"]) == {"lrv_mvm", "lrv_xmulv"}
+# harvest and UF/DF sit at the floor of the register
+for _k in nodoe_steps:
+    assert all(r["rpn_init"] == rpn_min for r in rows if r["key"] == _k)
+
+# ------------------------------------------------------------------ the attribute register
+# RC.cqa_table(): criteria printed by their type, the severity carried into this assessment, and
+# no severity for an attribute the assessment never scored (fragments joined at Version 2.0)
+reg = RC.cqa_table().reset_index(drop=True)
+reg["key"] = list(cqa_reg["key"])
+assert list(reg["Quality attribute"]) == list(cqa_reg["cqa"])
+assert list(reg["Acceptance"]) == list(all_cqas()["Acceptance"])   # as PCMP-001 Table 3.1 prints them
+scored = reg["Severity"].notna()
+assert set(reg.loc[~scored, "key"]) == {"fragments_lmw"}            # the one attribute never scored
+n_cqa = len(reg)
+n_crit = int(reg["Criticality"].isin(["H", "VH"]).sum())
+n_bio = int((cqa_reg["set_by"] == "bioreactor").sum())
+assert set(cqa_reg.loc[cqa_reg["set_by"] != "bioreactor", "key"]) == {
+    "fragments_lmw", "leached_protein_a", "lrv_xmulv", "lrv_mvm"}
+sev_reg_min = int(reg.loc[scored, "Severity"].min())                # over the scored attributes only
+sev_reg_max = int(reg.loc[scored, "Severity"].max())
+_top = reg[reg["Severity"] == sev_reg_max]
+assert set(_top["key"]) == {"high_mannose", "lrv_xmulv", "lrv_mvm"}
+n_top_attr = len(_top)
+t1_max = int(reg["Tool #1"].max())
+assert reg.loc[reg["Tool #1"].idxmax(), "key"] == "high_mannose"
+_r = reg.set_index("key")
+assert _r.loc["high_mannose", "Tool #1"] > _r.loc["afucosylation", "Tool #1"]
+vir_t1 = _one(int(_r.loc[k, "Tool #1"]) for k in ("lrv_xmulv", "lrv_mvm"))
+assert all(_r.loc[k, "Criticality"] == "VH" for k in ("lrv_xmulv", "lrv_mvm"))
+assert vir_t1 < _r.loc["afucosylation", "Tool #1"]   # very high by rule, not by score
+acid_t1, acid_sev = int(_r.loc["acidic_variants", "Tool #1"]), int(_r.loc["acidic_variants", "Severity"])
+assert acid_t1 == int(reg["Tool #1"].min())
+acid_par = [r for r in rows if "acidic_variants" in r["cqas"]]
+n_acid_par = len(acid_par)
+assert {r["key"] for r in acid_par} == {"bioreactor"}
+dna_sev = int(_r.loc["residual_dna", "Severity"])
+assert dna_sev == sev_reg_min
+assert [r["pkey"] for r in rows if "residual_dna" in r["cqas"]] == ["duration"]
+# fragments: in the register now, never scored by the assessment
+frag = _r.loc["fragments_lmw"]
+frag_acc, frag_crit, frag_t1 = frag["Acceptance"], frag["Criticality"], int(frag["Tool #1"])
+frag_crit_word = {"VL": "very low", "L": "low", "L-M": "low to moderate", "M": "moderate",
+                  "M-H": "moderate to high", "H": "high", "VH": "very high"}[frag_crit]
+assert cqa_reg.set_index("key").loc["fragments_lmw", "set_by"] == "harvest"
+assert not any("fragments_lmw" in r["cqas"] for r in rows)
+assert "fragments_lmw" not in RC.CQA_SEVERITY
+
+# Table 3.1: the register grouped by category, in the order the register first uses each
+_cats = list(dict.fromkeys(reg["Category"]))
+reg["_c"] = reg["Category"].map(_cats.index)
+reg31 = reg.sort_values("_c", kind="stable").reset_index(drop=True)
+reg31["Acceptance"] = [a + {"fragments_lmw": "^o)^", "residual_dna": "^d)^"}.get(k, "")
+                       for a, k in zip(reg31["Acceptance"], reg31["key"])]
+# the dose of the residual DNA criterion (config meta.dose): A-Mab's dose, a 70 kg adult assumed
+assert DOSE_MG == float(DOSE["mg_per_kg"]) * float(DOSE["body_weight_kg"])
+dose_note = (f"Per dose of {float(DOSE['mg_per_kg']):g} mg/kg, the dose of the A-Mab case study, for a "
+             f"reference adult of {float(DOSE['body_weight_kg']):g} kg, which is {DOSE_MG:g} mg of "
+             f"antibody. The body weight is an assumption.")
+# the lowest ranked parameters (priority Low): the two in the capture design are the only exception
+assert [r for r in rows if r["priority"] == "Low" and r["study"] == "multivariate DoE"] == perf_doe
+reg31["Severity"] = ["—^n)^" if pd.isna(s) else f"{int(s)}" for s in reg31["Severity"]]
+reg31["Set by"] = [s + ("^v)^" if k in ("lrv_xmulv", "lrv_mvm") else "")
+                   for s, k in zip(reg31["Set by"], reg31["key"])]
+
+# severity 10 outside the steps with a viral clearance claim: culture pH alone
+claim_steps = {"viral_inactivation", "aex", "virus_filtration"}
+assert all(r["key"] in claim_steps for r in rows if _viral(r))
+assert [(r["key"], r["pkey"]) for r in rows
+        if r["severity"] == sev_reg_max and r["key"] not in claim_steps] == [("bioreactor", "pH")]
+assert min(R("bioreactor", k)["severity"] for k in bq) == sev_hi    # every quality parameter >= High
+# the classes of parameter: within one, the RPN differs only through severity
+_classes = {(r["o_init"], r["d_init"]) for r in rows}
+assert len(_classes) == 3
+
+# ------------------------------------------------------------------ ranges handed to the plans
+both, low_sh, equal = [], [], []
+for _k in steps:
+    for _p in CFG.unit_op(_k).parameters:
+        lo0, hi0 = map(float, _p.nor_characterized)
+        a_, b_ = map(float, _p.prange)
+        if a_ < lo0 and b_ > hi0:
+            both.append(_p.name)
+        elif a_ == lo0 and b_ == hi0:
+            equal.append(_p.name)
+        elif a_ == lo0 and b_ > hi0:
+            low_sh.append(_p.name)
+        else:
+            raise AssertionError(f"{_p.name}: range studied and NOR overlap in an unexpected way")
+n_both, n_low_sh = len(both), len(low_sh)
+assert n_both + n_low_sh + len(equal) == n_par and len(equal) == 1
+assert equal == ["A-Mab concentration"]
+low_sh_txt = join_and([_lc(x) for x in low_sh])
+
+# ------------------------------------------------------------------ tables built here
+_fm = RC.ra_detail_df()
 
 
-def n_par(key):
-    return len(rows_for(key))
+def fm_table(k, label):
+    n = CFG.unit_op(k).step
+    d = _fm[_fm["Step"] == n].drop(columns=["Step"]).reset_index(drop=True)
+    # several lines per row: a thin rule between the rows keeps each parameter readable
+    return T.frame(d, f"Potential failure modes and their effects, {mid[k]}.", label,
+                   align=["P{2.8cm}", "P{4.0cm}", "P{4.3cm}", "P{3.6cm}"], style="rows")
 
 
-def n_mv(key):
-    return sum(1 for r in rows_for(key) if r["study"] == "multivariate DoE")
+scope_rows = []
+for _k in steps:
+    _g = [r for r in rows if r["key"] == _k]
+    _n = CFG.unit_op(_k).step
+    scope_rows.append([_n, name[_k], len(_g), sum(r["quality"] for r in _g),
+                       sum(r["study"] == "multivariate DoE" for r in _g),
+                       sum(r["study"] != "multivariate DoE" for r in _g), f"PCP-{_n:03d} / PCR-{_n:03d}"])
+scope = pd.DataFrame(scope_rows, columns=["Step", "Unit operation", "Parameters", "Quality",
+                                          "Multivariate", "Univariate", "Plan / report"])
+# the same split as the master plan reads it (char_scope_df, PCMP-001 Version 2.0 Table 4.1)
+_cs = char_scope_df()
+assert list(_cs["Multivariate"]) == list(scope["Multivariate"])
+assert list(_cs["Univariate"]) == list(scope["Univariate"])
+assert scope["Multivariate"].max() == ST["bioreactor"]["nmv"]
+assert (scope["Multivariate"] < ST["bioreactor"]["nmv"]).sum() == n_steps - 1
 
-
-def n_uv(key):
-    return n_par(key) - n_mv(key)
-
-
-def n_qual_par(key):
-    return sum(1 for r in rows_for(key) if r["quality"])
-
-
-def rpn_max(key):
-    return max(r["rpn_init"] for r in rows_for(key))
-
-
-def detail_step(key):
-    d = detail_df[detail_df["Step"] == _step[key]]
-    return d.drop(columns=["Step"])
-
-
-# --- the parameter set handed to the plans ---------------------------------------------
-def scope_ranges_df():
-    """Set-point, range to be studied and NOR for every parameter, in train order.
-
-    Rendered with floatfmt="g" (see the chunk that shows it): the frame mixes a 9000 g
-    centrifuge speed with a culture pH of 6.85, and the automatic float format for a column
-    holding both rounds one of them away."""
-    out = []
-    for k in CFG.train_order:
-        d = plan_params(k).copy()
-        d.insert(0, "Step", _step[k])
-        out.append(d)
-    return pd.concat(out, ignore_index=True)
-
-
-def _wider(p):
-    lo, hi = p.prange
-    nlo, nhi = p.nor
-    return lo < nlo and hi > nhi
-
-
-n_wider = sum(1 for k in CFG.train_order for p in CFG.unit_op(k).parameters if _wider(p))
-n_shared_bound = n_par_total - n_wider
+t52 = []
+for _k in steps:
+    _uo = CFG.unit_op(_k)
+    _pp = plan_params(_k).reset_index(drop=True)
+    for _, _x in _pp.iterrows():
+        _rr = next(r for r in rows if r["key"] == _k and r["param"] == _x["Parameter"])
+        _p = next(q for q in _uo.parameters if q.name == _x["Parameter"])
+        assert (_x["Study type"] == "multivariate") == (_rr["study"] == "multivariate DoE")
+        # the plan's own study label; the one justified univariate study carries a note
+        _sty = _x["Study type"] + ("^a)^" if _rr["study"] == "univariate (justified)" else "")
+        _name = _x["Parameter"] + ("^t)^" if (_k, _p.key) == ("harvest", "turbidity") else "")
+        # the values the assessment was made against (plan_params: the NOR and set-point as
+        # characterized); PCMP-001 Version 2.0 Table 4.2 gives the values in force
+        t52.append([T.STEP_NAME[_k], _name, _x["Unit"], f"{_x['Set-point']:g}", _x["Range studied"],
+                    _x["NOR"], _sty])
+params52 = pd.DataFrame(t52, columns=["Step", "Parameter", "Unit", "Set-point",
+                                      "Range studied", "NOR", "Study type"])
+assert len(params52) == n_par
+assert any(p.key == "turbidity" for p in CFG.unit_op("harvest").parameters)
 ```
+
+{{< pagebreak >}}
 
 ```{python}
 #| output: asis
@@ -188,597 +368,496 @@ print(SYN_BANNER)
 ## Approvals {.unnumbered}
 
 | Role | Function | Name (synthetic) | Signature | Date |
-|---|---|---|---|---|
+|:-----------|:---------------------------------------|:-------------------|:---------------|:-----------|
 | Author | Process Development / MSAT | — | — | — |
 | Reviewer | Analytical Development | — | — | — |
 | Reviewer | Manufacturing Science | — | — | — |
 | Reviewer | Statistics | — | — | — |
 | Approver | Quality Assurance | — | — | — |
 
-: Approval record (synthetic; signatures not applied). {#tbl-appr}
-
-## Abbreviations {.unnumbered}
-
-AEX, anion exchange chromatography; BLA, Biologics License Application; CEX, cation
-exchange chromatography; CPP, critical process parameter; CQA, critical quality attribute;
-DNA, deoxyribonucleic acid; DoE, design of experiments; GPP, general process parameter;
-HCP, host cell protein; HMW, high molecular weight; ICH, International Council for
-Harmonisation; MSAT, Manufacturing Science and Technology; MVM, minute virus of mice; NOR,
-normal operating range; PAR, proven acceptable range; RPN, risk priority number; SEC, size
-exclusion chromatography; SOP, standard operating procedure; UF/DF, ultrafiltration and
-diafiltration; WC-CPP, well-controlled critical process parameter; XMuLV, xenotropic
-murine leukaemia virus.
+Synthetic record. Signatures are not applied.
 
 {{< pagebreak >}}
 
-# Purpose and scope
-
-This document records the risk assessment made on the A-Mab drug substance process before
-any characterization study was executed. Its output is the scope of the characterization
-campaign. For every process parameter in the transferred process description it names the
-quality attributes the parameter could affect, the potential failure mode and its effect,
-an initial risk score, and the type of study assigned to the parameter. The assessment is
-prospective throughout and reports no result.
-
-The assessment does not classify parameters. A parameter is classified as a CPP, a WC-CPP,
-a key process parameter or a GPP from the effects the characterization studies measure,
-under SOP-4001, and the classification is reported in the per unit operation reports and
-consolidated in PCMR-001. The scores given below are initial scores in the same sense. The
-risk that remains once the studies have reported is a separate assessment made against data
-that does not yet exist, and nothing in this document anticipates it.
-
-The scope is the drug substance process from the production bioreactor to formulation.
-@tbl-train lists the `{python} n_steps` unit operations and the role each has in the
-control strategy. In total `{python} n_par_total` process parameters are carried into
-the assessment across those unit operations. The seed expansion train, drug product
-manufacture and the analytical methods themselves lie outside the scope of this document.
+## Revision history {.unnumbered}
 
 ```{python}
 #| output: asis
-show(process_steps_df())
+print(revision_history(DOC))
 ```
 
-: The A-Mab drug substance process train and the role of each unit operation in the control strategy. {#tbl-train}
+## Abbreviations {.unnumbered}
 
-PTP-001 is the parent of this assessment and defines the transfer it supports.
-@tbl-related lists the documents this assessment sits between. Its consumers are the
-characterization plans, one for each unit operation, which take the study type assigned
-here and set out how that study will be run.
+```{python}
+#| output: asis
+print(abbreviations_table([
+    ("ADCC", "antibody dependent cellular cytotoxicity"),
+    ("AMD", "analytical method decision"),
+    ("AU", "absorbance unit"),
+    ("BLA", "Biologics License Application"),
+    ("CDC", "complement dependent cytotoxicity"),
+    ("CEX", "cation exchange chromatography"),
+    ("CPP", "critical process parameter"),
+    ("CQA", "critical quality attribute"),
+    ("CV", "column volume"),
+    ("DNA", "deoxyribonucleic acid"),
+    ("DoE", "design of experiments"),
+    ("DS", "drug substance"),
+    ("DV", "diavolume"),
+    ("GPP", "general process parameter"),
+    ("HCP", "host cell protein"),
+    ("HMW", "high molecular weight species"),
+    ("icIEF", "imaged capillary isoelectric focusing"),
+    ("ICH", "International Council for Harmonisation"),
+    ("IgG1", "immunoglobulin G subclass 1"),
+    ("Init. RPN", "initial risk priority number"),
+    ("KPP", "key process parameter"),
+    ("LMW", "low molecular weight species"),
+    ("MSAT", "Manufacturing Science and Technology"),
+    ("MVM", "minute virus of mice"),
+    ("NOR", "normal operating range"),
+    ("nrCE-SDS", "non-reduced capillary electrophoresis with sodium dodecyl sulfate"),
+    ("NTU", "nephelometric turbidity unit"),
+    ("OD280", "optical density at 280 nm"),
+    ("PA", "Protein A"),
+    ("pCO2", "carbon dioxide partial pressure"),
+    ("QA", "Quality Assurance"),
+    ("rcf", "relative centrifugal force"),
+    ("RPN", "risk priority number"),
+    ("SEC", "size exclusion chromatography"),
+    ("Sev.", "severity"),
+    ("SOP", "standard operating procedure"),
+    ("UDP", "uridine diphosphate"),
+    ("UF/DF", "ultrafiltration and diafiltration"),
+    ("VCD", "viable cell density"),
+    ("WC-CPP", "well-controlled critical process parameter"),
+    ("XMuLV", "xenotropic murine leukemia virus"),
+]))
+```
+
+{{< pagebreak >}}
+
+<!-- ========================= BODY START ========================= -->
+
+# Purpose and scope {#sec-purpose}
+
+This document records the risk assessment made on the A-Mab drug substance process before any characterization study began. Its output is the scope of the characterization campaign. For each process parameter it names the quality attributes the parameter could affect, the potential failure mode and its effect, an initial risk score and the type of study assigned to the parameter. The assessment is prospective and reports no study result.
+
+The assessment does not classify parameters. A parameter is classified as a critical process parameter (CPP), a well-controlled critical process parameter (WC-CPP), a key process parameter (KPP) or a general process parameter (GPP) from the effects that the characterization studies measure. That classification follows the parameter classification procedure SOP-4001. It is reported in the characterization report of each unit operation and consolidated in the master report PCMR-001. The scores in this document are initial scores in the same sense. The risk that remains once the studies have reported is a separate assessment, and nothing in this document anticipates it.
+
+The scope is the drug substance process from the production bioreactor to formulation. @tbl-train lists the `{python} n_steps` unit operations and the principal role of each, and the assessment covers their `{python} n_par` process parameters. The seed expansion train, drug product manufacture and the analytical methods themselves are outside its scope.
+
+```{python}
+#| output: asis
+T.frame(process_steps_df(),
+        "The A-Mab drug substance process train and the principal role of each unit operation.",
+        "tbl-train", align=["r", "P{4.4cm}", "P{9.2cm}"]).show()
+```
+
+The Process Transfer Plan PTP-001 is the parent of this assessment. It moves the process from the development site in `{python} site_dev` to the commercial drug substance site in `{python} site_com`, and the parameters assessed here are those of the process description it transfers. The consumers of the assessment are the characterization plans PCP-003 to PCP-010, one for each unit operation. Each plan takes the study type assigned here and sets out how the study is run. @tbl-related lists the documents to which this assessment is linked.
 
 ```{python}
 #| output: asis
 print(related_docs_md(DOC))
+print()
+print(": Documents related to this assessment. {#tbl-related}")
 ```
 
-: Related documents. {#tbl-related}
+In this framework risk assessment is a lifecycle activity, not a single exercise [@ichq9; @amab2009]. This assessment is the first in that lifecycle. It draws on prior knowledge alone, because no A-Mab characterization data existed when it was made. It is revisited when the characterization reports are available, and again once commercial experience has been gained. The approach follows the enhanced development approach of ICH Q8 and ICH Q11 [@ichq8; @ichq11] and supports Stage 1 of the process validation lifecycle [@fda2011].
 
-Risk assessment in this framework is a lifecycle activity and not a single exercise
-[@ichq9; @amab2009]. This assessment is the first in that lifecycle and draws on prior
-knowledge alone, since no A-Mab characterization data exist at the time it is made. It is
-revisited when the characterization reports are available, and again once commercial scale
-experience has been gained. The approach follows the enhanced development approach of
-ICH Q8 and ICH Q11 and supports Stage 1 of the process validation lifecycle [@fda2011].
+## Changes in this revision {#sec-changes}
 
-# Risk assessment methodology
+Version 1.0 of this assessment was approved on `{python} appr_v1`. That date falls after the approval of PTP-001 on `{python} appr_ptp` and before the approval of the Process Characterization Master Plan PCMP-001 on `{python} appr_pcmp`. The first characterization study, `{python} first_id`, the qualification runs of the production bioreactor scale-down model, started on `{python} first_start`. Every study of the campaign started after this assessment was approved. When the Version 1.0 package was compiled, the title block of this assessment carried `{python} v1_block`, the date of the compilation and of the approval of the Version 1.0 reports, in place of its own approval date. The QA investigation `{python} inv_id` recorded this as part of its finding 5, which concerns the dates in the Version 1.0 records. QA opened the investigation on `{python} inv_open`, after its review of PCMR-001 Version 1.0 for readiness for the Biologics License Application (BLA), and closed it on `{python} inv_close`. Its corrective action CA3 reissues the characterization reports, PTP-001, this assessment and PCMR-001 at Version 2.0. This assessment is reissued under it, effective `{python} eff2`.
 
-The method is risk ranking and filtering, applied to process parameters as in the A-Mab
-case study [@amab2009]. Each parameter is put to two questions. The first asks what the
-parameter could do to a quality attribute if it moved outside the range over which the
-process is currently understood. The second asks whether the parameter could act together
-with another parameter of the same unit operation, so that the size of its effect depends
-on where that other parameter sits. The first question sets the score. The second sets the
-study type, because an effect that depends on a second parameter cannot be found by moving
-one parameter at a time.
+This revision makes the following changes.
 
-Severity is taken from the attribute at risk and not from the parameter. It runs from
-`{python} sev_lo` to `{python} sev_hi` and is the severity assigned to the attribute in the
-quality attribute assessment, reproduced in @tbl-cqa. Where a parameter could affect more
-than one attribute, the severity of the most severe of them is used. A parameter that puts
-no quality attribute at risk takes a severity of `{python} sev_perf`, the value assigned to a
-process attribute such as step yield or titer.
-
-Occurrence and detection are assigned before any effect has been measured, and they are
-assigned by class rather than parameter by parameter. Occurrence is scored at
-`{python} o_qual` for a parameter that could affect a quality attribute, because neither
-the size of its effect nor the width of the range that holds the attribute in limit is
-known at this point. It is scored at `{python} o_perf` for a parameter that puts no quality
-attribute at risk, where the platform history bounds how often the parameter leaves its
-range. Detection is scored on what the existing controls would reveal. A failure that acts
-on viral clearance is scored at `{python} d_viral`, since no in-process control and no
-release test on the drug substance measures the log reduction a step achieves. A failure
-that changes another quality attribute is scored at `{python} d_qual`, since release
-testing measures the attribute but monitoring during the unit operation does not. A failure
-that puts no quality attribute at risk is scored at `{python} d_perf`, since it shows up in
-the performance of a downstream unit operation before the batch is released.
-
-The initial risk priority number is the product of the three scores. Across the register it
-runs from `{python} rpn_lo` to `{python} rpn_hi` and takes `{python} n_rpn_values` distinct
-values, because occurrence and detection are assigned by class. Severity is therefore what
-separates one parameter from another within a unit operation. Priority is High where an
-attribute of severity `{python} sev_high` or above is at risk, Medium where a quality
-attribute of lower severity is at risk, and Low where no quality attribute is at risk. No
-parameter is assigned a study type on the number alone.
-
-The assessment assigns `{python} n_study_types` study types. A parameter carried into the
-designed experiment of its
-unit operation is studied multivariately, which is the only way to estimate an effect that
-depends on a second parameter. A parameter that could affect a quality attribute but is not
-carried into the design is studied one at a time, and the reason it was left out of the
-design is recorded with it. The A-Mab risk ranking and filtering table permits that
-substitution where the study can be justified [@amab2009], and the register marks such a
-parameter univariate (justified). A parameter that puts no quality attribute at risk is
-studied one at a time. The assignment is the decision this document makes, and each characterization
-plan states how the assigned study will be executed.
-
-Criticality is treated as a continuum in this framework and not as a binary split
-[@ichq9; @amab2009]. The ranking in @tbl-rank therefore orders parameters against each
-other. It does not divide them into a critical and a non-critical group, and it is not a
-control strategy. Both of those follow from the studies this assessment scopes.
-
-# Quality attributes at risk
-
-The severity axis of the assessment comes from the quality attribute register.
-@tbl-cqa gives the `{python} n_cqa` drug substance attributes the process must control,
-their acceptance criteria, the criticality assigned to each and the unit operation that
-forms it or, for the two cumulative clearance requirements, the step the requirement is
-assigned to. Criticality is the product of impact and uncertainty, which is Tool #1 of
-the A-Mab attribute assessment [@amab2009]. Attributes of high and very high criticality
-are called critical, and `{python} n_crit` of the `{python} n_cqa` attributes are critical
-on that definition.
+1. It records the approval date of Version 1.0 in the title block and in the revision history, and this section records the date on which the first characterization study started.
+2. It gives the quality attribute register as it now stands (@tbl-cqa). The register adds fragments, the low molecular weight species formed when the antibody is clipped. PCMP-001 Version 2.0 §7.8 sets non-reduced capillary electrophoresis with sodium dodecyl sulfate (nrCE-SDS) as the method for fragments, following the decision of `{python} amd_date` to change the fragment method (`{python} amd_id`). @sec-cqa gives the origin of their criterion and what the addition means for this assessment. The register also prints each criterion by its type, as a lower limit, an upper limit or a range. Version 1.0 printed both ends of every criterion, so that viral clearance read as if it had an upper limit.
+3. Where this document refers to acceptance criteria or to scale-down models, it refers to PCMP-001 Version 2.0. That plan qualifies each scale-down model by its offset from manufacturing scale (PCMP-001 §7.1). It judges each step output on which a drug substance criterion depends against an intermediate acceptance criterion (PCMP-001 §7.3).
+4. It corrects the descriptions of Version 1.0 that were wrong (@tbl-corrections and @tbl-corrections-2).
 
 ```{python}
 #| output: asis
-show(cqa_df)
+_vf = CFG.unit_op("virus_filtration").param("filtration_volume")
+_corr_cols = ["Section", "Version 1.0", "Version 2.0"]
+_corr_kw = dict(merge=["Section"], align=["P{2.2cm}", "P{6.2cm}", "P{6.6cm}"], style="rows",
+                size="footnotesize")
+T.frame(pd.DataFrame([
+    ["2 and 5", "A parameter that puts no quality attribute at risk is studied one at a time, and so "
+                "are the lowest ranked parameters.",
+     f"Such a parameter is studied one factor at a time unless it is carried into the design of its "
+     f"step, as {n_perf_doe} Protein A parameters are."],
+    ["2 and 6", "Severity separates the parameters of a unit operation, and the RPN does not separate "
+                "parameters within a class.",
+     "Within a class of parameter the RPN differs only through severity. Between classes, occurrence "
+     "and detection differ as well."],
+    ["2", "Criticality as a continuum cited to ICH Q9(R1).",
+     "Cited to ICH Q8(R2), as in PCMP-001 Version 2.0 §2."],
+    ["3", "Viral clearance takes its severity from the consequence of a shortfall and not from the "
+          "probability of detecting one.",
+     "Its severity follows from the very high criticality that the register gives viral clearance by "
+     "rule. That no release test detects a shortfall enters the detection score."],
+    ["4 and 5", "Each subsection gives the interaction judgement that decides the study type, recorded "
+                "per parameter.",
+     "Section 4 records the judgement where it decides the study type."],
+    ["4.1", "The production bioreactor carries the highest severity of any step.",
+     f"Culture pH is the only parameter outside the steps with a viral clearance claim that has a "
+     f"severity of {sev_reg_max}."],
+    ["4.1", "Acidic charge variants fall as culture pH rises.",
+     "Acidic variants are expected to rise with culture pH, because deamidation is catalysed by base."],
+    ["4.1", "Temperature and pH act on the same glycosyltransferase activity.",
+     "Both act on the same glycan processing enzymes, the mannosidases and the galactosyltransferase."],
+    ["4.1", "Dissolved oxygen raises titre through the productivity of the cells and not through their "
+            "number.",
+     "Dissolved oxygen acts on peak viable cell density, titre and process consistency, as Table 4.2 "
+     "gives it."],
+    ["4.1 to 4.8, Tables 4.2 to 4.9",
+     "Failure-mode texts with the labels and units of Version 1.0 (Dissolved CO2, mOsm, titer), the "
+     "header CQA(s) at risk, and the UF/DF buffer exchange called not part of drug substance "
+     "characterization.",
+     "The parameter names and units of the rest of the package, the header Attribute(s) at risk, since "
+     "Section 3 calls only high and very high attributes critical, and the UF/DF phrase removed."],
+    ["4.3", f"The {n_perf_doe} Protein A parameters scored on step yield cost no additional runs in the "
+            f"design.",
+     "Withdrawn. They are carried into the design so that the same design bounds step yield."],
+    ["4.4", "Inactivation of enveloped virus at low pH follows first order kinetics.",
+     "Close to first order over most of the hold, often with tailing near the limit of detection."],
+    ["4.4", "A hold longer than its range raises aggregate at any pH in the range.",
+     "An expectation from platform experience. No study had been run."],
+], columns=_corr_cols),
+    "Descriptions of Version 1.0 corrected in Version 2.0, Sections 2 to 4.4. No score and no study "
+    "type changes with them.", "tbl-corrections", **_corr_kw).show()
 ```
-
-: Drug substance quality attributes, their criticality and the severity carried into this assessment. {#tbl-cqa}
-
-Of the `{python} n_cqa` attributes, `{python} n_set_br` are formed in the production
-bioreactor. The remaining `{python} n_set_down` are set downstream, one at the capture step
-and one at each of the steps that fix a cumulative viral clearance requirement. The
-bioreactor therefore carries more parameters into multivariate study than any other unit
-operation.
-
-The top severity of `{python} sev_hi` is carried by `{python} n_sev_top` attributes. High
-mannose carries the highest Tool #1 score in the register at `{python} t1_hi`. High mannose
-glycans carry no core fucose, so they raise antibody dependent cell mediated cytotoxicity in
-the same way afucosylation does, and A-Mab acts on its target through that mechanism. The
-impact of the attribute is scored on efficacy for that reason, and its uncertainty is scored
-above that of afucosylation because the relationship rests on external literature rather than
-on assays run with A-Mab.
-
-Both viral clearance attributes carry the top severity for a different reason. Their
-requirement is cumulative across the low pH hold, the anion exchange step and the virus
-filter, and a shortfall at any one of them changes no property of the drug substance that a
-release test measures [@ichq5a]. Severity for these two attributes is therefore assigned on
-the consequence of a shortfall and not on the probability of detecting one.
-
-Acidic charge variants sit at the other end of the register with a Tool #1 score of
-`{python} t1_lo` and a severity of `{python} sev_acidic`. The impact is scored at the bottom
-of the scale because deamidation of A-Mab occurs at sites outside the binding region and
-outside the part of the Fc that carries effector function, so the deamidated forms retain
-their activity. Four bioreactor parameters are nevertheless scored against the attribute, and
-the range of each over which the acidic variant content stays within its acceptance criterion
-is one of the things the bioreactor study must establish. Residual DNA is treated the same
-way. A low severity lowers the priority of a parameter and does not remove it from study.
-
-# Parameter risk ranking by unit operation
-
-@tbl-rank gives the ranking for the whole train. Of the `{python} n_par_total`
-parameters, `{python} n_quality` are scored against at least one quality attribute and
-`{python} n_perf` against process performance alone. The ranking puts `{python} n_high`
-parameters at High priority, `{python} n_med` at Medium and `{python} n_low` at Low. The subsections that
-follow take each unit operation in turn and give the potential failure mode and effect
-behind each score, together with the interaction judgement that decides the study type.
 
 ```{python}
 #| output: asis
-show(rank_df)
+T.frame(pd.DataFrame([
+    ["4.5", "Protein load carries the highest severity of the step because aggregate and host cell "
+            "protein are both at risk.",
+     "Protein load, elution buffer pH and elution stop collect share the severity of aggregate."],
+    ["4.6", "At the load pH, host cell protein, DNA and virus carry a net negative charge.",
+     "DNA, virus and most host cell proteins do. Basic host cell proteins pass through with the "
+     "antibody."],
+    ["4.6, Table 4.7", "Protein load: reduced HCP removal capacity, with viral clearance robust.",
+     "The words on viral clearance are removed. They conflicted with the risk that the binding "
+     "capacity of the resin is exceeded."],
+    ["4.7", "Prior knowledge places neither the size nor the direction of a pressure effect on log "
+            "reduction.",
+     "Parvovirus filters can retain less virus at low pressure or low flux and after a pressure "
+     "interruption. The direction is known, and its size for this filter is not."],
+    ["4.7, Table 4.8", f"Volumetric load above {float(_vf.nor_characterized[1]):g} {_vf.unit}, the "
+                       f"upper limit of the NOR.",
+     f"Above {float(_vf.prange[1]):g} {_vf.unit}, the upper end of the range studied."],
+    ["4.8", "UF/DF forms and clears no quality attribute.",
+     "It forms and clears no attribute in Table 3.1. Its final concentration is released against a "
+     "specification."],
+    ["5", "A minimum hold time and a maximum volumetric load share a bound with their NOR.",
+     f"The low end of the range studied is shared with the NOR by {n_low_sh} parameters, among them "
+     f"hold time and filtration volume."],
+    ["5", "The assignment is the output of this assessment.",
+     "The main output. Section 7 lists the outputs."],
+    ["6", "A severity says what a failure would mean for the patient.",
+     "These words are dropped, and the rest of the sentence is kept."],
+    ["6", "If the anion exchange study finds that residence time acts together with the load chemistry, "
+          "the design would have to be augmented.",
+     "No study as assigned can detect that interaction. The univariate result bounds the step only if "
+     "the interaction is absent, as prior knowledge expects."],
+    ["6", "Each parameter is assessed against the attributes of its own step.",
+     "Each parameter is assessed against the attributes it can affect at its own step."],
+], columns=_corr_cols),
+    "Descriptions of Version 1.0 corrected in Version 2.0, Sections 4.5 to 6. No score and no study "
+    "type changes with them.", "tbl-corrections-2", **_corr_kw).show()
 ```
 
-: Pre-characterization parameter risk ranking, by unit operation. Scores are initial scores and no residual risk is reported. {#tbl-rank}
+The method in @sec-method, the scores and the ranking in @sec-ranking and the study assignment in @sec-assignment are unchanged. They are those approved on `{python} appr_v1`, before the studies. No study result enters this assessment, and it gives no final classification of any parameter.
 
-## Production Bioreactor
+# Risk assessment methodology {#sec-method}
 
-The production bioreactor forms the glycan, charge variant and aggregate attributes of the
-drug substance, so it carries the highest severity of any step in the train.
-Of its `{python} n_par("bioreactor")` parameters, `{python} n_qual_par("bioreactor")` are
-scored against a quality attribute, and the highest initial risk priority number in the step
-is `{python} rpn_max("bioreactor")`.
+The method is risk ranking and filtering, applied to process parameters as in the A-Mab case study [@amab2009] and within the quality risk management principles of ICH Q9 [@ichq9]. Each parameter is put to two questions. The first asks what the parameter could do to a quality attribute, or to process performance, if it moved outside the range over which the process is currently understood. The second asks whether the effect of the parameter could depend on the setting of another parameter of the same unit operation. The first question sets the score. The second sets the study type, because an effect that depends on a second parameter cannot be found by moving one parameter at a time.
 
-Culture pH and culture duration are each scored against `{python} n_at_risk_max` attributes,
-more than any other parameter in the register. Culture pH takes a severity of
-`{python} par_sev("bioreactor", "pH")` because high mannose is one of the attributes it puts
-at risk. A culture pH above its range raises high mannose and lowers galactosylation, because
-a higher extracellular pH raises the pH inside the Golgi and moves the mannosidases and the
-galactosyltransferase away from the acidic conditions at which they work fastest. Aggregate
-in the harvest rises with culture pH as well, and afucosylation and the acidic charge
-variants both fall as it rises.
+Severity is taken from the attribute at risk and not from the parameter. It runs from `{python} sev_reg_min` to `{python} sev_reg_max` and is the severity assigned to the attribute in the quality attribute assessment, reproduced in @tbl-cqa. Where a parameter could affect more than one attribute, the severity of the most severe of them is used. A parameter that puts no quality attribute at risk takes a severity of `{python} sev_perf`, the value assigned to a process attribute such as step yield or titre.
 
-Culture duration reaches the same number of attributes by a different route. Extending the
-culture, or harvesting it after viability has fallen, raises host cell protein and DNA in
-the harvest, because lysing cells release intracellular protein and DNA into the broth.
-Aggregate rises with culture duration as well. Antibody secreted early in the run stays in
-the vessel at culture temperature until harvest, and aggregate accumulates over that time.
-Galactosylation falls over the same period as the UDP-galactose that supplies the
-galactosyltransferase is depleted late in the culture. Afucosylation falls with duration as
-well, and the study has to bound that fall against the lower edge of the afucosylation
-criterion, below which the antibody loses effector function.
-
-Culture temperature, `{python} par_name("bioreactor", "co2")` and osmolality are each
-scored against galactosylation and acidic charge variants, and temperature is scored against
-afucosylation as well. Galactosylation rises with culture temperature, which raises the
-specific activity of the galactosyltransferase, and falls as dissolved carbon dioxide and
-osmolality rise. Temperature is expected to act together with pH on the glycosylation
-attributes, since both act on the same glycosyltransferase activity in the culture, and an
-effect of that kind is estimated only by moving the two parameters together. The
-`{python} n_qual_par("bioreactor")` parameters scored against a glycan, charge variant or
-aggregate attribute are therefore carried into one designed experiment.
-
-The remaining `{python} n_uv("bioreactor")` parameters change how many cells the culture
-reaches and how much antibody each of them makes, and none is scored against a quality
-attribute. Inoculation density, basal medium concentration and
-`{python} par_name("bioreactor", "feed_vol")` all raise the integral viable cell
-concentration over their ranges, and titer rises with it. Dissolved oxygen raises titer
-through the productivity of the cells rather than through their number. Basal medium
-concentration is the one that needed argument.
-Platform experience shows a statistically significant but shallow effect on afucosylation,
-too small to move the attribute across its acceptance criterion over the concentrations the
-process uses, so the parameter is carried on process performance grounds and assessed one at
-a time.
+Occurrence and detection are assigned before any effect has been measured, and they are assigned by class and not parameter by parameter. @tbl-scoring gives each score with its basis. Occurrence is scored at `{python} occ_q` for a parameter that could affect a quality attribute, because neither the size of its effect nor the width of the range that holds the attribute in limit is known at this point. It is scored at `{python} occ_p` for a parameter that puts no quality attribute at risk, where the platform history bounds how often the parameter leaves its range. Detection is scored on what the existing controls would reveal. A failure that acts on viral clearance is scored at `{python} det_v`, since no in-process control and no release test on the drug substance measures the log reduction a step achieves. A failure that changes another quality attribute is scored at `{python} det_q`, since release testing measures the attribute but monitoring during the unit operation does not. A failure that puts no quality attribute at risk is scored at `{python} det_p`, since it shows up in the performance of a downstream unit operation before the batch is released.
 
 ```{python}
 #| output: asis
-show(detail_step("bioreactor"))
+scoring = pd.DataFrame([
+    ["Severity", "Quality attribute at risk", f"{sev_reg_min} to {sev_reg_max}",
+     "Severity of the most severe attribute at risk, from the quality attribute assessment"],
+    ["Severity", "Process performance only", f"{sev_perf}",
+     "The value assigned to a process attribute such as step yield or titre"],
+    ["Occurrence", "Quality attribute at risk", f"{occ_q}",
+     "Neither the size of the effect nor the width of the range that holds the attribute in limit "
+     "is known"],
+    ["Occurrence", "Process performance only", f"{occ_p}",
+     "The platform history bounds how often the parameter leaves its range"],
+    ["Detection", "Viral clearance at risk", f"{det_v}",
+     "No in-process control and no release test on the drug substance measures the log reduction a "
+     "step achieves"],
+    ["Detection", "Other quality attribute at risk", f"{det_q}",
+     "Release testing measures the attribute, but monitoring during the unit operation does not"],
+    ["Detection", "Process performance only", f"{det_p}",
+     "Shows up in the performance of a downstream unit operation before the batch is released"],
+], columns=["Score", "Parameter class", "Value", "Basis"])
+T.frame(scoring, "Scores used for the initial risk of each parameter, by class of parameter.",
+        "tbl-scoring", merge=["Score"], align=["l", "P{4.2cm}", "l", "P{7.2cm}"]).show()
 ```
 
-: Production bioreactor: potential failure modes and their effects. {#tbl-fm-br}
+The initial risk priority number (RPN) is the product of severity, occurrence and detection. Across the assessment it runs from `{python} rpn_min` to `{python} rpn_max` and takes `{python} n_rpn` distinct values, because occurrence and detection are assigned by class. Within a class of parameter the RPN therefore differs only through severity. Priority is High where an attribute of severity `{python} sev_hi` or above is at risk, Medium where a quality attribute of lower severity is at risk, and Low where only process performance is at risk. No parameter is assigned a study type on its RPN alone.
 
-## Harvest and Clarification
+The assessment uses `{python} n_types` study types. A parameter carried into the designed experiment of its unit operation is studied multivariately, which is the only way to estimate an effect that depends on a second parameter. A parameter that could affect a quality attribute but is not carried into the design is studied one factor at a time, and the reason it was left out of the design is recorded with it. The A-Mab risk ranking and filtering approach permits this substitution where the study can be justified [@amab2009], and the assessment marks such a parameter "univariate (justified)". A parameter that puts no quality attribute at risk is studied one factor at a time unless it is carried into the design of its step (@sec-assignment). The A-Mab approach also allows a parameter to be given no new study where prior knowledge supports its range. This assessment assigns no parameter to that outcome. Each characterization plan states how the assigned study is executed.
 
-Harvest recovers and clarifies the culture and forms no product quality attribute. All
-`{python} n_par("harvest")` of its parameters are scored against process performance alone
-and all sit at the floor of the register at `{python} rpn_max("harvest")`. No parameter of
-this step is carried into a designed experiment.
+Criticality is treated as a continuum and not as a binary split [@ichq8; @amab2009]. The ranking in @tbl-ranking therefore orders parameters against each other. It does not divide them into a critical and a non-critical group, and it is not a control strategy. Both follow from the studies that this assessment scopes.
 
-The failure modes are a centrifugation speed outside its range, a depth filter loaded beyond
-its capacity, and a high turbidity after clarification. A centrifugation speed below its
-range leaves more cells and cell debris in the centrate. A particle settles faster the
-stronger the centrifugal field acting on it, so a lower speed settles less of the fine debris
-in the time the material spends in the bowl, and what stays in the centrate then loads the
-depth filters. A depth filter loaded beyond its rated area passes particulate instead of
-retaining it, and the turbidity of the clarified harvest rises. Turbidity is measured on the clarified
-harvest, and particulate that reaches the capture column raises its back pressure, so a
-failure at this step is seen before the batch is released. The capture step is robust to the
-feedstock over the range this step produces.
+# Quality attributes at risk {#sec-cqa}
+
+The severity axis of the assessment comes from the quality attribute register. @tbl-cqa gives the `{python} n_cqa` attributes of the drug substance as the register now stands. For each attribute it gives the acceptance criterion, the criticality, the severity carried into this assessment and the unit operation that forms the attribute. For the two cumulative viral clearance requirements it gives the unit operation to which the register assigns the requirement. The criteria are those of the A-Mab case study, except the criterion for fragments [@amab2009]. Criticality is the product of impact and uncertainty, which is Tool #1 of the A-Mab attribute assessment. Attributes of high and very high criticality are called critical, and `{python} n_crit` of the `{python} n_cqa` attributes are critical on that definition. The two viral clearance attributes carry very high criticality by rule, although their Tool #1 score is `{python} vir_t1`, because a viral contamination would harm the patient directly (PCMP-001 §3).
 
 ```{python}
 #| output: asis
-show(detail_step("harvest"))
+tbl_cqa = T.frame(
+    reg31[["Category", "Quality attribute", "Acceptance", "Criticality", "Tool #1", "Severity", "Set by"]],
+    "Drug substance quality attributes as the register now stands, with their criticality and "
+    "the severity carried into this assessment.", "tbl-cqa", merge=["Category"],
+    header={"Tool #1": "Tool #1\nscore", "Set by": "Formed or\nset at"},
+    align=["P{2.5cm}", "P{3.0cm}", "P{3.1cm}", "l", "r", "r", "P{3.2cm}"],
+    notes=[("o)", "Set by the sponsor when fragments joined the register at Version 2.0. The other "
+                  "criteria are those of the A-Mab case study."),
+           ("n)", "Not scored. Fragments joined the register after this assessment was made, and no "
+                  "severity is assigned to them."),
+           ("d)", dose_note),
+           ("v)", "The unit operation to which the register assigns the cumulative requirement."),
+           ("", "Criticality levels are VL very low, L low, L-M low to moderate, M-H moderate to "
+                "high, H high and VH very high.")],
+    notes_per_row=True)
+tbl_cqa.show()
 ```
 
-: Harvest and clarification: potential failure modes and their effects. {#tbl-fm-hv}
+Of the `{python} n_cqa` attributes, `{python} n_bio` are formed in the production bioreactor. The register assigns fragments to harvest, leached Protein A enters the process at the capture step, and each viral clearance requirement is assigned to one of the steps that clear virus. The bioreactor carries more parameters into multivariate study than any other unit operation (@tbl-scope).
 
-## Protein A Chromatography
+The highest severity, `{python} sev_reg_max`, is carried by `{python} n_top_attr` attributes. High mannose has the highest Tool #1 score in the register, `{python} t1_max`. High mannose glycans carry no core fucose, so they are expected to raise antibody dependent cellular cytotoxicity (ADCC) in the same way as afucosylation, and A-Mab acts on its target through ADCC. The impact of the attribute is therefore scored on efficacy. Its uncertainty is scored above that of afucosylation, because the link rests on published literature and not on assays run with A-Mab.
 
-Capture binds the antibody from the clarified harvest and removes the bulk of the host cell
-protein and DNA. Protein load and elution buffer pH are the
-`{python} n_qual_par("protein_a")` parameters scored against a quality attribute, both
-against host cell protein at a severity of `{python} par_sev("protein_a", "load")`. A
-protein load above the characterized range raises the host cell protein in the pool, because
-more impurity is carried onto the column for the same volume of resin and the wash removes a
-smaller share of it. A lower elution pH raises it as well, since a more acidic elution buffer
-displaces host cell protein that the wash left bound to the resin. The two act together, and
-both are carried into the capture design.
+Both viral clearance attributes carry the highest severity for a different reason. Each requirement is cumulative across the steps that clear the virus, which are low-pH viral inactivation, anion exchange and virus filtration for XMuLV, and anion exchange and virus filtration for MVM. The register assigns each requirement to one step, and the claims of these steps add up to it (PCMP-001 §7.4). A shortfall at one of these steps changes no property of the drug substance that a release test measures [@ichq5a]. Their severity follows from the very high criticality that the register gives viral clearance by rule (PCMP-001 §3). That no release test detects a shortfall enters the detection score (@tbl-scoring), not the severity.
 
-The capture eluate is the load for the low pH hold. Elution buffer pH therefore fixes the pH
-of the pool before titration and the amount of acid needed to bring it to the hold
-set-point.
+Acidic charge variants sit at the other end of the register, with a Tool #1 score of `{python} acid_t1` and a severity of `{python} acid_sev`. Their impact is scored low because deamidation of A-Mab occurs at sites outside the binding region and outside the part of the Fc region that carries effector function, so the deamidated forms keep their activity. The assessment still scores `{python} n_acid_par` bioreactor parameters against acidic variants. The range of each parameter over which acidic variants stay within their criterion is one of the things the bioreactor study must establish. Residual DNA, with the lowest severity, `{python} dna_sev`, is treated the same way. A low severity lowers the priority of a parameter and does not remove it from study.
 
-Load flow rate and end of pool collect are scored against step yield and against no quality
-attribute. Yield falls when a high load is run at a high flow rate, because the antibody has
-less time to diffuse into the resin pores and part of it passes through the column unbound.
-Yield rises as collection is carried further down the descending side of the elution peak, up
-to the point where the pool is diluted without gaining product. Both parameters are carried
-into the capture design, because the same design bounds yield and they cost no additional
-runs once the design exists. Operating temperature and bed height are assessed one at a time.
+Fragments are new to the register at Version 2.0. The A-Mab case study lists fragmentation among the typical quality attributes of an antibody but gives it no limit, and the sponsor set the criterion for fragments, `{python} frag_acc`, when they joined the register (PCMP-001 §3). Their criticality is `{python} frag_crit_word`, with a Tool #1 score of `{python} frag_t1`. The register assigns fragments to harvest, because proteases released from lysed cells clip the antibody in culture and during the harvest hold.
 
-No operating parameter of this step is scored against leached Protein A, although the
-attribute is formed here. Leached Protein A enters the pool from the affinity ligand itself,
-and the amount released is set by the resin lot and by how many cycles the resin has run,
-both controlled under SOP-2008, rather than by any parameter in @tbl-ranges. The polishing
-steps clear what reaches them. The capture study measures leached Protein A in the pool
-across the designed experiment, so the ranges this assessment scopes are bounded against it
-even though no parameter is ranked on it.
+This assessment was made before fragments joined the register. No parameter is scored against fragments and no severity is assigned to them. The study assignment in @sec-assignment was made without them. The harvest hold, where fragments form, is not a parameter of the list assessed here (@sec-assumptions). Whether a parameter could change fragments is therefore outside this assessment.
+
+# Parameter risk ranking by unit operation {#sec-ranking}
+
+@tbl-ranking gives the ranking for the whole train. Of the `{python} n_par` parameters, `{python} n_q` are scored against at least one quality attribute and `{python} n_perf` against process performance alone. The ranking puts `{python} n_high` parameters at High priority, `{python} n_med` at Medium and `{python} n_low` at Low. The highest RPN, `{python} rpn_max`, is reached by `{python} n_top` parameters, all of them at the steps with a viral clearance claim and all of them scored against viral clearance.
+
+The subsections that follow take each unit operation in turn. Each gives the potential failure mode and effect behind each score and, where it decides the study type, the judgement on interactions.
 
 ```{python}
 #| output: asis
-show(detail_step("protein_a"))
+T.frame(RC.ra_scope_df().drop(columns=["Attribute(s) at risk"]),
+        "Pre-characterization risk ranking of the process parameters, by unit operation. "
+        "The scores are initial scores, and no residual risk is reported.",
+        "tbl-ranking", merge=["Step", "Unit operation"],
+        align=["r", "P{3.3cm}", "P{4.6cm}", "r", "r", "l", "l"], size="footnotesize",
+        notes=[("", "Sev., severity of the most severe attribute at risk. Init. RPN, initial risk "
+                    "priority number, the product of severity, occurrence and detection.")]).show()
 ```
 
-: Protein A chromatography: potential failure modes and their effects. {#tbl-fm-pa}
+## Production Bioreactor {#sec-rk-bioreactor}
 
-## Low-pH Viral Inactivation
+The production bioreactor forms the glycan, charge variant and aggregate attributes of the drug substance. Of its `{python} ST["bioreactor"]["n"]` parameters, `{python} ST["bioreactor"]["nq"]` are scored against a quality attribute, all of them at a severity of `{python} sev_hi` or above. Culture pH is the only parameter outside the steps with a viral clearance claim that has a severity of `{python} sev_reg_max`, and it has the highest RPN in the step, `{python} ST["bioreactor"]["rpn_max"]`.
 
-Holding the pool at low pH inactivates enveloped virus by disrupting the lipid envelope
-XMuLV needs to enter a cell, and the attribute register assigns the cumulative XMuLV
-clearance requirement to this step. Of its
-`{python} n_par("viral_inactivation")` parameters, `{python} n_qual_par("viral_inactivation")`
-reach the top of the register at
-`{python} rpn_max("viral_inactivation")`, which is the highest initial risk priority number
-in the assessment.
+Culture pH and culture duration are each scored against `{python} n_attr_max` attributes, more than any other parameter in the assessment. Culture pH takes a severity of `{python} sev_bph` because high mannose is one of the attributes it puts at risk. A culture pH above its range is expected to raise high mannose and to lower galactosylation. A higher pH in the medium raises the pH in the Golgi, while the mannosidases and the galactosyltransferase work fastest under more acidic conditions. Less mannose is then trimmed from the glycans and less galactose is added to them. Aggregate in the harvest is expected to rise with culture pH and afucosylation to fall. Acidic variants are expected to rise with culture pH, because the deamidation of asparagine residues is catalysed by base.
 
-Inactivation of enveloped virus at low pH follows first order kinetics. Inactivation pH and
-temperature set the rate constant, and the hold time sets how long that rate acts, so the log
-reduction the step achieves is an extent and not a rate. A pH above the range therefore
-lowers the rate constant and leaves less virus inactivated over the same hold, and a hold
-shorter than its range leaves less inactivated at the same pH. A temperature below the range
-lowers the rate constant as well, and that matters most at the short end of the hold and the
-high end of the pH range, where the extent reached is smallest. The three parameters are
-assessed in one designed experiment because the extent depends on all three together and none
-of them can be bounded with the other two held at a single setting.
+Culture duration reaches as many attributes by a different route. A longer culture, or one harvested after viability has fallen, is expected to raise host cell protein and DNA in the harvest, because lysing cells release their protein and DNA into the medium. Aggregate is expected to rise with duration too, since antibody secreted early in the run is held at culture temperature until harvest. Galactosylation is expected to fall late in the culture as the supply of UDP-galactose to the galactosyltransferase runs down. Afucosylation is expected to fall with duration as well, and the study has to bound that fall against the lower limit of the afucosylation criterion.
 
-Inactivation pH carries a second failure mode in the opposite direction. A pH below the
-characterized range exposes the antibody to conditions under which aggregation and
-precipitation have been seen on the platform, and a hold longer than its range raises
-aggregate at any pH in the range.
+Culture temperature, pCO2 and osmolality are each scored against galactosylation and acidic variants, and temperature is also scored against afucosylation. Galactosylation is expected to rise with culture temperature, which raises the activity of the galactosyltransferase, and to fall as pCO2 and osmolality rise. Temperature is expected to act together with pH on the glycan attributes, because both act on the activity of the same glycan processing enzymes, the mannosidases and the galactosyltransferase. An effect of that kind is estimated only by moving the two parameters together. The `{python} len(bq)` parameters scored against a glycan, charge variant or aggregate attribute are therefore carried into one designed experiment.
 
-Detection is at the top of the scale for each of the three. Neither an in-process control nor
-a release test on the drug substance measures the log reduction the hold achieves, and the
-claim is made instead from a spiking study on a qualified small scale model [@ichq5a].
-
-A-Mab concentration is scored against process performance. Prior product experience shows no
-effect of concentration on the rate of inactivation, on aggregation or on charge variants
-over the range the pool reaches, so the parameter is assessed one at a time.
+The other `{python} ST["bioreactor"]["nperf"]` parameters change how many cells the culture reaches and how much antibody each cell makes, and none of them is scored against a quality attribute. Initial viable cell concentration, basal medium concentration and nutrient feed-1 volume each raise the integral of viable cell concentration over their ranges, and titre rises with it. Dissolved oxygen acts on peak viable cell density, titre and process consistency. Basal medium concentration needed an argument. Platform experience shows a statistically significant but shallow effect on afucosylation, too small to move the attribute across its criterion over the concentrations the process uses. The parameter is therefore scored on process performance and studied one factor at a time. Nutrient feed-1 volume is treated in the same way, since platform experience shows only a slight effect on galactosylation. @tbl-fm-bioreactor gives the failure modes of the step.
 
 ```{python}
 #| output: asis
-show(detail_step("viral_inactivation"))
+fm_table("bioreactor", "tbl-fm-bioreactor").show()
 ```
 
-: Low-pH viral inactivation: potential failure modes and their effects. {#tbl-fm-vi}
+## Harvest and Clarification {#sec-rk-harvest}
 
-## Cation Exchange Chromatography
+Harvest separates the cells from the culture and clarifies the supernatant for capture. Its `{python} ST["harvest"]["n"]` parameters are scored against process performance alone, and all of them sit at the floor of the ranking at `{python} rpn_min`. No parameter of this step is carried into a designed experiment. The A-Mab case study assumes, for simplicity, that harvest has no impact on product quality [@amab2009]. The register as it now stands assigns fragments to this step, which the assessment did not score (@sec-cqa).
 
-The cation exchange step is the principal aggregate reduction step of the process and also
-clears host cell protein, DNA and leached Protein A. It forms no quality attribute of its
-own. Of its
-`{python} n_par("cex")` parameters, `{python} n_qual_par("cex")` are scored against a quality
-attribute, and protein load carries the highest severity of them at
-`{python} par_sev("cex", "load")`
-because both aggregate and host cell protein are at risk.
-
-Aggregate is the attribute that matters most here. No step after the cation exchange step is
-credited with aggregate reduction, so aggregate that leaves this step in the pool reaches the
-drug substance. The aggregate content of the pool rises with protein load, with elution
-buffer pH and with elution stop collect. Aggregate elutes after the monomer, so extending
-collection down the descending side of the peak pulls more of it into the pool, and a higher
-load leaves less resin per gram of antibody to separate the two. Load and elution pH act
-together, since the resolution between monomer and aggregate in the elution peak depends on
-both. Load and wash conductivity is scored against host cell protein, where a conductivity
-below the range weakens the wash and leaves more host cell protein bound to be eluted with
-the product.
-
-Elution flow rate is scored against step yield. A higher elution flow rate broadens the
-elution peak, because the antibody has less time to diffuse out of the resin pores, and a
-broader peak dilutes the pool. Prior knowledge places no effect of flow rate on pool
-aggregate large enough to score, so the parameter is assessed one at a time.
+The failure modes are a centrifugal force outside its range, a depth filter loaded beyond its capacity and a high turbidity after clarification. A centrifugal force below its range leaves more cells and cell debris in the centrate. A particle settles faster the stronger the field acting on it, so a weaker field removes less of the fine debris in the time the material spends in the bowl. That debris then loads the depth filters. A depth filter loaded beyond its capacity passes particulate instead of retaining it, and the turbidity of the clarified harvest rises. Turbidity is measured on the clarified harvest, and particulate that reaches the capture column raises its back pressure. A failure at this step is therefore seen before the batch is released. @tbl-fm-harvest gives the failure modes.
 
 ```{python}
 #| output: asis
-show(detail_step("cex"))
+fm_table("harvest", "tbl-fm-harvest").show()
 ```
 
-: Cation exchange chromatography: potential failure modes and their effects. {#tbl-fm-cex}
+## Protein A Chromatography {#sec-rk-protein-a}
 
-## Anion Exchange Chromatography
+Capture binds the antibody from the clarified harvest and removes most of the host cell protein and DNA. Protein load and elution buffer pH are the `{python} len(pa_q)` parameters scored against a quality attribute, both against host cell protein at a severity of `{python} sev_pa`. A protein load above its range is expected to raise host cell protein per milligram of antibody in the pool, because host cell protein that binds to the captured antibody is not removed by the wash, and more of it is expected to be bound per milligram of antibody on a more heavily loaded column. A lower elution pH is expected to raise it as well, since a more acidic elution buffer releases host cell protein that the wash left bound to the resin. The two parameters are expected to act together, and both are carried into the capture design.
 
-The anion exchange step is operated in flow-through mode. At the load pH the step runs at,
-host cell protein, DNA and virus carry a net negative charge and bind to the resin, while
-the load pH sits below the isoelectric point of A-Mab, which therefore carries a net positive
-charge and passes through. The attribute register assigns the cumulative MVM clearance
-requirement to this step. All
-`{python} n_par("aex")` of its parameters are scored against a quality attribute.
+The capture eluate is the load of the low-pH hold. Elution buffer pH therefore sets the pH of the pool before titration and the amount of acid needed to bring it to the hold set-point.
 
-Load pH is scored against `{python} n_at_risk("aex", "load_ph")` attributes and reaches
-`{python} par_rpn("aex", "load_ph")`. It governs the charge on both the impurities and the
-resin, so a load pH below the characterized range weakens the binding of host cell protein
-and of both model viruses at once. Clearance also falls as the load conductivity rises,
-because the counter-ions in the load compete with virus and impurity for the charged groups
-on the resin. Load pH and load conductivity act together, since one sets the charge on the
-species and the other sets how strongly that charge is screened. Equil and wash-1
-conductivity and protein load are scored against host cell protein, where the risk is a loss
-of binding capacity rather than a loss of clearance, since the mass of impurity presented to
-a fixed volume of resin rises with the load.
+Load flow rate and end of pool collect are scored against step yield and against no quality attribute. Yield is expected to fall when a high load is run at a high flow rate, because the antibody has less time to diffuse into the resin pores and part of it passes through the column unbound. Yield is expected to rise as collection is carried further down the tail of the elution peak, up to the point where the pool is diluted without gaining product. Both parameters are carried into the capture design, so that the same design bounds step yield. Operating temperature and bed height are studied one factor at a time.
 
-Operating flow rate is the one parameter in the register with a quality attribute at risk
-that is not carried into a designed experiment. A higher flow rate shortens the residence
-time of the load in the bed, which leaves a virus particle less opportunity to reach and bind
-a charged site on the resin. The parameter reaches the step through residence time alone, and
-prior knowledge places no interaction between residence time and the load chemistry, so it is
-bounded by moving it one at a time. PCP-008 records that justification with the design.
+No operating parameter of this step is scored against leached Protein A, although the attribute enters the process here. Leached Protein A comes from the affinity ligand itself. This assessment attributed the amount released to the resin and its history of use, which are controlled under the resin life cycle procedure SOP-2008, and not to a parameter in @tbl-params. The polishing steps clear what reaches them. The capture study measures leached Protein A in the pool across the designed experiment, so the ranges this assessment scopes are bounded against it even though no parameter is ranked on it. @tbl-fm-protein-a gives the failure modes.
 
 ```{python}
 #| output: asis
-show(detail_step("aex"))
+fm_table("protein_a", "tbl-fm-protein-a").show()
 ```
 
-: Anion exchange chromatography: potential failure modes and their effects. {#tbl-fm-aex}
+## Low-pH Viral Inactivation {#sec-rk-vi}
 
-## Small-Virus Retentive Filtration
+Holding the pool at low pH inactivates enveloped virus by disrupting the lipid envelope that XMuLV needs to enter a cell. The register assigns the cumulative XMuLV clearance requirement to this step. Of its `{python} ST["viral_inactivation"]["n"]` parameters, `{python} n_vi_top` reach `{python} rpn_max`, the highest RPN in the assessment.
 
-The virus filter removes small non-enveloped virus by size and is the principal MVM
-clearance step. Both of its parameters are scored against MVM clearance and both reach
-`{python} rpn_max("virus_filtration")`. The step carries no parameter scored against process
-performance alone.
+Inactivation of enveloped virus at low pH is close to first order over most of the hold, and it often tails as the titre approaches the limit of detection. Inactivation pH and temperature set the rate constant, and the hold time sets how long that rate acts. Where the inactivation is first order, the log reduction is proportional to the rate constant integrated over the hold. A pH above its range lowers the rate constant and leaves less virus inactivated in the same hold. A hold shorter than its range leaves less virus inactivated at the same pH. A temperature below its range lowers the rate constant too, and this matters most at the short end of the hold and the high end of the pH range, where the log reduction reached is smallest. The `{python} n_vi_top` parameters are studied in one designed experiment, because the log reduction depends on all of them together and none can be bounded with the others held at one setting.
 
-Volumetric load is the parameter the step turns on. Log reduction falls as the volume
-filtered per unit area rises, because the retentive layer accumulates material and the
-probability of parvovirus passage rises with it. Filtration pressure is scored against both
-model viruses, and it sets the driving force across that accumulating layer. Prior knowledge
-places neither the size nor the direction of a pressure effect on log reduction, and the
-exposure is largest at high volumetric load, where the layer is thickest. Both parameters are
-therefore carried into the designed experiment rather than bounded one at a time.
+Inactivation pH has a second failure mode in the opposite direction. A pH below its range exposes the antibody to conditions under which aggregation and precipitation have been seen on the platform. A hold longer than its range is expected, from platform experience, to raise aggregate at any pH in the range. Inactivation pH and hold time are therefore scored against aggregate as well.
+
+Detection scores `{python} det_v` for each of these parameters. Neither an in-process control nor a release test of the drug substance measures the log reduction that the hold achieves. The viral clearance claim of the step is made instead from a spiking study in a qualified small-scale model [@ichq5a].
+
+A-Mab concentration is scored against process performance. Prior product experience showed no effect of concentration on the rate of inactivation, on aggregation or on charge variants over the range the pool reaches. The parameter is therefore studied one factor at a time. No parameter of this step is scored against MVM, because a parvovirus has no lipid envelope for low pH to disrupt (PCMP-001 §7.4). @tbl-fm-vi gives the failure modes.
 
 ```{python}
 #| output: asis
-show(detail_step("virus_filtration"))
+fm_table("viral_inactivation", "tbl-fm-vi").show()
 ```
 
-: Small-virus retentive filtration: potential failure modes and their effects. {#tbl-fm-vf}
+## Cation Exchange Chromatography {#sec-rk-cex}
 
-## Ultrafiltration / Diafiltration
+The cation exchange step is the principal aggregate reduction step of the process. It also clears host cell protein, DNA and leached Protein A, and it forms no attribute of its own. Of its `{python} ST["cex"]["n"]` parameters, `{python} ST["cex"]["nq"]` are scored against a quality attribute. Protein load, elution buffer pH and elution stop collect are scored against aggregate at a severity of `{python} sev_agg`, and protein load is scored against host cell protein as well.
 
-The formulation step concentrates the antibody and exchanges it into the drug substance
-buffer. It forms and clears no quality attribute. All `{python} n_par("ufdf")` of its
-parameters are scored against process performance and sit at the floor of the register at
-`{python} rpn_max("ufdf")`.
+Aggregate is the attribute that matters most here. No step after cation exchange is credited with aggregate reduction, so aggregate that leaves this step in the pool reaches the drug substance. Pool aggregate is expected to rise with protein load, elution buffer pH and elution stop collect. Aggregate elutes after the monomer, so collecting further down the tail of the elution peak takes more of it into the pool. A higher load leaves less resin per gram of antibody to separate the two. Load and elution pH are expected to act together, since the resolution between monomer and aggregate depends on both. The conductivity of the load and wash is scored against host cell protein. A conductivity below its range weakens the wash and leaves more host cell protein bound, to be eluted with the product.
 
-A diavolume count below the range leaves the buffer exchange incomplete, because each
-diavolume removes a fixed fraction of the buffer species left in the retentate and the
-residual falls with the number of diavolumes rather than with the time spent filtering. Flux
-rises with transmembrane pressure until the membrane reaches the pressure independent region,
-beyond which the polarized layer at the membrane surface thickens and flux stops rising, so a
-transmembrane pressure outside its range changes the processing time rather than the
-material. The final concentration is the drug substance concentration itself, which is
-measured directly and released against a specification, so a failure of this parameter is
-seen before the batch is released. Each is assessed one at a time.
+Elution flow rate is scored against step yield. A higher elution flow rate broadens the elution peak, because the antibody has less time to diffuse out of the resin pores, and a broader peak dilutes the pool. Prior knowledge places no effect of flow rate on pool aggregate large enough to score, so the parameter is studied one factor at a time. @tbl-fm-cex gives the failure modes.
 
 ```{python}
 #| output: asis
-show(detail_step("ufdf"))
+fm_table("cex", "tbl-fm-cex").show()
 ```
 
-: Ultrafiltration and diafiltration: potential failure modes and their effects. {#tbl-fm-ufdf}
+## Anion Exchange Chromatography {#sec-rk-aex}
 
-# Characterization study assignment
+The anion exchange step is run in flow-through mode. At the load pH, DNA, virus and most host cell proteins carry a net negative charge and bind to the resin. The load pH lies below the isoelectric point of A-Mab, which therefore carries a net positive charge and passes through, together with the basic host cell proteins. The register assigns the cumulative MVM clearance requirement to this step (@sec-cqa). All `{python} ST["aex"]["n"]` of its parameters are scored against a quality attribute.
 
-The assignment is the output of this assessment. Of the `{python} n_par_total`
-parameters, `{python} n_mv_total` are assigned to a multivariate design and
-`{python} n_uv_total` to univariate assessment. A designed experiment is run at
-`{python} n_doe_steps` of the `{python} n_steps` unit operations. The other
-`{python} n_nodoe_steps` are harvest and formulation, neither of which is scored against a
-quality attribute, and no designed experiment is to be run for them. @tbl-scope gives the
-split per unit operation with the plan and report that cover each.
+Load pH is scored against `{python} n_aex_ph` attributes and reaches `{python} rpn_max`. It sets the charge on the impurities and on the virus, so a load pH below its range weakens the binding of host cell protein and of both model viruses at once. Clearance is also expected to fall as load conductivity rises, because the counter-ions in the load compete with virus and impurity for the charged groups of the resin. Load pH and load conductivity are expected to act together, since one sets the charge on each species and the other sets how strongly that charge is screened. The conductivity of the equilibration and wash-1 buffers and the protein load are scored against host cell protein. A higher wash conductivity weakens the binding of host cell protein in the same way. A higher protein load presents more impurity to a fixed volume of resin, so its binding capacity can be exceeded.
+
+Operating flow rate is the one parameter in the assessment with a quality attribute at risk that is not carried into a designed experiment. A higher flow rate shortens the residence time of the load in the bed, which gives a virus particle less time to reach and bind a charged site on the resin. The parameter acts on the step through residence time alone, and prior knowledge places no interaction between residence time and the load chemistry. It is therefore bounded by moving it one factor at a time and is marked "univariate (justified)". The anion exchange plan PCP-008 records the justification with the design. @tbl-fm-aex gives the failure modes.
 
 ```{python}
 #| output: asis
-show(char_scope_df())
+fm_table("aex", "tbl-fm-aex").show()
 ```
 
-: Characterization scope per unit operation, and the documents that cover it. {#tbl-scope}
+## Small-Virus Retentive Filtration {#sec-rk-vf}
 
-The parameters assigned to a multivariate design are those judged able to act together with
-another parameter of the same unit operation. The judgement was made from platform and prior
-product experience and it is recorded per parameter in §4. The capture step carries
-`{python} n_perf_in_doe_pa` parameters into a design although they are scored against
-process performance alone, because the same design bounds step yield and their inclusion
-costs no additional runs.
+The virus filter removes small non-enveloped virus by size and is the principal MVM clearance step. Both of its parameters are scored against MVM clearance, and both reach `{python} rpn_max`. The step has no parameter that affects process performance alone.
 
-The assessment marks `{python} n_just_uni` parameter univariate (justified), which is the
-substitution the A-Mab risk ranking and filtering table permits where the study can be
-justified [@amab2009]. It is the operating flow rate of the anion exchange step, which is
-scored against both viral clearance attributes and reaches the step through residence time
-alone. The justification is that a parameter which does not act together with the load
-chemistry can be bounded by moving it one at a time, and PCP-008 carries it with the design.
-
-No parameter is excluded from study. The lowest ranking parameters change step yield and
-process consistency rather than a quality attribute, and they are studied one at a time so
-that the ranges entered in the batch record rest on data rather than on platform precedent
-alone.
-
-@tbl-ranges gives the parameter set handed to the plans, with the set-point, the range to be
-studied and the normal operating range. For `{python} n_wider` of the
-`{python} n_par_total` parameters the range to be studied is wider than the normal
-operating range on both sides, so that the edges of the characterized region lie outside the
-region in which the process will run [@amab2009]. For the remaining
-`{python} n_shared_bound` the two ranges share a bound, because that bound is a limit of the
-step rather than a control range. A minimum hold time and a maximum volumetric load are the
-clearest cases, and neither can be exceeded in the direction that would widen the study.
+Volumetric load is the parameter on which the step turns. The log reduction is expected to fall as the volume filtered per unit area rises, because the retentive layer accumulates material and the chance of a parvovirus passing rises with it. Filtration pressure is scored against both model viruses, and it sets the driving force across that accumulating layer. Parvovirus filters of this kind can retain less virus at low pressure or low flux and after a pressure interruption, so the direction of a pressure effect on the log reduction is known. Its size for this filter is not. The exposure is largest at high volumetric load, where the layer is thickest. Both parameters are therefore carried into the designed experiment. @tbl-fm-vf gives the failure modes.
 
 ```{python}
 #| output: asis
-show(scope_ranges_df(), floatfmt="g")
+fm_table("virus_filtration", "tbl-fm-vf").show()
 ```
 
-: The parameter set handed to the characterization plans, with the range to be studied. {#tbl-ranges}
+## Ultrafiltration / Diafiltration {#sec-rk-ufdf}
 
-The assignment is prospective. It is revisited when the characterization reports are
-available, and a parameter whose measured effect contradicts the judgement made here is
-reported as such in the report of its unit operation.
+The formulation step concentrates the antibody and exchanges it into the drug substance buffer. It forms and clears no attribute in @tbl-cqa. Its `{python} ST["ufdf"]["n"]` parameters are scored against process performance alone and sit at the floor of the ranking at `{python} rpn_min`. The A-Mab case study gives no characterization of this step [@amab2009], so the assessment rests on platform experience alone.
 
-# Assumptions and limitations
+A number of diavolumes below its range leaves the buffer exchange incomplete. Each diavolume removes a fixed fraction of the buffer species left in the retentate, so the residual falls with the number of diavolumes and not with the time spent filtering. Flux is expected to rise with transmembrane pressure until the membrane reaches the region in which flux no longer depends on pressure. Beyond that point the concentration polarization layer at the membrane surface thickens and flux stops rising, so a transmembrane pressure outside its range is expected to change the processing time. The final concentration is the drug substance concentration itself, which is measured and released against a specification. A failure of this parameter is therefore seen before the batch is released. Each parameter is studied one factor at a time. @tbl-fm-ufdf gives the failure modes.
 
-The assessment assumes that platform behaviour transfers to A-Mab. The mechanisms it relies
-on were established on the prior humanized IgG1 antibodies X-Mab, Y-Mab and Z-Mab and on
-A-Mab clinical and engineering experience, and the assumption is that A-Mab responds to the same parameters in
-the same directions [@amab2009]. Where it does not, the characterization study finds it,
-which is one of the reasons the studied ranges are wider than the operating ranges.
+```{python}
+#| output: asis
+fm_table("ufdf", "tbl-fm-ufdf").show()
+```
 
-The parameter list is assumed complete. It is the list carried in the process description
-transferred under PTP-001, and a parameter that is not in that description is not assessed
-here. An equipment or facility difference at the receiving site that introduces a new
-parameter is handled under the transfer plan and would require this assessment to be
-revised.
+# Characterization study assignment {#sec-assignment}
 
-Severity is taken from the quality attribute assessment and is not re-derived. That
-assessment scores impact and uncertainty and deliberately excludes manufacturing capability
-and detectability [@amab2009], so a severity in @tbl-cqa says what a failure would mean for
-the patient and says nothing about how likely the process is to produce one.
+The study assignment is the main output of this assessment. Of the `{python} n_par` parameters, `{python} n_mv` are assigned to a multivariate design and `{python} n_uni` to univariate study. A designed experiment is assigned at `{python} len(doe_steps)` of the `{python} n_steps` unit operations. The remaining `{python} len(nodoe_steps)`, harvest and UF/DF, have no parameter scored against a quality attribute, and no designed experiment is assigned to them. @tbl-scope gives the split per unit operation, with the plan and the report that cover each.
 
-Occurrence and detection are assigned by class rather than parameter by parameter, so the
-initial risk priority number takes only `{python} n_rpn_values` values across
-`{python} n_par_total` parameters. The number therefore separates classes of parameter well
-and separates parameters within a class not at all. Ranking within a unit operation should
-be read from severity and from the reasoning in §4.
+```{python}
+#| output: asis
+T.frame(scope, "Characterization scope per unit operation, and the documents that cover it.",
+        "tbl-scope", header={"Quality": "Scored against a\nquality attribute",
+                             "Multivariate": "Multivariate\ndesign", "Plan / report": "Plan and report"},
+        align=["r", "P{4.2cm}", "r", "r", "r", "r", "l"]).show()
+```
 
-The interaction judgement is the weakest part of the assessment. A designed experiment
-estimates interactions only among the parameters it carries, so an interaction between a
-parameter in the design and one left out of it cannot be found by that design. The clearest
-exposure is the operating flow rate of the anion exchange step, which is scored against both
-viral clearance attributes and studied one at a time. If the anion exchange study finds
-that residence time acts together with the load chemistry, the univariate result for flow
-rate would not bound the step and the design would have to be augmented.
+The parameters assigned to a multivariate design are those judged able to act together with another parameter of the same unit operation. The judgement was made from platform and prior product experience, and @sec-ranking records it where it decides the study type. The capture step carries `{python} n_perf_doe` parameters into its design although they are scored against process performance alone, so that the same design bounds step yield.
 
-Interactions across unit operations are not scored. Each parameter is assessed against the
-attributes of its own step. Material does carry properties forward, and the elution pH of the
-capture step setting the starting pH of the low pH hold is the clearest case, but such links
-are handled by the in-process limits of the receiving step rather than by a score in
-@tbl-rank.
+The assessment marks `{python} n_just` parameter "univariate (justified)", the substitution that the A-Mab risk ranking and filtering approach permits where the study can be justified [@amab2009]. It is the operating flow rate of the anion exchange step, which is scored against both viral clearance attributes and acts on the step through residence time alone. A parameter that does not act together with the load chemistry can be bounded by moving it one factor at a time, and the anion exchange plan PCP-008 carries that justification with its design.
 
-Finally, no number in this document is a measurement of A-Mab process behaviour. The scores
-are judgements, the studies are not yet run, and the ranges in @tbl-ranges are the ranges to
-be studied and not ranges that have been shown to be acceptable.
+No parameter is excluded from study on the ground that its risk is low. The lowest ranked parameters change step yield and process consistency, not a quality attribute. Apart from the `{python} n_perf_doe` Protein A parameters carried into the capture design, they are studied one factor at a time, so that the ranges entered in the batch record rest on data and not on platform precedent alone.
 
-# Outputs and downstream use
+@tbl-params gives the parameter set handed to the plans, with the set-point, the range to be studied and the normal operating range (NOR). Against these NORs the range to be studied is wider at both ends for `{python} n_both` of the `{python} n_par` parameters, so that the edges of the characterized region lie outside the region in which the process is run [@amab2009]. For `{python} n_low_sh` parameters the range studied and the NOR share their low end. These are `{python} low_sh_txt`. For A-Mab concentration the NOR equals the range studied.
 
-This assessment produces three things. The ranking in @tbl-rank is the pre-characterization
-risk basis. The study type in @tbl-rank and the summary in @tbl-scope are the scope. The
-parameter set in @tbl-ranges is what each plan instantiates.
+The set-points and NORs in @tbl-params are those this assessment was made against, and PCMP-001 Version 2.0 Table 4.2 gives the values in force.
 
-Per unit operation the consumer is the characterization plan named in @tbl-scope. Each plan
-cites this assessment as its risk basis, takes the study type and the range to be studied,
-and adds the scale-down model, the analytical methods, the sampling plan and the acceptance
-criteria. The report of that unit operation then measures the effects, defines the operating
-region and classifies each parameter under SOP-4001.
+```{python}
+#| output: asis
+T.frame(params52, "The parameter set handed to the characterization plans, with the set-point, "
+        "the range to be studied and the NOR.", "tbl-params", merge=["Step"],
+        align=["P{2.3cm}", "P{3.9cm}", "P{2.5cm}", "r", "l", "l", "l"], size="footnotesize",
+        notes=[("a)", "Marked univariate (justified) in the risk ranking."),
+               ("t)", "A measured value, not a set one. The set-point and NOR apply to the turbidity "
+                      "measured after clarification."),
+               ("", "The set-points and NORs are those this assessment was made against. PCMP-001 "
+                    "Version 2.0 Table 4.2 gives the values in force.")],
+        notes_per_row=True).show()
+```
 
-PCMP-001 consumes the assessment at campaign level. It states once what the individual plans
-would otherwise each restate, including the count of parameters going to multivariate and to
-univariate study across the train. PCMR-001 consolidates the reports and is where the risk
-that remains after characterization is addressed.
+The assignment is prospective. It is revisited when the characterization reports are available. A parameter whose measured effect contradicts the judgement made here is reported as such in the report of its unit operation.
 
-This document is superseded by its own revision. A change to the parameter list, to a
-severity, or to an assigned study type is made by revising this assessment, and the affected
-plans are revised with it.
+# Assumptions and limitations {#sec-assumptions}
 
-# Approvals
+The assessment assumes that platform behaviour transfers to A-Mab. The mechanisms it relies on were established on the earlier humanized IgG1 antibodies X-Mab, Y-Mab and Z-Mab and on A-Mab clinical and engineering experience [@amab2009]. The assumption is that A-Mab responds to the same parameters in the same directions. Where it does not, the characterization study finds it, which is one reason the ranges studied are wider than the NORs.
 
-This assessment is approved by the functions listed in @tbl-appr. Approval confirms that the
-parameter list is complete against the transferred process description, that the severity
-carried for each attribute agrees with the quality attribute assessment, and that the study
-type assigned to each parameter is supported by the reasoning given in §4. A change to the
-parameter list or to an assigned study type after approval is made by revision of this
-document.
+The parameter list is assumed complete. It is the list in the process description transferred under PTP-001, and a parameter that is not in that description is not assessed. An equipment or facility difference at the receiving site that introduces a new parameter is handled under the transfer plan and requires this assessment to be revised.
+
+Severity is taken from the quality attribute assessment and is not re-derived. That assessment scores impact and uncertainty and deliberately excludes manufacturing capability and detectability [@amab2009], so a severity in @tbl-cqa says nothing about how likely the process is to produce a failure.
+
+Occurrence and detection are assigned by class, so the initial RPN takes only `{python} n_rpn` values across `{python} n_par` parameters. Ranking within a unit operation should therefore be read from severity, from the class of the attribute at risk and from the reasoning in @sec-ranking.
+
+The judgement on which parameters act together is the weakest part of the assessment. A designed experiment estimates interactions only among the parameters it carries. An interaction between a parameter in the design and one left out of it cannot be found by that design. The clearest exposure is the operating flow rate of the anion exchange step, which is scored against both viral clearance attributes and studied one factor at a time. No study as assigned can detect an interaction of residence time with load pH and conductivity. The univariate result for flow rate therefore bounds the step only if that interaction is absent, as prior knowledge expects, and the anion exchange plan PCP-008 carries that justification.
+
+Interactions between unit operations are not scored. Each parameter is assessed against the attributes it can affect at its own step. Material does carry properties from one step to the next. The clearest case is the elution pH of the capture step, which sets the starting pH of the low-pH hold. That link is handled in the receiving step, where the pool is titrated to the set-point of inactivation pH, and not by a score in @tbl-ranking. An attribute carried from one step to the next is judged against the intermediate acceptance criteria of PCMP-001 Version 2.0 §7.3, which carry each drug substance criterion back through the steps downstream.
+
+Fragments are outside this assessment, for the reasons given in @sec-cqa.
+
+Finally, no number in this document is a measurement of A-Mab process behaviour. The scores are judgements, the studies had not been run when the assessment was made, and the ranges in @tbl-params are ranges to be studied and not ranges shown to be acceptable.
+
+# Outputs and downstream use {#sec-outputs}
+
+This assessment produces three outputs. The ranking in @tbl-ranking is the pre-characterization risk basis. The study types in @tbl-ranking and the split in @tbl-scope are the scope. The parameter set in @tbl-params is what each plan takes up.
+
+Per unit operation, the consumer is the characterization plan named in @tbl-scope. Each plan cites this assessment as its risk basis and takes the study type and the range to be studied. It adds the scale-down model, the analytical methods, the sampling plan and the acceptance criteria. The scale-down model and the acceptance criteria follow PCMP-001 Version 2.0 (§7.1 and §7.3). The report of the unit operation measures the effects, defines the operating region and classifies each parameter under SOP-4001.
+
+PCMP-001 consumes the assessment at campaign level. It states once what the plans would otherwise each restate, including the number of parameters assigned to multivariate and to univariate study across the train (PCMP-001 Table 4.1). PCMR-001 consolidates the reports and is where the risk that remains after characterization is addressed.
+
+This assessment is changed only by revision. A change to the parameter list, to the severity of an attribute or to an assigned study type is made by revising this document, and the affected plans are revised with it. Version 2.0 changes no score and no study type (@sec-changes).
+
+# Approvals {#sec-approvals}
+
+This assessment is approved by the functions in the approval record at the front of the document, with the responsibilities given in @tbl-approvals. Approval of Version 2.0 confirms the changes listed in @sec-changes and confirms that the method, the scores and the study assignment are those of Version 1.0.
+
+```{python}
+#| output: asis
+T.frame(pd.DataFrame([
+    ["Process Development / MSAT",
+     "Author. Owns the parameter list, the failure modes, the scores and the study assignment"],
+    ["Analytical Development",
+     f"The attribute register and the methods that measure each attribute, including the fragment "
+     f"method of {amd_id}"],
+    ["Manufacturing Science",
+     "Completeness of the parameter list against the process description transferred under PTP-001"],
+    ["Statistics", "The scoring scales and the assignment of parameters to designed experiments"],
+    ["Quality Assurance", f"Approval, and closure of {inv_id} corrective action CA3, which reissues "
+                          f"this document at Version 2.0"],
+], columns=["Function", "Responsibility for this assessment"]),
+    "Responsibilities of the approving functions.", "tbl-approvals",
+    align=["P{4.4cm}", "P{10.0cm}"]).show()
+```
+
+<!-- ========================= BODY END ========================= -->
 
 # References {.unnumbered}
 

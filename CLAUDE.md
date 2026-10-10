@@ -107,7 +107,7 @@ differ only in their `UO` key and unit-specific narrative:
   Results (center-point reproducibility, screening effects, RSM models with ANOVA &
   diagnostics, mechanistic interpretation) · Design space · Process capability ·
   Parameter classification · Contribution to the control strategy · Discussion ·
-  Conclusions · Deviations · References · Appendices (A screening matrix, B RSM matrix,
+  Conclusions · Study events and discrepancies from the plan · References · Appendices (A screening matrix, B RSM matrix,
   C full effect/coefficient tables, D analytical methods).
 - **Canonical section order — Plan (`PCP-00N`):** Purpose & scope · Objectives ·
   Related documents · Prior knowledge & quality risk basis · Materials & methods (SDM
@@ -182,6 +182,11 @@ differ only in their `UO` key and unit-specific narrative:
   design or procedure (that hides a departure), and it describes no study made after Version 1.0
   (hold, augmentation, confirmation and support studies): each report records those as discrepancies
   from its plan (`campaign.plan_discrepancies`, `discrepancy_register(DOC)`).
+- **No deviations in a characterization document** (owner, 2026-10-10). A process characterization
+  study is not GMP manufacture. Every departure from a plan, unforeseen work or a requirement not met,
+  even one found in a later review, is a discrepancy from the plan. The execution events Version 1.0
+  numbered `DEV-00N-0X` keep their numbers as *study events* (`dev_register`). Never add a
+  `deviations.events` entry for a review finding.
 - **Framing rule:** the screening model identifies effects; the **response-surface
   model is the predictive/design-space model**. State this; don't over-claim the
   near-saturated screening fit.

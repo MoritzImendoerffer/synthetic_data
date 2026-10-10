@@ -242,3 +242,27 @@ aggregate/HCP and screening DNA/leached Protein A; PCR-009 records how yield was
 (the Version 1.0 "unspiked filtrate pool" cannot exist); PCR-004 records the missing harvest scale-down
 qualification as a deviation (owner Q8); every report states residual DNA as controlled by clearance (A-Mab:
 "None as DNA is consistently cleared"), not by a release test.
+
+### Third session, evening (2026-10-10, after the second API outage)
+Promoted and annexed today: INV-002 (1052 quotes), PCP-010 (256), PCP-009 (485). Promoted, annex pending:
+PCP-008 (annex agent ab7d06daaa01eeeab). REV2_READY = INV-001, INV-002, PCMP-001, PCP-003, PCP-005, PCP-006,
+PCP-009, PCP-010, PCR-005.
+Register added today: DEV-003-07/08/09, DEV-005-03/04/05, DEV-006-04, DEV-007-03/04, DEV-008-04 (32 in all).
+Engine: screening setting corrections (DEV-003-01, run 4 at 153.5 mmHg); design-matrix letters from
+D.factor_letters; fig_par viral band label; S-VI-WC relabelled (least favourable combination, not "harshest
+within the PAR"); T.criteria_change note e names the three tests; INV-001 sentence likewise.
+Agents (resume by ID):
+- Re-open PCP-003/005/006: a9fbbfbe01c8ef961 (second pass: deleted Version 1.0 text, THRESHOLDS). Then re-anchor
+  the three annexes (legacy builders in build_ground_truth.py) and re-render the promoted PCP-003/005/006.
+- PCR-005 follow-up: abadf6256c0fc7077 (items 1-6 done; queued: classify by PCMP-001 §7.7, DEV-005-05). Then
+  re-anchor the PCR-005 annex (legacy build_report_protein_a).
+- PCP-004 final: a4f22fc16c1edba54. PCP-007 final: ac165794047144c20. Then promote each, annex agents.
+- PCR-003 revision: a927024c4bf0fc18f (feedback-PCR-003.run1.md). PCR-006 revision: afabf170561291d76
+  (feedback-PCR-006.run1.md). Then review run 2 each.
+- RA-001 content review a2065767a62f14e49; PTP-001 content review ad3f19600c7ed6b1b (factual checks saved). Then
+  fix passes by their authors (affba11fac83b329f, a84158a8f962603ae).
+Owner questions (report at the round's end): DNA calibration (AEX 5 logs, 70 kg); the empty last row of
+uncaptioned pipe tables; page bands (PCR-003 79 pp, PCR-006 74 pp); show() numparse; the low-pH acidic-variant
+results with no scatter (33 runs against an icIEF repeatability of 0.41 points: a data-integrity signal?); the
+bioreactor classes of dissolved oxygen (KPP) and basal medium (GPP) against the stated mechanism; the integrated
+model vs the fitted models (Table 8.1 means vs the RSM set-point predictions).

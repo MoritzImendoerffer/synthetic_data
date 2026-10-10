@@ -297,3 +297,8 @@ oxygen and basal medium; integrated model vs fitted models.
 Git hygiene: a `git mv -f DRAFT final` stages the DRAFT's last committed text, not the working tree; always
 `git add` the final file after the move (PCP-004 slip, fixed in 71bdafd). Never stage .claude/transitions/,
 signal-desktop*, wakeonlan, *.quarto_ipynb.
+Update at the limit: RA-001 revision run 1 DONE (affba11fac83b329f; 35 pp, gates green; committed). Next: review run
+2, promote, annex builder (tbl-cqa restructured, new tbl-corrections, tbl-methods-by-study gone; see
+status-RA-001.md). Its flag for PCR-003: RA-001 now expects acidic variants to RISE with culture pH (deamidation is
+base-catalysed); the seeded data show the opposite (pH effect −4.17, p = 0.003), so PCR-003 must report the
+measured direction as contradicting the RA-001 expectation. The RA-001 brief still lists T.methods_by_study.

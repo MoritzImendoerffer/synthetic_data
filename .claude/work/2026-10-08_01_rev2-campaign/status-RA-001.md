@@ -61,3 +61,42 @@ Scratch: `/tmp/claude-1000/-home-moritz-github-repos-synthetic-data/be14bf3c-e46
   and HCP are at risk" (8 comes from aggregate, shared by elution pH and stop collect).
 - Revision history says "approval and execution dates recorded": the only execution date this
   prospective document records is the start of the first study (S-BRX-SDM, 2025-08-11).
+
+## Revision run 1 (2026-10-10, after factual-RA-001.md and feedback-RA-001.run1.md)
+- [x] read feedback-RA-001.run1.md, factual-RA-001.md; shared fixes checked in code: RC.cqa_table
+      (criteria by type, fragments Severity None), build_fmea.fill texts, related_docs_md relations,
+      UNIT_OP_ROLE bioreactor; PCMP-001 pdf re-read for §2 (Q8(R2) continuum), §3 (fragments origin),
+      §7.8 wording.
+- [x] Table 3.2 (methods by study) and the S-CEX-FRC reason dropped; one pointer to PCMP-001 V2.0 §7.8
+      and Table 7.3 (§3). "Every study at every step" deleted.
+- [x] Table 3.1 built from RC.cqa_table(); fragments severity "—" with note (not scored); note on the
+      origin (A-Mab except fragments, sponsor-set at V2.0); sev_reg_min/max over scored attributes.
+- [x] V1.0 detection-6 wording restored (prose and Table 2.1); occurrence/detection prose in V1.0 words.
+- [x] errors 4, 5, 7, 8, 9 worded as factual-RA-001.md gives them; error 10 by the builder.
+- [x] science corrections and statements the tables contradicted: corrected, listed in new Table 1.3
+      (tbl-corrections, 13 rows). Continuum citation kept at Q8(R2) as PCMP-001 §2, listed.
+- [x] fragments-not-scored said once (§3, last two paragraphs); §1.1, §4.2 and §6 point to §3.
+- [x] Table 5.2: cells superseded at V2.0 marked per report (PCR-005, PCR-006) with notes pointing to
+      PCMP-001 Table 4.2; turbidity note (measured, not set).
+- [x] "register" kept for the attribute register only; codes named at first use (finding 5, CA3, CA2,
+      SOP-2008, PCP-008, the viral clearance claim); PCMR-001 gloss in §1 cut.
+- [x] abbreviations: AEX, AMV, DO, TMP, WV dropped (unused); OD -> OD280.
+- [x] check_render revision pass 1 and 2: all HARD gates OK (332 sentences, 5987 words); pdf + docx
+      rendered; 35 pp. Page images read: Tables 1.2, 1.3, 2.1, 3.1, 4.2, 5.2 (Table 3.1 last column
+      widened after the first look). .txt extract refreshed.
+
+### Annex notes for this revision
+- tbl-cqa: T.frame of reg31 (RC.cqa_table() grouped by category, Category first, merge=["Category"]);
+  markers: acceptance of fragments ^o)^ (origin note), severity "—^n)^" (not scored), viral "Set by" ^v)^;
+  CTable relabels them a), b), c) in order of use.
+- tbl-corrections: new T.frame in its chunk (merge=["Section"], style="rows").
+- tbl-params: markers ^t)^ on post-clarification turbidity, per-report markers on superseded set-point
+  and NOR cells (relabelled), ^a)^ on the justified univariate study.
+- tbl-methods-by-study no longer exists; the brief still lists T.methods_by_study() for RA-001.
+
+### Flags left
+- Acidic variants: the corrected expectation (rise with culture pH) is the opposite of the seeded
+  model (effects_bioreactor.csv: pH effect on acidic_variants -4.17, p = 0.003; STORY_BIBLE PCR-003
+  worst corner at high pH). PCR-003 must report the measured direction as contradicting RA-001.
+- "≤ 2 %" in Table 3.1: the cell prints the helper string; pdftotext merges it to "≤2%" on that
+  wrapped line only (word boxes identical to "≤ 5 %"); the DOCX text is the helper string.

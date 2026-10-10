@@ -266,3 +266,34 @@ uncaptioned pipe tables; page bands (PCR-003 79 pp, PCR-006 74 pp); show() numpa
 results with no scatter (33 runs against an icIEF repeatability of 0.41 points: a data-integrity signal?); the
 bioreactor classes of dissolved oxygen (KPP) and basal medium (GPP) against the stated mechanism; the integrated
 model vs the fitted models (Table 8.1 means vs the RSM set-point predictions).
+
+### HANDOFF (2026-10-10, late evening; session limit) — start here next session
+State: all eight plans promoted (PCP-003..010) and INV-002 promoted. Annexes grounded and in REV2_READY:
+INV-001, INV-002, PCMP-001, PCP-003, PCP-005, PCP-006, PCP-008, PCP-009, PCP-010, PCR-005 (the PCR-005 annex
+needs re-anchoring after its follow-up pass). 207 tests pass at 03a9c9d.
+Owner's decision tonight: "4/n flags, F decides" (data-state-2026-10-10.md §5; config cook_f_quantile;
+D.residual_influence over / over_f / f_limit). Register: PD-003-04, PD-005-02, PD-007-02, PD-009-02 reworded;
+PD-006-07 and PD-008-03 withdrawn.
+Work in flight when the session ended (resume each by ID with SendMessage; if an agent is gone, relaunch with
+the named fix list; uncommitted edits are in the working tree):
+1. Plans, generic Cook's test to the new rule: agent a9fbbfbe01c8ef961 on PCP-003/005/006/008/009. Then do
+   PCP-007 the same way (after its annex), re-render, and re-anchor annex quotes (PCP-003/005/006 legacy
+   builders in build_ground_truth.py; PCP-008/009 modules in annex_builders/).
+2. Annex builders: PCP-007 a5ff49d64bdb26d82, PCP-004 aeb9d1808661de0c2. On completion add each to REV2_READY,
+   build, ground, test, commit.
+3. PCR-005 follow-up: abadf6256c0fc7077 (feedback-PCR-005.followup-2026-10-10.md, items 1-6 done; queued:
+   classification by PCMP-001 §7.7, DEV-005-05, the PCP-005 objectives quote, the Cook's decision). Then
+   re-render, re-anchor its annex (legacy build_report_protein_a), commit.
+4. PCR-003 revision: a927024c4bf0fc18f (feedback-PCR-003.run1.md + the Cook's decision). Then review run 2.
+5. PCR-006 revision: afabf170561291d76 (feedback-PCR-006.run1.md + the Cook's decision; PD-006-07 withdrawn).
+   Then review run 2.
+6. RA-001 revision: affba11fac83b329f (feedback-RA-001.run1.md). PTP-001 revision: a84158a8f962603ae
+   (feedback-PTP-001.run1.md). Then review run 2 each, promote, annex builders.
+Then: PCR-004, PCR-007, PCR-008, PCR-009, PCR-010, PCMR-001 (authors), the full rebuild, the consistency sweep
+(builder table remarks; PCMP-001 §6.3 cross-reference to the §7.5 exception), ship.
+Owner questions still open (list above, "Owner questions"): DNA calibration; empty last row of uncaptioned pipe
+tables; page bands; show() numparse; low-pH acidic variants with no scatter; bioreactor classes of dissolved
+oxygen and basal medium; integrated model vs fitted models.
+Git hygiene: a `git mv -f DRAFT final` stages the DRAFT's last committed text, not the working tree; always
+`git add` the final file after the move (PCP-004 slip, fixed in 71bdafd). Never stage .claude/transitions/,
+signal-desktop*, wakeonlan, *.quarto_ipynb.

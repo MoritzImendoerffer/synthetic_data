@@ -249,6 +249,8 @@ def check_tables_fit(qmd: str) -> int:
     doc = fitz.open(pdf)
     text = re.sub(r"\s+", " ", " ".join(page.get_text() for page in doc))
     text_nospace = re.sub(r"\s+", "", text)
+    # also without hyphens: a note that wraps is hyphenated at a line end in the PDF ("augmen-tation")
+    text_nohyph = re.sub(r"[\s\-\u2010\u00ad]", "", text)
     doc.close()
     bad = []
     # the document's namespace from the dry run where there was one, else its identity variables
@@ -271,12 +273,17 @@ def check_tables_fit(qmd: str) -> int:
         frags = [f.strip(" ,;") for f in re.split(r"\^[^^]+\^", str(getattr(last, "text", last)))]
         probes = [max(frags, key=len)]
         if t.notes:
-            probes.append(t.notes[-1][1][:40])
+            # the start AND the end of the last note: a landscape table lost only the last line of its
+            # note at the page foot, which the start alone did not show (INV-002 Table 5.1, 2026-10-10)
+            note = re.sub(r"\^[^^]+\^", "", t.notes[-1][1])
+            probes += [note[:40], note[-40:]]
         for pr in probes:
             pr = re.sub(r"\s+", " ", pr).strip()
             # compared without spaces: the PDF text layer drops the space after a minus sign that
-            # LaTeX sets as an operator ("requirement −nominal", PCP-006, 2026-10-09)
-            if pr and re.sub(r"\s+", "", pr) not in text_nospace:
+            # LaTeX sets as an operator ("requirement −nominal", PCP-006, 2026-10-09); and, failing
+            # that, without hyphens, which a wrapped line may add or split at
+            if pr and re.sub(r"\s+", "", pr) not in text_nospace and \
+                    re.sub(r"[\s\-\u2010\u00ad]", "", pr) not in text_nohyph:
                 bad.append(f"{t.label}: {pr[:50]!r} not in the PDF (table taller than a page?)")
     if bad:
         print(f"FAIL  {len(bad)} complex table(s) cut off in the PDF:")

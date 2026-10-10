@@ -1303,13 +1303,11 @@ def adequacy_remedy(steps: Optional[List[str]] = None, label: str = "tbl-remedy"
                       f"{float(_cfg().raw()['campaign']['thresholds']['effect_alpha']):g}. A main effect in "
                       "parentheses is not significant and is kept because an interaction or a square of "
                       "it remains in the refit."),
-               ("", f"Runs needed: the smallest augmentation that gives a probability of success of at least "
-                    f"{float(ma['assurance']):.2f}, at the effects estimated from the planned runs, that the "
-                    "planned model meets the lack-of-fit test and the limit on overfitting of PCMP-001 "
-                    "§7.2. A dash means "
-                    "not reached within the size of the planned design, or not computed when the refit keeps "
-                    "no effect. For a refitted model the number is what an augmentation would have needed, "
-                    "and no runs were made.")],
+               ("", f"Runs needed: the smallest augmentation with a probability of success of at least "
+                    f"{float(ma['assurance']):.2f}, at the effects of the planned runs, that the planned model "
+                    "meets the lack-of-fit test and the limit on overfitting. A dash means not reached within "
+                    "the size of the planned design, or not computed when the refit keeps no effect. For a "
+                    "refitted model the number is what an augmentation would have needed, and no runs were made.")],
         notes_per_row=True, size="footnotesize", landscape=True,
         caption="Remedy of each model that does not meet the model-adequacy criteria.", label=label)
 

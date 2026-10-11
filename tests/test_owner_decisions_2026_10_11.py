@@ -19,12 +19,14 @@ def test_bioreactor_classes_follow_the_rule():
     assert uo.param("medium_conc").classification == "KPP"
 
 
-def test_acidic_alarms_sit_inside_the_nor_on_the_side_that_lowers_acidic_variants():
+def test_combined_alert_covers_every_failing_nor_combination():
+    """Option 1 (owner, 2026-10-11): conditional limits derived from the model; the alert fires when every alert
+    parameter is beyond its limit, and it covers every combination inside the NOR box that fails the criterion."""
     m = D.acidic_mitigation()
-    for a in m["alarms"]:
-        lo, hi = a["nor"]
-        assert lo < a["alarm"] < hi, a
-        assert (a["alarm"] > a["setpoint"]) == (a["side"] == "high"), a
+    assert m["covers_nor"]
+    for a in m["alert"]:
+        if a["limit"] is not None:
+            assert a["side"] in ("high", "low")
     # the action limit at harvest guards the lower criterion by the precision of icIEF
     assert m["action_limit"] > m["lower_criterion"]
     assert abs(m["action_limit"] - (m["lower_criterion"] + m["guard"] * m["sd"])) < 1e-9

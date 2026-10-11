@@ -1935,45 +1935,79 @@ def _nominal_fragments():
 
 
 
-def acidic_mitigation():
-    """The alarm limits and the harvest action limit that mitigate the acidic-variant risk accepted for the
-    production bioreactor (config ``campaign.risk_mitigation``; owner, 2026-10-11). For each alarm parameter the
-    side is the NOR edge at which acidic variants are lower: on the selected response-surface model at the
-    set-point of the other factors, or on the slope of the osmolality study for osmolality. The alarm sits
-    ``alarm_position`` of the way from the set-point to that edge. The action limit at harvest is the lower
-    intermediate acceptance criterion plus ``action_guard_sd`` intermediate-precision standard deviations of the
-    icIEF method at that level. Returns a dict with ``alarms`` (one dict per parameter: key, name, unit,
-    setpoint, nor, side, alarm), ``action_limit``, ``lower_criterion``, ``sd``, ``guard``, ``method`` and
-    ``monitoring``."""
+def _acidic_lower_limit(nat):
+    """The lower 95 % limit of a single run of bioreactor acidic variants at manufacturing scale, at the
+    settings ``nat`` (factor -> value; factors left out sit at the design centre)."""
+    _, lo, _ = prediction_interval("bioreactor", "acidic_variants", {k: [v] for k, v in nat.items()})
+    return float(to_mfg("bioreactor", "acidic_variants", np.atleast_1d(lo))[0])
+
+
+def acidic_mitigation(n_grid=241):
+    """The combined alert and the harvest action limit that mitigate the acidic-variant risk accepted for the
+    production bioreactor (config ``campaign.risk_mitigation``; owner, 2026-10-11, option 1).
+
+    A PAR is one-dimensional: the PAR of one parameter holds at its edge only while the parameters that act with it
+    stay within limits, which may lie inside their own PAR and NOR. For each alert parameter the unfavourable side
+    is the one on which the selected response-surface model predicts fewer acidic variants. Its conditional limit
+    is the most unfavourable value, searched across the range studied, at which the lower 95 % limit of a single
+    run still meets the lower criterion while every other factor of the model sits at its unfavourable NOR edge.
+    None when the criterion holds even at the end of the range studied. The combined alert fires when every alert
+    parameter with a limit is beyond it at the same time; ``covers_nor`` checks on a grid of the NOR box that every
+    failing combination raises it. The action limit at harvest is the lower intermediate acceptance criterion plus
+    ``action_guard_sd`` intermediate-precision standard deviations of the icIEF method at that level. Osmolality is
+    not a factor of the response-surface design; the harvest action limit covers it.
+    Returns ``alert`` (one dict per parameter: key, name, unit, setpoint, nor, side, limit), ``covers_nor``,
+    ``action_limit``, ``lower_criterion``, ``sd``, ``guard``, ``method`` and ``monitoring``."""
     m = CFG.raw()["campaign"]["risk_mitigation"]["bioreactor_acidic_variants"]
     uo = CFG.unit_op("bioreactor")
     resp = "acidic_variants"
     r = fit("bioreactor", "rsm", resp)
-    base = {f: uo.param(f).setpoint for f in r["factors"]}
-    pos = float(m["alarm_position"])
-    alarms = []
-    for key in m["alarm_parameters"]:
-        p = uo.param(key)
-        lo_e, hi_e = map(float, p.nor)
-        if key in r["factors"]:
-            ylo = float(predict("bioreactor", resp, natural={**base, key: lo_e})[0])
-            yhi = float(predict("bioreactor", resp, natural={**base, key: hi_e})[0])
-            side = "high" if yhi < ylo else "low"
-        else:
-            o = osmolality_analysis() if key == "osmolality" else None
-            if o is None:
-                raise ValueError(f"no rule gives the side of {key}")
-            slope = float(o[o["response"] == resp]["slope_nor"].iloc[0])
-            side = "high" if slope < 0 else "low"
-        edge = hi_e if side == "high" else lo_e
-        sp = float(p.setpoint)
-        alarms.append({"key": key, "name": p.name, "unit": p.unit, "setpoint": sp, "nor": (lo_e, hi_e),
-                       "side": side, "alarm": sp + pos * (edge - sp)})
+    fac = list(r["factors"])
     iac = csv("iac.csv")
     row = iac[(iac["step_key"] == "bioreactor") & (iac["response"] == resp)].iloc[0]
     lower = float(row["iac_low"])
+    base = {f: uo.param(f).setpoint for f in fac}
+    side = {}
+    for f in fac:
+        lo_e, hi_e = map(float, uo.param(f).nor)
+        ylo = float(predict("bioreactor", resp, natural={**base, f: lo_e})[0])
+        yhi = float(predict("bioreactor", resp, natural={**base, f: hi_e})[0])
+        side[f] = "high" if yhi < ylo else "low"
+    worst = {f: float(uo.param(f).nor[1] if side[f] == "high" else uo.param(f).nor[0]) for f in fac}
+    alert = []
+    for key in m["alert_parameters"]:
+        p = uo.param(key)
+        a, b = map(float, p.prange)
+        sp = float(p.setpoint)
+        # from the set-point toward the unfavourable end of the range studied
+        grid = np.linspace(sp, b if side[key] == "high" else a, n_grid)
+        ok = [g for g in grid if _acidic_lower_limit({**worst, key: g}) >= lower]
+        if len(ok) == len(grid):
+            limit = None                          # the criterion holds to the end of the range studied
+        elif ok:
+            limit = float(ok[-1])
+        else:
+            # fails even at the set-point: search the favourable side for the value where it is met
+            g2 = np.linspace(sp, a if side[key] == "high" else b, n_grid)
+            ok2 = [g for g in g2 if _acidic_lower_limit({**worst, key: g}) >= lower]
+            limit = float(ok2[0]) if ok2 else None
+        alert.append({"key": key, "name": p.name, "unit": p.unit, "setpoint": sp,
+                      "nor": tuple(map(float, p.nor)), "side": side[key], "limit": limit})
+    # the alert must cover every failing combination inside the NOR box
+    lim = {d["key"]: d for d in alert if d["limit"] is not None}
+
+    def beyond(k, v):
+        d = lim[k]
+        return v > d["limit"] if d["side"] == "high" else v < d["limit"]
+    axes = {f: np.linspace(*map(float, uo.param(f).nor), 7) for f in fac}
+    covers = True
+    for combo in itertools.product(*[axes[f] for f in fac]):
+        nat = dict(zip(fac, combo))
+        if _acidic_lower_limit(nat) < lower and not all(beyond(k, nat[k]) for k in lim):
+            covers = False
+            break
     meth = {x["id"]: x for x in CFG.raw()["deviations"]["methods"]}[m["action_method"]]
     sd = float(meth["precision_pct"]) / 100.0 * lower
     k = float(m["action_guard_sd"])
-    return {"alarms": alarms, "action_limit": lower + k * sd, "lower_criterion": lower, "sd": sd, "guard": k,
-            "method": m["action_method"], "monitoring": m["monitoring"]}
+    return {"alert": alert, "covers_nor": covers, "action_limit": lower + k * sd, "lower_criterion": lower,
+            "sd": sd, "guard": k, "method": m["action_method"], "monitoring": m["monitoring"]}

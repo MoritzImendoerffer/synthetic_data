@@ -515,10 +515,15 @@ so no NOR or set-point decision moves a criterion or a Version 1.0 number.
   as the producer's (decision 6a): acidic variants have very low criticality, 18 % is a range-of-experience
   limit, release testing detects a low result, and the probability out of specification is quantified
   (`p_oos.csv`, whose simulation varies osmolality within its NOR). Mitigation: acidic variants monitored at
-  harvest against an action limit, and alarm limits inside the NOR on the side that lowers acidic variants, for
-  pH, pCO2, osmolality and culture temperature (values by the rule of `D.acidic_mitigation`; owner, 2026-10-11). The
-  univariate effect of initial viable cell concentration at its NOR low is under the same acceptance, with acidic
-  variants at harvest trended against it in production, because it may be a false positive.
+  harvest against an action limit (the lower criterion plus two icIEF precision SDs), and a combined alert in the
+  control system: a PAR is one-dimensional, so the PAR of one parameter holds at its edge only while the parameters
+  that act with it stay within conditional limits, which here lie inside their NORs. The alert fires when culture
+  pH, pCO2 and culture temperature are all beyond their conditional limits at once (`D.acidic_mitigation`; owner,
+  2026-10-11, option 1; an alarm half-way to the NOR edge and one at the PAR edge were both rejected: the PAR is
+  checked batch by batch against the actual values). The univariate effect of initial viable cell concentration
+  at its NOR low is under the same acceptance, with acidic variants at harvest trended against it in production,
+  because it may be a false positive. The NOR is the controlled range of the batch record (PQRI, as EMA), read as
+  about ±3 SD of chance variation, roughly a tolerance interval (owner, 2026-10-11).
 
 **Harvest and UF/DF univariate studies (owner's decision 2026-10-08, option A).** Version 1.0
 described a univariate study of each of the two steps without a design (S-HAR-UNI, S-UFDF-UNI) and

@@ -6732,15 +6732,25 @@ PA5_HOLD_ATTR = {"Aggregate": "aggregates_hmw", "Acidic": "acidic_variants", "Fr
 PA5_REL_KIND = {"Rolls up into": "rolls_up_into", "Sibling — paired document": "executed_under",
                 "Parent — master plan": "executed_under",
                 "Parent — risk basis for study scope": "scoped_by", "Parent — transfer scope": "scoped_by"}
+#: The discrepancies of the record pass (owner, 2026-10-10: a characterization study raises no deviation),
+#: with the Deviation record each one was in the annex as fitted to the follow-up text. The config keeps the
+#: link only as a comment (campaign.plan_discrepancies: "were DEV-005-03 to DEV-005-05"); the ids are
+#: identifiers, not values.
+PA5_FORMER_DEV = {"PD-005-07": "DEV-005-03", "PD-005-08": "DEV-005-04", "PD-005-09": "DEV-005-05"}
 
 
 def build_report_protein_a():
     """PCR-005 Version 2.0: the Protein A report re-analysed under INV-001 and INV-002.
 
-    Fitted to the final Version 2.0 text. Every table of the report is a complex table, read back
-    through :func:`qmd_ctables` from the object the report printed. Every number in a quote is
-    either a cell of such a table or an inline expression of the report evaluated in its own
-    namespace (:func:`qmd_inline`); no value is typed here.
+    Fitted to the final Version 2.0 text, as re-anchored after the record pass of 2026-10-10 (commit
+    50ebbcc): §13 is "Study events and discrepancies from the plan", the two study events DEV-005-01
+    and DEV-005-02 are Deviation records (the schema's only record for an event and its outcome), the
+    three departures found in the Version 2.0 review (PD-005-07 to PD-005-09, formerly the Deviation
+    records DEV-005-03 to DEV-005-05) are discrepancy statements like PD-005-01 to PD-005-06, and the
+    discrepancy register is read from both parts the report prints (@tbl-pd, @tbl-pd-b). Every table
+    of the report is a complex table, read back through :func:`qmd_ctables` from the object the
+    report printed. Every number in a quote is either a cell of such a table or an inline expression
+    of the report evaluated in its own namespace (:func:`qmd_inline`); no value is typed here.
     """
     import doe_report as D
     import pandas as pd
@@ -6757,14 +6767,16 @@ def build_report_protein_a():
     A, add, _ST, _st = _adders(doc, f)
     text = _document_text(f)
 
-    # Report statements are numbered once they all exist. The statements of the annex as first fitted
-    # to the Version 2.0 text keep their ids, in their order; a statement added when the annex was
-    # re-anchored to the follow-up text (new=True) takes the next free id after them, although it sits
-    # in the section it belongs to. Sections added then are appended after the original ones.
+    # Report statements are numbered once they all exist, by generation. The statements of the annex as
+    # first fitted to the Version 2.0 text (new=False) keep their ids, in their order; a statement added
+    # when the annex was re-anchored to the follow-up text (new=True) takes the next free id after them,
+    # and one added when it was re-anchored to the record pass of 2026-10-10 (new=2) the next free id
+    # after those, although each sits in the section it belongs to. A statement whose sentence was only
+    # reworded keeps its id. Sections added later are appended after the original ones.
     pending, spans = [], []
 
     def st(text_, sec, quote, header=None, table_title=None, new=False):
-        pending.append((text_, sec, quote, header, table_title, new))
+        pending.append((text_, sec, quote, header, table_title, int(new)))
 
     def section(title, start):
         spans.append((title, start, len(pending)))
@@ -6817,10 +6829,32 @@ def build_report_protein_a():
     cap_t, cap_df = ct["tbl-cap"]
     capkeys = [by_label[c] for c in cap_df["CQA"]]
     caprow = ctable_rows(cap_t, capkeys)
+    # the register of study events (Event | Summary | Detected during | Outcome)
     dev_t, dev_df = ct["tbl-dev"]
-    devrow = ctable_rows(dev_t, dev_df["Deviation"])
-    pd_t, pd_df = ct["tbl-pd"]
-    pdrow = ctable_rows(pd_t, pd_df["Discrepancy"])
+    devrow = ctable_rows(dev_t, dev_df["Event"])
+    # the discrepancy register, printed in two parts from the same builder rows (@tbl-pd, @tbl-pd-b): each
+    # discrepancy anchors on its row in the part that prints it, with that part's caption and id
+    pdrow, pd_part = RowQuotes(), {}
+    for lab_ in ("tbl-pd", "tbl-pd-b"):
+        t_, df_ = ct[lab_]
+        r_ = ctable_rows(t_, df_["Discrepancy"])
+        if pdrow.header and r_.header != pdrow.header:
+            raise ValueError(f"{qmd}: the two parts of the discrepancy register have different headers")
+        pdrow.update(r_)
+        pdrow.header = r_.header
+        pd_part.update({k: (t_, f"{doc}_tab_{lab_[4:].replace('-', '_')}") for k in r_})
+    if list(pdrow) != [d["id"] for d in P.PLAN_DISCREPANCIES[doc]]:
+        raise ValueError(f"{qmd}: the discrepancy register does not print PLAN_DISCREPANCIES in order")
+
+    def pd_ref(k, sec_id, sec_title):
+        """The reference to the row of discrepancy ``k`` in the part of the register that prints it."""
+        t_, tid_ = pd_part[k]
+        return ref(doc, f, sec_id, sec_title, pdrow[k], table_title=t_.caption, table_id=tid_,
+                   table_header=pdrow.header)
+    # the headings of the report as they render ({#sec-...} label -> title)
+    qsrc = open(os.path.join(HERE, qmd), encoding="utf-8").read()
+    heading = {lab_: qmd_inline(ns, t_) for t_, lab_ in
+               re.findall(r"^#+ (.+?) \{#(sec-[\w-]+)\}\s*$", qsrc, flags=re.M)}
     off_t = ct["tbl-sdm-offsets"][0]
     offrow = ctable_rows(off_t)
     off0_t = ct["tbl-sdm-offsets-planned"][0]
@@ -7116,16 +7150,12 @@ def build_report_protein_a():
                                    table_header=rsrow.header)],
             metadata=meta()))
 
-    # one subsection per deviation (§13.1 to §13.5): what happened, and what the report says it changes.
-    # Each record anchors on its own sentences; the executive summary names all five in one sentence,
-    # which would anchor five records past the prose ceiling, so it anchors one statement instead.
-    dev_sec = {"DEV-005-01": "DEV-005-01. Elution buffer pH below target on a response-surface run",
-               "DEV-005-02": q("DEV-005-02. Leached Protein A result of run `{python} dev_005_02_run` "
-                               "initially out of trend"),
-               "DEV-005-03": "DEV-005-03. Univariate study without its centre runs",
-               "DEV-005-04": "DEV-005-04. Difference between the scales in leached Protein A not "
-                             "investigated",
-               "DEV-005-05": "DEV-005-05. Univariate study made before the response-surface design"}
+    # one subsection per study event (§13.1, §13.2): what happened, and what the report says it changes.
+    # The events of execution keep the DEV numbers Version 1.0 gave them; the document calls them study
+    # events, not deviations (owner, 2026-10-10), and Deviation is the schema's only record for an event
+    # and what was done about it. Each record anchors on its own sentences; the executive summary names
+    # both events in one sentence, which anchors one statement instead.
+    dev_sec = {d: heading[f"sec-dev{d[-2:]}"] for d in devrow}
     dev_prose = {
         "DEV-005-01": [q("Run `{python} dev_run` is analysed at its recorded pH, the setting at which "
                          "it was made."),
@@ -7136,26 +7166,8 @@ def build_report_protein_a():
                        q("The class of end of pool collect would not change, because that effect, "
                          "`{python} f2(s02_chg)` ppm across its range against the criterion of ≤ "
                          "`{python} crit_lpa` ppm, is too small to move leached Protein A appreciably")],
-        "DEV-005-03": [q("Study S-PA-UNI (`{python} win('S-PA-UNI')`) ran each end of each range "
-                         "`{python} uni_reps` times and made no run at the centre."),
-                       "The judgement of pool host cell protein and leached Protein A rests on the "
-                       "individual results at both ends, each against its criterion, and does not "
-                       "depend on the reference."],
-        "DEV-005-04": [q("On the `{python} n_sd_plan` scale-down runs of study S-PA-SDM against the "
-                         "`{python} n_m` manufacturing-scale batches, leached Protein A differs between "
-                         "the scales (`{python} pf(dev04_p)`, two-sided Student t test with pooled "
-                         "variance)."),
-                       "Under that rule leached Protein A is judged through its offset, and the model "
-                       "is qualified for it on the planned runs and on all runs"],
-        "DEV-005-05": [q("Study S-PA-UNI ran from `{python} chron.loc['S-PA-UNI', 'start']` to "
-                         "`{python} chron.loc['S-PA-UNI', 'end']`, after the screening design ended on "
-                         "`{python} chron.loc['S-PA-SCR', 'end']` and before the response-surface "
-                         "design began on `{python} chron.loc['S-PA-RSM', 'start']`"),
-                       "The univariate study is judged on its own runs and on the set-point runs of "
-                       "the qualification study, and no result of the response-surface design depends "
-                       "on it, so the order changes no conclusion of this report."],
     }
-    # the one sentence of the executive summary that names a single deviation (finding F5)
+    # the one sentence of the executive summary that names a single study event (finding F5)
     dev_exec = {"DEV-005-02": q("This rests on the re-assay of run `{python} dev_005_02_run` (DEV-005-02).")}
     dev_impact = {
         "DEV-005-01": f"Run {ns['dev_run']} is analysed at its recorded elution buffer pH of "
@@ -7170,17 +7182,9 @@ def build_report_protein_a():
                       "change; whether leached Protein A depends on end of pool collect, and whether its "
                       "residuals drift with run order, depends on which result is used. The run was "
                       "retained.",
-        "DEV-005-03": f"The {ns['uni_n_ref']} set-point runs of study S-PA-SDM served as the reference "
-                      f"in place of centre runs. The judgement of pool host cell protein and leached "
-                      f"Protein A rests on the individual results at both ends of each range and does not "
-                      f"depend on the reference. The runs were retained.",
-        "DEV-005-04": "Under the offset rule of PCMP-001 Version 2.0 (§7.1) leached Protein A is judged "
-                      "through its offset, and the scale-down model is qualified for it on the planned runs "
-                      "and on all runs. The expected cause of the difference was not tested.",
-        "DEV-005-05": "The univariate study is judged on its own runs and on the set-point runs of the "
-                      "qualification study, and no result of the response-surface design depends on it, so "
-                      "the order changes no conclusion of the report. The runs were retained.",
     }
+    if set(devrow) != set(dev_prose):
+        raise ValueError(f"{qmd}: the study events {list(devrow)} are not those this builder anchors")
     devs = []
     for did, row in devrow.items():
         c = cells(row)
@@ -7188,7 +7192,7 @@ def build_report_protein_a():
             deviation_id=did, summary=c[1], unit_operation=PAUO_NAME, detected_during=c[2],
             disposition=c[3], impact_statement=dev_impact[did], no_impact_on_conclusions=True,
             source_references=[
-                ref(doc, f, sid("dev"), "Deviations and discrepancies from the plan", row,
+                ref(doc, f, sid("dev"), heading["sec-dev"], row,
                     table_title=dev_t.caption, table_id=f"{doc}_tab_dev", table_header=devrow.header)]
             + [ref(doc, f, sid("dev"), dev_sec[did], quote) for quote in dev_prose[did]]
             + ([ref(doc, f, sid("exec"), "Executive summary", dev_exec[did])] if did in dev_exec else []),
@@ -7244,6 +7248,23 @@ def build_report_protein_a():
               "`{python} f1(dsm_frac)` % of the grid."),
             "A median can meet the criterion where a single batch does not."]),
     ]
+    # NC10, added with the record pass: the report raises no deviation (owner, 2026-10-10). It says so where
+    # its record section opens, and change 10 of §1.4 says what became of the events Version 1.0 numbered
+    q_nodev = ("PCP-005 calls a departure from the plan a deviation, but a process characterization study is "
+               "not GMP manufacture")
+    q_item10 = ("The events that Version 1.0 numbered as deviations, DEV-005-01 and DEV-005-02, are recorded as "
+                "study events under their numbers, because a process characterization study is not GMP "
+                "manufacture.")
+    ncs.append(ExplicitNonClaim(
+        non_claim_id=f"{doc}-NC10", subject="deviation", unit_operation=PAUO_NAME,
+        statement="The report records no deviation. The events of execution are recorded as study events, "
+                  "under the numbers Version 1.0 gave them, and every departure from the plan as a "
+                  "discrepancy from the plan.",
+        rationale="A process characterization study is not GMP manufacture.",
+        handled_elsewhere="§13 of this report, as study events and as discrepancies from the plan",
+        source_references=[ref(doc, f, sid("dev"), heading["sec-dev"], q_nodev),
+                           ref(doc, f, sid("changes"), "Changes in this revision", q_item10)],
+        metadata=meta()))
     rels = [DocumentRelationship(
         relationship_id=f"{doc}-R{i + 1:02d}", kind=PA5_REL_KIND.get(cells(row)[-1], "references"),
         source_document_id=doc, target_document_ref=target, statement=cells(row)[-1],
@@ -7268,7 +7289,8 @@ def build_report_protein_a():
         S.SectionEntityExtraction(document_id=doc, section_id=sid("class"), non_claims=[ncs[1]]),
         S.SectionEntityExtraction(document_id=doc, section_id=sid("control"), non_claims=[ncs[5]]),
         S.SectionEntityExtraction(document_id=doc, section_id=sid("disc"), non_claims=[ncs[2], ncs[4]]),
-        S.SectionEntityExtraction(document_id=doc, section_id=sid("dev"), deviations=devs),
+        S.SectionEntityExtraction(document_id=doc, section_id=sid("dev"), deviations=devs,
+                                  non_claims=[ncs[8]]),
     ]
 
     # ---- studies: every row of the execution-window table with a schema study type ----------
@@ -7330,9 +7352,7 @@ def build_report_protein_a():
                     table_title=ch_t.caption, table_id=f"{doc}_tab_chrono", table_header=chrow.header)]
         refs += [ref(doc, f, sid("design"), sec, quote) for sec, quote in prose]
         if s_ in pd_of:
-            refs.append(ref(doc, f, sid("dev"), "Discrepancies from the plan", pdrow[pd_of[s_]],
-                            table_title=pd_t.caption, table_id=f"{doc}_tab_pd",
-                            table_header=pdrow.header))
+            refs.append(pd_ref(pd_of[s_], sid("dev"), "Discrepancies from the plan"))
         studies.append(S.StudyDesign(
             study_id=f"study:{s_}", unit_operation=PAUO_NAME, scale_down_model=sdm_name,
             associated_parameters=[PAPARAM_CONCEPT[x] for x in spec.get("factors", [])
@@ -7416,13 +7436,18 @@ def build_report_protein_a():
             f"{ms_df['Analyte'].iloc[j]} is measured by {ms_df['Technique'].iloc[j]} ({amv}); use in "
             f"this report: {ms_df['Use in this report'].iloc[j]}.", "Analytical methods", row,
             msrow.header, ms_t.caption)
+    # @tbl-criteria-protein-a: Attribute | Criterion | mean at the set-point | mean range over the NOR |
+    # 95 % limits of a single run over the NOR (the statistic that decides the verdict) | Met
+    if crrow.header.count(CELL_SEP) < 5 or "95 % limits of a single run" not in crrow.header:
+        raise ValueError(f"{qmd}: the criteria table no longer prints the single-run limits column")
     for key, row in crrow.items():
         c = cells(row)
         add(f"attr:{key}", "attribute_has_acceptance_criterion", f"lit:{PAUO}_{key}_iac",
             f"At the Protein A step {c[0]} is judged against its intermediate acceptance criterion "
             f"{c[1]}; the model predicts {nofoot(c[2])} at the set-point and {nofoot(c[3])} over the "
-            f"NOR; met across the NOR: {c[4]}.", "Outputs against their criteria over the NOR", row,
-            crrow.header, cr_t.caption)
+            f"NOR, and the 95 % limits of a single run over the NOR, which decide the verdict, are "
+            f"{nofoot(c[4])}; met across the NOR: {c[5]}.", "Outputs against their criteria over the NOR",
+            row, crrow.header, cr_t.caption)
     attr_cell = hold_df["Attribute"].replace("", np.nan).ffill()
     for j, row in holdrow.items():
         if j and hold_df["Limit"].iloc[j] == "":
@@ -7654,10 +7679,12 @@ def build_report_protein_a():
          'host cell protein, leached Protein A, fragments or residual DNA.'), ex,
        q('No simulated batch of `{python} f"{n_mc_b:,}"` fell outside the drug substance criterion for '
          'host cell protein, leached Protein A, fragments or residual DNA'))
-    st(q("None of the `{python} n_dev` deviations of the step (DEV-005-01 to DEV-005-05) changes the "
-         "judgement of an output against its criterion."), ex,
-       q("The `{python} n_dev` deviations of the step (DEV-005-01 to DEV-005-05) were assessed, and none "
-         "changes the judgement of an output against its criterion."), new=True)
+    st(q("The `{python} n_dev` study events of the step (DEV-005-01 and DEV-005-02) change no judgement of an "
+         "output against its criterion."), ex,
+       q("The `{python} n_dev` study events of the step (DEV-005-01 and DEV-005-02) change no judgement of an "
+         "output against its criterion."), new=True)
+    st(q("The report records `{python} n_pd` discrepancies from the plan."), ex,
+       q("The report also records `{python} n_pd` discrepancies from the plan"), new=2)
     section("Executive summary findings", n0)
 
     sq = "Scale-down model and its qualification"
@@ -7722,10 +7749,10 @@ def build_report_protein_a():
        "qualification.")
     st(q("On the `{python} n_sd_plan` planned set-point runs of S-PA-SDM alone the two scales differ in "
          "leached Protein A (`{python} pf(dev04_p)`), a difference PCP-005 Version 1.0 required to be "
-         "investigated; no investigation is recorded (DEV-005-04)."), sq,
+         "investigated before the characterization studies; it was not (discrepancy PD-005-08)."), sq,
        q("On the `{python} n_sd_plan` runs of the planned study S-PA-SDM alone, the two scales differ in "
          "leached Protein A (`{python} pf(dev04_p)`). PCP-005 Version 1.0 required such a difference to "
-         "be investigated, and no investigation is recorded"), new=True)
+         "be investigated before the characterization studies, and it was not"), new=True)
     section("Scale-down model qualification", n0)
 
     ab = "Acceptance basis"
@@ -7789,6 +7816,20 @@ def build_report_protein_a():
          "overfitting of PCMP-001 §7.2, with predicted R² `{python} f2(aex_full_gap)` below R², so no "
          "bound replaces a platform value, and the criterion would be the a priori value of ≤ "
          "`{python} f0(crit_wo)` ng/mg."), new=True)
+    # §7.2 after the record pass: the criteria table prints the 95 % limits of a single run over the NOR, and
+    # the text names that column as the statistic that decides each verdict
+    oc = "Outputs against their criteria over the NOR"
+    st("The verdict of each output against its criterion rests on the upper end of the 95 % limits of a "
+       "single run over the NOR, the upper prediction limit of a single run.", oc,
+       "Each verdict rests on the upper end of those limits, the upper prediction limit of a single run over "
+       "the NOR.", new=2)
+    st(q("Over the NOR the upper prediction limit of a single run is `{python} f0(pl_pt)` ng/mg for pool host "
+         "cell protein against ≤ `{python} crit_hcp` ng/mg, `{python} f2(lpa_nor_up)` ppm for leached Protein "
+         "A against ≤ `{python} crit_lpa` ppm, and `{python} f2(frag_nor_up)` % for fragments against ≤ "
+         "`{python} crit_frag` %."), oc,
+       q("It is `{python} f0(pl_pt)` ng/mg for pool host cell protein against ≤ `{python} crit_hcp` ng/mg, "
+         "`{python} f2(lpa_nor_up)` ppm for leached Protein A against ≤ `{python} crit_lpa` ppm, and "
+         "`{python} f2(frag_nor_up)` % for fragments against ≤ `{python} crit_frag` %."), new=2)
     section("Acceptance criteria and their verification", n0)
 
     cs = "Conclusions"
@@ -7823,22 +7864,23 @@ def build_report_protein_a():
         (q("The design space, drawn on the upper prediction limit of a single run, covers "
            "`{python} f1(ds_frac)` % of the range studied and excludes no point with every parameter "
            "inside its NOR."), True),
-        (q("None of the `{python} n_dev` deviations changes the judgement of an output against its "
-           "criterion."), True),
+        ("Neither study event changes the judgement of an output against its criterion.", True),
     ]:
         st(quote.rstrip(".") + ".", cs, quote, new=new)
     section("Conclusions", n0)
 
-    dq = "Deviations and discrepancies from the plan"
+    # §13 after the record pass: the study events, then the discrepancies, which the register prints in two
+    # parts. The discrepancies of the record pass (PD-005-07 to -09) take ids after those of the first fit.
+    dq = heading["sec-dev"]
     n0 = len(pending)
     for k, row in pdrow.items():
         d = next(x for x in P.PLAN_DISCREPANCIES[doc] if x["id"] == k)
         st(f"Discrepancy {k} from PCP-005, {d['subject']}: planned {d['planned']}; done {d['done']}.",
-           dq, row, pdrow.header, pd_t.caption)
-    st("A discrepancy from the plan is work that the approved plan did not foresee and that was done "
-       "under approved procedures, and it is not a deviation.", dq,
-       "A discrepancy from the plan is work that the approved plan did not foresee and that was done "
-       "under approved procedures, such as further runs or a further analysis.")
+           dq, row, pdrow.header, pd_part[k][0].caption, new=2 if k in PA5_FORMER_DEV else False)
+    st("The report records the events of execution as study events, under the numbers Version 1.0 gave them, "
+       "and every departure from the plan as a discrepancy from the plan.", dq,
+       "so this report records the events of execution as study events, under the numbers Version 1.0 gave "
+       "them, and every departure from the plan as a discrepancy from the plan")
     st("The retest of retained samples S-PA-RET is in PCP-005 Version 2.0 and is not a discrepancy.", dq,
        "That version includes the retest of retained samples, S-PA-RET, made under the method decision "
        "AMD-001, so S-PA-RET is not a discrepancy.")
@@ -7852,15 +7894,13 @@ def build_report_protein_a():
        "the run of DEV-005-02 and with its re-assay.", dq,
        "The judgement of leached Protein A against its criterion is therefore the same with either "
        "result.")
-    st("A deviation is a departure from the approved plan, from an approved procedure or from a GMP "
-       "requirement, or an unplanned event during execution.", dq,
-       "A deviation is a departure from the approved plan, from an approved procedure or from a GMP "
-       "requirement, or an unplanned event during execution.", new=True)
-    st(q("By the rule of the deviation record a leached Protein A result is out of trend when it lies "
-         "outside the two-sided `{python} oot_pct` % prediction interval of a single result from the full "
+    st("PCP-005 calls a departure from the plan a deviation, but a process characterization study is not GMP "
+       "manufacture.", dq, q_nodev, new=True)
+    st(q("By the rule in the record of the event DEV-005-02, a leached Protein A result is out of trend when it "
+         "lies outside the two-sided `{python} oot_pct` % prediction interval of a single result from the full "
          "quadratic model of the response-surface design, fitted to the other runs without the result "
          "under review."), dq,
-       q("By the rule in the deviation record, a result is out of trend when it lies outside the two-sided "
+       q("By the rule in the record of the event, a result is out of trend when it lies outside the two-sided "
          "`{python} oot_pct` % prediction interval of a single result from the full quadratic model of the "
          "response-surface design, fitted to the other runs of the design without the result under "
          "review, at the settings of the run."), new=True)
@@ -7890,7 +7930,98 @@ def build_report_protein_a():
        q("Its upper prediction limit over the NOR would be `{python} f2(s02_nor_up)` ppm at manufacturing "
          "scale, against `{python} f2(lpa_nor_up)` ppm with the re-assay, and every PAR would still span "
          "the range studied of its parameter."), new=True)
-    section("Deviations and discrepancies from the plan", n0)
+    # added with the record pass: the outcome of the study events, and the three departures from the plan found
+    # in the Version 2.0 review (PD-005-07 to -09, formerly Deviation records), each on the sentences of its own
+    # subsection: what the plan required and what was done, how it was found and what was done with the runs,
+    # and why it changes no conclusion
+    st(q("Each of the `{python} n_dev` study events of the step was investigated, and its run was retained in "
+         "the analysis."), dq, "Each was investigated, and its run was retained in the analysis.", new=2)
+    st("Two of the discrepancies are further studies, and three are departures from the plan found in the "
+       "Version 2.0 review of the record.", "Discrepancies from the plan",
+       "Two are further studies, and three are departures from the plan found in the Version 2.0 review of "
+       "the record.", new=2)
+    s07, s08, s09 = (heading[f"sec-pd{k[-2:]}"] for k in PA5_FORMER_DEV)
+    for text_, sec_, quote_ in [
+        (q("Discrepancy PD-005-07: PCP-005 §6.4 requires each parameter of the univariate study to be run at the "
+           "low edge, the centre and the high edge of its range studied, and study S-PA-UNI ran each end of each "
+           "range `{python} uni_reps` times and made no run at the centre."), s07,
+         q("Study S-PA-UNI (`{python} win('S-PA-UNI')`) ran each end of each range `{python} uni_reps` times "
+           "and made no run at the centre.")),
+        (q("In place of runs at the centre, the `{python} uni_n_ref` set-point runs of the qualification study "
+           "S-PA-SDM served as the reference of the univariate study."), s07,
+         q("The `{python} uni_n_ref` set-point runs of the qualification study S-PA-SDM "
+           "(`{python} win('S-PA-SDM')`) served as the reference instead.")),
+        ("Discrepancy PD-005-07 was found in the Version 2.0 review of the study record against PCP-005, and "
+         "the runs were retained.", s07,
+         "The departure was found in the Version 2.0 review of the study record against PCP-005, and the runs "
+         "were retained."),
+        ("Without runs at the centre, a difference from the reference combines the effect of the parameter "
+         "with any difference between the two studies.", s07,
+         "A difference from the reference therefore combines the effect of the parameter with any difference "
+         "between the two studies."),
+        ("The judgement of pool host cell protein and leached Protein A in the univariate study rests on the "
+         "individual results at both ends of each range, each against its criterion, and does not depend on "
+         "the reference.", s07,
+         "The judgement of pool host cell protein and leached Protein A rests on the individual results at "
+         "both ends, each against its criterion, and does not depend on the reference."),
+        (q("Discrepancy PD-005-08: PCP-005 Version 1.0 accepted the scale-down model for an output only where "
+           "the qualification showed no difference between the scales significant at α = "
+           "`{python} g(eff_alpha)`, and required any difference to be investigated and the model modified "
+           "before the characterization studies."), s08,
+         q("PCP-005 Version 1.0 accepted the scale-down model for an output only where the qualification "
+           "showed no difference between the scales significant at α = `{python} g(eff_alpha)`, and it "
+           "required any difference to be investigated and the model modified before the characterization "
+           "studies.")),
+        (q("On the `{python} n_sd_plan` scale-down runs of study S-PA-SDM against the `{python} n_m` "
+           "manufacturing-scale batches, leached Protein A differs between the scales under that test "
+           "(`{python} pf(dev04_p)`, two-sided Student t test with pooled variance)."), s08,
+         q("On the `{python} n_sd_plan` scale-down runs of study S-PA-SDM against the `{python} n_m` "
+           "manufacturing-scale batches, leached Protein A differs between the scales under that test "
+           "(`{python} pf(dev04_p)`, two-sided Student t test with pooled variance).")),
+        ("No other output that the qualification compared differs between the scales at that level.", s08,
+         "No other output that the qualification compared differs at that level."),
+        ("The difference in leached Protein A between the scales was not investigated before the "
+         "characterization studies.", s08,
+         "The difference was not investigated before the characterization studies."),
+        ("Discrepancy PD-005-08 was found in the Version 2.0 re-analysis of the qualification against the "
+         "Version 1.0 rule.", s08,
+         "The departure was found in the Version 2.0 re-analysis of the qualification against the Version 1.0 "
+         "rule."),
+        ("PCMP-001 Version 2.0 §7.1 lets a scale-down model differ in mean from manufacturing scale where its "
+         "offset is known precisely enough, so the Version 1.0 test was stricter than the use of the model "
+         "needs.", s08,
+         "PCMP-001 Version 2.0 §7.1 lets a scale-down model differ in mean from manufacturing scale where its "
+         "offset is known precisely enough, so the Version 1.0 test was stricter than the use of the model "
+         "needs."),
+        ("Leached Protein A is judged through its offset, and the scale-down model is qualified for it on the "
+         "planned runs and on all runs.", s08,
+         "Leached Protein A is judged through its offset, and the model is qualified for it on the planned "
+         "runs and on all runs"),
+        (q("Discrepancy PD-005-09: PCP-005 §11 puts the univariate assessments fourth, after the qualification "
+           "runs, the screening design and the response-surface design, with which they may run in parallel, "
+           "and study S-PA-UNI ran from `{python} chron.loc['S-PA-UNI', 'start']` to "
+           "`{python} chron.loc['S-PA-UNI', 'end']`, after the screening design ended on "
+           "`{python} chron.loc['S-PA-SCR', 'end']` and before the response-surface design began on "
+           "`{python} chron.loc['S-PA-RSM', 'start']`."), s09,
+         q("Study S-PA-UNI ran from `{python} chron.loc['S-PA-UNI', 'start']` to "
+           "`{python} chron.loc['S-PA-UNI', 'end']`, after the screening design ended on "
+           "`{python} chron.loc['S-PA-SCR', 'end']` and before the response-surface design began on "
+           "`{python} chron.loc['S-PA-RSM', 'start']`")),
+        ("Discrepancy PD-005-09 was found in the Version 2.0 review of the execution dates (INV-001 finding 5), "
+         "and the runs were retained.", s09,
+         "The departure was found in the Version 2.0 review of the execution dates (INV-001 finding 5), and "
+         "the runs were retained."),
+        (q("The reason recorded for the order of the work is the `{python} pd09_reason`."), s09,
+         q("The reason recorded is the `{python} pd09_reason`.")),
+        ("The univariate study is judged on its own runs and on the set-point runs of the qualification study, "
+         "and no result of the response-surface design depends on it, so the order changes no conclusion of "
+         "the report.", s09,
+         "The univariate study is judged on its own runs and on the set-point runs of the qualification study, "
+         "and no result of the response-surface design depends on it, so the order changes no conclusion of "
+         "this report."),
+    ]:
+        st(text_, sec_, quote_, new=2)
+    section(heading["sec-dev"], n0)
 
     rv = "Changes in this revision"
     n0 = len(pending)
@@ -7904,10 +8035,13 @@ def build_report_protein_a():
            "criterion (INV-001 finding 4).")
     st("No NOR other than that of protein load and no set-point of the step is changed.", rv,
        "No other NOR and no set-point of the step is changed.")
-    st("The deviations DEV-005-03 to DEV-005-05, on the univariate study and on the qualification of the "
-       "scale-down model, are recorded in this revision.", rv,
-       "The deviations DEV-005-03 to DEV-005-05, on the univariate study and on the qualification of the "
-       "scale-down model, are recorded", new=True)
+    # change 10, reworded by the record pass: the id keeps the change that records the Version 1.0 events
+    st("The events that Version 1.0 numbered as deviations, DEV-005-01 and DEV-005-02, are recorded as study "
+       "events under their numbers, because a process characterization study is not GMP manufacture.", rv,
+       q_item10, new=True)
+    st("The departures from the plan found in the re-analysis are recorded as discrepancies from the plan.", rv,
+       "The departures from the plan found in the re-analysis are recorded as discrepancies from the plan",
+       new=2)
     section("Changes in this revision", n0)
 
     # sections added on re-anchoring: the objectives of §1.2, which quote PCP-005 §2 (read from the
@@ -7949,14 +8083,19 @@ def build_report_protein_a():
          "`{python} f1(dsm_frac)` % of the grid."), new=True)
     section("Design space", n0)
 
-    n_old = sum(not p[5] for p in pending)
-    nums, i_old, i_new = [], 0, n_old
+    gen_n = {g: sum(p[5] == g for p in pending) for g in sorted({p[5] for p in pending})}
+    gen_start = {g: sum(n for h, n in gen_n.items() if h < g) for g in gen_n}
+    nums, gen_i = [], dict.fromkeys(gen_n, 0)
     for p in pending:
-        if p[5]:
-            i_new += 1
-        else:
-            i_old += 1
-        nums.append(i_new if p[5] else i_old)
+        gen_i[p[5]] += 1
+        nums.append(gen_start[p[5]] + gen_i[p[5]])
+
+    def st_range(g):
+        """The statement ids of one generation, for the out-of-schema note."""
+        return f"{doc}-S{gen_start[g] + 1:02d} to {doc}-S{gen_start[g] + gen_n[g]:02d}"
+
+    def pd_first_last(rows):
+        return f"{list(rows)[0]} to {list(rows)[-1]}"
     ST = [ReportStatement(statement_id=f"{doc}-S{n:02d}", statement_text=p[0], confidence="high",
                           review_status="accepted",
                           source_references=[ref(doc, f, f"{doc}_sec", p[1], p[2], table_title=p[4],
@@ -7991,9 +8130,20 @@ def build_report_protein_a():
             "narrowed at its upper edge; the studies were planned and run against the NOR as "
             "characterized. ProcessParameter.PAR is the narrowest NOR-propagated PAR over the outputs "
             "with a criterion for a multivariate parameter, and the range studied for a univariate one.",
-            "The schema has no record type for a discrepancy from the plan. PD-005-01 to PD-005-06 are "
-            "report statements anchored on their rows of the discrepancy register, and the studies "
-            "they add (S-PA-SDM2, S-PA-HLD) carry that row as a source reference.",
+            "The schema has no record type for a discrepancy from the plan, and its Deviation model is not "
+            "used for one: the report records no deviation (a process characterization study is not GMP "
+            "manufacture; explicit non-claim NC10) and calls every departure from the plan a discrepancy. "
+            f"Each of {pd_first_last(pdrow)} is a report statement anchored on its row of the discrepancy "
+            "register, which the report prints in two parts (@tbl-pd and @tbl-pd-b, table ids "
+            f"{doc}_tab_pd and {doc}_tab_pd_b), and the studies a discrepancy adds (S-PA-SDM2, S-PA-HLD) "
+            "carry that row as a source reference. "
+            f"{P.join_and(list(PA5_FORMER_DEV))} were the Deviation records "
+            f"{P.join_and(list(PA5_FORMER_DEV.values()))} of the annex as re-anchored to the follow-up text "
+            "(config campaign.plan_discrepancies). "
+            "These three, the departures found in the Version 2.0 review of the record, also have report "
+            "statements anchored on the sentences of their own subsections (§13.3.3 to §13.3.5): what the "
+            "plan required and what was done, how the departure was found and what was done with the runs, "
+            "and why it changes no conclusion.",
             "The hold study S-PA-HLD has no hold study type in StudyDesign.study_type and is recorded "
             "as univariate (hold time at two temperatures); its factors are not process parameters. "
             "The nrCE-SDS retest S-PA-RET has no study type and no study record. The scale-down "
@@ -8011,21 +8161,25 @@ def build_report_protein_a():
             "across the NOR-propagated PAR as a share of its criterion, the margin of the PAR to the NOR "
             "and the reason for the class, each anchored on its sentence of §9) and by one assertion per "
             "parameter and attribute that §9 names, anchored on the sentence that names them.",
-            "Each Deviation record anchors on its row of the deviation register and on the sentences of "
-            "its own subsection (§13.1 to §13.5); the record of DEV-005-02 also cites the sentence of the "
-            "executive summary that names it. The executive summary names the five deviations together in "
-            "one sentence, which anchors a report statement: on every Deviation record it would be one "
-            "prose span behind five records, past the prose ceiling.",
-            f"Report statements and sections keep the ids of the annex as first fitted to the Version 2.0 "
-            f"text ({sum(not p[5] for p in pending)} statements, six sections). Statements added when the "
-            f"annex was re-anchored to the follow-up text take the ids after them, and the sections then "
-            f"added (Objectives, Design space) follow the original six. The non-claim NC08 of the first fit "
-            f"(a design space drawn on median predictions is not a claim for a single batch) is withdrawn, "
-            f"because the design space is now drawn on the upper prediction limit of a single run; NC09 "
-            f"records that the region drawn on the median prediction is a comparison only.",
-            "rhetorical_spans is empty: authoring/rhetorical/PCR-005.spans.yaml was curated against an "
-            "earlier text, and most of its spans no longer appear in the final Version 2.0 document. "
-            "The layer is dropped until it is re-curated. weak_claims is empty.",
+            f"The {len(devs)} study events ({', '.join(d.deviation_id for d in devs)}), the events of "
+            "execution that Version 1.0 recorded, are Deviation records, the schema's only record for an "
+            "event and what was done about it. The report calls them study events, not deviations, and "
+            "keeps their Version 1.0 numbers. Each record anchors on its row of the study-event register "
+            "(@tbl-dev: Event, Summary, Detected during, Outcome; disposition is the Outcome cell as "
+            "printed) and on sentences of its own subsection (§13.1, §13.2); the record of DEV-005-02 also "
+            "cites the sentence of the executive summary that names it. The executive summary names both "
+            "events in one sentence, which anchors a report statement.",
+            f"Report statements and sections keep their ids across re-anchorings. "
+            f"{st_range(0)} are those of the annex as first fitted to the Version 2.0 text (six sections), "
+            f"{st_range(1)} those added when it was re-anchored to the follow-up text (the sections "
+            f"Objectives and Design space were added then), and {st_range(2)} those added when it was "
+            f"re-anchored to the record pass of 2026-10-10 (the study events, the discrepancies PD-005-07 to "
+            f"PD-005-09 and the single-run limits of the criteria table). A statement whose sentence was "
+            f"reworded keeps its id, and no id is retired. The section 'Deviations and discrepancies from the "
+            f"plan' (sec05) is retitled '{heading['sec-dev']}', as §13 of the report is. The non-claim NC08 of "
+            f"the first fit (a design space drawn on median predictions is not a claim for a single batch) is "
+            f"withdrawn, because the design space is now drawn on the upper prediction limit of a single run; "
+            f"NC09 records that the region drawn on the median prediction is a comparison only.",
         ] + _unrendered_note(unrendered),
         inventory=rev2_inventory(doc, f, "process_characterization_report", PAUO_NAME,
                                  ["process characterization", "Protein A chromatography",
@@ -8037,7 +8191,7 @@ def build_report_protein_a():
         proven_acceptable_ranges=pars, report_sections=sections,
         assertions=AssertionStore(run_id=f"gt-{doc}", assertions=A, rationales=[]),
         concepts=ConceptStore(run_id=f"gt-{doc}", concepts=concepts),
-        rhetorical_spans=[],
+        rhetorical_spans=build_rhetorical_spans(doc, f),
         acceptance_criteria=acceptance_criteria_layer(doc, f, "Changes in this revision",
                                                       ct["tbl-criteria-change"][0], [PAUO]))
 

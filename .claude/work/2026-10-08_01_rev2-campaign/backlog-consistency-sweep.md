@@ -406,3 +406,9 @@ review is the last one, at reduced effort. PCR-007 and PCR-008 (authors running)
   them from the nominal train (data change) or stating per report that the record does not name the culture.
   Aggregate method: the SEC method is validated under AMV-3011 (SOP-3011), AMV-3221 is the record of its qualified
   performance (as PTP-001 states); config analytics.univariate_nodoe.assay names AMV-3221 for the results.
+- PCR-003 annex builder (pcr_003.py, 2010 quotes, 149 spans) committed; re-anchor after the criteria re-render, then
+  add PCR-003 (and PCR-006) to REV2_READY. D-002 registry text (DISCREPANCIES.md, discrepancies.yaml annex_note) says
+  build_step puts the claim in PCP-003.json too: only pcr_003.py carries it now; update the note. PCR-003's executive
+  summary and PD-003-08 subsection name the action limit and trending but not the combined alert (final touch with the
+  criteria pass). Shared-helper candidates: piped (smart apostrophes in pipe-table cells: a latent grounding bug for any
+  register row with an apostrophe), _block_spans, _printed_captions, frame_rows, superscript runs in render.

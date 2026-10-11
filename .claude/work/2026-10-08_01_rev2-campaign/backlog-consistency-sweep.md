@@ -382,3 +382,9 @@ term; the DNA calibration; page bands.
     against the criterion over the NOR.
   Use it for the classes resting on judgement (Protein A load flow rate and end of pool collect; the bioreactor
   effect-size bands; the low-pH margins). Put it in the PCMR-001 brief when PCMR-001 is prepared.
+- PCR-005 annex re-anchored after the record pass (ddb0e23; 588 quotes, 67 spans). For the sweep: a span checker
+  (both extractors, unique in the document, static in the .qmd) is in the scratchpad (`check_spans.keep.py`); move it
+  into authoring/build_rhetorical_annex.py. Shared-module candidates from that pass: `qmd_headings(qmd)`, a reader for
+  a register printed in several tables (PCR-003 will need it), generation-based statement ids in `_adders`. Minor
+  PCR-005 wording: §13.3 says the three departures were found in "the Version 2.0 review of the record", while PD-005-08
+  was found in "the Version 2.0 re-analysis of the qualification against the Version 1.0 rule".

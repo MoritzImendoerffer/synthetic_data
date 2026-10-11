@@ -88,3 +88,22 @@ scratchpad pcr007/PCR-007_cex.DRAFT.pre-fix1.qmd. Config, helpers and annex unto
 - Gates: check_render --render x4 (pass 1 failed on the font floor in tbl-near, fixed by dropping its Terms column;
   passes 2 to 4 exit 0), explicit quarto render pdf and docx exit 0, check_render once more exit 0. 80 pp.
   Tables inspected as page images: 1.2, 3.2, 5.9, 5.10, 7.2. No <<NEEDS:>>. DRAFT.txt refreshed.
+
+## Final pass (2026-10-11, same author)
+Inputs: feedback-PCR-007.final.md, content-review-PCR-007.md, data-state-2026-10-11.md, REPORT-LESSONS §6-7, rendered
+PCMP-001 and PCP-007 (scratch), A-Mab p.47 (Table 2.17). Config, helpers and annex untouched.
+- Q5.5 verified: the run-14 deletion gives load, conductivity, stop collect (stop collect −0.761, p 0.0781); the selected
+  model's conductivity term is −0.757, p 0.0775. Same rounding by coincidence. Prose now names the deletion model's terms
+  and the dropped load × conductivity interaction (§5.3.6, §11, §13.1.2); assertions Y14_TERMS / Y14_DROP added.
+- Q5.1 "load/wash buffer lot" in prose (exec summary, §13.1.1); register prints "Tris" as recorded.
+- Q5.2 pI sentence (§2.1); §1.1 clearance sentence aligned. Q5.3 §10 (low-pH, AEX, VF roles). Q5.4 verdict per objective (§12).
+- Q4 §13.1.2: no temperature set-point/range and no verification result or criterion in the record (asserted from config).
+- Q5.6 record cause stated, logic corrected (asserted root_cause). Q5.7 "at least" dropped. Q5.8 captions "%, plotted as a
+  fraction". Q5.9 DNA criterion basis once in §2.2. Q5.11 bound in force from 28 planned runs, also 4.18 on 40 (asserted).
+- Q1 causes named (§2.1 items 2 and curvature, §2.3, §5.6, §11). Q2 definitions (exec summary, Changes, §3.5 criterion 3);
+  "within 2 AICc units", "median of F(p, n − p)" (prose and Table 5.5 header). Q3/Q6 glosses and restatements removed.
+  Q7 codes named. D-001 untouched.
+- Gates: check_render --render exit 0, explicit quarto pdf and docx exit 0, check_render exit 0. 81 pp. Table 5.5 inspected
+  as page image. DRAFT.txt refreshed.
+- Builder/record issues: fig_rsm_contours plots yield as a fraction; LOT-BUF-2287 named "Tris" at pH 5.02; DEV-007-02 has no
+  set-point, range or verification result.

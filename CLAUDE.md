@@ -236,7 +236,7 @@ protein_a (5), viral_inactivation (6), cex (7), aex (8), virus_filtration (9)**.
 Steps **without** DoE: **harvest (4)** and **UF/DF (10)** — their plan/report present
 univariate characterization and are correspondingly shorter; do not fabricate a DoE for
 them. The rule follows the source: A-Mab p.85 assumes harvest has no impact on product
-quality "for simplicity", and p.86 leaves UF/DF out of the case study, so there is nothing
+quality "for simplicity", and p.114 leaves UF/DF out of the case study, so there is nothing
 to calibrate a design against. The Version 1.0 univariate studies (`S-HAR-UNI`, `S-UFDF-UNI`) had no
 recorded results, so Version 2.0 adds new univariate studies made during the re-analysis
 (`S-HAR-UNI2`, `S-UFDF-UNI2`: five levels in duplicate, `analytics.univariate_nodoe`), recorded as

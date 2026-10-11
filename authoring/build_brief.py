@@ -761,7 +761,7 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
                  "studied as a challenge: clarified filtrate adjusted to each level with centrate, "
                  "the level measured, the attributes recorded (centrate turbidity not reported)."
                  if key == "harvest" else
-                 "The source gives nothing for this step (A-Mab p.86: UF/DF 'not included in case "
+                 "The source gives nothing for this step (A-Mab p.114: UF/DF 'not included in case "
                  "study'). The aggregate effect at high final concentration and high TMP is this "
                  "campaign's own finding; residual buffer and concentration are performance "
                  "outputs, not attributes.")

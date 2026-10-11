@@ -388,3 +388,10 @@ term; the DNA calibration; page bands.
   a register printed in several tables (PCR-003 will need it), generation-based statement ids in `_adders`. Minor
   PCR-005 wording: §13.3 says the three departures were found in "the Version 2.0 review of the record", while PD-005-08
   was found in "the Version 2.0 re-analysis of the qualification against the Version 1.0 rule".
+
+### Pipeline change (owner, 2026-10-11): the readability review runs once, last, at reduced effort
+"Kill agents performing the last reviewing pass. I want to reduce the effort level for the last grammar/readability
+check." The content reviews of PCR-004 and PCR-009 (run 1) were stopped. From now on, per report:
+author → factual check (full effort) → fix pass → content review (the 7-question grammar/readability check, ONCE,
+Agent effort "medium") → final pass → promote → annex builder. PCR-010 already had both run-1 reviews; its next
+review is the last one, at reduced effort. PCR-007 and PCR-008 (authors running) follow the new order.

@@ -543,7 +543,7 @@ experiments, and no document calls them one.
   challenge: clarified filtrate adjusted to each level with centrate, and the attributes measured.
 - UF/DF: residual buffer falls as exp(−DV) (0.034 % at 8 DV, the value Version 1.0 printed).
   Aggregate rises a little with final concentration and TMP. The source gives nothing for this
-  step (A-Mab p.86), so this effect is the campaign's own finding, and PCR-010 presents it as a
+  step (A-Mab p.114), so this effect is the campaign's own finding, and PCR-010 presents it as a
   result, not as prior knowledge. Its size against the criterion is computed, never stated here.
 - The process model carries the same effects (`process.harvest.model`, `process.ufdf.model`), so
   Monte Carlo and PPQ include them. They are zero at set-point, so the nominal batch is unchanged.

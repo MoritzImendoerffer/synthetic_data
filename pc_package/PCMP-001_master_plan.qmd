@@ -213,7 +213,8 @@ n_iac_steps = iac["step_key"].nunique()
 n_tight = int(iac["tightened"].astype(bool).sum())
 brx_agg_apriori, brx_agg_now = T.num(r_brx_agg["iac_high_apriori"]), T.num(r_brx_agg["iac_high"])
 vi_agg_apriori, vi_agg_now = T.num(r_vi_agg["iac_high_apriori"]), T.num(r_vi_agg["iac_high"])
-cex_agg_iac = g(r_cex_agg["iac_high"])
+cex_agg_iac = T.num(r_cex_agg["iac_high"])
+cex_agg_apriori = g(r_cex_agg["iac_high_apriori"])
 
 claims = CFG.raw()["iac"]["viral_claims"]
 vcum = csv("iac_viral_cumulative.csv")
@@ -333,14 +334,33 @@ assert (_tonly["iac_high"] < _tonly["iac_high_apriori"]).all()          # each t
 assert (_wonly["iac_high"] > _wonly["iac_high_apriori"]).all()          # each widened-only is wider
 assert (_wide["iac_low"] == _wide["iac_low_apriori"]).all()
 assert set(_tight["cqa"]) == {"aggregates_hmw"}                         # "the aggregate criteria"
-assert all(steps.index(k) < steps.index("cex") for k in _tight["step_key"])   # upstream of CEX
+_agg_rows = iac[(iac.cqa == "aggregates_hmw") & (iac.spec_type == "upper")]
+assert set(_tight.index) == set(_agg_rows.index)                        # "every aggregate criterion"
 _vcexagg = verif[(verif.step_key == "cex") & (verif.cqa == "aggregates_hmw")].iloc[0]
-# tightening uses the single-batch prediction bound of the CEX aggregate clearance, not the point prediction
-assert all(abs(_tight["downstream_fold"] - float(_vcexagg["predicted_nor_bound95"])) < 1e-3)
+# the a priori derivation assumes no change of aggregate after cation exchange (iac.platform ufdf, add_max 0);
+# the UF/DF univariate study S-UFDF-UNI2 checks it (owner, 2026-10-11)
+_vufagg = verif[(verif.step_key == "ufdf") & (verif.cqa == "aggregates_hmw")].iloc[0]
+assert _vufagg["assumption"] == "add_max" and float(_vufagg["assumed"]) == 0.0
+assert not bool(_vufagg["met"]) and not bool(_vcexagg["met"])            # both tighten
+assert [k for k in steps[steps.index("cex") + 1:] if k in set(verif.loc[verif.cqa == "aggregates_hmw", "step_key"])] == ["ufdf"]
+assert "verify" in _plat["ufdf"]["aggregates_hmw"]                      # checked on a univariate study
+ufdf_agg_bound = f"{float(_vufagg['predicted_nor_bound95']):.3f}"
+assert T.ATTR_NAME["aggregates_hmw"].endswith("(%)")                    # "percentage points"
+# every aggregate criterion carries the UF/DF increase (the CEX pool row has no other downstream credit)
+assert abs(float(r_cex_agg["downstream_fold"]) - 1.0) < 1e-9
+assert abs(float(r_cex_agg["downstream_added"]) - float(_vufagg["predicted_nor_bound95"])) < 1e-3
+assert float(r_cex_agg["iac_high_apriori"]) == float(r_cex_agg["ds_high"])   # a priori: the drug substance criterion
+# upstream of CEX, tightening uses the single-batch prediction bound of the CEX aggregate clearance, not the point prediction
+_tight_up = _tight[_tight["step_key"].map(steps.index) < steps.index("cex")]
+assert len(_tight_up) > 0
+assert all(abs(_tight_up["downstream_fold"] - float(_vcexagg["predicted_nor_bound95"])) < 1e-3)
+n_tonly = len(_tonly)
 both = _both.iloc[0]
 assert both.step_key == "bioreactor" and both.cqa == "aggregates_hmw"
 _vviagg = verif[(verif.step_key == "viral_inactivation") & (verif.cqa == "aggregates_hmw")].iloc[0]
-assert bool(_vviagg["widening_supported"]) and abs(float(both.downstream_added) - float(_vviagg["predicted_nor_bound95"])) < 1e-3
+# its increase is the low-pH bound plus the UF/DF bound
+assert bool(_vviagg["widening_supported"]) and abs(float(both.downstream_added) - float(_vviagg["predicted_nor_bound95"])
+                                                   - float(_vufagg["predicted_nor_bound95"])) < 1e-3
 both_net = "stricter" if both.iac_high < both.iac_high_apriori else "wider"
 vi_agg_bound, vi_agg_plat = T.num(_vviagg["predicted_nor_bound95"]), T.num(_vviagg["assumed"])
 cex_agg_bound = T.num(_vcexagg["predicted_nor_bound95"])
@@ -360,12 +380,20 @@ assert not _vinad["model_adequate"].astype(bool).any()       # bettered, but the
 assert _vwid["model_adequate"].astype(bool).all()
 n_verif_inad = len(_vinad)
 n_verif_widen, n_verif_conf = len(_vwid), len(_vcon)
-assert n_verif_failed == 1 and n_verif_widen > 1 and n_verif_untestable > 1
+assert n_verif_failed == 2 and n_verif_widen > 1 and n_verif_untestable > 1
 assert n_verif_widen + n_verif_inad + n_verif_conf == n_verif_met
 assert set(verif.loc[verif["met"].isna(), "cqa"]) == {"leached_protein_a"}
 assert set(verif.loc[verif["met"].isna(), "step_key"]) == {"cex", "aex"}
-_vf = _vt[~_vt["met"].astype(bool)].iloc[0]
-assert _vf["step_key"] == "cex" and _vf["cqa"] == "aggregates_hmw"
+_vf = _vt[~_vt["met"].astype(bool)]
+assert set(zip(_vf["step_key"], _vf["cqa"])) == {("cex", "aggregates_hmw"), ("ufdf", "aggregates_hmw")}
+# the platform worst cases, and the one assumption of this plan that has no platform value (UF/DF aggregate)
+_vuni = verif["step_key"].map(lambda k: k == "ufdf")
+n_plat = int((~_vuni).sum())
+n_rsm_testable = int((verif["met"].notna() & ~_vuni).sum())
+assert n_plat - n_rsm_testable == n_verif_untestable
+_ufu = csv("univariate_studies.csv")
+ufdf_factors = join_and(pname(CFG.unit_op("ufdf").param(f).name)
+                        for f in dict.fromkeys(_ufu.loc[_ufu.study == _plat["ufdf"]["aggregates_hmw"]["verify"]["study"], "parameter"]))
 VSTEP = {"viral_inactivation": "low-pH viral inactivation", "cex": "cation exchange", "aex": "anion exchange"}
 def _vname(r):
     kind = "clearance" if r.assumption == "fold_min" else "increase"
@@ -378,7 +406,7 @@ vinad_list = join_and(_vname(r) for r in _vinad.itertuples()) if n_verif_inad el
 vinad_sentence = (f"For {vinad_list} the prediction bound of a single batch was also better, but the model does "
                   "not meet the three adequacy criteria that the rule names, so the platform values stand." if n_verif_inad else "")
 vinad_con_text = " ".join(s for s in (vinad_sentence, vcon_sentence) if s)
-vtest_steps = join_and(VSTEP[k] for k in dict.fromkeys(_vt["step_key"]))
+vtest_steps = join_and(VSTEP[k] for k in dict.fromkeys(_vt.loc[_vt["step_key"] != "ufdf", "step_key"]))
 # the bound is the conservative side of the point prediction
 assert all((r.predicted_nor_bound95 <= r.predicted_nor) if r.assumption == "fold_min"
            else (r.predicted_nor_bound95 >= r.predicted_nor) for r in _vt.itertuples())
@@ -632,7 +660,8 @@ assert all(iac_row("bioreactor", c)["basis"] == "drug substance" for c in _gly)
 n_gly = len(_gly)
 assert not D.fragment_responses("bioreactor", "rsm") and not D.fragment_responses("bioreactor", "screening")
 assert sat_lof == 1                                          # "one degree of freedom"
-assert r_cex_agg["basis"] == "drug substance"               # no step after CEX is credited with aggregate removal
+assert float(r_cex_agg["iac_high_apriori"]) == float(r_cex_agg["ds_high"])   # no step after CEX is credited with aggregate removal
+assert r_cex_agg["basis"] == "back-calculated, tightened on verification"   # the UF/DF increase
 assert float(r_cex_agg["iac_high"]) > float(r1_cex_agg["high"])   # wider than the Version 1.0 limit
 assert vc_all_met and all(vcum["claimed_sum"] - vcum["required"] < 0.1)   # "little room above them"
 assert "mvm_lrf" not in claims["viral_inactivation"]
@@ -750,7 +779,7 @@ This revision makes the following changes.
 7. It records the execution window of every study and the calibration status of the equipment each study used (@sec-sdm and @sec-schedule). The Version 1.0 records gave no execution dates, so the equipment tables appeared to cite expired calibrations (INV-001 finding 5). The Version 1.0 title blocks of the plans also carried `{python} pkg_rev1`, the date on which the Version 1.0 reports were approved, in place of the date each plan was approved. The revision history of this plan now gives the approval date.
 8. It states campaign thresholds for the significance of model terms (@sec-stats), for model adequacy (@sec-acc-model) and for capability (@sec-acc-capability). Version 1.0 left all three to the individual study.
 
-In Version 1.0 the cation exchange pool was judged against an aggregate limit of `{python} r1_cex_agg_hi` % HMW. That limit was the drug substance criterion of `{python} ds_agg` % divided by a margin of `{python} r1_cex_agg_margin`. The derivation in this plan credits no step after cation exchange with aggregate removal. The cation exchange pool therefore carries the drug substance criterion itself, `{python} cex_agg_iac` % (@tbl-iac). The Version 1.0 limit was never an approved criterion, because it was applied at analysis and appeared in no approved plan, so the wider criterion now in force replaces no approved value. What moved at each step as a result is stated in the "Changes in this revision" section of its PCR-00N, from its own data.
+In Version 1.0 the cation exchange pool was judged against an aggregate limit of `{python} r1_cex_agg_hi` % HMW. That limit was the drug substance criterion of `{python} ds_agg` % divided by a margin of `{python} r1_cex_agg_margin`. The derivation in this plan credits no step after cation exchange with aggregate removal. The a priori criterion of the cation exchange pool is therefore the drug substance criterion itself, `{python} cex_agg_apriori` %. Verification then found that UF/DF raises aggregate within its NOR, and the criterion in force carries that increase. It is `{python} cex_agg_iac` % (@tbl-iac). The Version 1.0 limit was never an approved criterion, because it was applied at analysis and appeared in no approved plan, so the wider criterion now in force replaces no approved value. What moved at each step as a result is stated in the "Changes in this revision" section of its PCR-00N, from its own data.
 
 # Stage 1 characterization strategy {#sec-strategy}
 
@@ -934,7 +963,7 @@ The rule above credits each downstream step only with the clearance or increase 
 
 Residual DNA has a drug substance criterion but no intermediate acceptance criterion. The Protein A designs measure DNA in the load and the pool, but the platform history used here gives no worst-case DNA clearance for the steps after Protein A, so no criterion can be carried back. Residual DNA is therefore judged on the drug substance only, and its capability is assessed in the integrated model (@sec-capability).
 
-Of the `{python} n_iac` criteria in @tbl-iac, `{python} n_apriori` are in force at their a priori value and verification changed `{python} n_moved`. The tightened criteria are the aggregate criteria upstream of cation exchange, because the cation exchange model gave a lower aggregate clearance than the platform worst case. One of them, `{python} both_phrase`, was also widened, because the low-pH viral inactivation model gave a smaller aggregate increase (`{python} vi_agg_bound` % at the prediction bound of a single batch, against `{python} vi_agg_plat` % on the platform). The result is a `{python} both_net` criterion than the a priori one. The other tightened criterion is `{python} tonly_list`. The criteria only widened are `{python} wonly_list`. The widening of `{python} wvi_phrase` comes from low-pH viral inactivation. There the A-Mab hold is at most `{python} vi_hold_hi` min within its NOR as characterized, and the platform worst cases are increases over a hold of `{python} plat_hold` min. `{python} vi_why_short` Every report that relies on a changed criterion argues the change by its risk (@sec-verification).
+Of the `{python} n_iac` criteria in @tbl-iac, `{python} n_apriori` are in force at their a priori value and verification changed `{python} n_moved`. Verification tightened every aggregate criterion, for two reasons. The a priori derivation assumes that no step after cation exchange changes aggregate. UF/DF raises aggregate within its NOR, by up to `{python} ufdf_agg_bound` percentage points at the prediction bound of a single batch, and each aggregate criterion now carries that increase. The cation exchange model also gave a lower aggregate clearance than the platform worst case, and that tightened the aggregate criteria upstream of cation exchange further. One of these, `{python} both_phrase`, was also widened, because the low-pH viral inactivation model gave a smaller aggregate increase (`{python} vi_agg_bound` % at the prediction bound of a single batch, against `{python} vi_agg_plat` % on the platform). The result is a `{python} both_net` criterion than the a priori one. The other tightened `{python} "criteria are" if n_tonly > 1 else "criterion is"` `{python} tonly_list`. The criteria only widened are `{python} wonly_list`. The widening of `{python} wvi_phrase` comes from low-pH viral inactivation. There the A-Mab hold is at most `{python} vi_hold_hi` min within its NOR as characterized, and the platform worst cases are increases over a hold of `{python} plat_hold` min. `{python} vi_why_short` Every report that relies on a changed criterion argues the change by its risk (@sec-verification).
 
 Applying these criteria to studies already executed is acceptable because the a priori derivation uses no data from the studies it judges. The drug substance criteria come from the CQA register. The worst cases come from the platform history of X-Mab, Y-Mab and Z-Mab. A-Mab data enter a criterion only when verification replaces a platform worst case with the one-sided `{python} vb` % prediction bound of a single batch for the same step (@sec-verification).
 
@@ -975,9 +1004,9 @@ Every change of a criterion is argued by its risk. A report whose verification t
 
 A report that relies on a widened criterion also gives the bound, the runs behind it, and the reason why the performance of the downstream step for A-Mab is known well enough to replace the platform value. The rule was written into this plan before any Version 2.0 step report used it. This reissue of the plan also records what the rule gave, in @sec-iac and below.
 
-The criteria assume `{python} n_verif` platform worst cases. Of these, `{python} n_verif_testable` are responses of the response-surface designs of `{python} vtest_steps`, and they can be checked. The other `{python} n_verif_untestable` are the leached Protein A clearance of cation exchange and of anion exchange. Leached Protein A is not a response of those designs, so the platform values stand. The prediction bound of a single batch was better than the platform worst case for `{python} vwid_list`, and these bounds replaced the platform values. `{python} vi_rep_text`
+The criteria assume `{python} n_plat` platform worst cases, and they assume that no step after cation exchange changes aggregate. Of the platform worst cases, `{python} n_rsm_testable` are responses of the response-surface designs of `{python} vtest_steps`, and they can be checked. The other `{python} n_verif_untestable` are the leached Protein A clearance of cation exchange and of anion exchange. Leached Protein A is not a response of those designs, so the platform values stand. UF/DF has no response-surface design. Its assumption is checked on the univariate study of UF/DF made during the Version 2.0 re-analysis, which varied `{python} ufdf_factors`. A model of the main effects of these factors is evaluated at the same combinations of NOR low, set-point and NOR high. The prediction bound of a single batch was better than the platform worst case for `{python} vwid_list`, and these bounds replaced the platform values. `{python} vi_rep_text`
 
-`{python} vinad_con_text` Verification found that the aggregate clearance of cation exchange within its NOR is lower than the platform worst case. That tightened the aggregate criteria upstream of cation exchange (@sec-iac). The cation exchange report PCR-007 gives the values and their analysis.
+`{python} vinad_con_text` Verification found that the aggregate clearance of cation exchange within its NOR is lower than the platform worst case. It also found that UF/DF raises aggregate within its NOR, by up to `{python} ufdf_agg_bound` percentage points at the prediction bound of a single batch. Together these tightened the aggregate criteria (@sec-iac). The cation exchange report PCR-007 and the UF/DF report PCR-010 give the values and their analysis.
 
 ## Proven acceptable ranges
 

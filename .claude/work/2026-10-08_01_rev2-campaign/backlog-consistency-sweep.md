@@ -412,3 +412,25 @@ review is the last one, at reduced effort. PCR-007 and PCR-008 (authors running)
   summary and PD-003-08 subsection name the action limit and trending but not the combined alert (final touch with the
   criteria pass). Shared-helper candidates: piped (smart apostrophes in pipe-table cells: a latent grounding bug for any
   register row with an apostrophe), _block_spans, _printed_captions, frame_rows, superscript runs in render.
+
+## From the data-state pass of 2026-10-11
+- `tables.py` `T.iac_derivation` footnote c) says "The response-surface model of a downstream step predicted…"; the
+  cation exchange pool aggregate row is tightened by the UF/DF univariate fit, not a response-surface model. Shared
+  helper: reword after all renders, then re-anchor any annex quoting the footnote.
+- PCMP-001 §7.1 intro "Verification then replaced some platform values with A-Mab prediction bounds…": true, but the
+  UF/DF bound replaced a plan assumption (no change after cation exchange), not a platform value.
+- `dev_register` prints "run retained in the analysis" for every retained event; DEV-009-02 covered several runs (a
+  lot used for more than one run). Consider "retained in the analysis" (no "run"), then re-anchor annexes quoting
+  Table 13.1 rows (PCR-003, -005, -006 and later).
+- PRIORITY (machinery): iac.csv `downstream_added` for an aggregate row now sums the low-pH increase (before the cation
+  exchange fold) and the UF/DF increase (after it). In `T.iac_derivation`, DS × fold − added gives 6.36, not the 6.30
+  in force; `iac.final`'s comment "the criterion can be recomputed from its own row" no longer holds; the footnote
+  "last digit" understates it. Fix in the table (a separate column for the increase after cation exchange, read from
+  iac_verification), keeping `downstream_added` so the assertions of PCR-003, PCR-004, PCR-006 and PCMP-001 hold;
+  then re-render and re-anchor every document that prints tbl-iac.
+- RESOLVED (owner 2026-10-11: keep the date): INV-001 takes effect on 2026-09-18 but its §6 now uses S-UFDF-UNI2 (2026-09-19 to 09-29), as it
+  already used the CA3 models with augmentation runs ending 2026-09-24. State it in INV-001, or move its date?
+- authoring/DISCREPANCIES.md D-001 seam note on PCR-008's coded 0 = 175 g/L is stale: PCR-008 §3.5.1 now explains
+  the coding (PD-008-09). Update the note without connecting the coding to the "PAR (set-point)" column.
+- PCR-008 departures in neither register: no date for the offset estimates (PCMP-001 §7.1 wants them before the first
+  run; same for PCR-010); step yield by A280 (AMV-3019), a method PCP-008 Table 3.2 does not name (same in PCR-007).

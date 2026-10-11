@@ -7159,8 +7159,8 @@ def build_report_protein_a():
     dev_prose = {
         "DEV-005-01": [q("Run `{python} dev_run` is analysed at its recorded pH, the setting at which "
                          "it was made."),
-                       q("The qualification of the scale-down model is therefore the same however run "
-                         "`{python} dev_run` is analysed.")],
+                       q("The scale-down model is therefore not qualified for pool host cell protein "
+                         "however run `{python} dev_run` is analysed.")],
         "DEV-005-02": ["The investigation suspected carryover in the ELISA, which would add analyte "
                        "from a preceding sample, and did not confirm it.",
                        q("The class of end of pool collect would not change, because that effect, "
@@ -7174,8 +7174,9 @@ def build_report_protein_a():
                       f"{T.num(ns['dev_005_01_ph_measured'])} (discrepancy PD-005-03). With the run at its "
                       f"recorded pH, at its design pH or excluded, pool host cell protein meets its "
                       f"criterion at every combination of the NOR with the offset ratio at its estimate and "
-                      f"at its unfavourable end, so the qualification of the scale-down model is the same "
-                      f"however the run is analysed. The run was retained.",
+                      f"exceeds it with the ratio at its unfavourable end, so the scale-down model is not "
+                      f"qualified for pool host cell protein however the run is analysed. The run was "
+                      f"retained.",
         "DEV-005-02": "The re-assay is the result reported and analysed. With the first result in its "
                       "place the judgement of leached Protein A against its criterion is the same, every "
                       "PAR still spans its range studied, and the class of end of pool collect would not "
@@ -7552,10 +7553,9 @@ def build_report_protein_a():
     # ---- report sections -------------------------------------------------------------------
     ex = "Executive summary"
     n0 = len(pending)
-    st(q("The normal operating range of protein load in force is narrowed from `{python} nor_load_c` to "
-         "`{python} nor(P['load'])` g/L resin."), ex,
-       q("The normal operating range (NOR) of protein load in force is narrowed from `{python} nor_load_c` "
-         "to `{python} nor(P['load'])` g/L resin."))
+    # NORs come from production (owner, 2026-10-11): the narrowing of the protein load NOR is reversed
+    st("The normal operating ranges of the step are not changed.", ex,
+       "The normal operating ranges (NORs) of the step are not changed.")
     st("Protein load and elution buffer pH are WC-CPPs.", ex,
        "Protein load and elution buffer pH were classified as well-controlled critical process "
        "parameters (WC-CPPs).")
@@ -7563,20 +7563,18 @@ def build_report_protein_a():
        ex, "Load flow rate and end of pool collect were classified as KPPs, and operating temperature "
            "and bed height as GPPs.")
     st("No parameter of the step is a CPP.", ex, "No parameter of the step is in the class CPP.")
-    st("The scale-down model is qualified for leached Protein A and, over the protein load NOR in "
-       "force, for pool host cell protein.", ex,
-       "The scale-down model is qualified for leached Protein A and, over the NOR in force, for pool "
-       "host cell protein, which in the scale-down model is")
-    st("Over the protein load NOR as characterized the scale-down model is not qualified for pool host "
-       "cell protein: with the offset ratio at the low end of its interval the upper prediction limit "
-       "of a single run exceeds the criterion.", ex,
-       q("Over the protein load NOR as characterized, `{python} nor_load_c` g/L resin, the model is not "
-         "qualified for pool host cell protein, because with the ratio at the low end of its interval "
-         "the upper prediction limit of a single run"))
-    st("The qualification also rests on the widened criterion and on the set-point runs added during the "
-       "re-analysis, and the selected model decides it.", ex,
-       q("The qualification also rests on the widened criterion and on the `{python} n_sd_supp` set-point "
-         "runs added during the re-analysis (PD-005-01), and the selected model decides it"))
+    st("The scale-down model is qualified for leached Protein A.", ex,
+       "The scale-down model is qualified for leached Protein A. Pool host cell protein in the scale-down "
+       "model is")
+    st("Over the NOR in force the scale-down model is not qualified for pool host cell protein: the upper "
+       "prediction limit of a single run meets the criterion with the offset ratio at its estimate and "
+       "exceeds it with the ratio at the low end of its interval.", ex,
+       q("Over the NOR in force, with protein load at `{python} nor(P['load'])` g/L resin, the model is not "
+         "qualified for pool host cell protein."))
+    st("The NOR is not narrowed, and the report flags the protein load NOR for discussion with "
+       "manufacturing on whether it can be improved.", ex,
+       "The NOR is not narrowed, because NORs come from production. The report flags the protein load NOR "
+       "for discussion with manufacturing on whether it can be improved.")
     st(q("Leached Protein A is `{python} lpa_off` ppm lower in the scale-down model, as expected from the "
          "longer hold of the load at manufacturing scale."), ex,
        q("Leached Protein A is `{python} lpa_off` ppm lower in the scale-down model, as expected from the "
@@ -7616,8 +7614,10 @@ def build_report_protein_a():
          "`{python} crit_frag` %, the highest at `{python} f2(fr_max)` %."), ex,
        q("All `{python} fr_n` pools of the response-surface design met the criterion of ≤ "
          "`{python} crit_frag` %, the highest at `{python} f2(fr_max)` %"))
-    st(q("Each of the `{python} n_crit` outputs with a criterion met it across the NOR in force."), ex,
-       q("Each of the `{python} n_crit` outputs with a criterion met it across the NOR in force."))
+    st(q("Each of the `{python} n_crit` outputs with a criterion met it across the NOR in force, pool host "
+         "cell protein with the offset ratio at its estimate."), ex,
+       q("Each of the `{python} n_crit` outputs with a criterion met it across the NOR in force, pool host "
+         "cell protein with the offset ratio at its estimate"))
     st(q('The criterion for pool host cell protein, ≤ `{python} crit_hcp` ng/mg, is '
          '`{python} f"{widen_pct:.0f}"` % wider than its a priori value, because the single-batch bound '
          'of the host cell protein clearance of anion exchange is better than its platform worst case.'),
@@ -7701,33 +7701,28 @@ def build_report_protein_a():
         st(f"On all set-point runs the offset of {label} is {nofoot(c[5])} (confidence interval {c[6]}); "
            f"met over the NOR at the low end, estimate and high end: {c[7]}; qualified: {c[8]}.", sq,
            offrow[j], offrow.header, off_t.caption)
-    st(q("Over the protein load NOR as characterized the upper prediction limit of a single run is "
-         "`{python} f0(pl_pt_c)` ng/mg with the ratio at its estimate and `{python} f0(pl_lo_c)` ng/mg "
-         "with the ratio at its low end, against the criterion of ≤ `{python} crit_hcp` ng/mg."), sq,
-       q("The upper prediction limit of a single run over that NOR is `{python} f0(pl_pt_c)` ng/mg at "
-         "manufacturing scale with the ratio at its estimate and `{python} f0(pl_lo_c)` ng/mg with the "
-         "ratio at its low end, against the criterion of ≤ `{python} crit_hcp` ng/mg."))
-    st(q("The limit at the low end of the ratio reaches the criterion when the upper edge of the protein "
-         "load NOR is `{python} f1(load_q_max)` g/L resin, so the NOR in force was narrowed to "
-         "`{python} nor(P['load'])` g/L resin."), sq,
-       q("With the other factors over their NORs, the limit at the low end of the ratio reaches the "
+    st(q("Over the NOR in force the upper prediction limit of a single run is `{python} f0(pl_pt)` ng/mg "
+         "with the ratio at its estimate and `{python} f0(pl_hi)` ng/mg with the ratio at its high end, "
+         "both below the criterion of ≤ `{python} crit_hcp` ng/mg."), sq,
+       q("The upper prediction limit of a single run over the NOR is `{python} f0(pl_pt)` ng/mg at "
+         "manufacturing scale with the ratio at its estimate and `{python} f0(pl_hi)` ng/mg with the ratio "
+         "at its high end, both below the criterion of ≤ `{python} crit_hcp` ng/mg."))
+    st(q("With the other factors over their NORs, the limit at the low end of the ratio meets the "
+         "criterion when the upper edge of the protein load NOR is `{python} f1(load_q_max)` g/L resin."), sq,
+       q("With the other factors over their NORs, the limit at the low end of the ratio meets the "
          "criterion when the upper edge of the protein load NOR is `{python} f1(load_q_max)` g/L resin."))
-    st(q("Over the narrowed NOR the upper prediction limit is `{python} f0(pl_lo)` ng/mg with the ratio at "
-         "its low end and `{python} f0(pl_hi)` ng/mg at its high end, both below the criterion."), sq,
-       q("Over that NOR the upper prediction limit is `{python} f0(pl_lo)` ng/mg with the ratio at its "
-         "low end and `{python} f0(pl_hi)` ng/mg at its high end, both below the criterion, and the model "
-         "is qualified for pool host cell protein."))
-    st(q("Against the a priori criterion of ≤ `{python} f0(crit_wo)` ng/mg the scale-down model would not "
-         "be qualified for pool host cell protein."), sq,
-       q("Against the a priori criterion of ≤ `{python} f0(crit_wo)` ng/mg, the limit with the ratio at "
-         "its low end, `{python} f0(pl_lo)` ng/mg, would exceed it."))
-    st(q("The other models of pool host cell protein whose AICc lies within 2 units of that of the selected "
-         "model are a sensitivity analysis, and `{python} n_near_fail` of them would not qualify the "
-         "scale-down model; the selected model, with the lowest AICc, decides the qualification."), sq,
-       q("The rule of the model selection takes the model with the lowest AICc, so the selected model "
-         "decides the qualification. The other models whose AICc lies within 2 units of it are a "
-         "sensitivity analysis, and `{python} n_near_fail` of them would not qualify the scale-down "
-         "model"))
+    st(q("With the ratio at its low end the upper prediction limit over the NOR in force is "
+         "`{python} f0(pl_lo)` ng/mg, above the criterion, so the scale-down model is not qualified for "
+         "pool host cell protein."), sq,
+       q("With the ratio at its low end it is `{python} f0(pl_lo)` ng/mg, above the criterion."))
+    st(q("Against the a priori criterion of ≤ `{python} f0(crit_wo)` ng/mg, which would apply without "
+         "corrective action CA3, the scale-down model is not qualified for pool host cell protein either."),
+       sq, q("the criterion would be its a priori value of ≤ `{python} f0(crit_wo)` ng/mg"))
+    st(q("Each of the `{python} n_near` models of pool host cell protein whose AICc lies within 2 units of "
+         "that of the selected model gives an upper prediction limit above the criterion with the ratio at "
+         "its low end, so the conclusion of the qualification does not depend on the choice of model."), sq,
+       q("Each of the `{python} n_near` models whose AICc lies within 2 units of that of the selected model "
+         "gives a limit above the criterion with the ratio at its low end"))
     st("The offset of leached Protein A is expected to come from cleavage of the ligand by harvest "
        "proteases during the longer hold of the load at manufacturing scale, a cause this study does "
        "not test.", sq, "The expected cause is cleavage of the ligand by harvest proteases.")
@@ -7740,13 +7735,27 @@ def build_report_protein_a():
        f"(confidence interval {c[6]}), and the model is not qualified for it (qualified: {c[8]}).", sq,
        off0row[0], off0row.header, off0_t.caption)
     st(q('The further set-point runs narrowed the half-width of the interval on the log scale by '
-         '`{python} f"{narrow_pct:.0f}"` %, which made the qualification possible.'), sq,
+         '`{python} f"{narrow_pct:.0f}"` %, and on all runs the model is still not qualified for pool host '
+         'cell protein.'), sq,
        q('The further runs narrowed the half-width of the interval on the log scale by '
-         '`{python} f"{narrow_pct:.0f}"` %, and this made the qualification possible.'))
-    st("Runs added after a result was seen raise the chance that the qualification passes, a limitation "
-       "of the qualification for pool host cell protein.", sq,
-       "Runs added until a test passes raise the chance that it passes, and this is a limitation of that "
-       "qualification.")
+         '`{python} f"{narrow_pct:.0f}"` %.'))
+    st("Runs added after a result was seen raise the chance that a test passes, but the model is not "
+       "qualified for pool host cell protein on all runs either, so the added runs did not change the "
+       "outcome of the qualification.", sq,
+       "Here the model is not qualified for pool host cell protein on all runs either, so the added runs "
+       "did not change the outcome of the qualification.")
+    # the flag, not a narrowing (owner, 2026-10-11)
+    st("The NOR is not narrowed: an offset compares laboratory results with production scale, so it can "
+       "change a PAR but not a NOR.", sq,
+       "An offset compares laboratory results with production scale, so it can change a PAR but not a NOR.",
+       new=3)
+    st("No NOR of the step lies outside its NOR-propagated PAR at manufacturing scale, so the flag of the "
+       "report comes from the qualification of the scale-down model and not from a PAR.", sq,
+       "The flag of this report therefore comes from the qualification of the scale-down model and not "
+       "from a PAR.", new=3)
+    st("Every judgement of pool host cell protein is made with the offset ratio at its estimate; the study "
+       "does not show that the conclusion over the NOR holds over the whole interval of the ratio.", sq,
+       "The study does not show that this holds over the whole interval of the ratio.", new=3)
     st(q("On the `{python} n_sd_plan` planned set-point runs of S-PA-SDM alone the two scales differ in "
          "leached Protein A (`{python} pf(dev04_p)`), a difference PCP-005 Version 1.0 required to be "
          "investigated before the characterization studies; it was not (discrepancy PD-005-08)."), sq,
@@ -7837,8 +7846,8 @@ def build_report_protein_a():
     for quote, new in [
         ("The step was characterized under PCP-005 in a screening design, a response-surface design and "
          "a univariate study.", False),
-        (q("The qualification for pool host cell protein also rests on the widened criterion and on all "
-           "`{python} n_sd_all` set-point runs. It is decided on the selected model"), False),
+        ("The conclusion holds with the offset ratio at its estimate and fails at the low end of its "
+         "interval.", False),
         ("Each selected model of the response-surface outputs meets the adequacy criteria on lack of fit "
          "and predictive power, and each model with a term is significant.", False),
         ("Criterion 5 is met except for leached Protein A and fragments, whose residual trends are small "
@@ -7850,7 +7859,8 @@ def build_report_protein_a():
            "rises."), False),
         (q("The criterion for pool host cell protein, ≤ `{python} crit_hcp` ng/mg, is widened by the "
            "single-batch bound of anion exchange."), False),
-        ("Each output with a criterion met it across the NOR in force.", False),
+        ("Each output with a criterion met it across the NOR in force, pool host cell protein with the "
+         "offset ratio at its estimate.", False),
         ("Protein load and elution buffer pH are WC-CPPs, load flow rate and end of pool collect are KPPs, "
          "and operating temperature and bed height are GPPs.", False),
         ("The ranges studied of operating temperature and bed height are supported for pool host cell "
@@ -8033,8 +8043,8 @@ def build_report_protein_a():
     st("Acidic variants in the held eluate are judged against both limits of their two-sided criterion.",
        rv, "Acidic variants in the held eluate are judged against both limits of their two-sided "
            "criterion (INV-001 finding 4).")
-    st("No NOR other than that of protein load and no set-point of the step is changed.", rv,
-       "No other NOR and no set-point of the step is changed.")
+    st("No NOR and no set-point of the step is changed.", rv,
+       "No NOR and no set-point of the step is changed.")
     # change 10, reworded by the record pass: the id keeps the change that records the Version 1.0 events
     st("The events that Version 1.0 numbered as deviations, DEV-005-01 and DEV-005-02, are recorded as study "
        "events under their numbers, because a process characterization study is not GMP manufacture.", rv,
@@ -8126,9 +8136,10 @@ def build_report_protein_a():
             "ProvenAcceptableRange keeps the field name par_at_setpoint for the univariate PAR (the "
             "report's 'Univ.' column, other parameters at their set-points); at this step the "
             "set-point of every design factor is the centre of its range studied.",
-            "ProcessParameter.NOR is the NOR in force. For protein load it is the NOR this revision "
-            "narrowed at its upper edge; the studies were planned and run against the NOR as "
-            "characterized. ProcessParameter.PAR is the narrowest NOR-propagated PAR over the outputs "
+            "ProcessParameter.NOR is the NOR in force. NORs come from production, and this revision "
+            "changes none. Over the protein load NOR the scale-down model is not qualified for pool "
+            "host cell protein, and the report flags that NOR for discussion with manufacturing (owner, "
+            "2026-10-11). ProcessParameter.PAR is the narrowest NOR-propagated PAR over the outputs "
             "with a criterion for a multivariate parameter, and the range studied for a univariate one.",
             "The schema has no record type for a discrepancy from the plan, and its Deviation model is not "
             "used for one: the report records no deviation (a process characterization study is not GMP "
@@ -10071,8 +10082,13 @@ def build_master_plan():
        "of equivalence, and states every judgement against a criterion at manufacturing scale")
     st(f"Version 1.0 judged the cation exchange pool against an aggregate limit of "
        f"{ns['r1_cex_agg_hi']} % HMW; Version 2.0 credits no later step with aggregate removal, so "
-       f"the pool carries the drug substance criterion, {ns['cex_agg_iac']} %.", chg,
-       "The cation exchange pool therefore carries the drug substance criterion itself")
+       f"the a priori criterion of the pool is the drug substance criterion, {ns['cex_agg_apriori']} %.", chg,
+       f"The a priori criterion of the cation exchange pool is therefore the drug substance criterion "
+       f"itself, {ns['cex_agg_apriori']} %.")
+    st(f"Verification found that UF/DF raises aggregate within its NOR, and the cation exchange pool "
+       f"criterion in force carries that increase, {ns['cex_agg_iac']} %.", chg,
+       f"Verification then found that UF/DF raises aggregate within its NOR, and the criterion in force "
+       f"carries that increase. It is {ns['cex_agg_iac']} %")
     st("A scale-down model is qualified for each output by the offset between the scales, and "
        "every judgement of a scale-down result against a criterion first subtracts that offset.",
        "Scale-down model qualification",
@@ -10134,10 +10150,14 @@ def build_master_plan():
        "replaces the platform value, and the point prediction never does.", verif,
        "In both directions the bound, on its unfavourable side, replaces the platform value, and "
        "the point prediction never does.")
-    st(f"Of the {ns['n_verif']} platform worst cases the criteria assume, {ns['n_verif_testable']} "
+    st(f"Of the {ns['n_plat']} platform worst cases the criteria assume, {ns['n_rsm_testable']} "
        f"can be checked against the response-surface designs of {ns['vtest_steps']}.", verif,
-       f"Of these, {ns['n_verif_testable']} are responses of the response-surface designs of "
+       f"Of the platform worst cases, {ns['n_rsm_testable']} are responses of the response-surface designs of "
        f"{ns['vtest_steps']}, and they can be checked.")
+    st(f"The assumption that UF/DF does not change aggregate is checked on the univariate study of UF/DF, "
+       f"which varied {ns['ufdf_factors']}.", verif,
+       f"Its assumption is checked on the univariate study of UF/DF made during the Version 2.0 "
+       f"re-analysis, which varied {ns['ufdf_factors']}.")
     st(f"The prediction bound of a single batch replaced the platform value for "
        f"{ns['vwid_list']}.", verif,
        f"The prediction bound of a single batch was better than the platform worst case for "
@@ -10156,6 +10176,10 @@ def build_master_plan():
        "case, which tightened the aggregate criteria upstream of cation exchange.", verif,
        "Verification found that the aggregate clearance of cation exchange within its NOR is lower "
        "than the platform worst case.")
+    st(f"UF/DF raises aggregate within its NOR by up to {ns['ufdf_agg_bound']} percentage points at the "
+       f"prediction bound of a single batch, and every aggregate criterion carries that increase.", verif,
+       f"It also found that UF/DF raises aggregate within its NOR, by up to {ns['ufdf_agg_bound']} "
+       f"percentage points at the prediction bound of a single batch.")
     st("The viral clearance claims meet the cumulative requirements with little room, so a step "
        "that falls short of its claim cannot be made up by another step.", "Viral clearance claims",
        "A step that falls short of its claim therefore cannot be made up by the surplus of another "
@@ -10758,12 +10782,8 @@ def build_investigation():
             f"{P.UNIT_OP_TITLES['viral_inactivation']} has process parameter "
             f"{vi.param(c['key']).name}, whose NOR PCR-006 Version 2.0 changes.",
             SEC["impact"], vi_nor_q)
-    # the Protein A NOR PCR-005 Version 2.0 narrows, on the sentence that gives it (§2)
-    pa_ch = ns["_pa_ch"][0]
-    add("step:protein_a", "step_has_parameter", f"param:protein_a_{pa_ch['key']}",
-        f"{P.UNIT_OP_TITLES['protein_a']} has process parameter {pa.param(pa_ch['key']).name}, whose "
-        f"NOR PCR-005 Version 2.0 narrows.", SEC["scope"],
-        f"The Protein A report PCR-005 Version 2.0 therefore {ns['pa_nor_txt']}.")
+    # the Protein A NOR is unchanged at Version 2.0 (owner, 2026-10-11: NORs come from production, an
+    # offset never narrows one); PCR-005 keeps it and flags it for discussion with manufacturing
 
     # ---- report sections: one statement per sentence of the document it cites -------------------
     sname, aname = ns["sname"], ns["aname"]
@@ -10789,12 +10809,12 @@ def build_investigation():
          f"whole NOR, although each meets it with every parameter at its set-point.", "summary",
          f"In the re-analysis, {ns['nm_list']} do not meet their Version 2.0 criterion across the "
          f"whole NOR, although each meets it with every parameter at its set-point (§6.3)."),
-        (f"At Version 2.0 the Protein A report PCR-005 {ns['pa_nor_summary']}, because over the NOR "
-         f"as characterized the scale-down model is not qualified for pool host cell protein.",
-         "summary",
-         f"At Version 2.0, the Protein A report PCR-005 {ns['pa_nor_summary']}, because over the NOR "
-         f"as it was characterized the scale-down model is not qualified for pool host cell protein "
-         f"(§2)."),
+        ("At Version 2.0 the Protein A report PCR-005 keeps the NOR in force and flags it for "
+         "discussion with manufacturing, because over that NOR the scale-down model is not qualified "
+         "for pool host cell protein.", "summary",
+         "At Version 2.0, the Protein A report PCR-005 keeps the NOR in force and flags it for "
+         "discussion with manufacturing, because over that NOR the scale-down model is not qualified "
+         "for pool host cell protein (§2)."),
         (f"At Version 2.0 the low-pH viral inactivation report PCR-006 {ns['vi_nor_summary']}, "
          f"because XMuLV clearance does not meet its claim at the least favourable combination of the "
          f"NOR as characterized.", "summary",
@@ -10832,30 +10852,29 @@ def build_investigation():
          f"to {ns['pa_r_all_hi']}.", "scope",
          f"On all runs it is {ns['pa_r_all']}, with an interval of {ns['pa_r_all_lo']} to "
          f"{ns['pa_r_all_hi']}."),
-        ("Over the Protein A NOR as characterized, the scale-down model is not qualified for pool host "
-         "cell protein, on the planned runs alone or on all runs.", "scope",
-         "Over the NOR as characterized, the model is not qualified for pool host cell protein, on the "
-         "planned runs alone or on all runs."),
+        ("Over the Protein A NOR, the scale-down model is not qualified for pool host cell protein, on "
+         "the planned runs alone or on all runs.", "scope",
+         "Over the NOR, the model is not qualified for pool host cell protein, on the planned runs alone "
+         "or on all runs."),
+        ("With the offset ratio at its estimate, pool host cell protein meets its criterion over the "
+         "Protein A NOR.", "scope", "The conclusion holds with the ratio at its estimate."),
         (f"With the offset ratio at the low end of its interval, the upper prediction limit of pool "
-         f"host cell protein over the NOR as characterized is {big(ns['pa_upl_char_lo'])} ng/mg on all "
-         f"runs, above the criterion.", "scope",
+         f"host cell protein over the Protein A NOR is {big(ns['pa_upl_char_lo'])} ng/mg on all runs, "
+         f"above the criterion.", "scope",
          f"With the ratio at the low end of its interval, which raises the prediction at manufacturing "
-         f"scale, the upper prediction limit over that NOR is {big(ns['pa_upl_char_lo'])} ng/mg on all "
+         f"scale, the upper prediction limit over the NOR is {big(ns['pa_upl_char_lo'])} ng/mg on all "
          f"runs, above the criterion."),
-        (f"Over the narrowed protein load NOR the limit is {big(ns['pa_upl_force_lo'])} ng/mg on all "
-         f"runs, and the scale-down model is qualified for pool host cell protein.", "scope",
-         f"Over the narrowed NOR, that limit is {big(ns['pa_upl_force_lo'])} ng/mg on all runs, and "
-         f"the model is qualified."),
-        (f"On the planned runs alone it is {big(ns['pa_upl_force_lo_plan'])} ng/mg, and the model "
-         f"would not be qualified.", "scope",
-         f"On the planned runs alone it is {big(ns['pa_upl_force_lo_plan'])} ng/mg, and the model "
-         f"would not be qualified."),
-        ("The further Protein A scale-down runs made the qualification possible.", "scope",
-         "The further runs therefore made the qualification possible."),
-        ("The qualification rests on runs added after the result on the planned runs was known, "
-         "which is a limitation of it.", "scope",
-         "The qualification therefore rests on runs added after a result was seen, and this is a "
-         "limitation of it."),
+        ("NORs come from production, and an offset does not narrow them.", "scope",
+         "NORs come from production, and an offset does not narrow them."),
+        ("PCR-005 Version 2.0 keeps the Protein A NOR in force, states that the scale-down model is not "
+         "qualified for pool host cell protein over it, and flags the NOR for discussion with "
+         "manufacturing.", "scope",
+         "The Protein A report PCR-005 Version 2.0 therefore keeps the NOR in force, states that the "
+         "model is not qualified for pool host cell protein over it, and flags the NOR for discussion "
+         "with manufacturing."),
+        ("The further Protein A scale-down runs narrowed the confidence interval of the offset but did "
+         "not change the conclusion.", "scope",
+         "The further runs narrowed the interval but did not change the conclusion."),
         (f"PCR-005 Version 2.0 records the further runs as {pd_id}, a discrepancy from the plan "
          f"PCP-005, which did not foresee them.", "scope",
          f"The plan did not foresee the further runs, so the Protein A report PCR-005 Version 2.0 "
@@ -11007,6 +11026,12 @@ def build_investigation():
          f"{ns['n_iac_claim']} are platform viral clearance claims."),
         ("The data of a step never set its own Version 2.0 criterion.", "iac",
          "The data of a step never set its own criterion."),
+        ("In the verification, each prediction of the downstream step is converted to manufacturing "
+         "scale with the offset of its scale-down model before the fold or the increase is computed.",
+         "verif",
+         "Each prediction of the downstream step is converted to manufacturing scale with the offset of "
+         "its scale-down model before the fold or the increase is computed, under the second rule of "
+         "CA1."),
         (f"Of the {ns['n_ver']} platform worst cases that could be tested, {ns['n_ver_met']} were "
          f"confirmed, because the prediction within the NOR was no worse than the platform value.",
          "verif",
@@ -11064,12 +11089,24 @@ def build_investigation():
     ] + [
         (f"In all, {ns['n_wid']} criteria were widened, for {ns['wid_list']}.", "verif",
          f"In all, {ns['n_wid']} criteria were widened, for {ns['wid_list']}."),
-        (f"The aggregate criteria upstream of cation exchange were recalculated with the single-batch "
-         f"bound of its aggregate clearance, and the {ns['n_tight']} aggregate criteria at the "
-         f"{ns['tight_steps']} steps were tightened.",
+        (f"{ns['nw'](ns['n_ver_nm']).capitalize()} platform worst cases were not confirmed, both for "
+         f"aggregate.", "verif",
+         f"{ns['nw'](ns['n_ver_nm']).capitalize()} assumptions were not confirmed, both for aggregate."),
+        ("PCMP-001 assumed that no step after cation exchange changes aggregate.", "verif",
+         "PCMP-001 assumed that no step after cation exchange changes aggregate."),
+        (f"UF/DF raises aggregate within its NOR, and the single-batch bound of the increase is "
+         f"{f2(ns['ufdf_agg_bound'])} percentage points.", "verif",
+         f"UF/DF raises it within its NOR, and the single-batch bound of the increase is "
+         f"{f2(ns['ufdf_agg_bound'])} percentage points."),
+        (f"The aggregate criteria upstream were recalculated with the cation exchange and UF/DF bounds, "
+         f"and the {ns['n_tight']} aggregate criteria at the {ns['tight_steps']} steps were tightened.",
          "verif",
-         f"The aggregate criteria upstream of cation exchange were recalculated with the bound, and "
-         f"the {ns['n_tight']} aggregate criteria at the {ns['tight_steps']} steps were tightened."),
+         f"The aggregate criteria upstream were recalculated with both bounds, and the {ns['n_tight']} "
+         f"aggregate criteria at the {ns['tight_steps']} steps were tightened."),
+        (f"The cation exchange aggregate criterion moved on the UF/DF bound alone, from the "
+         f"drug-substance criterion of {ns['ds_agg']:g} % to {f2(ns['cex_ds_agg_v2'])} %.", "verif",
+         f"The cation exchange criterion moved on the UF/DF bound alone, from the drug-substance "
+         f"criterion of {ns['ds_agg']:g} % to {f2(ns['cex_ds_agg_v2'])} %."),
         (f"The platform value of the aggregate increase at low-pH viral inactivation is an increase over "
          f"a hold of {ns['plat_hold_min']} min.", "verif",
          f"The platform value is an increase over a hold of {ns['plat_hold_min']} min."),
@@ -11100,9 +11137,9 @@ def build_investigation():
          f"widened.", "impact",
          f"Of the {ns['n_par_changed']} ranges that changed, {ns['n_par_wider']} widened."),
         (f"At cation exchange, against the Version 2.0 aggregate criterion of "
-         f"{ns['cex_ds_agg_v2']:g} %, the proven acceptable range for protein load is "
+         f"{f2(ns['cex_ds_agg_v2'])} %, the proven acceptable range for protein load is "
          f"{ns['cex_load_v2']} g/L resin and covers the upper end of the NOR.", "impact",
-         f"Against the Version 2.0 criterion of {ns['cex_ds_agg_v2']:g} %, the range is "
+         f"Against the Version 2.0 criterion of {f2(ns['cex_ds_agg_v2'])} %, the range is "
          f"{ns['cex_load_v2']} g/L resin, and it covers the upper end of the NOR."),
         (f"Judged against the upper limit alone, every acidic variant range at the bioreactor would "
          f"span the whole characterization range, so the lower limit of {ns['ds_acid_lo']:g} % now "
@@ -11158,11 +11195,11 @@ def build_investigation():
          "reported for information only and not used to judge a step.", "frag",
          "SEC fragment results from the Protein A pool and the low-pH viral inactivation pool will "
          "be reported for information only and not used to judge a step."),
-        (f"The process is unchanged except for NORs at the {ns['proc_nor_steps']} steps and "
-         f"set-points at {ns['proc_sp_steps']}, which PCR-005 and PCR-006 Version 2.0 change.",
+        (f"The process is unchanged except for NORs and set-points at the {ns['proc_nor_steps']} step, "
+         f"which PCR-006 Version 2.0 changes.",
          "product",
-         f"The process is unchanged except for NORs at the {ns['proc_nor_steps']} steps and set-points "
-         f"at {ns['proc_sp_steps']}, which PCR-005 and PCR-006 Version 2.0 change (§2, §6.3)."),
+         f"The process is unchanged except for NORs and set-points at the {ns['proc_nor_steps']} step, "
+         f"which PCR-006 Version 2.0 changes (§6.3)."),
         (f"Version 2.0 adds one drug-substance criterion, for fragments, at "
          f"{T.crit(0, ns['ds_frag'], 'upper')} %.", "product",
          f"Version 2.0 adds one drug-substance criterion, for fragments, at "
@@ -11249,7 +11286,7 @@ def build_investigation():
     keys = list(dict.fromkeys([c for _, c in iacrow] + [v1k]))
     params_used = ([("bioreactor", k) for k in list(ns["_fall"]) + list(ns["_rise"])
                     + list(ns["acid_nsig"])]
-                   + [("protein_a", k) for _, k, _ in ns["_mains"]] + [("protein_a", pa_ch["key"])]
+                   + [("protein_a", k) for _, k, _ in ns["_mains"]]
                    + [("viral_inactivation", c["key"]) for c in ns["_vi_ch"]])
     params_used = list(dict.fromkeys(params_used))
     concepts = [Concept(concept_id="process:amab_ds", concept_type="PROCESS",
@@ -11390,7 +11427,7 @@ BUILDERS = [(d, _builder(d, b)) for d, b in _LEGACY_BUILDERS]
 #: skipped and its annex kept as it is. This keeps check_grounding green at every step of the
 #: Rev 2.0 campaign (work unit 2026-10-08_01_rev2-campaign). When every document is in the set,
 #: delete this mechanism.
-REV2_READY: set = {"INV-001", "INV-002", "PCMP-001", "PCP-003", "PCP-004", "PCP-005", "PCP-006", "PCP-007", "PCP-008", "PCP-009", "PCP-010", "PCR-005", "PTP-001", "RA-001"}
+REV2_READY: set = {"INV-001", "INV-002", "PCMP-001", "PCP-003", "PCP-004", "PCP-005", "PCP-006", "PCP-007", "PCP-008", "PCP-009", "PCP-010", "PCR-003", "PCR-005", "PCR-006", "PTP-001", "RA-001"}
 
 
 def main(argv=None):

@@ -1032,8 +1032,12 @@ def build():  # noqa: C901 - one document, one builder, in the order of the repo
     relation("references", "PCR-007", "The cation exchange bound for the aggregate clearance, which tightened the "
              "aggregate criterion of the step, is in PCR-007.", "criteria",
              q("The one-sided 95 % prediction bound of a single batch there, "
-               "`{python} fx(float(cex_agg.predicted_nor_bound95))`-fold, replaced the platform value (PCR-007), which "
-               "alone would set the criterion at `{python} pct(AGG_TIGHT_ONLY, 2)`."))
+               "`{python} fx(float(cex_agg.predicted_nor_bound95))`-fold, replaced the platform value (PCR-007)."))
+    relation("references", "PCR-010", "The UF/DF bound for the aggregate increase, from the univariate study "
+             "S-UFDF-UNI2, which tightened the aggregate criterion of the step, is in PCR-010.", "criteria",
+             q("The one-sided 95 % prediction bound of a single run, "
+               "`{python} fx(float(uf_agg.predicted_nor_bound95))` points, replaced the assumption of no increase "
+               "(PCR-010)."))
     relation("references", "PCR-006", "The low-pH viral inactivation bound for the aggregate increase, which widened the "
              "aggregate criterion of the step, is in PCR-006, which also states whether it depends on a single run.",
              "criteria", q("PCR-006 gives the bound and states whether it depends on a single run, as PCMP-001 §7.5 "
@@ -1584,8 +1588,11 @@ def build():  # noqa: C901 - one document, one builder, in the order of the repo
         "initial viable cell concentration at its NOR low.",
         "The NOR was not narrowed.",
         "The risk was accepted as the producer's.",
-        "This report recommends an action limit for acidic variants at harvest, and the trending of acidic variants "
-        "against the initial viable cell concentration in production (@sec-control).",
+        "This report recommends a combined alert in the control system, which fires when `{python} ALERT_TXT` at the "
+        "same time.",
+        "It also recommends an action limit for acidic variants at harvest of `{python} pct(MIT['action_limit'], 2)`, "
+        "and the trending of acidic variants against the initial viable cell concentration in production "
+        "(@sec-control).",
         "All `{python} N_PAR` PARs computed with the other parameters varying across their NORs contain the NOR, and "
         "`{python} N_PAR - len(NARROW)` of them span the whole range studied.",
         "That every PAR contains the NOR rests on the `{python} N_AUG` augmentation runs and on the model selection.",
@@ -2215,26 +2222,33 @@ def build():  # noqa: C901 - one document, one builder, in the order of the repo
         "platform value stands.",
         "The lower limit is the drug substance limit unchanged, which assumes that no downstream step lowers acidic "
         "variants (PCP-003 §12).",
-        "The aggregate criterion is the drug substance limit multiplied by the aggregate clearance factor of cation "
-        "exchange, less the aggregate increase across low-pH viral inactivation.",
-        "From the platform values alone it is `{python} pct(AGG.iac_high_apriori, 2)`.",
-        "Verification of the platform worst cases changed both terms (PCMP-001 §7.5).",
+        "The aggregate criterion is the drug substance limit less the aggregate increase across UF/DF, multiplied by "
+        "the aggregate clearance factor of cation exchange, less the aggregate increase across low-pH viral "
+        "inactivation.",
+        "PCMP-001 assumed that no step after cation exchange changes aggregate, and from the platform values alone the "
+        "criterion is `{python} pct(AGG.iac_high_apriori, 2)`.",
+        "Verification of the platform worst cases at manufacturing scale changed all three terms (PCMP-001 §7.5).",
+        "UF/DF raised aggregate within its NOR in the univariate study S-UFDF-UNI2.",
         "The cation exchange model predicted within its NOR a lowest clearance of "
-        "`{python} fx(float(cex_agg.predicted_nor))`-fold, worse than the platform worst case of "
+        "`{python} fx(float(cex_agg.predicted_nor))`-fold at manufacturing scale, worse than the platform worst case of "
         "`{python} fx(float(cex_agg.assumed))`-fold.",
+        "These two bounds alone would set the criterion at `{python} pct(AGG_TIGHT_ONLY, 2)`.",
         "The low-pH viral inactivation model gave a bound of `{python} fx(float(vi_agg.predicted_nor_bound95))` points "
         "for the increase, better than the platform value of `{python} fx(float(vi_agg.assumed))` points, on a model "
         "that meets the first three adequacy criteria of PCMP-001 §7.2 (PCR-006).",
         "The criterion in force is `{python} pct(AGG.iac_high, 2)`, stricter than the a priori value.",
-        "It is computed from the unrounded terms, so the rounded values of @tbl-iac give "
-        "`{python} pct(DS_AGG * round(float(cex_agg.predicted_nor_bound95), 2) - round(float(vi_agg.predicted_nor_bound95), 2), 2)`.",
+        "It is computed from the unrounded terms, so the rounded values give "
+        "`{python} pct((DS_AGG - round(float(uf_agg.predicted_nor_bound95), 2)) * round(float(cex_agg.predicted_nor_bound95), 2) - round(float(vi_agg.predicted_nor_bound95), 2), 2)`.",
+        "The increase in @tbl-iac is the sum of the two increases, and the UF/DF increase is carried back through the "
+        "clearance factor of cation exchange.",
         "PCMP-001 §7.5 asks for the risk of the change.",
         "The net change is a tightening.",
         "The widening alone moves the criterion `{python} fx(AGG.iac_high - AGG_TIGHT_ONLY)` points in the direction of "
         "a higher risk to the patient.",
         "To meet the drug substance limit, cation exchange must clear at least "
-        "`{python} fx(float(cex_agg.predicted_nor_bound95))`-fold and low-pH viral inactivation must add no more than "
-        "`{python} fx(float(vi_agg.predicted_nor_bound95))` points.",
+        "`{python} fx(float(cex_agg.predicted_nor_bound95))`-fold, low-pH viral inactivation must add no more than "
+        "`{python} fx(float(vi_agg.predicted_nor_bound95))` points and UF/DF no more than "
+        "`{python} fx(float(uf_agg.predicted_nor_bound95))` points.",
         "At the highest single-run level that the model of this step predicts within the NOR, "
         "`{python} pct(AGG_UP, 2)` at manufacturing scale, the drug substance would then carry at most "
         "`{python} pct(DS_AGG_EST, 2)`.",
@@ -2494,8 +2508,11 @@ def build():  # noqa: C901 - one document, one builder, in the order of the repo
         "Acidic variants do not meet their criterion over the NOR on the prediction interval of a single run "
         "(@sec-criteria-results), and the NOR was not narrowed as PCP-003 §7 requires.",
         "The Version 2.0 re-analysis against the criteria of PCMP-001 Version 2.0 found the departure.",
-        "The risk was accepted as the producer's, on the grounds that @sec-criteria-results gives, with the action limit "
-        "and the trending of @sec-control.")
+        "The risk was accepted as the producer's, on the grounds that @sec-criteria-results gives.",
+        "A combined alert in the control system covers every failing combination inside the NOR.",
+        "It fires when `{python} ALERT_TXT` at the same time.",
+        "The action limit for acidic variants at harvest of `{python} pct(MIT['action_limit'], 2)` and the trending of "
+        "@sec-control complete the mitigation.")
     sqs("pd09",
         "PCP-003 §5.4 requires the culture to be monitored for viable cell density and viability, and §5.1 lists both, "
         "with the titre, among the outputs of the qualification.",

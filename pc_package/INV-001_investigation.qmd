@@ -51,8 +51,8 @@ import itertools
 DOC = "INV-001"
 UO = None
 # The investigation judged every NOR as it stood when it closed: the characterized NOR, before
-# PCR-005 and PCR-006 Version 2.0 changed NORs (the protein load NOR of Protein A, and the NORs and
-# set-points of low-pH viral inactivation). Every NOR-based value below is computed inside this
+# PCR-006 Version 2.0 changed the NORs and set-points of low-pH viral inactivation (the Protein A
+# NOR is unchanged: NORs come from production, owner 2026-10-11). Every NOR-based value below is computed inside this
 # context; it is closed at the end of the setup chunk, where the Version 2.0 changes are classified.
 _CN = D.characterized_nor()
 _CN.__enter__()
@@ -356,7 +356,8 @@ _is_t = _iac["tightened"].astype(str).eq("True")
 _is_w = _iac["widened"].astype(str).eq("True")
 n_tight, n_wid = int(_is_t.sum()), int(_is_w.sum())
 _tt = _iac[_is_t]
-tight_steps = " and ".join(sname(s) for s in _tt["step_key"])
+_tsn = [sname(s) for s in _tt["step_key"]]
+tight_steps = ", ".join(_tsn[:-1]) + " and " + _tsn[-1] if len(_tsn) > 1 else _tsn[0]
 assert set(_tt["cqa"]) == {"aggregates_hmw"}
 _ww = _iac[_is_w]
 _wl = [f"{aname(c)} at the {sname(s)} step" for s, c in zip(_ww["step_key"], _ww["cqa"])]
@@ -367,9 +368,16 @@ n_ver = len(_vt)
 n_ver_met = int((_vt["met"] == 1).sum())
 n_ver_wsup = int(((_vt["met"] == 1) & (_vt["widening_supported"] == 1)).sum())
 n_ver_nt = int(ver["met"].isna().sum())
-assert n_ver - n_ver_met == 1                                 # "One assumption was not confirmed"
-_vx = ver[ver["met"] == 0].iloc[0]
-assert (_vx["step_key"], _vx["cqa"]) == ("cex", "aggregates_hmw")
+n_ver_nm = n_ver - n_ver_met
+assert n_ver_nm == 2                                   # "Two assumptions were not confirmed, both for aggregate"
+_vxa = ver[ver["met"] == 0]
+assert list(zip(_vxa["step_key"], _vxa["cqa"])) == [("cex", "aggregates_hmw"), ("ufdf", "aggregates_hmw")]
+_vx, _vu = _vxa.iloc[0], _vxa.iloc[1]
+# every verification prediction is converted to manufacturing scale with the step's offset (CA1 rule 2)
+assert bool(ver.loc[ver["met"].notna() & ver["model_adequate"].astype(str).eq("True"), "offset"].notna().all())
+# UF/DF: PCMP-001 assumed no change in aggregate after cation exchange; UF/DF raises it within its NOR
+ufdf_agg_assumed, ufdf_agg_bound = float(_vu["assumed"]), float(_vu["predicted_nor_bound95"])
+assert ufdf_agg_assumed == 0 and ufdf_agg_bound > 0
 cex_agg_assumed, cex_agg_nor, cex_agg_edge = _vx["assumed"], _vx["predicted_nor"], _vx["observed_edge"]
 # a changed criterion moves only on the data of a step downstream of the one it judges
 for _, r in _iac[_is_t | _is_w].iterrows():
@@ -807,7 +815,7 @@ def _full(key, lbl_prefix):
     t = t[t["CQA"].str.startswith(lbl_prefix)]
     return all(_span(a) == _span(b) for a, b in zip(t["PAR (NOR)"], t["Char. range"]))
 tight_full = all(_full(k, "Aggregates") for k in _tt["step_key"])
-tight_phrase = ("Against the tightened criteria, every aggregate proven acceptable range at these two steps "
+tight_phrase = ("Against the tightened criteria, every aggregate proven acceptable range at these steps "
                 "still spans the whole characterization range, so the tightening moved no range."
                 if tight_full else
                 "Against the tightened criteria, at least one aggregate proven acceptable range at these steps "
@@ -818,6 +826,20 @@ _both = _iac[_is_t & _is_w]
 n_both = len(_both)
 both_txt = " and ".join(f"{aname(c)} at the {sname(s)} step" for s, c in zip(_both["step_key"], _both["cqa"]))
 assert n_both == 1 and _both.iloc[0]["step_key"] == "bioreactor" and _both.iloc[0]["cqa"] == "aggregates_hmw"
+# "two downstream steps tightened it and another widened it": cation exchange and UF/DF, low-pH
+_bdn = ver[(ver["step"] > 3) & (ver["cqa"] == "aggregates_hmw")]
+n_both_t = int((_bdn["met"] == 0).sum())
+assert n_both_t == 2 and int((_bdn["widening_supported"] == 1).sum()) == 1
+# the cation exchange aggregate criterion: a priori the drug-substance criterion, tightened on the UF/DF
+# bound alone (cation exchange is the last step with a fold for aggregate)
+_cxa = _iac[(_iac["step_key"] == "cex") & (_iac["cqa"] == "aggregates_hmw")].iloc[0]
+assert float(_cxa["iac_high_apriori"]) == ds_agg and float(_cxa["downstream_fold"]) == 1.0
+assert abs(float(_cxa["downstream_added"]) - ufdf_agg_bound) < 1e-3 and str(_cxa["tightened"]) == "True"
+# the UF/DF univariate study the UF/DF bound comes from (PCR-010 records it as a discrepancy from its plan)
+_u2 = [d["studies"] for d in PLAN_DISCREPANCIES.get("PCR-010", []) if d.get("studies")]
+assert len(_u2) == 1 and len(_u2[0]) == 1
+ufdf_uni2_id = _u2[0][0]
+assert ufdf_uni2_id in str(_vu["source"])
 _vagg = ver[(ver["step_key"] == "viral_inactivation") & (ver["cqa"] == "aggregates_hmw")].iloc[0]
 assert bool(_vagg["widening_supported"])
 vi_agg_assumed, vi_agg_bound = _vagg["assumed"], _vagg["predicted_nor_bound95"]
@@ -1004,28 +1026,19 @@ def _vrng(lo, hi, unit): return f"{lo:g}–{hi:g}" + ("" if unit == "pH" else f"
 # "the process is unchanged except for NORs at these steps and set-points at these" (§6.6)
 _nor_steps = [k for k in CFG.train_order if any(c["nor"] for c in _nor_changes(k))]
 _sp_steps = [k for k in CFG.train_order if any(c["sp"] for c in _nor_changes(k))]
-assert _nor_steps == ["protein_a", "viral_inactivation"] and _sp_steps == ["viral_inactivation"]
-proc_nor_steps, proc_sp_steps = _and([sname(k) for k in _nor_steps]), _and([sname(k) for k in _sp_steps])
+# NORs come from production and an offset never narrows one (owner, 2026-10-11): only low-pH viral
+# inactivation changes its NORs and set-points
+assert _nor_steps == ["viral_inactivation"] and _sp_steps == ["viral_inactivation"]
+proc_nor_steps = _and([sname(k) for k in _nor_steps])
 
-# Protein A (PCR-005 Version 2.0): the protein load NOR narrowed, set-point unchanged
-_pa_ch = _nor_changes("protein_a")
-assert len(_pa_ch) == 1 and _pa_ch[0]["nor"].startswith("narrowed") and not _pa_ch[0]["sp"]
-_pl_ = _pa_ch[0]
-pa_nor_summary = f"narrows the NOR of {_pl_['name']}"
-pa_nor_txt = (f"{pa_nor_summary} {_pl_['nor'][len('narrowed '):]}, from "
-              f"{_vrng(*_pl_['old'], _pl_['unit'])} to {_vrng(*_pl_['new'], _pl_['unit'])}")
-# over the narrowed NOR the scale-down model is qualified for pool host cell protein on all runs, and it
-# would not be on the planned runs alone: the further runs made the qualification possible
-_hqf = {s: D.offset_qualification("protein_a", "pool_hcp_ng_mg", studies=ids) for s, ids in _sdm_sets.items()}
-assert _hqf["all"]["qualified"] and not _hqf["planned"]["qualified"] and not _hqf["planned"]["met_lo"]
-with D.offset_at("lo"):
-    pa_upl_force_lo = D.nor_prediction_limit("protein_a", "pool_hcp_ng_mg")
-with D.offset_at("lo", _sdm_planned_ids):
-    pa_upl_force_lo_plan = D.nor_prediction_limit("protein_a", "pool_hcp_ng_mg")
-assert pa_upl_force_lo <= pa_hcp_v2 < pa_upl_force_lo_plan
-# leached Protein A stays qualified over the narrowed NOR, on either set of runs
-assert all(D.offset_qualification("protein_a", "leached_protein_a_ppm", studies=ids)["qualified"]
-           for ids in _sdm_sets.values())
+# Protein A (PCR-005 Version 2.0): the NOR in force is the NOR as characterized (owner, 2026-10-11:
+# NORs come from production, an offset never narrows one). Over it the scale-down model is not qualified
+# for pool host cell protein (asserted above, on either set of runs), so PCR-005 keeps the NOR and flags
+# it for discussion with manufacturing. The further runs narrowed the interval but did not change that.
+assert not _nor_changes("protein_a")
+assert not _hq["all"]["qualified"] and not _hq["planned"]["qualified"]
+# no NOR of the step lies outside its corrected PAR (D.nor_flags), so the flag is the qualification alone
+assert D.nor_flags("protein_a").empty
 
 # low-pH viral inactivation (PCR-006 Version 2.0). The investigation states the direction of each change
 # and no value: PCR-006 revised the hold time after this investigation closed, and gives the values
@@ -1131,7 +1144,7 @@ The root cause is that the Process Characterization Master Plan PCMP-001 Version
 
 Under corrective action CA1, the investigation defined intermediate acceptance criteria by a rule written before any report applied it. Each criterion is carried back from the drug-substance criterion through the platform worst case of each downstream step, with no margin. This campaign's data can move a criterion only through the one-sided `{python} VB` % prediction bound of a single batch of a downstream step, at the least favourable combination within its normal operating range (NOR). The same rule set fixes how a scale-down model whose mean differs from manufacturing scale is qualified, and that viral clearance is judged at the least favourable combination of the other parameters. Corrective action CA1 issues all of this in PCMP-001 Version 2.0. Corrective actions CA2 and CA3 reissue the step plans and every other document of the package against it, with fragments measured by nrCE-SDS. They are due on `{python} ca_open_due` and were open at closure. Preventive action PA1 revises SOP-1002 so that a characterization protocol cannot be approved without its criteria (§7).
 
-Of the `{python} n_par_v1` proven acceptable ranges that Version 1.0 reported with the other parameters varying within their NORs, `{python} par_counts_phrase`. In the re-analysis, `{python} nm_list` do not meet their Version 2.0 criterion across the whole NOR, although each meets it with every parameter at its set-point (§6.3). At Version 2.0, the Protein A report PCR-005 `{python} pa_nor_summary`, because over the NOR as it was characterized the scale-down model is not qualified for pool host cell protein (§2). The low-pH viral inactivation report PCR-006 `{python} vi_nor_summary`, because XMuLV clearance does not meet its claim at the least favourable combination of the NOR as it was characterized (§6.3). The lowest capability index of the drug substance is now that of acidic variants, at `{python} f2(v2_min_cpk)`, against its lower limit. No GMP batch was dispositioned on these documents, and there is no product impact (§6.6).
+Of the `{python} n_par_v1` proven acceptable ranges that Version 1.0 reported with the other parameters varying within their NORs, `{python} par_counts_phrase`. In the re-analysis, `{python} nm_list` do not meet their Version 2.0 criterion across the whole NOR, although each meets it with every parameter at its set-point (§6.3). At Version 2.0, the Protein A report PCR-005 keeps the NOR in force and flags it for discussion with manufacturing, because over that NOR the scale-down model is not qualified for pool host cell protein (§2). The low-pH viral inactivation report PCR-006 `{python} vi_nor_summary`, because XMuLV clearance does not meet its claim at the least favourable combination of the NOR as it was characterized (§6.3). The lowest capability index of the drug substance is now that of acidic variants, at `{python} f2(v2_min_cpk)`, against its lower limit. No GMP batch was dispositioned on these documents, and there is no product impact (§6.6).
 
 # Event description
 
@@ -1161,11 +1174,11 @@ print(": Documents in the scope of the investigation, all at Version 1.0 when it
 
 Three things are outside the scope. The computation of a proven acceptable range itself, which is how the other parameters are held or varied while one parameter is scanned, is not reviewed here. The experiments themselves are not reviewed either. Finally, the study events recorded in the step reports keep the outcome those reports give them.
 
-The re-analysis in §6 uses the same designed experiments and the same results as Version 1.0, with two additions. The first is the fragment results by nrCE-SDS of the designed experiments. They were measured before Version 1.0 was approved (§4.7), `{python} ce_where_txt`, but Version 1.0 did not report them. The second is `{python} n_sdm_sup` further set-point runs of the Protein A scale-down model (study `{python} sdm2_id`), made from `{python} sdm2_start` to `{python} sdm2_end`, during the investigation.
+The re-analysis in §6 uses the same designed experiments and the same results as Version 1.0, with three additions. The first is the fragment results by nrCE-SDS of the designed experiments. They were measured before Version 1.0 was approved (§4.7), `{python} ce_where_txt`, but Version 1.0 did not report them. The second is `{python} n_sdm_sup` further set-point runs of the Protein A scale-down model (study `{python} sdm2_id`), made from `{python} sdm2_start` to `{python} sdm2_end`, during the investigation. The third is the UF/DF univariate study `{python} ufdf_uni2_id`. Only its aggregate results enter the re-analysis, in the verification of the platform worst cases (§6.2).
 
 The Protein A plan, PCP-005, had planned `{python} n_sdm_planned` set-point runs for the qualification of that model (study `{python} sdm1_id`). The further runs were made during the re-analysis, to narrow the confidence interval of the offset of the model for pool host cell protein. Of the Protein A pool attributes, host cell protein comes nearest its criterion of `{python} big(pa_hcp_v2)` ng/mg. On the model that PCR-005 Version 2.0 uses, its upper 95 % prediction limit over the NOR as characterized is `{python} f"{pa_hcp_use:.0f}"` % of the criterion, and it rises with `{python} pa_hcp_drivers`. That model is fitted on the log scale, so the offset is a difference of mean logarithms. It is stated as a ratio, the geometric mean of the scale-down runs divided by that of the manufacturing-scale batches. On the planned runs alone, the ratio is `{python} pa_r_plan`, with a `{python} OFF_CI` % confidence interval of `{python} pa_r_plan_lo` to `{python} pa_r_plan_hi`. On all runs it is `{python} pa_r_all`, with an interval of `{python} pa_r_all_lo` to `{python} pa_r_all_hi`. The plan did not foresee the further runs, so the Protein A report PCR-005 Version 2.0 records them as `{python} pd_id`, a discrepancy from the plan. They are not a deviation, because no approved procedure or GMP requirement was departed from.
 
-A scale-down model is qualified for an output when the conclusion against its criterion over the NOR is the same with the offset at either end of that interval (§6.1). Over the NOR as characterized, the model is not qualified for pool host cell protein, on the planned runs alone or on all runs. With the ratio at the low end of its interval, which raises the prediction at manufacturing scale, the upper prediction limit over that NOR is `{python} big(pa_upl_char_lo)` ng/mg on all runs, above the criterion. The Protein A report PCR-005 Version 2.0 therefore `{python} pa_nor_txt`. Over the narrowed NOR, that limit is `{python} big(pa_upl_force_lo)` ng/mg on all runs, and the model is qualified. On the planned runs alone it is `{python} big(pa_upl_force_lo_plan)` ng/mg, and the model would not be qualified. The further runs therefore made the qualification possible. The decision to make them was taken after the result on the planned runs was known. The qualification therefore rests on runs added after a result was seen, and this is a limitation of it. The qualification rule and the criterion were not changed, and only the number of runs grew. For `{python} lpa_oname` the model is qualified on either set of runs.
+A scale-down model is qualified for an output when the conclusion against its criterion over the NOR is the same with the offset at either end of that interval (§6.1). Over the NOR, the model is not qualified for pool host cell protein, on the planned runs alone or on all runs. The conclusion holds with the ratio at its estimate. With the ratio at the low end of its interval, which raises the prediction at manufacturing scale, the upper prediction limit over the NOR is `{python} big(pa_upl_char_lo)` ng/mg on all runs, above the criterion. NORs come from production, and an offset does not narrow them. The Protein A report PCR-005 Version 2.0 therefore keeps the NOR in force, states that the model is not qualified for pool host cell protein over it, and flags the NOR for discussion with manufacturing. The further runs narrowed the interval but did not change the conclusion. The decision to make them was taken after the result on the planned runs was known. The qualification rule and the criterion were not changed, and only the number of runs grew. For `{python} lpa_oname` the model is qualified on either set of runs.
 
 # Background
 
@@ -1324,7 +1337,7 @@ Corrective action CA1 also defined three rules that the re-analysis applies.
 2. A scale-down model is qualified for an output when its offset (the mean of the scale-down set-point runs less the mean of the manufacturing-scale batches) is known precisely enough that the conclusion over the NOR is the same at either end of the `{python} OFF_CI` % confidence interval of the offset. A qualified model may differ in mean from manufacturing scale. Every Version 2.0 judgement subtracts the offset, so results are stated at manufacturing scale.
 3. A quality attribute is judged per batch, on the 95 % prediction interval of a single batch. Viral clearance is judged on the mean predicted log reduction factor (LRF) at the least favourable combination of NOR low, set-point and NOR high of the other parameters.
 
-@tbl-iac gives the `{python} n_iac` criteria with their derivation. Of these, `{python} n_iac_ds` are the drug-substance criterion applied directly, `{python} n_iac_back` are carried back through the downstream steps, and `{python} n_iac_claim` are platform viral clearance claims. When the platform worst cases were verified (§6.2), `{python} n_tight` of the back-calculated criteria were tightened and `{python} n_wid` were widened. The criterion for `{python} both_txt` is counted in both, because one downstream step tightened it and another widened it.
+@tbl-iac gives the `{python} n_iac` criteria with their derivation. Of these, `{python} n_iac_ds` are the drug-substance criterion applied directly, `{python} n_iac_back` are carried back through the downstream steps, and `{python} n_iac_claim` are platform viral clearance claims. When the platform worst cases were verified (§6.2), `{python} n_tight` of the back-calculated criteria were tightened and `{python} n_wid` were widened. The criterion for `{python} both_txt` is counted in both, because `{python} nw(n_both_t)` downstream steps tightened it and another widened it.
 
 ```{python}
 #| output: asis
@@ -1335,7 +1348,7 @@ This campaign's data enter the Version 2.0 criteria, as they entered the Version
 
 ## Verification of the platform worst cases
 
-The platform worst cases are assumptions about A-Mab. Each was checked against the data of the downstream step it describes, under the first rule of CA1 in §6.1. The value observed at the edges of the characterization range is shown for information. @tbl-iac-verification gives the result. Of the `{python} n_ver` assumptions that could be tested, `{python} n_ver_met` were confirmed, because the prediction within the NOR was no worse than the platform value. For `{python} n_ver_wsup` of them the single-batch bound was also better than the platform value, on a model that meets the first three adequacy criteria of PCMP-001 §7.2, and the criteria upstream were recalculated with the bound. `{python} vin_sentence` For the other `{python} nw(n_ver_kept)` the single-batch bound was not better than the platform value, so the platform value stands.
+The platform worst cases are assumptions about A-Mab. Each was checked against the data of the downstream step it describes, under the first rule of CA1 in §6.1. Each prediction of the downstream step is converted to manufacturing scale with the offset of its scale-down model before the fold or the increase is computed, under the second rule of CA1. The value observed at the edges of the characterization range is shown for information. @tbl-iac-verification gives the result. Of the `{python} n_ver` assumptions that could be tested, `{python} n_ver_met` were confirmed, because the prediction within the NOR was no worse than the platform value. For `{python} n_ver_wsup` of them the single-batch bound was also better than the platform value, on a model that meets the first three adequacy criteria of PCMP-001 §7.2, and the criteria upstream were recalculated with the bound. `{python} vin_sentence` For the other `{python} nw(n_ver_kept)` the single-batch bound was not better than the platform value, so the platform value stands.
 
 ```{python}
 #| output: asis
@@ -1344,7 +1357,7 @@ T.worst_case_verification().show()
 
 At the edges of the characterization range, cation exchange cleared host cell protein `{python} f1(cex_hcp_edge)`-fold, short of the platform worst case of `{python} f1(cex_hcp_assumed)`-fold. Within the NOR, the lowest clearance the model predicts is `{python} f1(cex_hcp_nor)`-fold, and the single-batch bound is `{python} f1(cex_hcp_bound)`-fold. The edges of the characterization range lie outside the NOR, so the edge value does not decide the criterion. The prediction within the NOR confirms the platform value. The single-batch bound is below it, so the platform value of `{python} f1(cex_hcp_assumed)`-fold stands for cation exchange. The verification used the models that `{python} INV2["id"]` corrective action CA3 selects for each output (§2). At anion exchange, the single-batch bound for host cell protein is `{python} T.num(aex_hcp_bound)`-fold, which is better than the platform value of `{python} T.num(aex_hcp_assumed)`-fold. The anion exchange model passes the adequacy tests, so this bound replaced the platform value. The anion exchange bound widened the cation exchange criterion for host cell protein from `{python} T.num(cex_hcp_apriori)` to `{python} T.num(cex_hcp_v2)` ng/mg. Carried back through the platform value at cation exchange and this bound at anion exchange, the Protein A criterion for host cell protein was widened from `{python} big(pa_hcp_apriori)` to `{python} big(pa_hcp_v2)` ng/mg. The Protein A criterion is also wider than the Version 1.0 limit of `{python} big(pa_hcp_crit)` ng/mg, which was never an approved criterion (finding F1). In all, `{python} n_wid` criteria were widened, for `{python} wid_list`. @tbl-par-change in §6.3 gives the ranges that widened as a result.
 
-One assumption was not confirmed. The platform worst case for aggregate at cation exchange is a fold clearance of `{python} f1(cex_agg_assumed)`. Within its NOR, the lowest fold clearance the response surface model of this campaign predicts is `{python} f2(cex_agg_nor)`, and the single-batch bound is `{python} f2(cex_agg_bound)`. The aggregate criteria upstream of cation exchange were recalculated with the bound, and the `{python} n_tight` aggregate criteria at the `{python} tight_steps` steps were tightened. At the bioreactor the same criterion was also widened, because the single-batch bound of the aggregate increase at low-pH viral inactivation, `{python} f2(vi_agg_bound)` percentage points, is smaller than the platform value of `{python} f2(vi_agg_assumed)`. The platform value is an increase over a hold of `{python} plat_hold_min` min. The A-Mab value is an increase within the NOR as characterized, where the hold lasts at most `{python} f"{amab_hold_max:g}"` min. `{python} vi_why_text` The criterion is still right, because routine manufacture does not hold longer than the NOR. The acidic-variant increase at low-pH viral inactivation, `{python} f2(vi_acid_bound)` points, is also below its platform value of `{python} f2(vi_acid_assumed)`, but its model fits exactly, so the bioreactor criterion for acidic variants stays at its a priori value. `{python} tight_phrase`
+`{python} nw(n_ver_nm).capitalize()` assumptions were not confirmed, both for aggregate. The platform worst case for aggregate at cation exchange is a fold clearance of `{python} f1(cex_agg_assumed)`. Within its NOR, the lowest fold clearance the response surface model of this campaign predicts is `{python} f2(cex_agg_nor)`, and the single-batch bound is `{python} f2(cex_agg_bound)`. PCMP-001 assumed that no step after cation exchange changes aggregate. UF/DF raises it within its NOR, and the single-batch bound of the increase is `{python} f2(ufdf_agg_bound)` percentage points. The aggregate criteria upstream were recalculated with both bounds, and the `{python} n_tight` aggregate criteria at the `{python} tight_steps` steps were tightened. The cation exchange criterion moved on the UF/DF bound alone, from the drug-substance criterion of `{python} f"{ds_agg:g}"` % to `{python} f2(cex_ds_agg_v2)` %. At the bioreactor the aggregate criterion was also widened, because the single-batch bound of the aggregate increase at low-pH viral inactivation, `{python} f2(vi_agg_bound)` percentage points, is smaller than the platform value of `{python} f2(vi_agg_assumed)`. The platform value is an increase over a hold of `{python} plat_hold_min` min. The A-Mab value is an increase within the NOR as characterized, where the hold lasts at most `{python} f"{amab_hold_max:g}"` min. `{python} vi_why_text` The criterion is still right, because routine manufacture does not hold longer than the NOR. The acidic-variant increase at low-pH viral inactivation, `{python} f2(vi_acid_bound)` points, is also below its platform value of `{python} f2(vi_acid_assumed)`, but its model fits exactly, so the bioreactor criterion for acidic variants stays at its a priori value. `{python} tight_phrase`
 
 The criterion of `{python} T.num(lpa_crit)` ppm for leached Protein A at the Protein A step rests on two platform worst cases, for cation exchange and anion exchange, that no response of this campaign could test (not a response in @tbl-iac-verification). Together they assume a clearance of `{python} f1(lpa_assumed)`-fold. Judged per batch at manufacturing scale, the upper 95 % prediction limit for the Protein A pool is at most `{python} f2(lpa_hi)` ppm over the NOR (@tbl-results). It meets the step criterion. For a batch at that level to meet the drug-substance criterion of `{python} f"{ds_lpa:g}"` ppm, the downstream steps need to clear only `{python} f2(lpa_need)`-fold. The untested platform worst cases therefore carry little of the weight of this criterion.
 
@@ -1366,7 +1379,7 @@ T.frame(par_show,
 
 Of the `{python} n_par_changed` ranges that changed, `{python} n_par_wider` widened. Of these, `{python} brx_wider` are at the bioreactor. There, `{python} brx_wider_glycan` glycan ranges widened because the capability alert limits of Version 1.0 (finding F3) gave way to the drug-substance criteria. A further `{python} nw(brx_wider_agg)` aggregate ranges widened because the Version 1.0 aggregate limit, divided by a safety factor (finding F2), gave way to a back-calculated criterion with no margin. At the other steps, `{python} n_wider_other_r1` of the `{python} n_wider_other` wider ranges belong to criteria that Version 1.0 had divided by a safety factor. `{python} wider_rest_phrase`
 
-At cation exchange, the Version 1.0 aggregate criterion of `{python} T.num(cex_agg_crit)` % HMW was the drug-substance criterion divided by a safety factor of `{python} f1(cex_agg_margin)`. Against it, the proven acceptable range for protein load, with the other parameters varying within their NORs, was `{python} cex_load_v1` g/L resin. That range did not reach the upper end of the protein load NOR at `{python} f"{cex_load_nor[1]:g}"` g/L resin. Against the Version 2.0 criterion of `{python} f"{cex_ds_agg_v2:g}"` %, the range is `{python} cex_load_v2` g/L resin, and it covers the upper end of the NOR. At the bioreactor, the range for dissolved CO2 judged on galactosylation, computed the same way, was `{python} brx_gal_v1` mmHg at Version 1.0. It did not reach the lower end of the NOR at `{python} f"{brx_co2_nor[0]:g}"` mmHg. Judged against the drug-substance criterion, it is `{python} brx_gal_v2` mmHg.
+At cation exchange, the Version 1.0 aggregate criterion of `{python} T.num(cex_agg_crit)` % HMW was the drug-substance criterion divided by a safety factor of `{python} f1(cex_agg_margin)`. Against it, the proven acceptable range for protein load, with the other parameters varying within their NORs, was `{python} cex_load_v1` g/L resin. That range did not reach the upper end of the protein load NOR at `{python} f"{cex_load_nor[1]:g}"` g/L resin. Against the Version 2.0 criterion of `{python} f2(cex_ds_agg_v2)` %, the range is `{python} cex_load_v2` g/L resin, and it covers the upper end of the NOR. At the bioreactor, the range for dissolved CO2 judged on galactosylation, computed the same way, was `{python} brx_gal_v1` mmHg at Version 1.0. It did not reach the lower end of the NOR at `{python} f"{brx_co2_nor[0]:g}"` mmHg. Judged against the drug-substance criterion, it is `{python} brx_gal_v2` mmHg.
 
 The ranges that did not widen have three causes. At the bioreactor, the only Version 2.0 limit stricter than its Version 1.0 counterpart is the lower limit for acidic variants, which Version 1.0 did not apply (finding F4, §4.5). As a result, `{python} nw(brx_acid_changed)` of the acidic variant ranges there changed. Of these, `{python} brx_acid_phrase`. Judged against the upper limit alone, every one of them would span the whole characterization range, so the lower limit of `{python} f"{ds_acid_lo:g}"` % now sets them. Acidic variants fall as `{python} acid_unc_name` rises, in this campaign's response surface model and in the response surface estimates of the published A-Mab case study [@amab2009, Table 3.16]. For `{python} acid_unc_name`, the range is therefore `{python} acid_unc_par` `{python} acid_unc_unit`, and it no longer reaches the upper end of the NOR at `{python} f"{acid_unc_nor_hi:g}"` `{python} acid_unc_unit`.
 
@@ -1410,7 +1423,7 @@ In the re-analysis, fragments are judged on nrCE-SDS results only, against the f
 
 ## Product impact
 
-No GMP batch of A-Mab was manufactured or dispositioned on the basis of these documents, and Version 1.0 was not used in a regulatory submission. The findings concern how the characterization data were judged. The experiments and the drug-substance criteria that existed in Version 1.0 are unchanged. The process is unchanged except for NORs at the `{python} proc_nor_steps` steps and set-points at `{python} proc_sp_steps`, which PCR-005 and PCR-006 Version 2.0 change (§2, §6.3). Version 2.0 adds one drug-substance criterion, for fragments, at `{python} T.crit(0, ds_frag, "upper")` %. There is no product impact.
+No GMP batch of A-Mab was manufactured or dispositioned on the basis of these documents, and Version 1.0 was not used in a regulatory submission. The findings concern how the characterization data were judged. The experiments and the drug-substance criteria that existed in Version 1.0 are unchanged. The process is unchanged except for NORs and set-points at the `{python} proc_nor_steps` step, which PCR-006 Version 2.0 changes (§6.3). Version 2.0 adds one drug-substance criterion, for fragments, at `{python} T.crit(0, ds_frag, "upper")` %. There is no product impact.
 
 # Corrective and preventive actions
 

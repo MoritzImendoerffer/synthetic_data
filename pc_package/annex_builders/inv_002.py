@@ -835,10 +835,10 @@ def build():
     sq("summary", """After selection, `{python} n_none_sel` outputs have no adequate model (`{python} none_sel_phrase`), and they are judged on their measured results.""")
     sq("summary", """Model selection was adopted before the investigation into acceptance criteria set after the data were seen (INV-001) closed on `{python} INV["closed"]`, so the intermediate acceptance criteria fixed at that closure rest on the selected models.""")
     sq("summary", """The verification of the platform worst cases widened `{python} n_w_in` of these criteria, for `{python} w_in_txt`, by replacing a platform worst case with the one-sided `{python} vb_pct` % prediction bound of a single A-Mab batch.""")
-    sq("summary", """The criterion for `{python} w_in_tt_txt` was also tightened by another downstream step, and it is narrower than its a priori value.""")
+    sq("summary", """The criterion for `{python} w_in_tt_txt` was also tightened by `{python} tt_by_txt`, and it is narrower than its a priori value.""")
     sq("summary", """Against the criteria that the same verification gives on the full quadratic models, model selection made `{python} n_wider` criteria wider, by `{python} pct_txt`, and kept the upper limit of acidic variants at the production bioreactor at its a priori value, which the full quadratic models would have widened""",
        """Against the criteria that the verification gives on the full quadratic models, model selection made `{python} n_wider` criteria wider, by `{python} pct_txt`, and kept the upper limit of acidic variants at the production bioreactor at its a priori value, which the full quadratic models would have widened.""")
-    sq("summary", "Against the criteria without model selection, however, the scale-down model would not be qualified for host cell protein in the Protein A pool and at cation exchange.")
+    sq("summary", "Against the criteria without model selection, however, the scale-down model would not be qualified for host cell protein at cation exchange.")
     sq("summary", "One is the lower prediction limit of acidic variants at the production bioreactor at the least favourable combination of the NOR",
        "This report gives the lower prediction limit of acidic variants at the production bioreactor at the least favourable combination of the NOR, from the model of all runs.")
     sq("summary", "The reports of the two augmented steps give the measured results of the new runs, the re-evaluation of every model and the ranges.")
@@ -1167,6 +1167,11 @@ def build():
     sq("sel_search", "It also worked on the raw scale only.",
        "The backward elimination of corrective action CA2 worked on the raw scale only.")
     sq("sel_verif", "The verification of these worst cases uses the same model selection, on the planned runs of each downstream step.")
+    sq("sel_verif", "Both are converted to manufacturing scale with the offset of the scale-down model of the step, then into a clearance fold or an increase, and the least favourable value over the combinations is the bound of the step.",
+       "The predicted value and the single-batch bound are converted to manufacturing scale with the offset of the scale-down model of the step, then into a clearance fold or an increase, and the least favourable value over the combinations is the bound of the step.")
+    sq("sel_verif", "UF/DF has no designed experiment.")
+    sq("sel_verif", """Its increase of aggregate, which PCMP-001 had assumed to be zero, is verified from the univariate study `{python} ufdf_uni_id`.""",
+       """The increase of aggregate at UF/DF, which PCMP-001 had assumed to be zero, is verified from the univariate study `{python} ufdf_uni_id`.""", ["UF/DF has no designed experiment."])
     sq("sel_verif", "Where the predicted value of a step is worse than the platform worst case, the bound replaces the platform value, and the criteria upstream of the step tighten.")
     sq("sel_verif", "and is not an exact fit, the bound replaces the platform value, and the criteria upstream widen.",
        "Where the single-batch bound is better than the platform worst case, on a selected model that meets the three tests and is not an exact fit, the bound replaces the platform value, and the criteria upstream widen.")
@@ -1305,14 +1310,23 @@ def build():
     sq("imp_crit", "Judged against the criteria that the full quadratic models would have given, no output changes its conclusion over the NOR in force.")
     sq("imp_crit", """For host cell protein in the Protein A pool, the lower end of the `{python} pname(HK[0], PF)` range moves from `{python} f"{par_in[PF][0]:.2f}"` to `{python} f"{par_wo[PF][0]:.2f}"`, and both lie below the NOR of `{python} f"{pf_nor[0]:g}"` to `{python} f"{pf_nor[1]:g}"`.""")
     sq("imp_crit", """A scale-down model is qualified for an output when its conclusion over the NOR is the same with the offset at either end of its `{python} f"{100 * ci_off:.0f}"` % confidence interval (PCMP-001 §7.1).""")
-    sq("imp_crit", "In both cases the low end of the offset interval decides.",
-       "For host cell protein in the Protein A pool and at cation exchange, the low end of the offset interval decides whether the scale-down model would be qualified against the criteria without model selection.",
-       ["Against the criteria without model selection, the scale-down model would not be qualified for host cell protein in the Protein A pool or at cation exchange."])
-    sq("imp_crit", """In the Protein A pool, with the offset at the low end of its interval, a ratio of `{python} f2(QD[HK]["off"]["lo"])`, the upper limit of the two-sided 95 % prediction interval of a single batch over the NOR, at manufacturing scale, is `{python} f"{QD[HK]['lim_lo']:,.0f}"` `{python} QD[HK]["unit"]`.""")
-    sq("imp_crit", """That is above the criterion of `{python} f"{QD[HK]['crit_wo']:,.0f}"` `{python} QD[HK]["unit"]` that the full quadratic models give, and below the criterion in force of `{python} f"{QD[HK]['crit_in']:,.0f}"` `{python} QD[HK]["unit"]`.""",
-       """In the Protein A pool that limit is above the criterion of `{python} f"{QD[HK]['crit_wo']:,.0f}"` `{python} QD[HK]["unit"]` that the full quadratic models give, and below the criterion in force of `{python} f"{QD[HK]['crit_in']:,.0f}"` `{python} QD[HK]["unit"]`.""")
-    sq("imp_crit", """At cation exchange, with the offset at `{python} f2(QD[CXH]["off"]["lo"])`, the same limit is `{python} f"{QD[CXH]['lim_lo']:,.0f}"` `{python} QD[CXH]["unit"]`, against `{python} f"{QD[CXH]['crit_wo']:,.0f}"` `{python} QD[CXH]["unit"]` without model selection and `{python} f"{QD[CXH]['crit_in']:,.0f}"` `{python} QD[CXH]["unit"]` in force.""")
-    sq("imp_crit", "These two qualifications rest on the criteria that model selection widened.")
+    sq("imp_crit", "Against the criteria without model selection, the scale-down model would not be qualified for host cell protein at cation exchange.")
+    sq("imp_crit", "The low end of the offset interval decides.",
+       "For host cell protein at cation exchange, the low end of the offset interval decides whether the scale-down model would be qualified against the criteria without model selection.",
+       ["Against the criteria without model selection, the scale-down model would not be qualified for host cell protein at cation exchange."])
+    sq("imp_crit", """With the offset at the low end of its interval, a ratio of `{python} f2(QD[CXH]["off"]["lo"])`, the upper limit of the two-sided 95 % prediction interval of a single batch over the NOR, at manufacturing scale, is `{python} f"{QD[CXH]['lim_lo']:,.0f}"` `{python} QD[CXH]["unit"]`.""",
+       """For host cell protein at cation exchange, with the offset at the low end of its interval, a ratio of `{python} f2(QD[CXH]["off"]["lo"])`, the upper limit of the two-sided 95 % prediction interval of a single batch over the NOR, at manufacturing scale, is `{python} f"{QD[CXH]['lim_lo']:,.0f}"` `{python} QD[CXH]["unit"]`.""",
+       ["Against the criteria without model selection, the scale-down model would not be qualified for host cell protein at cation exchange."])
+    sq("imp_crit", """That is above the criterion of `{python} f"{QD[CXH]['crit_wo']:,.0f}"` `{python} QD[CXH]["unit"]` that the full quadratic models give, and below the criterion in force of `{python} f"{QD[CXH]['crit_in']:,.0f}"` `{python} QD[CXH]["unit"]`.""",
+       """At cation exchange that limit is above the criterion of `{python} f"{QD[CXH]['crit_wo']:,.0f}"` `{python} QD[CXH]["unit"]` that the full quadratic models give, and below the criterion in force of `{python} f"{QD[CXH]['crit_in']:,.0f}"` `{python} QD[CXH]["unit"]`.""")
+    sq("imp_crit", "This qualification rests on the criteria that model selection widened.",
+       "The qualification of the scale-down model for host cell protein at cation exchange rests on the criteria that model selection widened.")
+    sq("imp_crit", "For host cell protein in the Protein A pool the scale-down model is not qualified over the NOR in force against either criterion.")
+    sq("imp_crit", """With the offset at the low end of its interval, the same limit is `{python} f"{hq_lim_lo:,.0f}"` `{python} hq_unit`, above the criterion in force of `{python} f"{hq_crit_in:,.0f}"` `{python} hq_unit` and above the `{python} f"{hq_crit_wo:,.0f}"` `{python} hq_unit` without model selection.""",
+       """In the Protein A pool, with the offset at the low end of its interval, the upper limit of the two-sided 95 % prediction interval of a single batch over the NOR is `{python} f"{hq_lim_lo:,.0f}"` `{python} hq_unit`, above the criterion in force of `{python} f"{hq_crit_in:,.0f}"` `{python} hq_unit` and above the `{python} f"{hq_crit_wo:,.0f}"` `{python} hq_unit` without model selection.""",
+       ["For host cell protein in the Protein A pool the scale-down model is not qualified over the NOR in force against either criterion."])
+    sq("imp_crit", "NORs come from production, so the Protein A report (PCR-005) Version 2.0 keeps the NOR and flags it for discussion with manufacturing.",
+       "NORs come from production, so the Protein A report (PCR-005) Version 2.0 keeps the Protein A NOR and flags it for discussion with manufacturing.")
     st("imp_crit", q("""Host cell protein and aggregates are attributes of the drug substance specification, with limits of `{python} join_and(f"{v:g} {u} {CQA_PL[c]}" for c, (v, u) in ds_by_cqa.items() if c in risk_cqas)`."""), [ref("imp_crit", q_risk)])
     sq("imp_crit", "A step output at its criterion still gives a drug substance within its limit, as long as each downstream step clears at least the value that the derivation uses.")
     sq("imp_crit", """For host cell protein these are a fold of `{python} p_cexh` at cation exchange, the platform worst case, and `{python} b_aex_s` at anion exchange, its single-batch bound.""")

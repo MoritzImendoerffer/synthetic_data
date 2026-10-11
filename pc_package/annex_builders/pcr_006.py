@@ -325,6 +325,10 @@ def build():  # noqa: C901 - one document, one builder, in the order of the repo
 
     def md_rows(md, label):
         rows_ = G.md_string_rows(md)
+        # a markdown table is markdown: pandoc renders its straight apostrophes typographic ("report’s")
+        for k_, v_ in list(rows_.items()):
+            if normalize(v_) not in text and normalize(_smart(v_)) in text:
+                rows_[k_] = _smart(v_)
         cap = ns_caps[label]
         if normalize(f"{cap} {rows_.header}") not in text:
             raise ValueError(f"{DOC}: the caption of {label} no longer reads {cap!r}")
@@ -939,9 +943,12 @@ def build():  # noqa: C901 - one document, one builder, in the order of the repo
     relation("references", "PCR-005", "The Protein A step that supplies the eluate is characterized under PCR-005.",
              "operation", q("Each run starts from Protein A eluate produced at the set-points of the Protein A step, "
                             "which is characterized under PCR-005."))
-    relation("references", "PCR-007", "The verification that tightened the aggregate criterion of this step is in "
-             "PCR-007, the characterization report of cation exchange.", "iac",
-             q("That analysis is in PCR-007, the characterization report of cation exchange."))
+    q_cex_ufdf = q("Those analyses are in PCR-007 and PCR-010, the characterization reports of cation exchange and of "
+                   "UF/DF.")
+    relation("references", "PCR-007", "The cation exchange verification that tightened the aggregate criterion of "
+             "this step is in PCR-007, the characterization report of cation exchange.", "iac", q_cex_ufdf)
+    relation("references", "PCR-010", "The UF/DF rise in aggregate that tightened the aggregate criterion of this step "
+             "is in PCR-010, the characterization report of UF/DF.", "iac", q_cex_ufdf)
     relation("references", "PCR-003", "PCR-003 argues the widened aggregate criterion of the production bioreactor "
              "output and its risk.", "verif", q("PCR-003 argues the widened criterion and its risk for the bioreactor."))
     relation("references", "PCR-008", "Anion exchange (PCR-008) is one of the three claims that meet the cumulative "
@@ -1528,8 +1535,10 @@ def build():  # noqa: C901 - one document, one builder, in the order of the repo
                           "(`{python} INV[\"id\"]` finding 1).")])
     sq("changes", "The Version 2.0 aggregate criterion of `{python} fx(crit_agg)` % HMW is wider than the Version 1.0 "
                   "limit of `{python} fx(agg_v1)` % and stricter than its own a priori value of "
-                  "`{python} fx(agg_apriori, 1)` %, because cation exchange cleared less aggregate within its NOR than "
-                  "the platform worst case assumed, so the verification there tightened the criterion (@sec-iac).")
+                  "`{python} fx(agg_apriori, 1)` %, because the verification of two later steps tightened it.",
+       extra=[("changes", "Cation exchange cleared less aggregate within its NOR than the platform worst case assumed, "
+                          "and ultrafiltration and diafiltration (UF/DF) raises aggregate within its NOR, where "
+                          "PCMP-001 assumed no change (@sec-iac).")])
     sq("changes", "The XMuLV criterion of `{python} fx(claim)` log~10~ is the platform claim of the step and is "
                   "stricter than the Version 1.0 value of `{python} fx(xmulv_v1)` log~10~, which was the cumulative "
                   "requirement minus the nominal clearance of the other steps in this campaign.")
@@ -1773,8 +1782,15 @@ def build():  # noqa: C901 - one document, one builder, in the order of the repo
     sq("iac", "No margin is applied.")
     sq("iac", "Within its NOR, cation exchange cleared less aggregate than its platform worst case, so the one-sided "
               "`{python} VB` % prediction bound of a single cation exchange batch, a clearance factor of "
-              "`{python} fx(cex_fold_agg)`, replaced the platform value, and the a priori criterion of "
-              "`{python} fx(agg_apriori, 1)` % tightened to the value in @tbl-iac.")
+              "`{python} fx(cex_fold_agg)`, replaced the platform value.")
+    sq("iac", "UF/DF raises it within its NOR, so the one-sided `{python} VB` % prediction bound of a single UF/DF "
+              "batch, a rise of `{python} fx(ufdf_agg, 3)` percentage points, is taken off the drug substance criterion.",
+       "PCMP-001 assumed that no step after cation exchange changes aggregate. UF/DF raises it within its NOR, so the "
+       "one-sided `{python} VB` % prediction bound of a single UF/DF batch, a rise of `{python} fx(ufdf_agg, 3)` "
+       "percentage points, is taken off the drug substance criterion before it is carried back through cation exchange.",
+       extra=[("iac", "PCMP-001 assumed that no step after cation exchange changes aggregate.")])
+    sq("iac", "Together the two changes tightened the a priori criterion of `{python} fx(agg_apriori, 1)` % to the value "
+              "in @tbl-iac.")
     sq("iac", "The criteria were derived after the studies ran, in PCMP-001 Version 2.0.",
        extra=[("iac", "That is acceptable because the derivation uses no result of the studies it judges.")])
     sq("criteria", "Every output meets its criterion.")
@@ -1973,11 +1989,13 @@ def build():  # noqa: C901 - one document, one builder, in the order of the repo
                 "this one were recalculated with it.")
     sq("verif", "The criterion affected is the aggregate criterion of the production bioreactor output.",
        "The criterion affected is the aggregate criterion of the production bioreactor output: a priori "
-       "`{python} fx(brx_apriori, 1)` % HMW, tightened by the cation exchange verification to `{python} fx(brx_tight)` "
+       "`{python} fx(brx_apriori, 1)` % HMW, tightened by the cation exchange verification and the UF/DF allowance to "
+       "`{python} fx(brx_tight)` "
        "% and widened by the bound of this step to `{python} fx(brx_final)` %.",
-       extra=[("verif", "The cation exchange verification tightened it to `{python} fx(brx_tight)` %, and the bound of "
-                        "this step then widened it to `{python} fx(brx_final)` %, which is stricter than the a priori "
-                        "value and wider than the value the cation exchange verification alone would give.")])
+       extra=[("verif", "The cation exchange verification and the UF/DF allowance tightened it to "
+                        "`{python} fx(brx_tight)` %, and the bound of this step then widened it to "
+                        "`{python} fx(brx_final)` %, which is stricter than the a priori value and wider than the value "
+                        "those two changes alone would give.")])
     sq("verif", "The platform values are increases over a hold of `{python} g(RNG[\"hold_time\"][1])` min, and the bound "
                 "of this step is the increase within a NOR whose longest hold is `{python} g(NORc[\"hold_time\"][1])` "
                 "min, so the replacement reflects the shorter hold of the A-Mab NOR and not a more stable product.")

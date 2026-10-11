@@ -364,3 +364,21 @@ Owner questions still open: the basis of the fragments criterion (≤ 2 %); temp
 its low end but carries no alarm (the owner listed pH, pCO2, osmolality); the Protein A KPP judgement with no threshold
 for "practically relevant"; low-pH acidic variants with zero scatter; the integrated model with no offset and no ivcc
 term; the DNA calibration; page bands.
+
+### Owner's answers of 2026-10-11 (morning)
+- Fragments criterion (≤ 2 %): the owner does not know its origin. Checked A-Mab: Table 2.2 (p.30) lists fragmentation
+  as a typical attribute with no limit, and Table 2.29 (p.56, basis for acceptable ranges) has no fragments row. So
+  PCMP-001 §3 stands ("the sponsor set the criterion ... when they joined the register at Version 2.0"); no document
+  may attribute 2 % to A-Mab. A basis (for example the sponsor's platform range of experience) is still open.
+- Culture temperature carries an alarm too (config `campaign.risk_mitigation...alarm_parameters`; 34.75 °C, low side).
+- TASK FOR LATER, in PCMR-001 (owner: "fits well into the PCMR"; reports are not touched): demonstrate that the
+  significant effects and differences of the campaign are not practically relevant. Owner's definition: practically
+  relevant means a significant effect or difference that has practical implications for product quality or process
+  consistency. The demonstration depends on the kind:
+  - a DoE effect: no impact within the expected variation (across the NOR and the PAR), against the criteria;
+  - a scale-down offset: the uncertainty around the difference does not change any conclusion (the offset rule's
+    two-ends test, and its size against the criterion);
+  - a significant univariate or OFAT difference (initial viable cell concentration, S-VI-OFAT acidic variants): its size
+    against the criterion over the NOR.
+  Use it for the classes resting on judgement (Protein A load flow rate and end of pool collect; the bioreactor
+  effect-size bands; the low-pH margins). Put it in the PCMR-001 brief when PCMR-001 is prepared.

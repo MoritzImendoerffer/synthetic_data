@@ -515,8 +515,10 @@ so no NOR or set-point decision moves a criterion or a Version 1.0 number.
   as the producer's (decision 6a): acidic variants have very low criticality, 18 % is a range-of-experience
   limit, release testing detects a low result, and the probability out of specification is quantified
   (`p_oos.csv`, whose simulation varies osmolality within its NOR). Mitigation: acidic variants monitored at
-  harvest, and alarm limits inside the NOR on the side that lowers acidic variants, for pH, pCO2 and now
-  osmolality.
+  harvest against an action limit, and alarm limits inside the NOR on the side that lowers acidic variants, for
+  pH, pCO2, osmolality and culture temperature (values by the rule of `D.acidic_mitigation`; owner, 2026-10-11). The
+  univariate effect of initial viable cell concentration at its NOR low is under the same acceptance, with acidic
+  variants at harvest trended against it in production, because it may be a false positive.
 
 **Harvest and UF/DF univariate studies (owner's decision 2026-10-08, option A).** Version 1.0
 described a univariate study of each of the two steps without a design (S-HAR-UNI, S-UFDF-UNI) and

@@ -689,8 +689,8 @@ def criteria_results(step: str, label: Optional[str] = None) -> CTable:
         notes.append(("e)", "Judged on the mean prediction at the least favourable combination, the lower "
                             "end of the range over the NOR."))
     return CTable(
-        header=[[C("Attribute", rs=2), C("Criterion", rs=2), C(("Mean predicted by the response-surface model, or measured results where it has none^c)^"
-                                                if any_meas else "Mean predicted by the response-surface model")
+        header=[[C("Attribute", rs=2), C("Criterion", rs=2), C(("Mean predicted by the\nresponse-surface model, or measured\nresults where it has none^c)^"
+                                                if any_meas else "Mean predicted by the\nresponse-surface model")
                                                + ("^b)^" if any_off else ""), cs=2), C("95 % limits of a\nsingle run over\nthe NOR" + ("^b)^" if any_off else ""), rs=2), C("Met across\nthe NOR^a)^", rs=2)],
                 ["At the set-point", "Range over the NOR"]],
         body=body, align="llrrrl", notes=notes, notes_per_row=True,
@@ -1480,13 +1480,13 @@ def model_reevaluation(step: str, label: Optional[str] = None) -> CTable:
     body = []
     for resp in [r for r in crit if r in D.rsm_data(step, "planned").columns]:
         p = D.fit(step, "rsm", resp, runs="planned", form="full")
-        row = [_attr_label(resp, step), str(p["n"]), f"{p['R2']:.2f}", f"{p['predR2']:.2f}",
-               f"{p['gap']:.2f}"]
+        row = [_attr_label(resp, step), str(p["n"]), _minus(f"{p['R2']:.2f}"), _minus(f"{p['predR2']:.2f}"),
+               _minus(f"{p['gap']:.2f}")]
         if aug:
             a = D.fit(step, "rsm", resp, runs="all", form="full")
             if a["block"]:
                 pb = float(a["model"].pvalues.get("block"))
-                row += [str(a["n"]), f"{a['R2']:.2f}", f"{a['predR2']:.2f}", f"{a['gap']:.2f}",
+                row += [str(a["n"]), _minus(f"{a['R2']:.2f}"), _minus(f"{a['predR2']:.2f}"), _minus(f"{a['gap']:.2f}"),
                         f"{a['p_lof']:.3f}", f"{pb:.3f}"]
             else:
                 row += [C("not measured in the augmentation^a)^", cs=6)]

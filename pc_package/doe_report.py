@@ -330,7 +330,9 @@ def anova_lof_df(key, resp):
     ss_res = r["sse"]
     df_res = int(m.df_resid)
     rows = [
-        ["Model", ss_model, df_model, ss_model / df_model, m.fvalue, m.f_pvalue],
+        # a model with no term has no model sum of squares to divide and no F-test (PCR-009 author)
+        ["Model", ss_model, df_model, ss_model / df_model if df_model else np.nan,
+         m.fvalue if df_model else np.nan, m.f_pvalue if df_model else np.nan],
         ["Residual", ss_res, df_res, ss_res / df_res if df_res else np.nan, np.nan, np.nan],
         ["  Lack of fit", r["ss_lof"], r["df_lof"],
          r["ss_lof"] / r["df_lof"] if r["df_lof"] else np.nan, r["F_lof"], r["p_lof"]],
@@ -1486,15 +1488,15 @@ def par_table(key):
         crit = (f"≥ {_fmt_crit(lo)}" if stype == "lower" else f"≤ {_fmt_crit(hi)}" if stype == "upper"
                 else f"{_fmt_crit(lo)}–{_fmt_crit(hi)}")
         status = fit(key, "rsm", resp)["status"]
-        basis = {"full": "model", "selected": "selected model", "none": "measured results"}[status]
+        basis = {"full": "model", "selected": "selected model", "none": "no adequate model"}[status]
         for factor in rsm_factors(key):
             p = CFG.unit_op(key).param(factor)
             rng_ = f"{p.prange[0]:g}–{p.prange[1]:g}"
             if status == "none":
-                # PCMP-001 §7.2: no adequate model sets a range. The designs span the range
-                # studied, so the range holds on the measured results when every one meets the
-                # criterion, and is not established otherwise.
-                par_s = par_n = rng_ if measured_met(key, resp) else "not established"
+                # PCMP-001 §7.2: no adequate model sets a range, so an output with no adequate model has
+                # no PAR; it is judged on its measured results (REPORT-LESSONS §1 rule 10; the PCR-006 and
+                # PCR-009 reviews found PARs printed for such outputs)
+                par_s = par_n = "n.a."
             else:
                 par_s = _par_str(par_at_design_centre(key, resp, factor)["par_nat"])
                 par_n = _par_str(par_nor_propagated(key, resp, factor)["par_nat"])

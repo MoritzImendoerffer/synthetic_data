@@ -127,3 +127,24 @@ Hand-back items (neither register / helpers):
   method register (as PCR-007 does) - a method the plan does not name;
 - T.criteria_results note a) attaches to column headers (builder); D.governing_factor uses screening effects;
   discrepancy_register renders over 4-5 pages in very narrow columns.
+
+## Final pass (2026-10-11, same author; readability review, feedback-PCR-008.final.md)
+Backup before the pass: scratchpad/pcr008/PCR-008_aex.DRAFT.pre-final.qmd. No config, helper or annex change.
+New setup asserts (block "final pass: words pinned to the data"): centre-point LRF SDs > assay repeatability;
+DEV-008-02 original > corrected set-point; VF_ALL (all-run worst-case fold, 5.34) differs from the planned-run 5.40 and
+matches VALL; all-run LOF p equals FIT p_lof; the PAR table prints the MVM load pH edge rounded up (7.23 vs 7.2225);
+protein load PAR = characterized range for every output; COMPLETE_MET (parts 1, 3, 4, 5 of PCP-008 §7 item 8);
+XMuLV interaction in the selected model and not in the other model within 2 AICc units.
+Resolved: Q5.2/5.3 (DEV-008-02 direction from values, "permissive" quoted, fixed-cut + block p = 0.526 only; §11 too),
+Q5.1 (PAR note states inward rounding; text gives unrounded and printed edges; §5.3.4 adds selected-model edges),
+Q5.5 (protein load: selected model carries it, the other model drops it, class named a conservative judgement; §5.3.2
+"which decides" removed), Q4 completion rule (stated and reported in §12; part 2 not shown by the record, PD-008-03),
+Q4 margins (load pH both sides, protein load 70/20 g/L, flow rate 50 cm/hr each side, viral at upper end only),
+Q5.4, Q5.6, Q5.7, Q5.9 (A-Mab Table 2.17 basis), Q5.10 (the 20 % not seen at release; nothing in the record covers
+them; Discussion qualified), Q5.11, Q1, Q2 (definitions in the executive summary; "within 2 AICc units"; absolute
+residuals; decision statistic; "governed" dropped; clearance factor "at least"), Q3/Q6 (glosses and restatements
+removed; PD paragraphs reduced to consequences, PD-008-09 paragraph dropped; §3.1 spiking sentence; SDs "larger"),
+Q7 (INV-001/INV-002 by finding, augmentation, DEV-008-03 run, AMD-001, F-test criterion, widening rule, §7.5).
+Q5.8 and Q5.12 left (0.0279 from unrounded means, rounds to 0.03).
+Gate: check_render --render exit 0; explicit pdf and docx renders OK; check_render exit 0. 81 pp, 778 sentences,
+15,524 words, 32 complex tables complete, no text below 7.9 pt. Tables looked at: 5.4, 5.8, 5.11, 7.3. DRAFT.txt refreshed.

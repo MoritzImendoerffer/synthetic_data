@@ -434,3 +434,17 @@ review is the last one, at reduced effort. PCR-007 and PCR-008 (authors running)
   the coding (PD-008-09). Update the note without connecting the coding to the "PAR (set-point)" column.
 - PCR-008 departures in neither register: no date for the offset estimates (PCMP-001 §7.1 wants them before the first
   run; same for PCR-010); step yield by A280 (AMV-3019), a method PCP-008 Table 3.2 does not name (same in PCR-007).
+- FOR THE OWNER (PCR-007, informational): with the offset in the verification, 3 of the 5 host cell protein models
+  within 2 AICc give a cation exchange fold of 38.8–39.5 (< platform 40, would tighten the Protein A HCP criterion)
+  and fail the qualification at 418 ng/mg (up to 432). The selected model decides (40.22; 414 ng/mg); PCR-007 states
+  both. Candidate for the PCMR-001 practical-relevance demonstration.
+- `T.criteria_results` note b) implies manufacturing scale for fragments (no offset); PCR-007 patched locally.
+- `dev_register("PCR-009")`: DEV-009-01 summary "Transient filtration-pressure excursion above NOR" (Version 1.0
+  record) vs the report's judgement against the run's set pressure; hyphenated compounds "filtration-pressure",
+  "vendor-typical" in event records; PCR-010 "Transmembrane-pressure excursion", "topped up". Decide whether the
+  event register prints a Version 2.0 summary beside the Version 1.0 record.
+- Shared annex helpers proposed by the PCR-009 builder: `S_(prefix, upto)` (unique prose span by prefix to sentence
+  end) and an `md_captions` reader; candidates for annex_builders/__init__.py.
+- OWNER QUESTION (record): LOT-BUF-2287 / DEV-007-01 name a "Tris load/wash buffer" retested at pH 5.02; Tris
+  (pKa ~8.1) does not buffer at pH 5. Version 1.0 PCR-007 (frozen) prints "Tris" twice. Rename in the config (e.g.
+  acetate) and accept the Version 1.0 mismatch, or keep the record as it is?

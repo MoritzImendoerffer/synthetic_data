@@ -6,7 +6,7 @@
 PY ?= python3
 PKG_DIR := pc_package
 
-.PHONY: all data figures fmea corpus corpus-variant corpus-variants style discourse test clean env help pm
+.PHONY: all data figures fmea corpus corpus-variant corpus-variants style discourse test qa clean env help pm
 
 help:
 	@echo "Targets:"
@@ -21,6 +21,7 @@ help:
 	@echo "  make discourse- advisory discourse diagnostics (needs: uv sync --extra discourse)"
 	@echo "  make fmea     - build the post-PC FMEA workbook (content source for RA-001)"
 	@echo "  make test     - run reproducibility tests"
+	@echo "  make qa       - build the graded question-answer set -> pc_package/qa/"
 	@echo "  make pm       - regenerate docs/pm/ (the board) from the active work unit"
 	@echo "  make env      - install Python dependencies"
 	@echo "  make clean    - remove generated outputs and rendered documents"
@@ -98,6 +99,13 @@ corpus-variants:
 
 test:
 	$(PY) -m pytest -q tests/
+
+# The graded question-answer set for the dw tool (pc_package/qa/README.md): generated from the
+# annexes and the CSVs of the Version 2.0 documents in build_ground_truth.REV2_READY, plus the
+# curated items in qa/curated.yaml, every quote grounded against the rendered .docx. Run it after
+# `make corpus`. Fails if a level falls below its minimum count.
+qa:
+	cd $(PKG_DIR) && $(PY) build_qa.py
 
 # The visible half of the planning workflow: docs/pm/ is .claude/work/<id>/state.json rendered
 # as notes a person can read. Generated notes are overwritten; the hand-written ones beside

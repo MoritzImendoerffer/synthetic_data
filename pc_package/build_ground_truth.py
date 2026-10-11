@@ -6737,6 +6737,8 @@ PA5_REL_KIND = {"Rolls up into": "rolls_up_into", "Sibling — paired document":
 #: link only as a comment (campaign.plan_discrepancies: "were DEV-005-03 to DEV-005-05"); the ids are
 #: identifiers, not values.
 PA5_FORMER_DEV = {"PD-005-07": "DEV-005-03", "PD-005-08": "DEV-005-04", "PD-005-09": "DEV-005-05"}
+#: Discrepancies of PCR-005 registered by the owner's decision of 2026-10-11 (statement generation 4).
+PA5_PD_OWNER = ("PD-005-10",)
 
 
 def build_report_protein_a():
@@ -6747,7 +6749,8 @@ def build_report_protein_a():
     and DEV-005-02 are Deviation records (the schema's only record for an event and its outcome), the
     three departures found in the Version 2.0 review (PD-005-07 to PD-005-09, formerly the Deviation
     records DEV-005-03 to DEV-005-05) are discrepancy statements like PD-005-01 to PD-005-06, and the
-    discrepancy register is read from both parts the report prints (@tbl-pd, @tbl-pd-b). Every table
+    discrepancy register is read from the three parts the report prints (@tbl-pd to @tbl-pd-c). PD-005-10
+    (owner, 2026-10-11: the pool HCP model used against PCMP-001 §7.1) is a fourth generation (new=4). Every table
     of the report is a complex table, read back through :func:`qmd_ctables` from the object the
     report printed. Every number in a quote is either a cell of such a table or an inline expression
     of the report evaluated in its own namespace (:func:`qmd_inline`); no value is typed here.
@@ -6832,14 +6835,14 @@ def build_report_protein_a():
     # the register of study events (Event | Summary | Detected during | Outcome)
     dev_t, dev_df = ct["tbl-dev"]
     devrow = ctable_rows(dev_t, dev_df["Event"])
-    # the discrepancy register, printed in two parts from the same builder rows (@tbl-pd, @tbl-pd-b): each
-    # discrepancy anchors on its row in the part that prints it, with that part's caption and id
+    # the discrepancy register, printed in three parts from the same builder rows (@tbl-pd, @tbl-pd-b,
+    # @tbl-pd-c): each discrepancy anchors on its row in the part that prints it, with that part's caption and id
     pdrow, pd_part = RowQuotes(), {}
-    for lab_ in ("tbl-pd", "tbl-pd-b"):
+    for lab_ in ("tbl-pd", "tbl-pd-b", "tbl-pd-c"):
         t_, df_ = ct[lab_]
         r_ = ctable_rows(t_, df_["Discrepancy"])
         if pdrow.header and r_.header != pdrow.header:
-            raise ValueError(f"{qmd}: the two parts of the discrepancy register have different headers")
+            raise ValueError(f"{qmd}: the parts of the discrepancy register have different headers")
         pdrow.update(r_)
         pdrow.header = r_.header
         pd_part.update({k: (t_, f"{doc}_tab_{lab_[4:].replace('-', '_')}") for k in r_})
@@ -7685,6 +7688,10 @@ def build_report_protein_a():
          "output against its criterion."), new=True)
     st(q("The report records `{python} n_pd` discrepancies from the plan."), ex,
        q("The report also records `{python} n_pd` discrepancies from the plan"), new=2)
+    st("The model is used for pool host cell protein with the offset ratio at its estimate, a discrepancy "
+       "from the plan (PD-005-10).", ex,
+       "The model is used for pool host cell protein all the same, with the ratio at its estimate "
+       "(PD-005-10).", new=4)
     section("Executive summary findings", n0)
 
     sq = "Scale-down model and its qualification"
@@ -7756,6 +7763,11 @@ def build_report_protein_a():
     st("Every judgement of pool host cell protein is made with the offset ratio at its estimate; the study "
        "does not show that the conclusion over the NOR holds over the whole interval of the ratio.", sq,
        "The study does not show that this holds over the whole interval of the ratio.", new=3)
+    st("The report uses the model of pool host cell protein although its conclusion changes across the "
+       "interval of the offset ratio, against the rule of PCMP-001 §7.1, and records this as the "
+       "discrepancy PD-005-10.", sq,
+       "This report uses the model of pool host cell protein all the same, and that departure is the "
+       "discrepancy PD-005-10", new=4)
     st(q("On the `{python} n_sd_plan` planned set-point runs of S-PA-SDM alone the two scales differ in "
          "leached Protein A (`{python} pf(dev04_p)`), a difference PCP-005 Version 1.0 required to be "
          "investigated before the characterization studies; it was not (discrepancy PD-005-08)."), sq,
@@ -7886,7 +7898,8 @@ def build_report_protein_a():
     for k, row in pdrow.items():
         d = next(x for x in P.PLAN_DISCREPANCIES[doc] if x["id"] == k)
         st(f"Discrepancy {k} from PCP-005, {d['subject']}: planned {d['planned']}; done {d['done']}.",
-           dq, row, pdrow.header, pd_part[k][0].caption, new=2 if k in PA5_FORMER_DEV else False)
+           dq, row, pdrow.header, pd_part[k][0].caption,
+           new=2 if k in PA5_FORMER_DEV else 4 if k in PA5_PD_OWNER else False)
     st("The report records the events of execution as study events, under the numbers Version 1.0 gave them, "
        "and every departure from the plan as a discrepancy from the plan.", dq,
        "so this report records the events of execution as study events, under the numbers Version 1.0 gave "
@@ -8031,6 +8044,40 @@ def build_report_protein_a():
          "this report."),
     ]:
         st(text_, sec_, quote_, new=2)
+    # PD-005-10 (owner, 2026-10-11): the pool HCP model used although its conclusion changes across the offset
+    # interval, on the sentences of its own subsection
+    s10 = heading["sec-pd10"]
+    st("The sixth discrepancy is the use of the model of pool host cell protein against a rule of PCMP-001 "
+       "§7.1.", "Discrepancies from the plan",
+       "The sixth is the use of the model of pool host cell protein against a rule of PCMP-001 §7.1.", new=4)
+    for text_, quote_ in [
+        ("Discrepancy PD-005-10: PCMP-001 §7.1 states that a model whose conclusion for an output changes "
+         "between the two ends of the offset interval is not used for that output.",
+         "PCMP-001 §7.1 states that a model whose conclusion for an output changes between the two ends of "
+         "the offset interval is not used for that output."),
+        (q("Over the NOR in force the upper prediction limit of a single run of pool host cell protein is "
+           "`{python} f0(pl_pt)` ng/mg with the offset ratio at its estimate and `{python} f0(pl_lo)` ng/mg "
+           "with the ratio at the low end of its interval, against the criterion of ≤ `{python} crit_hcp` "
+           "ng/mg, so the conclusion changes across the interval."),
+         q("Over the NOR in force the upper prediction limit of a single run of pool host cell protein is "
+           "`{python} f0(pl_pt)` ng/mg with the offset ratio at its estimate and `{python} f0(pl_lo)` ng/mg "
+           "with the ratio at the low end of its interval, against the criterion of ≤ `{python} crit_hcp` "
+           "ng/mg")),
+        ("The model of pool host cell protein is used for the judgement over the NOR, for the PARs and for the "
+         "design space, with the offset ratio at its estimate as PCMP-001 §7.1 rule 2 requires.",
+         "The model is used all the same for the judgement over the NOR, for the PARs and for the design "
+         "space, with the ratio at its estimate as PCMP-001 §7.1 rule 2 requires."),
+        ("The offset of pool host cell protein is known precisely enough to be accounted for at its estimate, "
+         "and the NOR comes from production and is not narrowed by an offset.",
+         "The offset is known precisely enough to be accounted for at its estimate. The NOR comes from "
+         "production and is not narrowed by an offset."),
+        ("The limitation is stated with each conclusion for pool host cell protein, and the protein load NOR "
+         "is flagged for discussion with manufacturing.",
+         "The limitation is stated with each conclusion for pool host cell protein, and the protein load NOR "
+         "is flagged for discussion with manufacturing, so that manufacturing can decide whether the NOR can "
+         "be improved."),
+    ]:
+        st(text_, s10, quote_, new=4)
     section(heading["sec-dev"], n0)
 
     rv = "Changes in this revision"
@@ -8045,6 +8092,10 @@ def build_report_protein_a():
            "criterion (INV-001 finding 4).")
     st("No NOR and no set-point of the step is changed.", rv,
        "No NOR and no set-point of the step is changed.")
+    st("The model of pool host cell protein is used with the offset ratio at its estimate, against the rule "
+       "of PCMP-001 §7.1, and this is recorded as the discrepancy PD-005-10.", rv,
+       "The model of pool host cell protein is used with the ratio at its estimate, against the rule of "
+       "PCMP-001 §7.1, and this is recorded as the discrepancy PD-005-10", new=4)
     # change 10, reworded by the record pass: the id keeps the change that records the Version 1.0 events
     st("The events that Version 1.0 numbered as deviations, DEV-005-01 and DEV-005-02, are recorded as study "
        "events under their numbers, because a process characterization study is not GMP manufacture.", rv,
@@ -8145,8 +8196,8 @@ def build_report_protein_a():
             "used for one: the report records no deviation (a process characterization study is not GMP "
             "manufacture; explicit non-claim NC10) and calls every departure from the plan a discrepancy. "
             f"Each of {pd_first_last(pdrow)} is a report statement anchored on its row of the discrepancy "
-            "register, which the report prints in two parts (@tbl-pd and @tbl-pd-b, table ids "
-            f"{doc}_tab_pd and {doc}_tab_pd_b), and the studies a discrepancy adds (S-PA-SDM2, S-PA-HLD) "
+            "register, which the report prints in three parts (@tbl-pd, @tbl-pd-b and @tbl-pd-c, table ids "
+            f"{doc}_tab_pd, {doc}_tab_pd_b and {doc}_tab_pd_c), and the studies a discrepancy adds (S-PA-SDM2, S-PA-HLD) "
             "carry that row as a source reference. "
             f"{P.join_and(list(PA5_FORMER_DEV))} were the Deviation records "
             f"{P.join_and(list(PA5_FORMER_DEV.values()))} of the annex as re-anchored to the follow-up text "
@@ -8185,7 +8236,9 @@ def build_report_protein_a():
             f"{st_range(1)} those added when it was re-anchored to the follow-up text (the sections "
             f"Objectives and Design space were added then), and {st_range(2)} those added when it was "
             f"re-anchored to the record pass of 2026-10-10 (the study events, the discrepancies PD-005-07 to "
-            f"PD-005-09 and the single-run limits of the criteria table). A statement whose sentence was "
+            f"PD-005-09 and the single-run limits of the criteria table). {st_range(3)} were added with the "
+            f"data state of 2026-10-11 (the flag of the protein load NOR), and {st_range(4)} with the "
+            f"discrepancy PD-005-10 (owner, 2026-10-11). A statement whose sentence was "
             f"reworded keeps its id, and no id is retired. The section 'Deviations and discrepancies from the "
             f"plan' (sec05) is retitled '{heading['sec-dev']}', as §13 of the report is. The non-claim NC08 of "
             f"the first fit (a design space drawn on median predictions is not a claim for a single batch) is "
@@ -11427,7 +11480,7 @@ BUILDERS = [(d, _builder(d, b)) for d, b in _LEGACY_BUILDERS]
 #: skipped and its annex kept as it is. This keeps check_grounding green at every step of the
 #: Rev 2.0 campaign (work unit 2026-10-08_01_rev2-campaign). When every document is in the set,
 #: delete this mechanism.
-REV2_READY: set = {"INV-001", "INV-002", "PCMP-001", "PCP-003", "PCP-004", "PCP-005", "PCP-006", "PCP-007", "PCP-008", "PCP-009", "PCP-010", "PCR-003", "PCR-005", "PCR-006", "PTP-001", "RA-001"}
+REV2_READY: set = {"INV-001", "INV-002", "PCMP-001", "PCP-003", "PCP-004", "PCP-005", "PCP-006", "PCP-007", "PCP-008", "PCP-009", "PCP-010", "PCR-003", "PCR-004", "PCR-005", "PCR-006", "PCR-009", "PCR-010", "PTP-001", "RA-001"}
 
 
 def main(argv=None):

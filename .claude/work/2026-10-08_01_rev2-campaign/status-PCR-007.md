@@ -60,3 +60,31 @@ Helpers and data:
 - The stop collect raises aggregate with the AU setting, opposite to the mechanism and PCP-007 §4.1, and has no yield effect: check the sign convention.
 - DEV-007-02 record has no units for tmax and duration; °C and min were written.
 - Builder labels: "load/Wash", "Pool HCP".
+
+## Fix pass 1 (2026-10-11, same author)
+Inputs: feedback-PCR-007.run1.md, factual-PCR-007.md, data-state-2026-10-11.md, REPORT-LESSONS §3, §6, §7, brief regenerated
+(authoring/build_brief.py PCR-007), rendered PCMP-001 and PCP-007 re-extracted (pdftotext). Backup of the run-1 draft:
+scratchpad pcr007/PCR-007_cex.DRAFT.pre-fix1.qmd. Config, helpers and annex untouched.
+
+- A. Record: PD-007-05 to -11 described in new §13.2.5 to §13.2.11 and cited where the text relies on them (§3.2 operation,
+  §3.3 analytical, §3.4 sampling, §3.5 statistics and §3.5.1 items 2, 4, 6, §8, Discussion, exec summary). "Not recorded"
+  used; Version 1.0's claims (load, flow-through, wash assayed; column released) stated "with no result recorded"
+  (Changes item 7, §3.4, PD-007-05, -07, -08).
+- B. Verification with the offset at its estimate (evaluate() now applies it; reproduces iac_verification to 1e-3).
+  Sensitivity to the offset ends computed (HCP 28.1 / 57.6, bounds 23.0 / 47.1; aggregate 1.40 / 1.78). Pool aggregate
+  criterion 4.90 % with the UF/DF allowance 0.104 (asserted = DS − allowance), stated in §1.1, §7.1, the risk argument,
+  §8, §10, exec summary, Changes item 1. Fragments: one verdict, confirmed by PCP-007 §7.6 with the §7.2 limitation.
+- C. Stop collect: data as observed, no cause; yield "has no stop-collect term". Elution flow rate GPP argued as a named
+  judgement (0.32 log10, p 0.044, factor 2.1 / 1.45 over the NOR; DS 0.00017 → 0.00036 ng/dose, Cpk 7.30 → 2.67);
+  yield interval includes the load effect; PCMP-001 §7.7 quoted with "practically relevant" and the too-small clause.
+- D. E3 (99.85 % at the a priori criterion, 22 points), E4 (drift: region max 408 → 461, 1.13 % of grid; qualification
+  414 → 467 > 418; "does not depend on the trend" limited to the NOR), E5 (per response), E7 (objectives quoted, 2 and 3
+  amended), E8, E9 (run 6 / run 14 effects named; yield stop collect tested in full quadratic p 0.239 and screening
+  p 0.268; run 14 deleted gives −0.76 points/coded unit, p 0.078), E10 (curvature −0.092 < centre SD 0.144, not
+  claimed), E12 (window and Table 3.2), E13 all items.
+- New sensitivity found while re-reading the data: with the offset now in the verification, 3 of the 5 near-equivalent
+  HCP models give a lowest fold below 40 (38.8 to 39.5) and 3 fail the qualification at 418 (up to 432 ng/mg); stated
+  in §5.3.4, §7.4, Discussion, exec summary. Selected model decides.
+- Gates: check_render --render x4 (pass 1 failed on the font floor in tbl-near, fixed by dropping its Terms column;
+  passes 2 to 4 exit 0), explicit quarto render pdf and docx exit 0, check_render once more exit 0. 80 pp.
+  Tables inspected as page images: 1.2, 3.2, 5.9, 5.10, 7.2. No <<NEEDS:>>. DRAFT.txt refreshed.

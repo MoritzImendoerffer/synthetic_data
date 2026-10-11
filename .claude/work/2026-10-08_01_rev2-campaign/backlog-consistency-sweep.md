@@ -395,3 +395,14 @@ check." The content reviews of PCR-004 and PCR-009 (run 1) were stopped. From no
 author → factual check (full effort) → fix pass → content review (the 7-question grammar/readability check, ONCE,
 Agent effort "medium") → final pass → promote → annex builder. PCR-010 already had both run-1 reviews; its next
 review is the last one, at reduced effort. PCR-007 and PCR-008 (authors running) follow the new order.
+- Register (2026-10-11): PD-004-04 to -08 and PD-010-02 to -06 added from the factual checks; PD-004-01 names the
+  levels without NOR limits and the added responses; PD-010-01 names the second skid (accepted with argument, owner).
+  The hold-study entries PD-004-02, PD-005-05, PD-006-05 now say PCMP-001 Version 2.0 §5 sets the criterion (the next
+  step's entry criteria) and only the expected level and the reading of the change are the report's approach.
+  PCR-005 needs a re-render and annex re-anchor at the end (PD-005-05 text, criteria-table header wrap of 21f0a49).
+  INV-001 §4.4 says the simulation "draws every parameter inside its NOR": PCMP-001 and the data say N(set-point,
+  NOR/6) clipped to the range studied (sweep). The hold pools' day-0 levels are config constants not tied to the
+  step models (harvest aggregate 1.10 against about 1.55 %; low-pH acidic variants above S-VI-OFAT): consider deriving
+  them from the nominal train (data change) or stating per report that the record does not name the culture.
+  Aggregate method: the SEC method is validated under AMV-3011 (SOP-3011), AMV-3221 is the record of its qualified
+  performance (as PTP-001 states); config analytics.univariate_nodoe.assay names AMV-3221 for the results.

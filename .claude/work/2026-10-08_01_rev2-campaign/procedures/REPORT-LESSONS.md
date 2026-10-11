@@ -204,8 +204,10 @@ filtration. A rule marked "DoE steps" does not apply to harvest or UF/DF.
    and a difference not detected carries the precision of the comparison. For harvest and UF/DF,
    STORY_BIBLE §9b ("Harvest and UF/DF univariate studies") applies in full.
 10. **Hold studies** (harvest, Protein A, low-pH inactivation). One pool made at set-point was held, at
-    the temperatures and for the time tested, and the claim stops there. No plan sets a hold criterion,
-    so the report states its approach and records it within the hold-study discrepancy. The verdict
+    the temperatures and for the time tested, and the claim stops there. PCMP-001 Version 2.0 §5 judges a
+    held pool against the criteria it must meet on entering the next step. The level expected to enter the
+    hold and the reading of the change are the report's approach, recorded within the hold-study
+    discrepancy. The verdict
     concerns what the hold adds: the highest level expected to enter the hold plus the largest change
     over it. The expected level is the single-batch limit over the NOR of the step that sets the
     attribute, at manufacturing scale, or that step's measured results where it has no adequate model.

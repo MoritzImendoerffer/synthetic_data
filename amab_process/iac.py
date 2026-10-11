@@ -123,8 +123,40 @@ def cumulative_claims(cfg: Config) -> pd.DataFrame:
 BOUND_CONFIDENCE = 0.95
 
 
+def sdm_offset(cfg: Config, sdm: Optional[pd.DataFrame], step: str, col: str, log: bool):
+    """The scale-down offset of one output at its point estimate, as the verification applies it
+    (PCMP-001 §7.1 rule 2; owner, 2026-10-11): ``("ratio", r)`` for an output modelled on the log
+    scale, the ratio of the geometric means, or ``("difference", d)``, the difference of the means,
+    scale-down minus manufacturing scale, from ``sdm_qualification.csv``. The same estimate as
+    ``doe_report.sdm_offset`` at its point. None when the output has no qualification data (fragments,
+    viral clearance) or the config switches offsets off (``analytics.sdm.apply_offset``)."""
+    if sdm is None or not cfg.raw()["analytics"]["sdm"].get("apply_offset", False):
+        return None
+    d = sdm[sdm["step"] == step]
+    if col not in d.columns:
+        return None
+    a = d.loc[d["scale"] == "scale-down", col].dropna().to_numpy(float)
+    b = d.loc[d["scale"] == "manufacturing", col].dropna().to_numpy(float)
+    if len(a) < 2 or len(b) < 2:
+        return None
+    if log:
+        return "ratio", float(np.exp(np.log(a).mean() - np.log(b).mean()))
+    return "difference", float(a.mean() - b.mean())
+
+
+def to_mfg(off, y):
+    """A scale-down value at manufacturing scale: divided by a ratio offset (on the log scale, the
+    log ratio subtracted), minus a difference offset, unchanged with no offset. As
+    ``doe_report.to_mfg``."""
+    y = np.asarray(y, dtype=float)
+    if off is None:
+        return y
+    kind, v = off
+    return y / v if kind == "ratio" else y - v
+
+
 def _nor_worst(cfg: Config, step: str, df: pd.DataFrame, col: str, feed: float, mode: str,
-               form: str = "selected", bound: str = "batch"):
+               form: str = "selected", bound: str = "batch", sdm: Optional[pd.DataFrame] = None):
     """Worst predicted fold (mode 'fold') or increase (mode 'add') over the NOR box of the step's
     response-surface factors, from the model INV-002 corrective action CA3 selects for the output
     (``adequacy.select_model``: Box-Cox scale, AICc over the hierarchical submodels of the full
@@ -132,8 +164,13 @@ def _nor_worst(cfg: Config, step: str, df: pd.DataFrame, col: str, feed: float, 
     worst case at its one-sided 95 % confidence bound. ``form="full"`` uses the full quadratic on
     the raw scale instead, the model the plans prescribe: the verification as it would have been
     without CA3, which INV-002 compares with the one in force (CA3 was adopted before INV-001
-    closed, so the criteria fixed at that closure rest on the selected models). Returns (worst,
-    bound, adequacy)."""
+    closed, so the criteria fixed at that closure rest on the selected models).
+
+    The fold and the increase are computed at manufacturing scale (PCMP-001 §7.1 rule 2; owner,
+    2026-10-11): the feed is a manufacturing-scale value of the process model, so the scale-down
+    prediction of the pool, and its bound, are converted by the step's offset at its point estimate
+    (:func:`sdm_offset`, on the scale of the model) before they are compared with it. So are the
+    measured results behind ``edge``. Returns (edge, worst, bound, adequacy, offset)."""
     import itertools
     from . import adequacy as ad
     from .studies import RSM_TOP, DOE_FACTORS
@@ -143,6 +180,9 @@ def _nor_worst(cfg: Config, step: str, df: pd.DataFrame, col: str, feed: float, 
         sel = {**ad.adequacy(df, col, fac, ad.full_terms(fac), th), "scale": "raw"}
     else:
         sel = ad.select_model(df, col, fac, th)
+    off = sdm_offset(cfg, sdm, step, col, sel["scale"] == "log")
+    meas = to_mfg(off, df[col].to_numpy(float))
+    edge = float((feed / meas).min()) if mode == "fold" else float((meas - feed).max())
     uo = cfg.unit_op(step)
     pts = []
     # the NOR as characterized: the criteria were fixed at INV-001 closure, before any report
@@ -166,12 +206,55 @@ def _nor_worst(cfg: Config, step: str, df: pd.DataFrame, col: str, feed: float, 
     # 2026-10-09; PCMP-001 §7.5); bound="mean": the confidence bound of the mean output, the rule as
     # first set on 2026-10-08, kept for comparison only
     ci = sel["model"].get_prediction(X).summary_frame(alpha=2 * (1 - BOUND_CONFIDENCE))
-    y = back(ci["mean"].to_numpy())
-    up = back(ci["mean_ci_upper" if bound == "mean" else "obs_ci_upper"].to_numpy())
+    y = to_mfg(off, back(ci["mean"].to_numpy()))
+    up = to_mfg(off, back(ci["mean_ci_upper" if bound == "mean" else "obs_ci_upper"].to_numpy()))
     worst = float((feed / y).min()) if mode == "fold" else float((y - feed).max())
     bound = float((feed / up).min()) if mode == "fold" else float((up - feed).max())
     adq = {"r2_gap": sel["gap"], "p_lof": sel["p_lof"], "adequate": bool(sel["adequate"])}
-    return worst, bound, adq
+    return edge, worst, bound, adq, off
+
+
+def _univariate_increase(cfg: Config, step: str, uni: pd.DataFrame, study: str, col: str,
+                         sdm: Optional[pd.DataFrame], bound: str = "batch"):
+    """The largest increase of an output across the NOR of a step studied one factor at a time
+    (UF/DF aggregate; owner, 2026-10-11). An ordinary least squares fit of the output, at
+    manufacturing scale (difference offset at its point estimate), on the main effects of the factors
+    of the univariate study ``study``, all runs pooled (each run carries the set-point of the factors
+    it did not vary). The increase is the one-sided 95 % prediction bound of a single run at the least
+    favourable combination of NOR low, set-point and NOR high of the factors, minus the fitted mean
+    at the set-point; a factor with a one-sided NOR (``nor_one_sided: low``) takes its NOR high as the
+    upper edge of the combination. ``edge`` is the largest measured result minus that fitted mean.
+    Returns (edge, worst, bound, adequacy, offset) as :func:`_nor_worst`."""
+    import itertools
+    from . import adequacy as ad
+    th = {k: float(v) for k, v in cfg.raw()["campaign"]["thresholds"].items()}
+    uo = cfg.unit_op(step)
+    d = uni[(uni["study"] == study) & uni[col].notna()].copy()
+    fac = list(dict.fromkeys(d["parameter"]))
+    off = sdm_offset(cfg, sdm, step, col, log=False)
+    d[col] = to_mfg(off, d[col].to_numpy(float))
+
+    def coded(f, v):
+        lo, hi = uo.param(f).prange
+        return (np.asarray(v, dtype=float) - (lo + hi) / 2) / ((hi - lo) / 2)
+    for f in fac:
+        nat = np.where(d["parameter"] == f, d["value"].to_numpy(float), uo.param(f).setpoint_characterized)
+        d["coded_" + f] = coded(f, nat)
+    a = ad.adequacy(d.reset_index(drop=True), col, fac, fac, th, block=False)
+    # the NOR as characterized, as for the response-surface steps
+    combos = list(itertools.product(*[[uo.param(f).nor_characterized[0], uo.param(f).setpoint_characterized,
+                                       uo.param(f).nor_characterized[1]] for f in fac]))
+    P = pd.DataFrame([{"coded_" + f: float(coded(f, v)) for f, v in zip(fac, c)} for c in combos])
+    S = pd.DataFrame([{"coded_" + f: float(coded(f, uo.param(f).setpoint_characterized)) for f in fac}])
+    m = a["model"]
+    ci = m.get_prediction(ad.matrix(P, fac).to_numpy()).summary_frame(alpha=2 * (1 - BOUND_CONFIDENCE))
+    ref = float(m.predict(ad.matrix(S, fac).to_numpy())[0])
+    up = ci["mean_ci_upper" if bound == "mean" else "obs_ci_upper"].to_numpy()
+    edge = float(d[col].max() - ref)
+    worst = float(ci["mean"].max() - ref)
+    bnd = float(up.max() - ref)
+    adq = {"r2_gap": a["gap"], "p_lof": a["p_lof"], "adequate": bool(a["adequate"])}
+    return edge, worst, bnd, adq, off
 
 
 def _adequacy(cfg: Config, model, df: pd.DataFrame, col: str) -> Dict[str, float]:
@@ -201,7 +284,8 @@ def _adequacy(cfg: Config, model, df: pd.DataFrame, col: str) -> Dict[str, float
 
 def verification(cfg: Config, data: Dict[str, pd.DataFrame], ps: pd.DataFrame,
                  frag_nominal: Dict[str, float], vi_feed_acidic: float,
-                 form: str = "selected", bound: str = "batch") -> pd.DataFrame:
+                 form: str = "selected", bound: str = "batch", *, sdm: pd.DataFrame,
+                 uni: pd.DataFrame) -> pd.DataFrame:
     """For every platform worst case the IACs rely on, what THIS campaign showed for that step.
 
     Two numbers. ``observed_edge`` is the worst value among the response-surface runs, which sit
@@ -212,7 +296,13 @@ def verification(cfg: Config, data: Dict[str, pd.DataFrame], ps: pd.DataFrame,
     the A-Mab value, which can only tighten the criterion. ``form`` is passed to
     :func:`_nor_worst`: the selected models by default, ``"full"`` for the verification on the full
     quadratic models the plans prescribe, as it would have been without INV-002 corrective action
-    CA3."""
+    CA3.
+
+    Every fold and increase is computed at manufacturing scale, the scale-down results converted by
+    the step's offset from ``sdm`` (``sdm_qualification.csv``; PCMP-001 §7.1 rule 2, owner,
+    2026-10-11). ``offset`` and ``offset_scale`` record what was applied. A platform entry with a
+    ``verify`` block names a univariate study in ``uni`` (``univariate_studies.csv``) instead of a
+    response-surface design (UF/DF aggregate, :func:`_univariate_increase`)."""
     pss = ps.set_index("step")
     vi_in_agg = float(pss.loc[6, "aggregate_out_pct"] - pss.loc[6, "aggregate_delta_pct"])
     feeds = {
@@ -229,14 +319,18 @@ def verification(cfg: Config, data: Dict[str, pd.DataFrame], ps: pd.DataFrame,
         for cqa, p in attrs.items():
             kind = "fold_min" if "fold_min" in p else "add_max"
             assumed = float(p[kind])
-            edge = nor = nor_bound = None
+            edge = nor = nor_bound = off = None
             adq = {"r2_gap": None, "p_lof": None, "adequate": None}
-            if (step, cqa) in feeds and step in data:
+            if "verify" in p:
+                v = p["verify"]
+                edge, nor, nor_bound, adq, off = _univariate_increase(cfg, step, uni, v["study"],
+                                                                      v["response"], sdm, bound)
+            elif (step, cqa) in feeds and step in data:
                 feed, col, mode = feeds[(step, cqa)]
                 df = data[step]
                 if col in df and df[col].notna().all():
-                    edge = float((feed / df[col]).min()) if mode == "fold" else float((df[col] - feed).max())
-                    nor, nor_bound, adq = _nor_worst(cfg, step, df, col, feed, mode, form, bound)
+                    edge, nor, nor_bound, adq, off = _nor_worst(cfg, step, df, col, feed, mode, form,
+                                                                bound, sdm)
             met = None if nor is None else (nor >= assumed if kind == "fold_min" else nor <= assumed)
             # widening (owner's decision 2026-10-08): allowed only where the A-Mab worst case beats
             # the platform value even at its 95 % confidence bound
@@ -250,6 +344,7 @@ def verification(cfg: Config, data: Dict[str, pd.DataFrame], ps: pd.DataFrame,
                          "predicted_nor": nor, "predicted_nor_bound95": nor_bound if nor is not None else None,
                          "met": met, "widening_supported": better, "model_adequate": adq["adequate"],
                          "r2_minus_pred_r2": adq["r2_gap"], "p_lack_of_fit": adq["p_lof"],
+                         "offset_scale": off[0] if off else None, "offset": off[1] if off else None,
                          "source": p.get("source", "")})
     return pd.DataFrame(rows)
 

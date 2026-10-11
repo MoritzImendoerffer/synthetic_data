@@ -37,3 +37,15 @@ def test_review_findings_are_no_events():
     d = P.csv("deviations.csv")
     assert not d["detected_during"].str.contains("Version 2.0").any()
     assert len(d) == 17
+
+
+def test_nor_flags_match_the_par_margins():
+    """A NOR that does not hold is flagged for discussion with manufacturing, not narrowed (owner,
+    2026-10-11). nor_flags lists exactly the factor and output pairs whose NOR in force reaches outside
+    the NOR-propagated PAR (checked here on Protein A, the step whose load NOR was reversed)."""
+    f = D.nor_flags("protein_a")
+    assert list(f.columns)[:6] == ["step", "step_key", "factor", "factor_name", "unit", "response"]
+    m = D.par_margins("protein_a")
+    expect = {(r["factor"], r["response"]) for _, r in m.iterrows() if not r["contains_nor"]}
+    got = {(r["factor"], r["response"]) for _, r in f.iterrows() if r["response"] in set(m["response"])}
+    assert got == expect

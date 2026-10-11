@@ -260,12 +260,24 @@ priori:
   them is not a good argument. Tightening needs no such test. Both directions use the one-sided
   95 % prediction bound of a single batch, never the point prediction and never a confidence bound
   of the mean (the rule of 2026-10-09 below; `iac_verification.csv`: `model_adequate`).
+  Folds and increases are verified at manufacturing scale (owner, 2026-10-11; PCMP-001 §7.1 rule 2):
+  the feed is a manufacturing-scale value, so the scale-down pool prediction and its bound are first
+  converted by the step's offset at its point estimate, a ratio on the log scale and a difference on the
+  raw scale (`iac_verification.csv`: `offset_scale`, `offset`). Outputs with no measured offset
+  (fragments, viral clearance) are verified as predicted. Version 2.0 as first issued compared the
+  manufacturing-scale feed with the uncorrected scale-down prediction, found by the PCR-007 and PCR-008
+  factual checks.
   Each report that relies on a widened criterion gives the argument: the bound, the runs behind
   it, and why the downstream step's performance at A-Mab is known well enough. Which criteria
   tightened and which widened is a result read from `iac.csv` (`tightened`, `widened`), never
-  typed. One assumption was not confirmed: within its NOR, cation exchange cleared aggregate less
-  than the platform worst case. That tightened the aggregate criteria upstream of cation
-  exchange. Whether any proven acceptable
+  typed. Two assumptions were not confirmed: within its NOR, cation exchange cleared aggregate less
+  than the platform worst case, and UF/DF raised aggregate although PCMP-001 assumes no step after
+  cation exchange changes it. That tightened the aggregate criteria from the cation exchange pool
+  upward. The UF/DF allowance (owner, 2026-10-11; `iac.platform.ufdf`, an assumed increase of none) is
+  verified from the univariate study S-UFDF-UNI2: an OLS of pool aggregate at manufacturing scale on
+  diavolumes, TMP and final concentration, all runs pooled; the increase is the one-sided 95 %
+  prediction bound of a single run at the least favourable NOR combination minus the fitted mean at
+  the set-point (diavolumes, a one-sided NOR, take their NOR high as the upper edge). Whether any proven acceptable
   range moved because of it is a result. Each affected report states it from its own PAR table,
   and nothing here asserts it.
 - **The flow of the derivation.** Rule: `config` `iac:`. Derivation: `amab_process/iac.py`.
@@ -450,6 +462,10 @@ the plan says it has none, and the report states its approach and records it as 
 `T.parameters_by_step` footnotes each change. Monte Carlo and PPQ use the values in force; the recorded
 experiments, the nominal batch and the verification of platform worst cases use the characterized ones,
 so no NOR or set-point decision moves a criterion or a Version 1.0 number.
+- **NORs are not moved by offsets (owner, 2026-10-11).** A NOR comes from production. A report does not
+  narrow a NOR because a criterion, a scale-down offset or its interval says so. Where the NOR in force
+  reaches outside the NOR-propagated PAR at manufacturing scale, the report flags it for discussion with
+  manufacturing on whether the NOR can be improved (`D.nor_flags(key)`, a computed list, never typed).
 - **The rule for changing a criterion (owner, 2026-10-09).** Verification tightens or widens a criterion on
   the one-sided 95 % prediction bound of a SINGLE BATCH at the least favourable NOR combination of the
   downstream step (`iac.verification(..., bound="batch")`, `D.VERIFICATION_BOUND`), never on a confidence
@@ -495,12 +511,13 @@ so no NOR or set-point decision moves a criterion or a Version 1.0 number.
   report states that the rule was not met and why that is acceptable; it never pools the runs with
   S-CEX-VER (an analysis chosen after the result, the pattern INV-001 condemns). D-001 is kept.
 - **PCR-005, Protein A.** Under the single-batch rule the pool host cell protein criterion is widened only by
-  the anion exchange bound. At that criterion the scale-down model is not qualified for pool host cell
-  protein at the characterized load NOR (20–40 g/L resin): with the offset at the unfavourable end of its
-  interval the conclusion fails. PCR-005 Version 2.0 therefore narrows the load NOR in force (config
-  `nor_v2`), where the model is qualified. On the three planned scale-down runs alone the model would not
-  be qualified even there; the six supplementary runs (PD-005-01) made the qualification possible
-  (computed: `D.offset_qualification(..., studies=[...])`). Run 23 is analysed at its recorded pH
+  the anion exchange bound. The load NOR in force is the NOR as characterized. A narrowing of the load NOR
+  (config `nor_v2`, 2026-10-09), made because the scale-down model was not qualified for pool host cell
+  protein at the top of the load NOR with the offset at the unfavourable end of its interval, was reversed
+  (owner, 2026-10-11: NORs are not moved by offsets, above). Whether the model is qualified for that output
+  over the NOR is a result (`D.offset_qualification`), and the report states it and argues it by its risk;
+  a NOR that does not hold is flagged (`D.nor_flags`). The six supplementary runs (PD-005-01) entered the
+  qualification (computed: `D.offset_qualification(..., studies=[...])`). Run 23 is analysed at its recorded pH
   (PD-005-03); pool host cell protein is modelled on the log scale with a ratio offset.
 - **PCR-003, bioreactor acidic variants (owner: option a, confirmed after the osmolality study).** At the
   worst corner of the NOR (high pH, high pCO2, low temperature, long culture) the single-batch prediction

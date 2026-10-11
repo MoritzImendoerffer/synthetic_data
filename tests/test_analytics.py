@@ -32,7 +32,8 @@ SHARED = ["doe_bioreactor_screening", "doe_bioreactor_rsm", "doe_protein_a_scree
           "doe_virus_filtration_screening", "doe_virus_filtration_rsm",
           "process_summary", "viral_clearance"]
 # monte_carlo and ppq_batches left this list on 2026-10-08: they sample each parameter within the
-# NOR in force, and Version 2.0 narrowed three NORs (config nor_v2, PCR-005 and PCR-006).
+# NOR in force, and Version 2.0 narrowed three NORs (config nor_v2, PCR-006; the Protein A load narrowing
+# of PCR-005 was reversed by the owner on 2026-10-11).
 # A model output that an owner's decision changed by design, not an experiment, is exempt column by column
 # (each entry names its decision): residual DNA of the drug substance moved when DNA was carried in pg/mg
 # with a real dose and AEX DNA clearance set to 5 logs (owner's decision Q4, 2026-10-10, meta.dose).

@@ -220,7 +220,8 @@ def main() -> None:
     for pool in cfg.raw()["analytics"]["holds"]:
         save(an.hold_study(cfg, pool, ps).round(4), f"hold_{pool}.csv")
     save(an.comparability(cfg, ps).round(4), "cex_fraction_comparability.csv")
-    save(an.sdm_impurities(cfg, an.sdm_qualification(cfg, proc, feeds), feeds), "sdm_qualification.csv")
+    sdm_q = an.sdm_impurities(cfg, an.sdm_qualification(cfg, proc, feeds), feeds)
+    save(sdm_q, "sdm_qualification.csv")
     # S-VI-UNI2 (PD-006-06) appended last: XMuLV clearance at the ends of the A-Mab concentration range;
     # then the spiked anion exchange run of the flow-rate study, and the size variants and attributes the
     # Version 1.0 plans required (owner's decision Q5, 2026-10-10)
@@ -241,8 +242,11 @@ def main() -> None:
                 for k in st.DOE_FACTORS}
     # the rule in force (owner, 2026-10-09): a criterion is tightened or widened on the one-sided 95 %
     # prediction bound of a single batch (PCMP-001 §7.5)
+    # every fold and increase at manufacturing scale, the scale-down results converted by the step's offset
+    # (PCMP-001 §7.1 rule 2, owner 2026-10-11); UF/DF aggregate from its univariate study
     ver = ia.verification(cfg, rsm_data, ps, an.nominal_train(cfg),
-                          vi_feed_acidic=feeds["viral_inactivation"].cqas["acidic_variants"], bound="batch")
+                          vi_feed_acidic=feeds["viral_inactivation"].cqas["acidic_variants"], bound="batch",
+                          sdm=sdm_q, uni=uni)
     save(ver.round(4), "iac_verification.csv")
     save(ia.final(cfg, ver), "iac.csv")
     # the same verification on the full quadratic models the plans prescribe: the criteria as they
@@ -250,7 +254,7 @@ def main() -> None:
     # criteria in force rest on the selected models); INV-002 compares the two
     ver_full = ia.verification(cfg, rsm_data, ps, an.nominal_train(cfg),
                                vi_feed_acidic=feeds["viral_inactivation"].cqas["acidic_variants"],
-                               form="full", bound="batch")
+                               form="full", bound="batch", sdm=sdm_q, uni=uni)
     save(ver_full.round(4), "iac_verification_full.csv")
     save(ia.final(cfg, ver_full), "iac_full.csv")
     save(ia.p_oos(cfg, mc), "p_oos.csv")

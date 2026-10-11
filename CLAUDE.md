@@ -153,7 +153,9 @@ differ only in their `UO` key and unit-specific narrative:
   against its intermediate acceptance criterion (`config` `iac:` → `amab_process/iac.py` →
   `iac.csv`): the drug-substance criterion carried backward through the platform worst case of
   every downstream step, with no margin. `iac.derive()` reads the config only
-  (`tests/test_iac.py`). Verification against this campaign's data tightens a criterion where a
+  (`tests/test_iac.py`). Verification against this campaign's data, with folds and increases at
+  manufacturing scale (scale-down offset applied, owner 2026-10-11; UF/DF aggregate verified from
+  S-UFDF-UNI2), tightens a criterion where a
   step does worse than the platform worst case, and widens it only by the rule stated in advance:
   the one-sided 95 % prediction bound of a single batch at the A-Mab worst case (the least
   favourable NOR combination of the downstream step) beats the platform value and the downstream

@@ -1811,6 +1811,45 @@ def par_margins(key):
     return pd.DataFrame(rows)
 
 
+def nor_flags(key=None):
+    """NORs that do not hold, flagged for discussion with manufacturing (owner, 2026-10-11).
+
+    NORs come from production. A report does not narrow a NOR because a criterion or a scale-down
+    offset says so: it flags it, and manufacturing decides whether the NOR can be improved. One row
+    for each response-surface factor and output with a criterion and an adequate model (quality
+    attributes and fragments) where the NOR in force is not inside the NOR-propagated PAR, judged at
+    manufacturing scale (``par_nor_propagated``, offset at its point estimate). ``side`` says which
+    NOR edge lies outside ("low", "high", "both"), or "no PAR" when the criterion fails even at the
+    set-point. ``key`` limits the list to one step; by default every step with a response-surface
+    design. An empty frame means every NOR holds."""
+    keys = [key] if key else list(st.DOE_FACTORS)
+    cols = ["step", "step_key", "factor", "factor_name", "unit", "response", "nor_low", "nor_high",
+            "par_low", "par_high", "side"]
+    rows = []
+    for k in keys:
+        uo = CFG.unit_op(k)
+        for resp in list(responses(k)) + fragment_responses(k, "rsm"):
+            if effective_acceptance(k, resp) is None or fit(k, "rsm", resp)["status"] == "none":
+                continue
+            for f in rsm_factors(k):
+                p = uo.param(f)
+                lo_n, hi_n = float(p.nor[0]), float(p.nor[1])
+                tol = 1e-6 * (p.prange[1] - p.prange[0])
+                par = par_nor_propagated(k, resp, f)["par_nat"]
+                if par is None:
+                    side, plo, phi = "no PAR", None, None
+                else:
+                    plo, phi = float(par[0]), float(par[1])
+                    out_lo, out_hi = plo > lo_n + tol, phi < hi_n - tol
+                    if not (out_lo or out_hi):
+                        continue
+                    side = "both" if (out_lo and out_hi) else "low" if out_lo else "high"
+                rows.append({"step": uo.step, "step_key": k, "factor": f, "factor_name": p.name,
+                             "unit": p.unit, "response": resp, "nor_low": lo_n, "nor_high": hi_n,
+                             "par_low": plo, "par_high": phi, "side": side})
+    return pd.DataFrame(rows, columns=cols)
+
+
 def nor_worst_corner(key, resp):
     """The least favourable combination of NOR low, set-point and NOR high for an output with a
     criterion, at manufacturing scale: the settings, the predicted value (the median on a log-scale
@@ -1924,7 +1963,8 @@ def verification_all_runs():
             continue
         data = {key: rsm_data(key, runs="all", corrected=False)}
         # only this step's rows are kept; the low-pH acidic-variant feed is not needed for them
-        out = _iac.verification(cfg, data, ps, _nominal_fragments(), vi_feed_acidic=float("nan"))
+        out = _iac.verification(cfg, data, ps, _nominal_fragments(), vi_feed_acidic=float("nan"),
+                                sdm=csv("sdm_qualification.csv"), uni=csv("univariate_studies.csv"))
         rows.append(out[out["step_key"] == key])
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 

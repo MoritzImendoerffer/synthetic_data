@@ -334,3 +334,33 @@ PCR-005 flags: the load flow rate and end of pool collect stay KPPs on a judgeme
 cell protein, 6 % and 7 % of the criterion across the PAR; no threshold exists, and the report says so) — an owner
 question; the held-eluate aggregate criterion rests on the widened low-pH aggregate bound (INV-002 §8.4), not named
 in §4.5 (PCR-006 owns that widening; check the cross-reference at the sweep).
+
+### Night of 2026-10-10/11: record without deviations, promotions, owner's bioreactor decisions
+Owner decisions: (2026-10-10) no deviations in a characterization report: 16 review findings became PD entries,
+the 17 Version 1.0 events are study events under their DEV numbers (00c0e64; canon, CLAUDE.md, memory updated);
+the Version 1.0 scale-down test was too strict (PD-003-13, PD-005-08, PD-007-04). (2026-10-11) pH by base
+addition with pCO2 by the sparge CO2 fraction (PCP-003 corrected, change 14; PCR-003 to follow); osmolality CPP,
+dissolved oxygen GPP, basal medium KPP (counts 2 CPP, 19 WC-CPP, 10 KPP, 6 GPP); the ivcc NOR-low corner under the
+PD-003-08 acceptance with acidic variants trended against ivcc in production; alarm limits and a harvest action
+limit by a stated rule (`D.acidic_mitigation`, config `campaign.risk_mitigation`).
+Promoted: PTP-001 (36 pp, annex 1011), RA-001 (34 pp, annex 1246), PCR-006 (81 pp; annex builder next).
+REV2_READY now also PTP-001, RA-001.
+For the sweep:
+- Table numbers typed in cells and in cross-document references follow the PDF's chapter numbering; the DOCX numbers
+  tables 1..n (RA-001 corrections tables, "PCMP-001 Table 4.2" in RA-001 and elsewhere). Decide: chapter numbering in
+  the DOCX, or wording that does not depend on it.
+- check_render does not see a landscape table running off its rotated page (PCR-005 register); add a check.
+- T.criteria_results: fold the doc-local wraps of PCR-005 and PCR-006 into the builder; the offset mark sits on headers
+  that also cover viral rows (no offset).
+- T.ofat_effects (11 columns) and T.cex_verification_n (nested runs) are hard to read (PCR-006 review).
+- T.sdm_offsets mixes differences and ratios in one column; T.model_reevaluation does not state the scale (PCR-003).
+- PTP-001: char_scope_df names three steps differently from Table 2; §7 condition 3 wording (facility).
+- Annex builders: one annex_builders/_common.py for the helpers copied into every module (q, _prose, _smart, keyed,
+  _gate, _walk, _check_sections, head_of, row_refs, _unmark, _printed, _text, _nomark, _lc); METHOD_TYPE lacks
+  AMV-3021 and AMV-3221, METHOD_ATTRS lacks AMV-3221.
+- PCR-005 rhetorical spans: only 3 of 40 spans of authoring/rhetorical/PCR-005.spans.yaml remain in the text;
+  re-annotate (procedure rule 7) for every report at the end.
+Owner questions still open: the basis of the fragments criterion (≤ 2 %); temperature also lowers acidic variants at
+its low end but carries no alarm (the owner listed pH, pCO2, osmolality); the Protein A KPP judgement with no threshold
+for "practically relevant"; low-pH acidic variants with zero scatter; the integrated model with no offset and no ivcc
+term; the DNA calibration; page bands.

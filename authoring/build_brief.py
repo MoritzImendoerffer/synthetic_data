@@ -702,8 +702,9 @@ def _rev2_section(doc_id, key, is_report, is_plan, doe) -> str:
     pds = P.PLAN_DISCREPANCIES.get(doc_id, [])
     if pds:
         w("- **Discrepancies from the plan** (`discrepancy_register(DOC)`, `PLAN_DISCREPANCIES`). "
-          "Work the plan did not foresee, with no departure from a procedure. Never call one a "
-          "deviation:\n")
+          "Every departure from the plan: work the plan did not foresee and a plan requirement that was "
+          "not met, however late it was found. A process characterization study is not GMP manufacture "
+          "and raises no deviation (owner, 2026-10-10). Never call one a deviation:\n")
         for d in pds:
             w(f"  - {d['id']}: {d['subject']}. Planned ({d['plan']}): {d['planned']}. Done: "
               f"{d['done']}. Reason: {d['reason']}.\n")
@@ -1023,10 +1024,14 @@ def build(doc_id: str, review: bool = False) -> str:
     w(_rev2_section(doc_id, key, is_report, is_plan, doe))
 
     # 5. Deviations -------------------------------------------------------------
-    w("## 5. Deviations — structured facts (author writes the prose; Option A)\n\n")
+    w("## 5. Study events — structured facts (author writes the prose; Option A)\n\n")
+    w("The events of execution that Version 1.0 recorded, under the DEV numbers it gave them. Version "
+      "1.0 called them deviations. This document calls them study events, because a process "
+      "characterization study is not GMP manufacture (owner, 2026-10-10). The config field `type` and "
+      "the scalar prefix `dev_` keep their Version 1.0 names.\n\n")
     reg_md = P.dev_register(doc_id)
     if not reg_md.strip():
-        w("_No seeded deviations for this document._\n\n")
+        w("_No study events for this document._\n\n")
     else:
         w("Register — `dev_register(\"%s\")`:\n\n" % doc_id)
         w(reg_md + "\n\n")
@@ -1054,14 +1059,14 @@ def build(doc_id: str, review: bool = False) -> str:
         scal = {n: v for n, v in P.DEV_SCALARS.items()
                 if dev_prefixes and n.startswith(dev_prefixes)}
         if scal:
-            w("Deviation scalars available as inline expressions (module globals — "
+            w("Study-event scalars available as inline expressions (module globals — "
               "`` `{python} <name>` ``):\n\n")
             for n, v in sorted(scal.items()):
                 w(f"- `{n}` = {v}\n")
             w("\n")
     if superseded:
         w("### Superseded study (real re-executed dataset)\n\n")
-        w("A deviation invalidated the first execution and it was re-run. The first-"
+        w("A study event invalidated the first execution and it was re-run. The first-"
           "execution data are seeded and exposed for reference (root-cause confirmation), "
           "**not** for the reported analysis:\n\n")
         for kind in superseded:

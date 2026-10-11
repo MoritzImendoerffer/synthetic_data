@@ -451,3 +451,7 @@ review is the last one, at reduced effort. PCR-007 and PCR-008 (authors running)
 - `doe_report.fig_rsm_contours` plots step yield as a fraction labelled "Step yield"; tables use %. PCR-007 captions say
   "(%, plotted as a fraction)". Fix the figure to %.
 - DEV-007-02 record has no temperature set-point, permitted range, or result/criterion for the AMV-3221 verification.
+- `T.model_reevaluation` "Model used (terms)": "equil/Wash-1" lower-cased; XMuLV row prints "4 terms" not the terms.
+- Docx renders a space after a closing curly quote ("“PAR (set-point)” ,"): quote consumers (annex builders, the QA
+  set, doctool) must match it; consider fixing at render (reference.docx / filter).
+- More shared annex helpers proposed (pcr_008.py): `unambiguous()`, `S_first()`, `lc1()`.

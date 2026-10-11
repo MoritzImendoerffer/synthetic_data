@@ -1931,3 +1931,47 @@ def _nominal_fragments():
     from amab_process import analytics as _an, load_config
     return _an.nominal_train(load_config())
 
+
+
+def acidic_mitigation():
+    """The alarm limits and the harvest action limit that mitigate the acidic-variant risk accepted for the
+    production bioreactor (config ``campaign.risk_mitigation``; owner, 2026-10-11). For each alarm parameter the
+    side is the NOR edge at which acidic variants are lower: on the selected response-surface model at the
+    set-point of the other factors, or on the slope of the osmolality study for osmolality. The alarm sits
+    ``alarm_position`` of the way from the set-point to that edge. The action limit at harvest is the lower
+    intermediate acceptance criterion plus ``action_guard_sd`` intermediate-precision standard deviations of the
+    icIEF method at that level. Returns a dict with ``alarms`` (one dict per parameter: key, name, unit,
+    setpoint, nor, side, alarm), ``action_limit``, ``lower_criterion``, ``sd``, ``guard``, ``method`` and
+    ``monitoring``."""
+    m = CFG.raw()["campaign"]["risk_mitigation"]["bioreactor_acidic_variants"]
+    uo = CFG.unit_op("bioreactor")
+    resp = "acidic_variants"
+    r = fit("bioreactor", "rsm", resp)
+    base = {f: uo.param(f).setpoint for f in r["factors"]}
+    pos = float(m["alarm_position"])
+    alarms = []
+    for key in m["alarm_parameters"]:
+        p = uo.param(key)
+        lo_e, hi_e = map(float, p.nor)
+        if key in r["factors"]:
+            ylo = float(predict("bioreactor", resp, natural={**base, key: lo_e})[0])
+            yhi = float(predict("bioreactor", resp, natural={**base, key: hi_e})[0])
+            side = "high" if yhi < ylo else "low"
+        else:
+            o = osmolality_analysis() if key == "osmolality" else None
+            if o is None:
+                raise ValueError(f"no rule gives the side of {key}")
+            slope = float(o[o["response"] == resp]["slope_nor"].iloc[0])
+            side = "high" if slope < 0 else "low"
+        edge = hi_e if side == "high" else lo_e
+        sp = float(p.setpoint)
+        alarms.append({"key": key, "name": p.name, "unit": p.unit, "setpoint": sp, "nor": (lo_e, hi_e),
+                       "side": side, "alarm": sp + pos * (edge - sp)})
+    iac = csv("iac.csv")
+    row = iac[(iac["step_key"] == "bioreactor") & (iac["response"] == resp)].iloc[0]
+    lower = float(row["iac_low"])
+    meth = {x["id"]: x for x in CFG.raw()["deviations"]["methods"]}[m["action_method"]]
+    sd = float(meth["precision_pct"]) / 100.0 * lower
+    k = float(m["action_guard_sd"])
+    return {"alarms": alarms, "action_limit": lower + k * sd, "lower_criterion": lower, "sd": sd, "guard": k,
+            "method": m["action_method"], "monitoring": m["monitoring"]}

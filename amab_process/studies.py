@@ -193,7 +193,8 @@ def _sample_overrides(proc: Process, rng: np.random.Generator,
             lo, hi = p.nor
             sigma = max((hi - lo) / 6.0, 1e-9)
             val = rng.normal(p.setpoint, sigma)
-            val = float(np.clip(val, p.prange[0], p.prange[1]))
+            lo_clip = max(p.prange[0], p.nor[0]) if getattr(p, "nor_one_sided", None) == "low" else p.prange[0]
+            val = float(np.clip(val, lo_clip, p.prange[1]))   # a one-sided minimum is never undercut
             d[p.key] = val
         overrides[key] = d
     return overrides

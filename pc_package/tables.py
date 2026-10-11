@@ -730,6 +730,10 @@ def parameters_by_step(steps: Optional[List[str]] = None, label="tbl-parameters-
             par = cfg.unit_op(k).param(next(q.key for q in uo.parameters if q.name == r["parameter"]))
             same = (par.nor[0], par.nor[1]) == (par.prange[0], par.prange[1])
             nor = ["as characterized^a)^"] if same else [f"{pval(r['nor_low'])}–{pval(r['nor_high'])}"]
+            if getattr(par, "nor_one_sided", None) == "low":
+                # a counted parameter run to at least its minimum (diavolumes; owner, 2026-10-11)
+                nor = [f"≥ {pval(r['nor_low'])}^d)^"]
+                used.add("d)")
             if same:
                 used.add("a)")
             if list(par.nor) != list(par.nor_characterized):
@@ -764,7 +768,8 @@ def parameters_by_step(steps: Optional[List[str]] = None, label="tbl-parameters-
             body.append(row)
     notes = [("a)", "The normal operating range equals the characterized range."),
              ("b)", "Studied one factor at a time. Every other parameter was studied in the designed "
-                    "experiments of its step.")] + narrowed
+                    "experiments of its step."),
+             ("d)", "A minimum: the parameter is counted to its target and is not run below this value.")] + narrowed
     return CTable(
         header=[["Step", "Parameter", "Unit", "Set-point", "NOR", "Characterized\nrange", "Class"]],
         body=body, align=["P{1.8cm}", "P{4.0cm}", "P{2.6cm}", "r", "P{2.2cm}", "l", "l"],

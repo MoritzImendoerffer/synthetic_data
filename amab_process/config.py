@@ -50,6 +50,7 @@ class Parameter:
     nor_characterized: List[float] = None   # the NOR the studies were planned and judged against
     setpoint_characterized: float = None    # the set-point the studies were run around (``setpoint`` is
                                             # the set-point in force: ``setpoint_v2`` if a report moved it)
+    nor_one_sided: str = None               # "low": the NOR is a minimum, at least nor[0] (diavolumes, owner 2026-10-11)
 
     @property
     def par(self) -> List[float]:
@@ -133,6 +134,7 @@ class Config:
                 nor=list(p.get("nor_v2", p.get("nor", p.get("range", [0, 0]))) if _NOR_MODE["mode"] == "final"
                          else p.get("nor", p.get("range", [0, 0]))),
                 nor_characterized=list(p.get("nor", p.get("range", [0, 0]))),
+                nor_one_sided=p.get("nor_one_sided"),
             )
             for p in raw.get("parameters", [])
         ]

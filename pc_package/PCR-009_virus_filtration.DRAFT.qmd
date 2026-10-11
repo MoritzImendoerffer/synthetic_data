@@ -36,22 +36,498 @@ jupyter: python3
 
 ```{python}
 #| tags: [setup]
-import sys, os
+import sys, os, re, itertools
 sys.path.insert(0, os.path.abspath("."))
 from _pcpkg import *  # noqa: F401,F403
 import doe_report as D
 import tables as T          # complex tables: merged cells, footnotes (T.<builder>(...).show())
 import matplotlib.pyplot as plt
 import scipy.stats as sstat
+import numpy as np
+import pandas as pd
+from amab_process import adequacy as ad
 
 DOC = "PCR-009"
 UO = "virus_filtration"
 UO_TITLE = "Small-Virus Retentive Filtration (Step 9)"
 
-# --- doc-local derived scalars go here (pull from the model; never type numbers) ---
-# Examples (adapt to this step; see authoring/out/PCR-009.brief.md for the inventory):
-#   n_scr = doe_runs(UO, "screening"); n_rsm = doe_runs(UO, "rsm")
-#   fits  = {r: D.fit(UO, "rsm", r) for r in D.responses(UO)}
+# --- formatting: one format per kind of value, a true minus sign -------------------------------
+def _mn(s):
+    if s.startswith("-"):
+        return ("−" + s[1:]) if any(ch in "123456789" for ch in s) else s[1:]
+    return s
+def fx(v, nd=2):
+    return _mn(f"{float(v):,.{nd}f}")
+_ALPHA_P = float(THRESHOLDS["effect_alpha"])
+def _p3(p):
+    """Three decimals, or four where three would put the value on the wrong side of alpha or on it."""
+    s3 = f"{p:.3f}"
+    return f"{p:.4f}" if (float(s3) < _ALPHA_P) != (p < _ALPHA_P) or float(s3) == _ALPHA_P else s3
+def pv(p):
+    """A p-value in running text."""
+    return "p < 0.001" if p < 0.001 else f"p = {_p3(p)}"
+def pn(p):
+    """A p-value in a table cell."""
+    return "< 0.001" if p < 0.001 else _p3(p)
+def floor2(x):
+    """Two decimals rounded down, for a lower bound stated as "p ≥"."""
+    import math
+    return f"{math.floor(x * 100) / 100:.2f}"
+def inward(x, up, sig=3):
+    """A range edge rounded to three significant figures toward the inside of the range, as the
+    PAR table of doe_report prints it."""
+    import math
+    x = float(x)
+    step = 10 ** (math.floor(math.log10(abs(x))) - sig + 1)
+    q = x / step
+    if abs(q - round(q)) < 1e-9:
+        return round(round(q) * step, 12)
+    return round((math.ceil(q) if up else math.floor(q)) * step, 12)
+rng_s = lambda r: f"{r[0]:g}–{r[1]:g}"
+NEAR_AICC = 2.0                    # models within this many AICc units are near-equivalent (REPORT-LESSONS)
+
+# --- parameters, from the config ------------------------------------------------------------------
+uo = CFG.unit_op(UO)
+FAC = D.rsm_factors(UO)
+assert FAC == ["filtration_volume", "pressure"] and D.screening_factors(UO) == FAC
+LET = D.factor_letters(UO)
+PV, PP = uo.param("filtration_volume"), uo.param("pressure")
+NM_V, NM_P = PV.name, PP.name
+U_V, U_P = PV.unit, PP.unit
+SP_V, SP_P = PV.setpoint, PP.setpoint
+NOR_V, NOR_P = PV.nor, PP.nor
+RNG_V, RNG_P = PV.prange, PP.prange
+HALF_V, HALF_P = (RNG_V[1] - RNG_V[0]) / 2, (RNG_P[1] - RNG_P[0]) / 2
+assert T.nor_change(PV) is None and T.nor_change(PP) is None        # no NOR changed at Version 2.0
+assert PV.setpoint == PV.setpoint_characterized and PP.setpoint == PP.setpoint_characterized
+assert RNG_V[0] == NOR_V[0] and RNG_V[1] > NOR_V[1] and RNG_P[0] < NOR_P[0] and RNG_P[1] > NOR_P[1]
+PR = report_params(UO).set_index("Parameter")
+CLASS_V, CLASS_P = PR.loc[NM_V, "Class"], PR.loc[NM_P, "Class"]
+assert CLASS_V == CLASS_P == "WC-CPP"
+SCOPE = char_scope_df().set_index("Step").loc[uo.step]
+N_PAR, N_MV, N_UNI = int(SCOPE["Parameters"]), int(SCOPE["Multivariate"]), int(SCOPE["Univariate"])
+assert N_PAR == N_MV == 2 and N_UNI == 0
+
+# --- designs ---------------------------------------------------------------------------------------
+SCR = csv("doe_virus_filtration_screening.csv")
+RSM = csv("doe_virus_filtration_rsm.csv")
+n_scr, n_rsm = doe_runs(UO, "screening"), doe_runs(UO, "rsm")
+n_scr_c, n_rsm_c = doe_centre_points(UO, "screening"), doe_centre_points(UO, "rsm")
+n_scr_f = int((SCR.run_type == "factorial").sum())
+n_rsm_f, n_rsm_a = int((RSM.run_type == "factorial").sum()), int((RSM.run_type == "axial").sum())
+assert n_scr_f + n_scr_c == n_scr and n_rsm_f + n_rsm_a + n_rsm_c == n_rsm
+assert not D.has_augmentation(UO)
+n_all = n_scr + n_rsm
+assert D.fragment_responses(UO, "screening") == D.fragment_responses(UO, "rsm") == ["lmw_cesds_pct"]
+
+# --- chronology ------------------------------------------------------------------------------------
+CHR = csv("study_chronology.csv").set_index("id")
+win = lambda s: (CHR.loc[s, "start"], CHR.loc[s, "end"])
+W_SDM, W_SCR, W_RSM = win("S-VF-SDM"), win("S-VF-DOE"), win("S-VF-RSM")
+assert sorted(CHR[CHR.step == UO].index) == ["S-VF-DOE", "S-VF-RSM", "S-VF-SDM"]   # nothing added later
+assert CHR[CHR.step == UO]["equipment"].isna().all()       # no instrumented system under calibration named
+PLAN_V1 = rev1_date("PCP-009")
+REP_V1 = rev1_date(DOC)
+VER, EFF = doc_version(DOC)
+assert PLAN_V1 < W_SDM[0] <= W_SDM[1] < W_SCR[0] <= W_SCR[1] < W_RSM[0] <= W_RSM[1] < REP_V1
+assert AMD["date"] < W_SCR[0]                                     # both designs after AMD-001
+CA3_DATE = re.search(r"\d{4}-\d{2}-\d{2}", CAPA2.set_index("id").loc["CA3", "status"]).group(0)
+assert CA3_DATE < INV["closed"]
+
+# --- criteria --------------------------------------------------------------------------------------
+ACC = {r: D.effective_acceptance(UO, r) for r in ["mvm_lrf", "xmulv_lrf", "lmw_cesds_pct"]}
+CL_M, CL_X = ACC["mvm_lrf"][0], ACC["xmulv_lrf"][0]
+CR_F = ACC["lmw_cesds_pct"][1]
+assert ACC["mvm_lrf"][2] == ACC["xmulv_lrf"][2] == "lower" and ACC["lmw_cesds_pct"][2] == "upper"
+assert D.acceptance_basis(UO, "mvm_lrf") == D.acceptance_basis(UO, "xmulv_lrf") == "platform claim"
+assert D.acceptance_basis(UO, "lmw_cesds_pct") == "drug substance"
+IAC9 = D.iac_table(UO)
+assert not IAC9["tightened"].any() and not IAC9["widened"].any()   # in force = a priori
+R1 = D.rev1_criteria(UO).set_index("response")
+R1_M, R1_X = float(R1.loc["mvm_lrf", "low"]), float(R1.loc["xmulv_lrf", "low"])
+R1_RULE = R1.loc["mvm_lrf", "rule"]
+assert R1_RULE == R1.loc["xmulv_lrf", "rule"] and R1_M > CL_M and R1_X > CL_X and "lmw_cesds_pct" not in R1.index
+IACALL = D.iac_table()
+_claim = lambda step, resp: float(IACALL[(IACALL.step_key == step) & (IACALL.response == resp)]["iac_low"].iloc[0])
+CL_VI_X, CL_AEX_X, CL_AEX_M = _claim("viral_inactivation", "xmulv_lrf"), _claim("aex", "xmulv_lrf"), _claim("aex", "mvm_lrf")
+assert "mvm_lrf" not in set(IACALL[IACALL.step_key == "viral_inactivation"].response)   # no MVM claim at low pH
+CUM = csv("iac_viral_cumulative.csv").set_index("cqa")
+SUM_X, REQ_X = float(CUM.loc["lrv_xmulv", "claimed_sum"]), float(CUM.loc["lrv_xmulv", "required"])
+SUM_M, REQ_M = float(CUM.loc["lrv_mvm", "claimed_sum"]), float(CUM.loc["lrv_mvm", "required"])
+assert abs(SUM_X - (CL_VI_X + CL_AEX_X + CL_X)) < 1e-9 and abs(SUM_M - (CL_AEX_M + CL_M)) < 1e-9
+assert bool(CUM["met"].all())
+assert D.iac_verification(UO).empty                     # no criterion relies on a worst case of this step
+assert float(cqa_reg.set_index("key").loc["lrv_mvm", "acc_low"]) == REQ_M
+assert float(cqa_reg.set_index("key").loc["lrv_xmulv", "acc_low"]) == REQ_X
+
+# --- the response-surface models (INV-002 CA3 selection) and their adequacy ------------------------
+TH = D.TH
+ALPHA, GAPMAX = TH["effect_alpha"], TH["max_r2_minus_pred_r2"]
+LOF_ALPHA, RES_ALPHA = TH["lof_alpha"], TH["residual_alpha"]
+COOK_K, COOK_Q = TH["cook_factor"], TH["cook_f_quantile"]
+assert ALPHA == LOF_ALPHA == RES_ALPHA
+RESP4 = ["mvm_lrf", "xmulv_lrf", "lmw_cesds_pct", "step_yield"]
+FT = {r: D.fit(UO, "rsm", r) for r in RESP4}
+RI = {r: D.residual_influence(UO, r) for r in RESP4}
+FM, FXV, FF, FY = (FT[r] for r in RESP4)
+RIM, RIX, RIF, RIY = (RI[r] for r in RESP4)
+assert all(FT[r]["n"] == n_rsm and not FT[r]["block"] and FT[r]["transform"] is None for r in RESP4)
+assert all(FT[r]["boxcox"]["lo"] <= 0 <= FT[r]["boxcox"]["hi"] and FT[r]["boxcox"]["lo"] <= 1 <= FT[r]["boxcox"]["hi"]
+           for r in RESP4)                                # every interval contains 0 and 1: raw scale
+BC_M = FM["boxcox"]
+BC_GRID = (-10.0, 10.0)                                   # a wider grid of lambda than the selection's -2 to 2
+BC_WIDE = ad.boxcox_interval(D.rsm_data(UO, "planned"), "mvm_lrf", FAC, ad.full_terms(FAC),
+                             grid=np.round(np.arange(BC_GRID[0], BC_GRID[1] + 1e-9, 0.01), 2))
+assert BC_M["lo"] == -2.0 and BC_WIDE["lo"] > BC_GRID[0] and BC_WIDE["lo"] <= 0 <= BC_WIDE["hi"] and BC_WIDE["lo"] <= 1 <= BC_WIDE["hi"]
+assert abs(BC_WIDE["hi"] - BC_M["hi"]) < 1e-9
+N_CAND = len(ad.hierarchical_subsets(FAC))
+N_FULL = len(ad.full_terms(FAC))
+assert FM["status"] == "selected" and FM["names"] == ["filtration_volume"]
+assert FM["p"] < ALPHA and FM["p_lof"] >= LOF_ALPHA and FM["gap"] <= GAPMAX
+assert FXV["status"] == "none" and FXV["names"] == ["pressure"] and FXV["p"] >= ALPHA and FXV["gap"] > GAPMAX
+assert FXV["p_lof"] >= LOF_ALPHA
+assert FF["status"] == "selected" and FF["names"] == [] and FF["p_lof"] >= LOF_ALPHA and FF["gap"] <= GAPMAX
+assert FY["status"] == "selected" and FY["names"] == [] and FY["p_lof"] >= LOF_ALPHA and FY["gap"] <= GAPMAX
+assert RIM["testable"] and RIM["trends_met"] and RIM["over_f"] == [5] and sorted(RIM["over"]) == [2, 5]
+assert RIF["trends_met"] and RIF["over"] == [9] and RIF["over_f"] == []
+assert RIY["met"] and RIY["over"] == [] and RIX["met"]
+_cook = lambda ri, run: float(ri["cook"][ri["runs"].index(run)])
+COOK5, COOK2, COOK9 = _cook(RIM, 5), _cook(RIM, 2), _cook(RIF, 9)
+_infm = FM["model"].get_influence()
+HAT_M = _infm.hat_matrix_diag
+RUNS_M = list(FM["df"]["run"])
+H5 = float(HAT_M[RUNS_M.index(5)])
+LEV_LIM = 2 * RIM["p"] / RIM["n"]
+assert HAT_M.max() < LEV_LIM                               # no run above 2p/n in leverage
+RES5 = float(FM["model"].resid.iloc[RUNS_M.index(5)])
+SRES5 = float(_infm.resid_studentized_external[RUNS_M.index(5)])
+RES2 = float(FM["model"].resid.iloc[RUNS_M.index(2)])
+RUN5 = RSM.set_index("run").loc[5]
+RUN2 = RSM.set_index("run").loc[2]
+RUN9 = RSM.set_index("run").loc[9]
+assert RUN5.run_type == "axial" and RUN5.filtration_volume == RNG_V[0] and RUN2.run_type == "factorial"
+assert RUN9.run_type == "center" and RES5 > 0 and RES2 < 0
+ORDER5 = int(RUN5.run_order)
+M_AT_LO = sorted(float(x) for x in RSM[RSM.filtration_volume == RNG_V[0]].mvm_lrf)
+assert RUN5.mvm_lrf == max(M_AT_LO)
+SW = {r: float(sstat.shapiro(FT[r]["model"].resid.values).pvalue) for r in ["mvm_lrf", "lmw_cesds_pct", "step_yield"]}
+assert all(p >= ALPHA for p in SW.values())
+SD_PE_M = float(np.sqrt(FM["ss_pe"] / FM["df_pe"]))
+
+B0, B1 = float(FM["model"].params["const"]), float(FM["model"].params["filtration_volume"])
+SE_B1 = float(FM["model"].bse["filtration_volume"])
+EFF_V = 2 * B1                                            # across the range studied
+SLOPE10 = B1 / HALF_V * 10                                # per 10 L/m2
+_pm = lambda v: float(D.predict(UO, "mvm_lrf", natural={"filtration_volume": v})[0])
+M_LO, M_SP, M_NORHI, M_HI = _pm(RNG_V[0]), _pm(SP_V), _pm(NOR_V[1]), _pm(RNG_V[1])
+WC_M = D.nor_worst_corner(UO, "mvm_lrf")
+assert WC_M["settings"]["filtration_volume"] == NOR_V[1] and WC_M["median_met"] and WC_M["met"]
+assert abs(WC_M["predicted"] - M_NORHI) < 1e-9
+M_PI_LO = WC_M["pi_low"]                                  # per batch, for information
+def crossing(predict_fn, claim, lo=RNG_V[0], hi=RNG_V[1], n=90001):
+    xs = np.linspace(lo, hi, n)
+    y = predict_fn(xs)
+    ok = y >= claim
+    if ok.all():
+        return None
+    i = int(np.argmax(~ok))
+    return float(np.interp(claim, [y[i], y[i - 1]], [xs[i], xs[i - 1]]))
+CROSS_V = crossing(lambda xs: D.predict(UO, "mvm_lrf", natural={"filtration_volume": xs}), CL_M)
+assert CROSS_V is not None and NOR_V[1] < CROSS_V < RNG_V[1]
+MEAS_BELOW = [(k, int(r.run), r.filtration_volume, r.pressure, r.mvm_lrf)
+              for k, d in (("screening", SCR), ("response-surface", RSM)) for _, r in d.iterrows() if r.mvm_lrf < CL_M]
+assert MEAS_BELOW and all(x[2] == RNG_V[1] for x in MEAS_BELOW)
+N_BELOW = len(MEAS_BELOW)
+assert D.measured_met(UO, "mvm_lrf") is False
+D0 = D.rsm_data(UO, "planned")
+def _ranked(resp):
+    sel = FT[resp]
+    rows = []
+    for terms in ad.hierarchical_subsets(FAC):
+        a = ad.aicc(D0[sel["ycol"]].to_numpy(float), ad.matrix(D0, terms, False).to_numpy(float))
+        rows.append((a - sel["aicc"], list(terms)))
+    return sorted(rows, key=lambda x: x[0])
+RANK = {r: _ranked(r) for r in RESP4}
+assert all(RANK[r][0][1] == FT[r]["names"] and abs(RANK[r][0][0]) < 1e-9 for r in RESP4)
+NEAR = {r: [x for x in RANK[r][1:] if x[0] <= NEAR_AICC] for r in RESP4}
+assert NEAR["mvm_lrf"] == [] and NEAR["lmw_cesds_pct"] == []
+NEXT_M_D, NEXT_M_TERMS = RANK["mvm_lrf"][1]
+assert NEXT_M_TERMS == ["filtration_volume", "pressure"]
+assert len(NEAR["xmulv_lrf"]) == 1 and NEAR["xmulv_lrf"][0][1] == []
+NX_D = NEAR["xmulv_lrf"][0][0]
+NX_FIT = ad.adequacy(D0, "xmulv_lrf", FAC, [], TH)
+assert NX_FIT["adequate"]
+NX_MEAN = float(NX_FIT["model"].params["const"])
+assert NX_MEAN >= CL_X
+assert len(NEAR["step_yield"]) == 1 and NEAR["step_yield"][0][1] == ["filtration_volume"]
+NY_D = NEAR["step_yield"][0][0]
+NY_FIT = ad.adequacy(D0, "step_yield", FAC, ["filtration_volume"], TH)
+NY_B, NY_P = float(NY_FIT["model"].params["filtration_volume"]), float(NY_FIT["model"].pvalues["filtration_volume"])
+assert NY_P >= ALPHA and NY_B < 0
+SW_SAME = {}
+for r in ["mvm_lrf", "xmulv_lrf", "lmw_cesds_pct"]:
+    f = FT[r]
+    SW_SAME[r] = all(sorted(ad.stepwise_aicc(f["df"], f["ycol"], f["factors"], False, dr)["terms"]) == sorted(f["names"])
+                     for dr in ("backward", "forward"))
+assert all(SW_SAME.values())
+with D.planned_full_models():
+    PFULL = {r: D.fit(UO, "rsm", r) for r in RESP4}
+    PFULL_COEF = {r: D.rsm_coeff_df(UO, r) for r in RESP4}
+assert all(PFULL[r]["gap"] > GAPMAX for r in ["mvm_lrf", "xmulv_lrf", "lmw_cesds_pct"])
+GAP_FULL_M = PFULL["mvm_lrf"]["gap"]
+PF_ADJ = {r: PFULL[r]["adjR2"] for r in RESP4}
+_pf = PFULL["mvm_lrf"]["model"]
+PF_AB, PF_AB_SE, PF_AB_P = (float(_pf.params["filtration_volume:pressure"]), float(_pf.bse["filtration_volume:pressure"]),
+                           float(_pf.pvalues["filtration_volume:pressure"]))
+PF_A2, PF_A2_P = float(_pf.params["filtration_volume^2"]), float(_pf.pvalues["filtration_volume^2"])
+PF_B, PF_B_P = float(_pf.params["pressure"]), float(_pf.pvalues["pressure"])
+PF_B2, PF_B2_P = float(_pf.params["pressure^2"]), float(_pf.pvalues["pressure^2"])
+assert PF_AB_P >= ALPHA and PF_A2_P >= ALPHA and PF_B_P >= ALPHA and PF_B2_P >= ALPHA
+assert PF_A2 > 0 and PF_B2 < 0
+MA9 = csv("model_adequacy.csv")
+MA9 = MA9[MA9.step_key == UO].set_index("response")
+assert set(MA9["remedy"]) == {"refit"}
+assert MA9.loc["mvm_lrf", "reason"] == MA9.loc["xmulv_lrf", "reason"] == "not a drug substance test"
+assert MA9.loc["lmw_cesds_pct", "reason"] == "no effect to resolve"
+XB, XB_P = float(FXV["model"].params["pressure"]), float(FXV["model"].pvalues["pressure"])
+MEAS_X = D.measured_values(UO, "xmulv_lrf")
+assert D.measured_met(UO, "xmulv_lrf") is True and len(MEAS_X) == n_all
+F_MEAN, F_SD = float(FF["model"].params["const"]), float(FF["rmse"])
+MEAS_F = D.measured_values(UO, "lmw_cesds_pct")
+assert D.measured_met(UO, "lmw_cesds_pct") is True and len(MEAS_F) == n_all
+F_PI_HI = D.nor_prediction_limit(UO, "lmw_cesds_pct", "upper")
+F_PI_LO = D.nor_prediction_limit(UO, "lmw_cesds_pct", "lower")
+assert F_PI_HI <= CR_F and F_PI_LO >= 0
+Y_MEAN, Y_SD = float(FY["model"].params["const"]), float(FY["rmse"])
+GAP_NOTERM = lambda n: (2 * n - 1) / (n - 1) ** 2         # R2 minus predicted R2 of a model with no term
+assert abs(GAP_NOTERM(n_rsm) - FF["gap"]) < 1e-9 and abs(GAP_NOTERM(n_rsm) - FY["gap"]) < 1e-9
+assert GAP_NOTERM(n_rsm) <= GAPMAX < GAP_NOTERM(n_rsm - 1)
+CESDS = CFG.raw()["analytics"]["methods"]["cesds"]
+CESDS_SD, CESDS_LOQ = float(CESDS["sd_abs"]), float(CESDS["loq"])
+assert CESDS["id"] == "AMV-3020"
+METH = csv("dev_methods.csv").set_index("id")
+LOQ_MVM, LOQ_X = float(METH.loc["AMV-3018", "loq"]), float(METH.loc["AMV-3017", "loq"])
+LOQ_UNIT = METH.loc["AMV-3018", "loq_unit"]
+assert METH.loc["AMV-3017", "loq_unit"] == LOQ_UNIT
+AMV_T = dict(VIRUS_FILT_AMV_REFS)
+SOP_T = dict(VIRUS_FILT_SOP_REFS)
+
+# --- the judgements over the NOR -------------------------------------------------------------------
+NOR_MET = {r: D.nor_met(UO, r) for r in ["mvm_lrf", "xmulv_lrf", "lmw_cesds_pct"]}
+assert all(NOR_MET.values())
+# what INV-002 CA3 changed at this step: the criteria without CA3 (D.ca3_criteria_sensitivity, this step only)
+_pars = lambda: {f: D.par_nor_propagated(UO, "mvm_lrf", f)["par_nat"] for f in FAC}
+PARS_IN = _pars()
+with D.criteria_without_ca3():
+    ACC_WO = {r: D.ipc_limit(UO, r) for r in NOR_MET}
+    MET_WO = {r: D.nor_met(UO, r) for r in NOR_MET}
+    PARS_WO = _pars()
+assert ACC_WO == {r: D.ipc_limit(UO, r) for r in NOR_MET} and MET_WO == NOR_MET
+assert all(np.allclose(PARS_IN[f], PARS_WO[f]) for f in FAC)
+
+# --- deletion of runs: the flagged runs of criterion 4, and every run in turn -----------------------
+def _coded(nat):
+    return pd.DataFrame({"coded_" + f: np.atleast_1d(D.to_coded(UO, f, np.asarray(nat[f], float))) for f in FAC})
+def _pred(sel, nat, alpha=0.05):
+    sf = sel["model"].get_prediction(ad.matrix(_coded(nat), sel["terms"], False)).summary_frame(alpha=alpha)
+    b = np.exp if sel["scale"] == "log" else (lambda v: v)
+    return b(sf["mean"].to_numpy()), b(sf["obs_ci_lower"].to_numpy()), b(sf["obs_ci_upper"].to_numpy())
+NORG = pd.DataFrame(list(itertools.product(*[[uo.param(f).nor[0], uo.param(f).setpoint, uo.param(f).nor[1]] for f in FAC])),
+                    columns=FAC)
+GRID11 = pd.DataFrame(list(itertools.product(*[D.to_natural(UO, f, np.linspace(-1, 1, 11)) for f in FAC])), columns=FAC)
+def _contig(xs, mask, centre):
+    i = int(np.argmin(np.abs(xs - centre)))
+    if not mask[i]:
+        return None
+    lo = hi = i
+    while lo > 0 and mask[lo - 1]:
+        lo -= 1
+    while hi < len(xs) - 1 and mask[hi + 1]:
+        hi += 1
+    return float(xs[lo]), float(xs[hi])
+def deletion(resp, drop):
+    d = D0 if drop is None else D0[D0["run"] != drop].reset_index(drop=True)
+    sel = ad.select_model(d, resp, FAC, TH)
+    assert not sel["exact"]
+    out = {"run": drop, "n": len(d), "terms": list(sel["terms"]), "adequate": bool(sel["adequate"]),
+           "scale": sel["scale"], "gap": sel["gap"], "sel": sel}
+    if resp == "mvm_lrf":
+        m, _, _ = _pred(sel, {f: NORG[f].to_numpy() for f in FAC})
+        out["worst"] = float(m.min())
+        out["nor_met"] = bool(out["worst"] >= CL_M) if sel["adequate"] else None
+        xs = np.linspace(RNG_V[0], RNG_V[1], D.PAR_GRID)
+        worst = np.array([_pred(sel, {"filtration_volume": np.full(3, x),
+                                      "pressure": np.array([NOR_P[0], SP_P, NOR_P[1]])})[0].min() for x in xs])
+        out["par_v"] = _contig(xs, worst >= CL_M, SP_V)
+        g = _pred(sel, {f: GRID11[f].to_numpy() for f in FAC})[0]
+        out["ds_frac"] = float(np.mean(g >= CL_M))         # fragments and XMuLV exclude no grid point
+        out["b1"] = float(sel["model"].params.get("filtration_volume", np.nan))
+    else:
+        m, lo, hi = _pred(sel, {f: NORG[f].to_numpy() for f in FAC})
+        out["pi_lo"], out["pi_hi"] = float(lo.min()), float(hi.max())
+        meas = np.concatenate([SCR[resp].to_numpy(float), d[resp].to_numpy(float)])
+        out["meas_met"] = bool(np.all(meas <= CR_F))
+        out["nor_met"] = bool(out["pi_hi"] <= CR_F and out["pi_lo"] >= 0) if sel["adequate"] else out["meas_met"]
+    return out
+RUNS = [int(x) for x in RSM["run"]]
+LOO = {r: deletion("mvm_lrf", r) for r in [None] + RUNS}
+LOOF = {r: deletion("lmw_cesds_pct", r) for r in [None] + RUNS}
+D_ALL, D5, D2 = LOO[None], LOO[5], LOO[2]
+DSG = D.design_space_grid(UO)
+DSG_MEAN = D.design_space_grid(UO, basis="mean")
+PN_V = D.par_nor_propagated(UO, "mvm_lrf", "filtration_volume")["par_nat"]
+PN_P = D.par_nor_propagated(UO, "mvm_lrf", "pressure")["par_nat"]
+PC_V = D.par_at_design_centre(UO, "mvm_lrf", "filtration_volume")["par_nat"]
+# the doc-local analysis reproduces the engine on all runs
+assert abs(D_ALL["par_v"][1] - PN_V[1]) < 1e-9 and abs(D_ALL["ds_frac"] - DSG["fraction"]) < 1e-12
+assert abs(D_ALL["worst"] - M_NORHI) < 1e-9
+assert DSG["binding"] == "mvm_lrf" and DSG["measured"] == {"xmulv_lrf": True} and DSG["per_response"]["lmw_cesds_pct"] == 0.0
+assert DSG_MEAN["fraction"] == DSG["fraction"]
+DS_N = DSG["n_points"]
+DS_IN = int(round(DSG["fraction"] * DS_N))
+DS_PCT = 100 * DSG["fraction"]
+# every deletion keeps the term and the claim; only the position of the upper PAR edge of volume moves
+assert all(LOO[r]["terms"] == ["filtration_volume"] and LOO[r]["adequate"] and LOO[r]["nor_met"] for r in LOO)
+LOO_WORST = [LOO[r]["worst"] for r in RUNS]
+LOO_LOG = [r for r in RUNS if LOO[r]["scale"] == "log"]
+LOO_END = [r for r in RUNS if LOO[r]["par_v"][1] == RNG_V[1]]
+assert 5 in LOO_END and set(LOO_END) <= set([5] + LOO_LOG)
+assert D5["scale"] == D2["scale"] == "raw"
+assert D5["par_v"][1] == RNG_V[1] and D5["ds_frac"] == 1.0
+assert D2["ds_frac"] == DSG["fraction"] and D2["par_v"][1] < PN_V[1]
+assert abs(D5["b1"]) < abs(B1) < abs(D2["b1"])
+CROSS2 = crossing(lambda v: _pred(D2["sel"], {"filtration_volume": v, "pressure": np.full(len(v), SP_P)})[0], CL_M)
+assert crossing(lambda v: _pred(D5["sel"], {"filtration_volume": v, "pressure": np.full(len(v), SP_P)})[0], CL_M) is None
+LOO_EDGE_MIN = min(LOO[r]["par_v"][1] for r in RUNS)
+# fragments: with any one run deleted the model has no term and, on 11 runs, exceeds the limit on
+# overfitting; fragments are then judged on their measured results, all within the criterion
+assert all(LOOF[r]["terms"] == [] and not LOOF[r]["adequate"] and LOOF[r]["meas_met"] and LOOF[r]["nor_met"] for r in RUNS)
+assert all(abs(LOOF[r]["gap"] - GAP_NOTERM(n_rsm - 1)) < 1e-9 for r in RUNS) and LOOF[None]["nor_met"]
+
+# --- PARs --------------------------------------------------------------------------------------------
+PT = D.par_table(UO)
+LAB_M, LAB_X, LAB_F = D.RESP_LABEL["mvm_lrf"], D.RESP_LABEL["xmulv_lrf"], D.RESP_LABEL["lmw_cesds_pct"]
+PTI = PT.set_index(["CQA", "Parameter"])
+PAR_V_S, PAR_V_N = PTI.loc[(LAB_M, NM_V), "PAR (set-point)"], PTI.loc[(LAB_M, NM_V), "PAR (NOR)"]
+PAR_P_N = PTI.loc[(LAB_M, NM_P), "PAR (NOR)"]
+assert all(PTI.loc[(LAB_X, n), "Basis"] == "no adequate model" and PTI.loc[(LAB_X, n), "PAR (NOR)"] == "n.a."
+           and PTI.loc[(LAB_X, n), "PAR (set-point)"] == "n.a." for n in (NM_V, NM_P))
+assert PTI.loc[(LAB_F, NM_V), "PAR (NOR)"] == rng_s(RNG_V) and PTI.loc[(LAB_F, NM_P), "PAR (NOR)"] == rng_s(RNG_P)
+EDGE_V = inward(PN_V[1], up=False)
+assert PAR_V_N == f"{RNG_V[0]:g}–{EDGE_V:g}"
+# PCMP-001 §7.6: the range carried into the control strategy is the intersection of the PARs over the outputs
+# with an adequate model; the fragment PARs cover the range studied, so the MVM PARs are the intersection
+PN_F = {f: D.par_nor_propagated(UO, "lmw_cesds_pct", f)["par_nat"] for f in FAC}
+assert PN_F["filtration_volume"] == tuple(RNG_V) and PN_F["pressure"] == tuple(RNG_P)
+MARG_V = EDGE_V - NOR_V[1]
+PMG = D.par_margins(UO).set_index(["response", "factor"])
+assert bool(PMG.loc[("mvm_lrf", "filtration_volume"), "contains_nor"]) and bool(PMG.loc[("mvm_lrf", "pressure"), "contains_nor"])
+assert PN_P == (RNG_P[0], RNG_P[1]) and PN_V[0] == RNG_V[0] and PC_V[0] == RNG_V[0]
+assert D.governing_factor(UO, "mvm_lrf") == "filtration_volume"
+M_EDGE = _pm(EDGE_V)
+with D.rev1_criteria_in_force():
+    R1_PN_V = D.par_nor_propagated(UO, "mvm_lrf", "filtration_volume")["par_nat"]
+    R1_PN_P = D.par_nor_propagated(UO, "mvm_lrf", "pressure")["par_nat"]
+PT1 = D.par_table_rev1(UO).set_index(["CQA", "Parameter"])
+R1_PAR_V, R1_PAR_P = PT1.loc[(LAB_M, NM_V), "PAR (NOR)"], PT1.loc[(LAB_M, NM_P), "PAR (NOR)"]
+assert R1_PN_V[1] < NOR_V[1] and R1_PN_P[0] > NOR_P[0]   # Version 1.0: both narrower than the NOR
+R1_PAR_XV, R1_PAR_XP = PT1.loc[(LAB_X, NM_V), "PAR (NOR)"], PT1.loc[(LAB_X, NM_P), "PAR (NOR)"]
+assert R1_PAR_XV == rng_s(RNG_V) and R1_PAR_XP == rng_s(RNG_P)   # the Version 1.0 XMuLV ranges, now withdrawn
+
+# --- screening ----------------------------------------------------------------------------------------
+SE = {r: D.screening_effects_df(UO, r).set_index("Term") for r in RESP4}
+SF = {r: D.fit(UO, "screening", r) for r in RESP4}
+E_A_M, P_A_M = float(SE["mvm_lrf"].loc["A", "Effect"]), float(SE["mvm_lrf"].loc["A", "p-value"])
+E_B_M, P_B_M = float(SE["mvm_lrf"].loc["B", "Effect"]), float(SE["mvm_lrf"].loc["B", "p-value"])
+E_AB_M, P_AB_M = float(SE["mvm_lrf"].loc["AB", "Effect"]), float(SE["mvm_lrf"].loc["AB", "p-value"])
+assert P_A_M < ALPHA and P_B_M >= ALPHA and P_AB_M >= ALPHA and E_A_M < 0
+assert all(float(SE[r]["p-value"].min()) >= ALPHA for r in ["xmulv_lrf", "lmw_cesds_pct", "step_yield"])
+SCR_P_M, SCR_DFR = float(SF["mvm_lrf"]["p"]), int(SF["mvm_lrf"]["model"].df_resid)
+assert SCR_P_M >= ALPHA
+def _curv(d, resp):
+    return float(d[d.run_type == "center"][resp].mean() - d[d.run_type == "factorial"][resp].mean())
+CURV_SCR = {r: _curv(SCR, r) for r in RESP4}
+CURV_RSM_F = _curv(RSM, "lmw_cesds_pct")
+CURV_P = {r: float(SF[r]["p_lof"]) for r in RESP4}       # the 1-df lack of fit of the screening model
+assert all(int(SF[r]["df_lof"]) == 1 for r in RESP4)
+assert CURV_P["lmw_cesds_pct"] < ALPHA and all(CURV_P[r] >= ALPHA for r in ["mvm_lrf", "xmulv_lrf", "step_yield"])
+assert CURV_SCR["lmw_cesds_pct"] < 0 < CURV_RSM_F
+_cs, _cr = SCR[SCR.run_type == "center"]["lmw_cesds_pct"], RSM[RSM.run_type == "center"]["lmw_cesds_pct"]
+_fs, _fr = SCR[SCR.run_type == "factorial"]["lmw_cesds_pct"], RSM[RSM.run_type == "factorial"]["lmw_cesds_pct"]
+CURV_DF = len(_cs) - 1 + len(_cr) - 1
+CURV_SP = float(np.sqrt((((_cs - _cs.mean()) ** 2).sum() + ((_cr - _cr.mean()) ** 2).sum()) / CURV_DF))
+CURV_DIFF = CURV_RSM_F - CURV_SCR["lmw_cesds_pct"]
+CURV_T = CURV_DIFF / (CURV_SP * np.sqrt(1 / len(_cs) + 1 / len(_fs) + 1 / len(_cr) + 1 / len(_fr)))
+CURV_PD = float(2 * sstat.t.sf(abs(CURV_T), CURV_DF))
+assert CURV_PD >= ALPHA and max(abs(CURV_SCR["lmw_cesds_pct"]), abs(CURV_RSM_F)) < 0.1 * CR_F
+MIN_OTHER_CURV_P = min(CURV_P[r] for r in ["mvm_lrf", "xmulv_lrf", "step_yield"])
+MIN_OTHER_CURV_S = floor2(MIN_OTHER_CURV_P)
+
+# --- centre points ----------------------------------------------------------------------------------------
+def _cen(d, resp):
+    v = d[d.run_type == "center"][resp].to_numpy(float)
+    return len(v), v.mean(), v.std(ddof=1), v.min(), v.max()
+CEN = {(k, r): _cen(d, r) for k, d in (("screening", SCR), ("rsm", RSM)) for r in RESP4}
+assert CEN[("screening", "mvm_lrf")][2] > max(CEN[("rsm", "mvm_lrf")][2], CEN[("rsm", "xmulv_lrf")][2])
+
+# --- scale-down model ----------------------------------------------------------------------------------
+OFF_Y = D.sdm_offset(UO, "step_yield")
+Q_Y = D.offset_qualification(UO, "step_yield")
+assert not Q_Y["judged"]
+SDMQ9 = csv("sdm_qualification.csv")
+SDMQ9 = SDMQ9[SDMQ9.step == UO].dropna(axis=1, how="all")
+assert [c for c in SDMQ9.columns if c not in ("study", "step", "scale", "run")] == ["step_yield"]
+assert all(D.sdm_offset(UO, r) is None for r in ["mvm_lrf", "xmulv_lrf", "lmw_cesds_pct"])
+
+# --- capability -------------------------------------------------------------------------------------------
+CAPK = ["lrv_mvm", "lrv_xmulv", "fragments_lmw"]
+CAPT = cap.set_index("key")
+CPK_M, CPK_X, CPK_F = (float(CAPT.loc[k, "Cpk"]) for k in CAPK)
+assert min(CPK_M, CPK_X, CPK_F) >= CPK_TARGET and CPK_M < CPK_X < CPK_F
+POOS = D.p_oos().set_index("key")
+N_MC = int(V["n_monte_carlo"])
+assert all(int(POOS.loc[k, "n_oos"]) == 0 for k in CAPK) and all(int(POOS.loc[k, "n"]) == N_MC for k in CAPK)
+BOUND_CONF = D.PI_LEVEL                                   # the confidence of the bound on a zero count
+P_UP = 1 - (1 - BOUND_CONF) ** (1 / N_MC)                 # one-sided upper bound with no batch outside
+PPM_M, PPM_X, PPM_F = (float(POOS.loc[k, "ppm_normal"]) for k in CAPK)
+assert PPM_F < 0.005
+
+# --- study events and the registers ----------------------------------------------------------------
+EV = dev_facts(DOC).set_index("dev_id")
+assert list(EV.index) == ["DEV-009-01", "DEV-009-02"] and set(EV["disposition"]) == {"retained"}
+N_EV = len(EV)
+LOT = EV.loc["DEV-009-02", "lot"]
+LOTS = csv("dev_lots.csv").set_index("id")
+LOT_VENDOR, LOT_USED = LOTS.loc[LOT, "vendor"], LOTS.loc[LOT, "used_in"]
+EV2_METHOD = EV.loc["DEV-009-02", "method"]
+assert RNG_P[0] < dev_009_01_pmax_psi < RNG_P[1] and dev_009_01_pmax_psi > NOR_P[1]
+assert D.setting_corrections(UO, "rsm") == [] and D.setting_corrections(UO, "screening") == []
+assert not any(re.search(r"(screening|RSM) run \d+", str(s), re.I) for s in EV["summary"])   # no run named
+PDS = PLAN_DISCREPANCIES[DOC]
+assert [d["id"] for d in PDS] == [f"PD-009-0{k}" for k in range(1, 8)]   # the prose names these seven entries
+N_PD = len(PDS)
+
+SCALE_L = int(V["commercial_scale_l"])
+N_PPQ = int(CFG.raw()["meta"]["n_ppq_batches"])
+
+# --- constants of the methods, and the assertions behind named runs and plain words -----------------
+SLOPE_STEP = 10                                           # the MVM slope is stated per this many L/m2
+SLOPE_PER = B1 / HALF_V * SLOPE_STEP
+PCT_UP = 100 * (1 - (1 - D.PI_LEVEL) / 2)                 # the upper end of a two-sided interval, one-sided
+OFF_CI = 100 * OFF_Y["ci"]
+GRID_N = int(round(DS_N ** 0.5))
+assert GRID_N ** 2 == DS_N
+ordinal = lambda k: f"{k}{'th' if 10 <= k % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(k % 10, 'th')}"
+CURV_MAXABS = max(abs(CURV_SCR["lmw_cesds_pct"]), abs(CURV_RSM_F))
+assert RUN2.filtration_volume == RNG_V[0] and RUN2.pressure == RNG_P[1]
+assert RUN5.pressure == (RNG_P[0] + RNG_P[1]) / 2
+assert LOO_LOG == [3, 7] and LOO_END == [5, 7] and all(LOO[r]["ds_frac"] == 1.0 for r in LOO_END)
+MARG_MIN = inward(LOO_EDGE_MIN, up=False) - NOR_V[1]       # the smallest margin of NOR to PAR edge over the deletions
+CROSS_MARG = CROSS_V - NOR_V[1]
+# the MVM LRF falls with volume at every pressure of the response-surface design
+assert all(g.sort_values("filtration_volume").mvm_lrf.iloc[-1] < g.sort_values("filtration_volume").mvm_lrf.iloc[0]
+           for _, g in RSM.groupby("pressure"))
+assert _pred(D5["sel"], {"filtration_volume": [RNG_V[1]], "pressure": [SP_P]})[0][0] > M_HI
 ```
 
 {{< pagebreak >}}
@@ -86,25 +562,805 @@ print(revision_history(DOC))
 
 ## Abbreviations {.unnumbered}
 
-<!-- Author: the abbreviations actually used in THIS document, as (abbreviation, meaning)
-     pairs. The helper sorts them and prints a two-column table. Include the step-specific ones
-     (assays, model viruses, unit-op abbreviations). -->
-
 ```{python}
 #| output: asis
 print(abbreviations_table([
+    ("ADCC", "antibody-dependent cell-mediated cytotoxicity"),
+    ("AICc", "Akaike's information criterion with the small-sample correction"),
+    ("AMD", "analytical method decision"),
+    ("AMV", "analytical method validation"),
+    ("CI", "confidence interval"),
+    ("Cpk", "process capability index"),
+    ("CQA", "critical quality attribute"),
+    ("CV", "coefficient of variation"),
+    ("DoE", "design of experiments"),
+    ("DS", "drug substance"),
+    ("GMP", "good manufacturing practice"),
+    ("HMW", "high molecular weight species"),
+    ("IAC", "intermediate acceptance criterion"),
+    ("ICH", "International Council for Harmonisation"),
+    ("LMW", "low molecular weight species"),
+    ("LOQ", "limit of quantitation"),
+    ("LRF", "log reduction factor"),
+    ("MSAT", "Manufacturing Science and Technology"),
+    ("MVM", "minute virus of mice"),
     ("NOR", "normal operating range"),
+    ("nrCE-SDS", "non-reduced capillary electrophoresis with sodium dodecyl sulfate"),
+    ("PAR", "proven acceptable range"),
+    ("psi", "pound-force per square inch"),
+    ("QA", "Quality Assurance"),
+    ("qPCR", "quantitative polymerase chain reaction"),
+    ("SD", "standard deviation"),
+    ("SDM", "scale-down model"),
+    ("SOP", "standard operating procedure"),
+    ("TCID50", "median tissue culture infective dose"),
+    ("WC-CPP", "well-controlled critical process parameter"),
+    ("XMuLV", "xenotropic murine leukemia virus"),
 ]))
 ```
 
 {{< pagebreak >}}
 
-<!-- ========================= BODY START (author here) =========================
-     Write every section in authoring/section_plan.yaml order for this doc-type,
-     each with its scaffold / register / rigor obligations. Numbers = inline exprs.
-     ========================================================================== -->
+<!-- ========================= BODY START ========================= -->
 
+# Executive summary {.unnumbered}
 
+This report presents the Stage 1 process characterization of the small virus retentive filtration step (Step 9) of the A-Mab drug substance process. The step removes virus by size. It is the dedicated small virus removal operation of the purification train and the principal source of clearance of minute virus of mice (MVM), and it also carries a claim for xenotropic murine leukemia virus (XMuLV). The study followed the characterization plan PCP-009 and supports the transfer of the process from Cambridge, MA, to Grafton, WI, under PTP-001. It was run on a scale-down model of the commercial step in two designed experiments in filtration volume (load) and filtration pressure, a screening design of `{python} n_scr` runs and a face-centred central composite design of `{python} n_rsm` runs. Version 2.0 judges every output with a criterion against the criteria of the master plan PCMP-001 Version 2.0 and analyses the response-surface outputs by model selection (@sec-changes).
+
+Filtration volume was the only parameter with a detected effect. Across the range studied, from `{python} f"{RNG_V[0]:g}"` to `{python} f"{RNG_V[1]:g}"` L/m2, the mean MVM log reduction factor (LRF) fell by `{python} fx(-EFF_V)` log10 along a straight line. No term containing filtration pressure was significant for any output. The selected model of MVM LRF meets the first three model-adequacy criteria of PCMP-001 §7.2. It does not meet the fourth, because one run, run 5, has a Cook's distance above the limit that the criterion sets. XMuLV LRF has no adequate model and is judged on its measured results. Fragments and step yield did not depend on either parameter.
+
+Each output with a criterion met its intermediate acceptance criterion across the normal operating range (NOR). At the least favourable NOR combination the mean predicted MVM LRF is `{python} fx(M_NORHI)` log10, against the claim of this step of `{python} fx(CL_M)` log10. Every measured XMuLV LRF, from `{python} fx(MEAS_X.min())` to `{python} fx(MEAS_X.max())` log10, met its claim of `{python} fx(CL_X)` log10, and XMuLV LRF has no PAR. For fragments the upper 95 % limit of a single run within the NOR is `{python} fx(F_PI_HI)` %, against the criterion of `{python} fx(CR_F)` %. The proven acceptable range (PAR) of filtration volume for MVM is `{python} PAR_V_N` L/m2 in the NOR-propagated analysis, and so extends `{python} f"{MARG_V:g}"` L/m2 beyond the upper NOR edge. The PAR of filtration pressure for MVM is the whole range studied. The design space covers `{python} fx(DS_PCT, 0)` % of the characterized region on the grid evaluated, and only filtration volumes above `{python} fx(CROSS_V, 1)` L/m2 lie outside it. With run 5 deleted, the PAR of filtration volume and the design space would both reach the end of the range studied, while the judgement over the NOR and the terms of the selected model would not change.
+
+Both parameters were classified as well-controlled critical process parameters (WC-CPP). Filtration volume lowers the MVM LRF by `{python} fx(-EFF_V)` log10 across its range, and its PAR extends `{python} f"{MARG_V:g}"` L/m2 beyond its NOR. No effect of filtration pressure was detected, and its class follows the A-Mab case study and the scope of the viral clearance claim (@sec-classification). The integrated model of the train gives a process capability index (Cpk) of `{python} fx(CPK_M)` for the cumulative MVM clearance of the drug substance and of `{python} fx(CPK_X)` for XMuLV, both above the target of `{python} fx(CPK_TARGET)` and the minimum of `{python} f"{CPK_MIN:.1f}"` of PCMP-001. No simulated batch fell below either cumulative requirement.
+
+Two study events were recorded, a transient pressure excursion to `{python} dev_009_01_pmax_psi` psi and a membrane lot whose flux was `{python} dev_009_02_flux_deficit_pct` % below the value typical for the vendor. The runs concerned were retained in the analysis, and the record does not name them. The register holds `{python} N_PD` discrepancies from the plan (@sec-discrepancies). Two concern the analysis, the model selection (PD-009-01) and the use of a model that does not meet the criterion on residuals and influential runs for the ranges and the design space (PD-009-02). Four record results and comparisons that PCP-009 required and the record does not hold (PD-009-03 to PD-009-06), among them the flux decay and the integrity tests of the qualification runs and the integrity tests and virus controls of the design runs. The last records the analyses that the plan does not contain (PD-009-07). The results of this report roll up into the master report PCMR-001, which consolidates the cumulative viral clearance claim.
+
+# Introduction {#sec-intro}
+
+## Product and unit operation {#sec-product}
+
+A-Mab is a humanized IgG1 monoclonal antibody whose principal mechanism of action is antibody-dependent cell-mediated cytotoxicity (ADCC) [@amab2009]. It is purified by the platform train of Protein A capture, low-pH viral inactivation, cation exchange, anion exchange, small virus retentive filtration and ultrafiltration / diafiltration. The commercial process runs at a production bioreactor scale of `{python} f"{SCALE_L:,}"` L.
+
+The small virus retentive filtration step filters the flow-through pool of anion exchange through a membrane whose pore size distribution retains the parvoviruses while the antibody passes. The step is run at a set filtration pressure, in psi, up to a set filtration volume, which is the volume of load filtered per square metre of membrane, in L/m2. MVM, a parvovirus, is among the smallest viruses of concern, and this step is the principal source of its clearance. XMuLV, an enveloped retrovirus, is many times larger than the pores. The clearance of the step is orthogonal to that of low-pH viral inactivation (Step 6) and anion exchange chromatography (Step 8), because it removes virus by size and not by inactivation or by binding [@ichq5a].
+
+The step forms no quality attribute. It contributes a log reduction to the two cumulative viral clearance requirements of the drug substance. Its filtrate is also judged against the drug substance criterion for fragments, because no later step changes them (@sec-par). Step yield is a process performance output with no criterion.
+
+The plan paired with this report is PCP-009. @tbl-related lists the documents to which this report relates.
+
+```{python}
+#| output: asis
+print(related_docs_md(DOC))
+print()
+print(": Related documents. {#tbl-related}")
+```
+
+## Objectives {#sec-objectives}
+
+The objectives of the study were those of PCP-009 §2.
+
+1. Qualify a scale-down model of the step, and show that it represents the commercial step for virus retention, for flux decay and for step yield.
+2. Determine which of the parameters affect the two viral clearance responses and the step yield, in what direction and by how much.
+3. Fit a response-surface model for each response over the characterization ranges, and establish whether it predicts the mean response adequately.
+4. Derive a proven acceptable range for each parameter against each of the two viral clearance responses.
+5. Classify each parameter under SOP-4001 and define what the step contributes to the control strategy and to the modular viral clearance claim.
+
+Version 2.0 of the plan adds fragments to objectives 2 to 4. The screening design identifies the parameters that have an effect. The response-surface model is the predictive model, and every range in this report comes from it. @sec-conclusions states the outcome against each objective.
+
+## Regulatory and scientific basis {#sec-regulatory}
+
+The study belongs to Stage 1, process design, of the lifecycle approach to process validation [@fda2011]. It follows the enhanced approach of ICH Q8(R2) and ICH Q11. Prior knowledge and risk assessment identify the parameters that may affect quality, and designed experiments then measure and bound their effects [@ichq8; @ichq11]. Criticality is treated as a continuum, as ICH Q8(R2) describes it, and the risk assessment that scoped the study followed ICH Q9(R1) [@ichq8; @ichq9]. Viral clearance is evaluated under ICH Q5A(R2). Each step that clears virus is studied in its own spiking model, and its log reduction enters the cumulative claim as a module [@ichq5a]. The process model, the attribute framework and the risk method follow the A-Mab case study [@amab2009].
+
+## Changes in this revision {#sec-changes}
+
+Version `{python} VER` of this report replaces Version `{python} REV1['rev']` of `{python} REP_V1`. It is issued under the QA investigation `{python} INV['id']`, which was opened on `{python} INV['opened']` after a review of the master report PCMR-001 for readiness of the Biologics License Application, and closed on `{python} INV['closed']` with the classification `{python} INV['classification']`. INV-001 found that the criteria used to judge each step in the PAR analysis had been set after the data were seen and were in no approved protocol (INV-001 finding 1). The Version 1.0 limits of this step were among them. They were applied at analysis and appear in no approved plan. This revision also applies the second investigation `{python} INV2['id']` (opened `{python} INV2['opened']`, closed `{python} INV2['closed']`, classification `{python} INV2['classification']`), which applied the model-adequacy criteria of PCMP-001 §7.2 to every response-surface model with a criterion. The changes to this report are the following.
+
+1. Acceptance criteria. MVM LRF and XMuLV LRF are each judged against the platform claim of this step, `{python} fx(CL_M)` log10, under PCMP-001 §7.4 (@tbl-criteria-change). Version 1.0 judged them against the rule "`{python} R1_RULE`", which gave `{python} fx(R1_M)` for MVM and `{python} fx(R1_X)` for XMuLV. Fragments are added as an output, with the drug substance criterion of `{python} fx(CR_F)` %.
+2. Fragment method. Fragments are measured by non-reduced capillary electrophoresis with sodium dodecyl sulfate (nrCE-SDS), the method that the analytical method decision `{python} AMD['id']` of `{python} AMD['date']` set for every study at every step. Both designs of this step started after that date, so every run of both has an nrCE-SDS result (@tbl-methods-by-study). Version 1.0 did not assess fragments at this step.
+3. Statistic of judgement. Viral clearance is judged on the mean predicted LRF at the least favourable combination of NOR low, set-point and NOR high of the parameters (PCMP-001 §6.4). Fragments are judged on the 95 % prediction interval of a single run. Version 1.0 judged every output on a 95 % interval for a single batch from a Monte-Carlo simulation of the fitted model.
+4. Models. Each response-surface output is analysed by the model selection that INV-002 adopted as its corrective action CA3 on `{python} CA3_DATE`, in place of the full quadratic model that the plan prescribed (@sec-statistics). Under it XMuLV LRF has no adequate model and is judged on its measured results, and the selected model of MVM LRF does not meet the criterion on influential runs (@sec-rsm).
+5. Scale-down model. The model is qualified by its offset from manufacturing scale (PCMP-001 §7.1) and not by a test of equivalence (@sec-sdm).
+6. Record. The execution window of every study is now given (@tbl-windows), which the Version 1.0 records did not give (INV-001 finding 5). The departures from the plan that the re-analysis found are recorded as discrepancies from the plan (@sec-discrepancies).
+
+```{python}
+#| output: asis
+T.criteria_change(["virus_filtration"]).show()
+```
+
+The data, the designs, the NOR and the set-points of the step did not change. The conclusions on the PARs moved. Recomputed under the Version 1.0 criteria, statistic and model, with each edge rounded inward as in @tbl-par, the NOR-propagated PAR of filtration volume for MVM is `{python} R1_PAR_V` L/m2 and that of filtration pressure `{python} R1_PAR_P` psi, and neither contains the NOR. Under Version 2.0 they are `{python} PAR_V_N` L/m2 and `{python} PAR_P_N` psi, and both contain it (@sec-par). The criterion, the statistic of judgement and the model changed together, and the move reflects the three changes at once. Version 1.0 also gave XMuLV LRF PARs of `{python} R1_PAR_XV` L/m2 and `{python} R1_PAR_XP` psi from its full quadratic model. These PARs are withdrawn, because XMuLV LRF has no adequate model and therefore no PAR.
+
+# Prior knowledge and quality risk basis {#sec-prior}
+
+## Platform and prior-product knowledge {#sec-platform}
+
+The small virus retentive filtration step has been used to manufacture three earlier licensed humanized IgG1 antibodies of the platform, X-Mab, Y-Mab and Z-Mab, and to supply A-Mab clinical material, with the same filter type and the same mode of operation [@amab2009]. Their history gives the platform claim of the step, `{python} fx(CL_M)` log10 for each of the two model viruses (PCMP-001 §7.4). The mechanism of removal is size exclusion and does not depend on the antibody, so the platform experience sets the direction expected for each effect. How the anion exchange pool of A-Mab fouls the membrane is specific to the product, and the effects were therefore measured on A-Mab material.
+
+MVM sits close to the pore size cut-off of the membrane. Its retention depends on the fraction of pores at the large end of the distribution and on the flow through them. As the membrane fouls with product and residual impurity, the flux shifts toward the least fouled and largest pores, and small virus can pass. MVM retention is therefore expected to fall as the volume filtered per unit area rises, and the maximum load is the parameter that bounds the claim. PCP-009 §6.3 also expected the fall to accelerate toward the top of the volume range, as the shift of flux to the largest pores progresses.
+
+Filtration pressure sets the flux. A higher pressure compresses the fouling layer and raises the flux, and PCP-009 expected MVM retention to fall at high pressure as more filtrate passes the largest open pores. A low pressure or an interruption of flow lets virus held in the pore structure diffuse through. For this reason the claim of the step is made over a pressure range and for uninterrupted filtration. Because the load sets how much of the membrane is still open and the pressure sets how fast the filtrate crosses it, PCP-009 §4.3 expected the fall of MVM retention with load to be steeper at high pressure than at low pressure.
+
+XMuLV is many times larger than the pores. It is retained while the membrane is intact, so its clearance is expected not to depend on either parameter. The antibody passes the pores freely, and step yield is limited by product held up in the fouling layer and in the system. Yield is therefore expected to be high and to fall slowly as the load rises. Fragments, the clipped species of the antibody, are smaller than the intact antibody and pass the pores in the same way, so the step is not expected to change the fragment level of its load.
+
+## Quality attributes in scope {#sec-cqa}
+
+The step contributes log reduction to the two viral safety attributes of @tbl-cqa and is judged against the criterion for fragments. The acceptance values of the two viral safety attributes are cumulative requirements on the drug substance. They are met by the claims of several steps together and cannot be applied to one step.
+
+```{python}
+#| output: asis
+_cq = cqas_by_keys(["lrv_mvm", "lrv_xmulv", "fragments_lmw"])[["Category", "CQA", "Acceptance", "Criticality", "Tool #1"]].copy()
+_cq["Tool #1"] = _cq["Tool #1"].astype(int).astype(str)
+T.frame(_cq, "Quality attributes to which the step contributes, with their drug substance criteria and criticality.",
+        "tbl-cqa", merge=["Category"], align=["l", "P{4.6cm}", "P{3.6cm}", "l", "r"],
+        notes=[("", "VH, very high. L, low. Tool #1 is the criticality score of the A-Mab case study, the product "
+                    "of impact and uncertainty.")], notes_per_row=True).show()
+```
+
+Both viral safety attributes are of very high criticality. It was assigned by rule, because a viral contamination would harm the patient directly (PCMP-001 §3). MVM is the virus whose retention the operating parameters of this step can degrade. Low-pH viral inactivation makes no claim for MVM, because a parvovirus has no lipid envelope for low pH to disrupt. The cumulative MVM requirement of `{python} f"{REQ_M:g}"` log10 therefore rests on the claims of anion exchange and of this step alone (PCMP-001 §7.4).
+
+Fragments are of low criticality. They form in culture and during the harvest hold, where proteases released from lysed cells clip the antibody, and the register assigns them to harvest. Their criterion was set by the sponsor when fragments joined the register at Version 2.0 (PCMP-001 §3). Step yield is a process performance output, and no drug substance attribute maps to it.
+
+## Risk-based prioritization and parameter selection {#sec-risk}
+
+The risk assessment RA-001 ranked every parameter of the train twice, for its potential impact on the quality attributes and for its potential to interact with other parameters [@ichq9]. Parameters ranked high on either ranking were assigned to multivariate study, and parameters ranked lower to univariate study. For this step RA-001 assigned its `{python} N_PAR` parameters to multivariate study and none to univariate study. Filtration volume was ranked high because MVM retention falls as the volume filtered per unit area rises. Filtration pressure was ranked high because a loss of pressure or a stop of flow lets MVM held in the pore structure diffuse into the filtrate, and because a higher pressure drives more filtrate through the pores that remain open. No parameter of the step was left out of the study on prior knowledge alone, because a viral safety claim is supported by product specific data even where the mechanism is well understood.
+
+# Materials and methods {#sec-methods}
+
+## Scale-down model and its qualification {#sec-sdm}
+
+The scale-down model uses the same filter type as manufacturing, and the load is scaled by membrane area (PCMP-001 §5). The volumetric load in L/m2 and the filtration pressure of the model therefore correspond to the commercial step.
+
+The qualification runs were made in study S-VF-SDM, from `{python} W_SDM[0]` to `{python} W_SDM[1]`, under the scale-down model procedure SOP-1001 and before the screening runs began. The study compared `{python} OFF_Y['n_sd']` scale-down runs at the set-points with `{python} OFF_Y['n_m']` manufacturing-scale batches. PCP-009 §5.1 named three outputs for this comparison, the flux decay profile, the step yield and the post-use integrity test result, and required the load material, the filtration temperature and the hold-up volume per area to be matched. The record holds step yield alone. The flux decay profile and the post-use integrity test results are not recorded for either scale, and neither is the matching (PD-009-03). Version 1.0 of this report stated that every run passed its post-use integrity test, but no result of the test is recorded, for these runs or for the design runs (@sec-operation). The comparison therefore rests on step yield alone.
+
+The model is qualified by the offset rule of PCMP-001 §7.1. The offset of an output is the mean of the scale-down runs at the set-points minus the mean of the manufacturing batches, with its two-sided `{python} f"{OFF_CI:g}"` % confidence interval. The model is qualified for an output when the conclusion against its criterion over the NOR is the same with the offset at either end of that interval. Step yield has no criterion at this step, so its offset is recorded and no conclusion depends on it (@tbl-sdm-offsets). The mean step yield was `{python} fx(100*OFF_Y['mean_sd'], 1)` % at scale-down and `{python} fx(100*OFF_Y['mean_m'], 1)` % at manufacturing scale, an offset of `{python} fx(100*OFF_Y['offset'], 1)` percentage points with a `{python} f"{OFF_CI:g}"` % confidence interval of `{python} fx(100*OFF_Y['lo'], 1)` to `{python} fx(100*OFF_Y['hi'], 1)` points.
+
+```{python}
+#| output: asis
+T.sdm_offsets(["virus_filtration"]).show()
+```
+
+The two LRF and fragments were not compared at the two scales. Their offset is unknown, not zero, and they are judged as the scale-down model gives them (PCMP-001 §7.1). Virus cannot be spiked into a manufacturing batch, so every clearance figure of this report comes from the scale-down model, and its representativeness rests on the spiking model [@ichq5a]. The representativeness of the fragment results rests on the mechanism of the step (@sec-platform). No output with a criterion therefore has a measured offset, and the judgements of MVM LRF, XMuLV LRF and fragments are made on the scale-down results under these assumptions.
+
+## Operation {#sec-operation}
+
+PCP-009 §5.2 specifies the flow-through pool of anion exchange as the load of every run, and the record does not identify the pool used in each run (PD-009-06). Each design point was run once, at the filtration pressure of the point and up to its filtration volume (Appendices A and B). Both model viruses were spiked into the load of every run, and every run gave an MVM LRF and an XMuLV LRF. The order of execution of each run is recorded and enters the residual tests (@sec-statistics). The designs varied the two parameters of @tbl-params. The other operating variables of the step are set by the operation procedure SOP-2012 and were not factors of the designs.
+
+PCP-009 §5.2 planned the step yield of each design run from the same spiked run, by protein mass balance from the ultraviolet absorbance of the load and of the pooled filtrate. PCP-009 §5.4 asked instead for an unspiked load and an unspiked filtrate pool to be assayed for the yield, which cannot exist when every design run is spiked, so the plan conflicts with itself. The record gives the yield of each spiked run as a single value. It holds no protein concentration, no volume, no named assay and no sample of the load taken before spiking (PD-009-05).
+
+PCP-009 §5.2 required the filter of each run to be integrity tested before and after the run under SOP-2012, and a run whose post-use test failed to be excluded. No integrity test result is recorded for any design run (PD-009-04), and no run was excluded. The claim made from these runs applies to uninterrupted filtration, and no run of the record is described as interrupted.
+
+## Analytical methods {#sec-analytical}
+
+The methods of @tbl-sops measured the outputs. MVM was titred by TCID50 with qPCR confirmation (AMV-3018), XMuLV by TCID50 (AMV-3017) and fragments by nrCE-SDS (AMV-3020). The LRF of a run is the base-ten logarithm of the total virus in the spiked load divided by the total virus in the filtrate (PCP-009 §5.3). PCP-009 §5.2 names ultraviolet absorbance for the step yield, and the record names no assay (@sec-operation). Appendix D summarises the methods.
+
+```{python}
+#| output: asis
+T.sop_references(sops=VIRUS_FILT_SOP_REFS, amvs=VIRUS_FILT_AMV_REFS).show()
+```
+
+The record holds one LRF per run for each virus. It does not hold the titres of the spiked load and the filtrate, the limit of detection reached, or the results of the cytotoxicity, interference and spike recovery controls that PCP-009 §5.3 required. Nor does it hold the achieved titre of each run, the clarification of the virus stock or the identification of each sample by run and volumetric load (PCP-009 §5.4 and §12). Every LRF in the record is a point value. Whether any filtrate titre was below the limit of detection, which would make its LRF a lower bound, cannot be read from the record.
+
+Both designs ran after the method decision AMD-001, so fragments were measured by nrCE-SDS on every run of both designs (@tbl-methods-by-study). The method has a limit of quantitation of `{python} f"{CESDS_LOQ:g}"` % and an absolute standard deviation of `{python} fx(CESDS_SD)` percentage points. Aggregate was not measured at this step.
+
+```{python}
+#| output: asis
+T.methods_by_study(["virus_filtration"]).show()
+```
+
+## Sampling plan {#sec-sampling}
+
+PCP-009 §5.4 planned samples of the load before spiking, of the spiked load and of the filtrate, with the filtrate sampled as sequential fractions across the volumetric load and as a pool. The record holds one result per run for each output, no result for a fraction and not the volume actually filtered in each run (@sec-discrepancies). The log reduction therefore cannot be resolved against the volume filtered within a run, and the effect of filtration volume is estimated between runs only. The screening design had `{python} n_scr_c` replicates of the centre point, and the response-surface design had `{python} n_rsm_c`. Their spread gives the pure error of each design for the lack of fit tests.
+
+## Statistical methods {#sec-statistics}
+
+Both factors were coded to −1 and +1 at the ends of the range studied and to 0 at its midpoint, so that coefficients are comparable between the two factors and between the two designs. A coded coefficient is the change in the response over half the range studied, `{python} f"{HALF_V:g}"` L/m2 for filtration volume and `{python} f"{HALF_P:g}"` psi for filtration pressure. Terms significant at α = `{python} f"{ALPHA:g}"` were treated as real (PCMP-001 §6.2). In this report the terms of a model are counted without the intercept.
+
+The screening design was analysed by ordinary least squares with both main effects and their interaction. An effect is twice the coded coefficient, which is the change in the response across the whole range studied, as PCMP-001 §6.2 states it. PCP-009 §5.5 states effects as the change over half the range, which is the coefficient, and Appendix C gives both. The screening model identifies effects. Its centre points test for curvature through the one degree of freedom left for lack of fit, but they cannot attribute the curvature to a factor.
+
+Each response-surface output was analysed by model selection, the analysis that INV-002 adopted as corrective action CA3. It replaced the full quadratic model of PCP-009 §5.5 (@sec-discrepancies). The selection has three steps.
+
+1. The scale. The Box-Cox profile of the full quadratic gives the power of the response that best suits a least squares fit, with its 95 % interval [@boxcox1964]. The log scale is used where that interval contains 0 and excludes 1, and the raw scale otherwise. Every interval at this step contained both 0 and 1, so every output was modelled on the raw scale.
+2. The terms. The full quadratic in two factors has `{python} N_FULL` terms, the two main effects, their interaction and the two squares. It has `{python} N_CAND` hierarchical submodels, counting the model with no term, in which an interaction appears only with both of its main effects and a square only with its main effect. Every submodel was fitted, and the one with the lowest AICc was selected. AICc estimates how well a model would predict new runs and penalises every estimated term. Its small-sample correction raises the penalty when the runs are few for the number of terms, as in these designs [@hurvich1989; @burnham2002]. The residual variance is counted as a parameter of the model. A stepwise search changes one term at a time and can stop where only a combination of changes would lower AICc further. On these data a stepwise search in either direction would have stopped at the same model for every output with a criterion.
+3. The check. The selected model was judged against the four criteria of PCMP-001 §7.2 below. A model with no term states that the output does not depend on the parameters within the range studied. An output with no adequate model is judged on its measured results and sets no range.
+
+PCP-009 §7 states the four adequacy criteria of PCMP-001 §7.2 with their thresholds.
+
+1. A significant model. The model F-test is significant at α = `{python} f"{ALPHA:g}"`. A model with no term has no F-test, and the criterion does not apply to it.
+2. No significant lack of fit. The lack of fit test against the pure error of the centre points is not significant at α = `{python} f"{LOF_ALPHA:g}"`.
+3. The limit on overfitting. Predicted R², calculated from the prediction error sum of squares, falls short of R² by no more than `{python} fx(GAPMAX)` [@montgomery2017].
+4. Residuals and influence. The absolute residuals regressed on the predicted values, and the residuals regressed on the order of execution, show no slope significant at α = `{python} f"{RES_ALPHA:g}"`. A run with a Cook's distance above `{python} f"{COOK_K:g}"`/n is examined by deleting it and repeating the judgement. The model fails the criterion only where a run's Cook's distance exceeds the median of the F distribution with p and n − p degrees of freedom, where p is the number of model parameters including the intercept and n the number of runs.
+
+R², adjusted R² and predicted R² are reported for every model. PCP-009 §7 also keeps the Version 1.0 conditions that the residuals show no material departure from normality and that the residual standard error is small against the distance between the predicted response and its criterion, and it leaves the judgement of both to this report. Normality is judged on the normal quantile plot and by the Shapiro-Wilk test at α = `{python} f"{ALPHA:g}"`. The residual standard error is judged small against that distance when the 95 % limit of a single run on the side of the criterion still meets the criterion at the least favourable NOR combination. Several analyses of this report are not in PCP-009 (PD-009-07). They are the deletion of every response-surface run, the test of the curvature of the two designs against each other, the Shapiro-Wilk test and the reading of the Version 1.0 conditions by the limit of a single run, the comparisons with near-equivalent and stepwise models, and the capability analysis.
+
+Each output with a criterion was judged at every combination of NOR low, set-point and NOR high of the two parameters, `{python} len(NORG)` combinations in all. Viral clearance was judged on the mean predicted LRF at the least favourable of these combinations, because viral clearance is validated at worst-case conditions (PCMP-001 §6.4). The lower 95 % limit of a single run there is given for information. Fragments were judged on the exact 95 % prediction interval of a single run at each combination, which includes the uncertainty of the fitted coefficients and the residual. The interval is two-sided, so its upper end is a one-sided `{python} f"{PCT_UP:g}"` % limit. An output with no adequate model was judged on every measured result of both designs. No offset was applied, because no output with a criterion has a measured offset at this step (@sec-sdm). @sec-par defines the two PAR analyses, and @sec-design-space the grid on which the design space was evaluated.
+
+Capability was estimated from the integrated model of the train (PCMP-001 §6.5) and judged against the target and the minimum of PCMP-001 §7.9. The analyses followed the design of experiments procedure SOP-1002. The Monte-Carlo analyses use a fixed random seed, so every number of this report can be regenerated from the data.
+
+# Study design {#sec-design}
+
+## Factors, ranges and the knowledge space {#sec-factors}
+
+@tbl-params gives the two parameters of the step with their set-points, their NOR and the ranges studied. Both parameters were factors of both designs. The NOR and the set-points were not changed at Version 2.0, so the NOR in force is the NOR as characterized.
+
+```{python}
+#| output: asis
+_pt = pd.DataFrame([[LET["filtration_volume"], NM_V, U_V, f"{SP_V:g}", rng_s(NOR_V), rng_s(RNG_V)],
+                    [LET["pressure"], NM_P, U_P, f"{SP_P:g}", rng_s(NOR_P), rng_s(RNG_P)]],
+                   columns=["Code", "Parameter", "Unit", "Set-point", "NOR", "Range studied"])
+T.frame(_pt, "Parameters of the step, with their set-points, normal operating ranges and the ranges studied.",
+        "tbl-params", align=["l", "l", "l", "r", "l", "l"],
+        notes=[("", "Code, the letter of the factor in the design matrices and the effect tables.")],
+        notes_per_row=True).show()
+```
+
+The range of filtration volume runs from the lower NOR edge, `{python} f"{RNG_V[0]:g}"` L/m2, to `{python} f"{RNG_V[1]:g}"` L/m2, above the upper NOR edge of `{python} f"{NOR_V[1]:g}"` L/m2. It was widened upward only, because MVM retention was expected to fall as the load rises, so that the edge of acceptable performance would lie above the NOR. The pressure range of `{python} rng_s(RNG_P)` psi extends beyond the NOR of `{python} rng_s(NOR_P)` psi on both sides. Low pressures were included because a low pressure was expected to let retained virus diffuse through, and high pressures because they drive more filtrate through the largest open pores. The ranges studied form the knowledge space of the step, and no claim in this report extends beyond them.
+
+The studies of the step ran one after the other (@tbl-windows). Each window runs from the first to the last day of runs of its study, and all of them closed before Version 1.0 of this report was approved on `{python} REP_V1`. The record names no instrumented system under calibration and change control for these studies (PCMP-001 Table 5.1), so no calibration status is given.
+
+```{python}
+#| output: asis
+_w = pd.DataFrame([["S-VF-SDM", "Qualification of the scale-down model", *W_SDM],
+                   ["S-VF-DOE", "Screening design", *W_SCR],
+                   ["S-VF-RSM", "Response-surface design", *W_RSM]],
+                  columns=["Study", "Study type", "Start", "End"])
+T.frame(_w, "Execution windows of the studies of the step.", "tbl-windows", align=["l", "l", "l", "l"]).show()
+```
+
+## Screening design {#sec-screening-design}
+
+The screening study S-VF-DOE was a two-level full factorial in both factors with centre points, `{python} n_scr` runs in all, of which `{python} n_scr_f` were the factorial runs at the corners of the ranges studied and `{python} n_scr_c` were replicates of the centre point (Appendix A). With two factors the full factorial estimates both main effects and their interaction free of aliasing. The interaction model leaves one degree of freedom for lack of fit, which is the test for curvature, so its fit statistics overstate how well it fits (PCMP-001 §6.2).
+
+## Response-surface design {#sec-rsm-design}
+
+The response-surface study S-VF-RSM was a face-centred central composite design in both factors, `{python} n_rsm` runs in all, made up of `{python} n_rsm_f` factorial runs, `{python} n_rsm_a` axial runs and `{python} n_rsm_c` replicates of the centre point (Appendix B). The axial runs sit on the edges of the ranges studied, because settings outside those ranges are not settings for which the step may be claimed. The design supports the full quadratic model in both factors. Its centre points give the pure error for the lack of fit test, with `{python} n_rsm_c - 1` degrees of freedom.
+
+## Univariate assessment {#sec-univariate}
+
+No parameter of this step was assigned to univariate study. PCP-009 §6.4 allowed a univariate confirmation run where the designs could not separate an effect, and none was made.
+
+# Results {#sec-results}
+
+## Centre-point performance and reproducibility {#sec-centre}
+
+@tbl-centre gives the centre-point results of both designs. In the response-surface design the SD of the four centre points was `{python} fx(CEN[('rsm','mvm_lrf')][2])` log10 for MVM LRF and `{python} fx(CEN[('rsm','xmulv_lrf')][2])` log10 for XMuLV LRF. The three MVM centre points of the screening design spread more widely, from `{python} fx(CEN[('screening','mvm_lrf')][3])` to `{python} fx(CEN[('screening','mvm_lrf')][4])` log10, an SD of `{python} fx(CEN[('screening','mvm_lrf')][2])` log10. The variance of the centre points of each design is its pure error, the basis of its lack of fit test.
+
+```{python}
+#| output: asis
+_lab = {"mvm_lrf": "MVM LRF (log10)", "xmulv_lrf": "XMuLV LRF (log10)", "lmw_cesds_pct": "Fragments, LMW (%)",
+        "step_yield": "Step yield (%)"}
+_rows_cen = []
+for _k, _kn in (("screening", "Screening"), ("rsm", "Response surface")):
+    for _r in RESP4:
+        _n, _m, _s, _lo, _hi = CEN[(_k, _r)]
+        _sc = 100 if _r == "step_yield" else 1
+        _rows_cen.append([_kn, _lab[_r], str(_n), fx(_m * _sc, 1 if _r == "step_yield" else 2), fx(_s * _sc), fx(100 * _s / _m, 1)])
+T.frame(pd.DataFrame(_rows_cen, columns=["Design", "Response", "n", "Mean", "SD", "CV (%)"]),
+        "Centre-point results of the two designs.", "tbl-centre", merge=["Design"],
+        align=["l", "l", "r", "r", "r", "r"],
+        notes=[("", "SD and mean in the unit of the response. CV, the SD as a percentage of the mean.")],
+        notes_per_row=True).show()
+```
+
+## Factor effects in the screening design {#sec-screening}
+
+Filtration volume had the only significant effect in the screening design (@tbl-scr-effects). Raising it from `{python} f"{RNG_V[0]:g}"` to `{python} f"{RNG_V[1]:g}"` L/m2 lowered MVM LRF by `{python} fx(-E_A_M)` log10 (`{python} pv(P_A_M)`). The effect of pressure on MVM LRF (`{python} fx(E_B_M)` log10, `{python} pv(P_B_M)`) and the interaction (`{python} fx(E_AB_M)` log10, `{python} pv(P_AB_M)`) were not significant. The F-test of the whole screening model of MVM LRF gave `{python} pv(SCR_P_M)`, with `{python} SCR_DFR` residual degrees of freedom. No term was significant for XMuLV LRF, fragments or step yield.
+
+```{python}
+#| output: asis
+_lab2 = {"mvm_lrf": "MVM LRF", "xmulv_lrf": "XMuLV LRF", "lmw_cesds_pct": "Fragments, LMW", "step_yield": "Step yield"}
+_rows_scrfit = [[_lab2[_r], fx(SF[_r]["R2"]), fx(SF[_r]["adjR2"]), fx(SF[_r]["predR2"]), pn(SF[_r]["p"]), pn(CURV_P[_r])]
+         for _r in RESP4]
+T.frame(pd.DataFrame(_rows_scrfit, columns=["Response", "R²", "Adj. R²", "Pred. R²", "Model F-test p", "Curvature p"]),
+        "Screening models of the four responses.", "tbl-scr-fit", align=["l", "r", "r", "r", "r", "r"],
+        notes=[("", "Curvature p, the lack of fit test of the interaction model, one degree of freedom, which compares "
+                    "the centre points with the factorial runs.")], notes_per_row=True).show()
+```
+
+```{python}
+#| output: asis
+_unit = {"mvm_lrf": "log10", "xmulv_lrf": "log10", "lmw_cesds_pct": "% points", "step_yield": "% points"}
+_rows_screff = []
+for _r in RESP4:
+    _sc = 100 if _r == "step_yield" else 1
+    for _t in ["A", "B", "AB"]:
+        _e = SE[_r].loc[_t]
+        _rows_screff.append([f"{_lab2[_r]} ({_unit[_r]})", _t, fx(_e["Effect"] * _sc), fx(2 * _e["Std. err."] * _sc), pn(_e["p-value"])])
+T.frame(pd.DataFrame(_rows_screff, columns=["Response", "Term", "Effect", "Std. err.", "p-value"]),
+        "Effects in the screening design, as the change in the response across the range studied.",
+        "tbl-scr-effects", merge=["Response"], align=["l", "l", "r", "r", "r"],
+        notes=[("", f"A, {NM_V[:1].lower() + NM_V[1:]}. B, {NM_P[:1].lower() + NM_P[1:]}. AB, their interaction. "
+                    "Std. err., the standard error of the effect.")], notes_per_row=True).show()
+```
+
+The centre points of the screening design showed curvature for fragments. The three centre points read `{python} fx(-CURV_SCR['lmw_cesds_pct'])` percentage points lower than the factorial runs, which is significant (`{python} pv(CURV_P['lmw_cesds_pct'])`). In the response-surface design the four centre points read `{python} fx(CURV_RSM_F)` points higher than the factorial runs, the opposite sign. The difference between the two estimates, `{python} fx(CURV_DIFF)` points, is not significant (`{python} pv(CURV_PD)`), by a t-test on the pooled SD of the centre points of both designs with `{python} CURV_DF` degrees of freedom. In size both estimates are at most `{python} fx(CURV_MAXABS)` percentage points, against a criterion of `{python} fx(CR_F)` %, and of the order of the SD of the method, `{python} fx(CESDS_SD)` points. No other response showed curvature in the screening design (p ≥ `{python} MIN_OTHER_CURV_S`). The screening results identify the effects, and the response-surface design gives the predictive model.
+
+## Response-surface models {#sec-rsm}
+
+@tbl-reeval-virus-filtration compares the full quadratic model that PCP-009 planned, fitted to the `{python} n_rsm` planned runs, with the model each output now uses. The full quadratic did not meet the limit on overfitting for any output with a criterion. Its R² exceeded its predicted R² by `{python} fx(GAP_FULL_M)` for MVM LRF and by more for XMuLV LRF and fragments. Its adjusted R² was `{python} fx(PF_ADJ['mvm_lrf'])` for MVM LRF, `{python} fx(PF_ADJ['xmulv_lrf'])` for XMuLV LRF and `{python} fx(PF_ADJ['lmw_cesds_pct'])` for fragments. INV-002 named a refit as the remedy for each of them. Viral clearance is not a drug substance test, so no further run was spiked with virus, and fragments had no effect to resolve. The step was therefore not augmented.
+
+```{python}
+#| output: asis
+T.model_reevaluation("virus_filtration").show()
+```
+
+The model selection gave a straight line in filtration volume for MVM LRF, a model in pressure alone for XMuLV LRF, and a model with no term for fragments and for step yield. @tbl-adequacy judges each selected model against the first three criteria of PCMP-001 §7.2, and @tbl-influence against the fourth.
+
+```{python}
+#| output: asis
+_terms = lambda f: ", ".join(LET[t] if t in LET else t for t in f["names"]) or "none"
+_v = lambda b: "Met" if b else "Not met"
+_brow = []
+for _r in RESP4:
+    _f = FT[_r]
+    _has = bool(_f["names"])
+    _sdu = 100 if _r == "step_yield" else 1
+    _brow.append([_lab2[_r], _terms(_f), fx(_f["R2"]), fx(_f["adjR2"]), fx(_f["predR2"]), fx(_f["rmse"] * _sdu, 3),
+                  pn(_f["p"]) if _has else "n.a.", _v(_f["p"] < ALPHA) if _has else "n.a.",
+                  pn(_f["p_lof"]), _v(_f["p_lof"] >= LOF_ALPHA), fx(_f["gap"]), _v(_f["gap"] <= GAPMAX)])
+CTable(header=[[C("Output", rs=2), C("Terms", rs=2), C("R²", rs=2), C("Adj.\nR²", rs=2), C("Pred.\nR²", rs=2),
+                C("Residual\nSD", rs=2), C("Criterion 1", cs=2), C("Criterion 2", cs=2), C("Criterion 3", cs=2)],
+               ["F-test\np", "Met", "Lack of\nfit p", "Met", "Gap", "Met"]],
+       body=_brow, align=["l", "l", "r", "r", "r", "r", "r", "l", "r", "l", "r", "l"], size="footnotesize",
+       notes=[("", "A, filtration volume. B, filtration pressure. Residual SD in the unit of the output, log10 for "
+                   "the LRF and percentage points for fragments and step yield. Gap, R² minus predicted R², at most "
+                   f"{fx(GAPMAX)}. n.a., not applicable, the model has no term and no F-test.")],
+       notes_per_row=True, caption="Selected models against the first three adequacy criteria of PCMP-001 §7.2.",
+       label="tbl-adequacy").show()
+```
+
+```{python}
+#| output: asis
+_irow = []
+for _r in RESP4:
+    _ri = RI[_r]
+    _has = bool(FT[_r]["names"])
+    _over = ", ".join(str(x) for x in _ri["over"]) or "none"
+    _overf = ", ".join(str(x) for x in _ri["over_f"]) or "none"
+    _irow.append([_lab2[_r], pn(_ri["p_spread"]) if _has else "n.a.", pn(_ri["p_order"]),
+                  f"{fx(_ri['cook_max'])} (run {_ri['cook_run']})", fx(_ri["f_limit"]), _over, _overf,
+                  "Met" if _ri["met"] else "Not met"])
+CTable(header=[[C("Output", rs=2), C("Residual trend p", cs=2), C("Cook's distance", cs=4), C("Criterion 4", rs=2)],
+               ["Spread", "Order", "Largest", "F median", "Runs above 4/n", "Runs above F median"]],
+       body=_irow, align=["l", "r", "r", "r", "r", "P{1.8cm}", "P{1.8cm}", "l"], size="footnotesize",
+       notes=[("", "Spread, the regression of the absolute residuals on the predicted values, not tested for a model "
+                   "with no term. Order, the regression of the residuals on the order of execution. "
+                   f"4/n is {fx(COOK_K / n_rsm)} with n = {n_rsm} runs. F median, the median of F(p, n − p), "
+                   "which depends on the number of parameters p.")],
+       notes_per_row=True, caption="Selected models against the fourth adequacy criterion of PCMP-001 §7.2, residuals and influence.",
+       label="tbl-influence").show()
+```
+
+MVM LRF is modelled by a straight line in filtration volume (@tbl-coef-mvm). The Box-Cox interval of λ contains both 0 and 1, so the raw scale was kept. On the grid of the selection the interval runs from the lower end of the grid, `{python} fx(BC_M['lo'])`, to `{python} fx(BC_M['hi'])`. On a grid of λ from `{python} fx(BC_GRID[0], 0)` to `{python} fx(BC_GRID[1], 0)` it runs from `{python} fx(BC_WIDE['lo'])` to `{python} fx(BC_WIDE['hi'])`. The intercept, `{python} fx(B0)` log10, is the mean predicted LRF at the midpoint of the volume range, `{python} f"{RNG_V[0] + HALF_V:g}"` L/m2. The coefficient of filtration volume is `{python} fx(B1, 3)` log10 per coded unit, with a standard error of `{python} fx(SE_B1, 3)`. Across the range studied the mean LRF therefore falls by `{python} fx(-EFF_V)` log10, which is `{python} fx(-SLOPE_PER)` log10 for every `{python} SLOPE_STEP` L/m2. The model F-test is significant (`{python} pv(FM['p'])`), the lack of fit is not (`{python} pv(FM['p_lof'])`, @tbl-anova-mvm), and R² exceeds predicted R² by `{python} fx(FM['gap'])`. The model therefore meets the first three criteria. The residual SD of the model is `{python} fx(FM['rmse'])` log10, against an SD of the centre points of `{python} fx(SD_PE_M)` log10. The residuals show no departure from normality (Shapiro-Wilk `{python} pv(SW['mvm_lrf'])`, @fig-diag-mvm). The next model by AICc adds the main effect of pressure and lies `{python} fx(NEXT_M_D, 1)` units higher, so no other model is within `{python} f"{NEAR_AICC:g}"` units of the selected one.
+
+```{python}
+#| output: asis
+_c = D.rsm_coeff_df(UO, "mvm_lrf")
+_c = pd.DataFrame({"Term": _c["Term"], "Coefficient": [fx(x, 3) for x in _c["Coef."]],
+                   "Std. err.": [fx(x, 3) for x in _c["Std. err."]], "t": [fx(x, 1) for x in _c["t"]],
+                   "p-value": [pn(x) for x in _c["p-value"]]})
+T.frame(_c, "Selected model of MVM LRF, coefficients in coded units.", "tbl-coef-mvm", align=["l", "r", "r", "r", "r"],
+        notes=[("", "A, filtration volume, coded −1 to +1 over the range studied. Coefficients in log10.")],
+        notes_per_row=True).show()
+```
+
+```{python}
+#| output: asis
+_a = D.anova_lof_df(UO, "mvm_lrf")
+_blank = lambda v, nd: "" if pd.isna(v) else fx(v, nd)
+_a = pd.DataFrame({"Source": [s.strip() for s in _a["Source"]], "Sum of squares": [_blank(x, 3) for x in _a["Sum sq."]],
+                   "df": [str(int(x)) for x in _a["df"]], "Mean square": [_blank(x, 3) for x in _a["Mean sq."]],
+                   "F": [_blank(x, 1) for x in _a["F"]], "p-value": ["" if pd.isna(x) else pn(x) for x in _a["p-value"]]})
+T.frame(_a, "Analysis of variance of the selected model of MVM LRF, with the lack of fit against pure error.",
+        "tbl-anova-mvm", align=["l", "r", "r", "r", "r", "r"],
+        notes=[("", "Lack of fit and pure error partition the residual.")], notes_per_row=True).show()
+```
+
+```{python}
+#| label: fig-diag-mvm
+#| fig-cap: "Diagnostics of the selected model of MVM LRF, residuals against predicted values, normal quantile plot, and actual against predicted values."
+fig = D.fig_diagnostics(UO, "mvm_lrf")
+plt.show()
+```
+
+The model of MVM LRF does not meet the fourth criterion. Neither residual trend is significant (`{python} pv(RIM['p_spread'])` for the spread and `{python} pv(RIM['p_order'])` for the order). Runs 2 and 5 have a Cook's distance above `{python} f"{COOK_K:g}"`/n = `{python} fx(COOK_K / n_rsm)`. Run 5, at `{python} fx(COOK5)`, also exceeds the median of F(p, n − p), `{python} fx(RIM['f_limit'])`, and so fails the criterion. Run 5 is an axial run at the lowest filtration volume, `{python} f"{RUN5.filtration_volume:g}"` L/m2, and the centre pressure, `{python} f"{RUN5.pressure:g}"` psi, executed `{python} ordinal(ORDER5)` of `{python} n_rsm`. Its LRF, `{python} fx(RUN5.mvm_lrf)` log10, is the highest of the `{python} len(M_AT_LO)` runs of the design at that volume. Its residual is `{python} fx(RES5)` log10, and its externally studentized residual `{python} fx(SRES5, 1)`. Its leverage, `{python} fx(H5)`, is below 2p/n = `{python} fx(LEV_LIM)`, and like every run it lies inside the range studied. Run 2, a factorial run at the lowest volume and the highest pressure, has a residual of `{python} fx(RES2)` log10.
+
+Both flagged runs were deleted in turn, the model selection was repeated and MVM LRF was judged over the NOR again (@tbl-deletion). Every other run of the design was deleted in the same way, because the record does not name the runs of the two study events (@sec-events). Every deletion leaves filtration volume as the only term of the selected model and the mean predicted LRF at the least favourable NOR combination between `{python} fx(min(LOO_WORST))` and `{python} fx(max(LOO_WORST))` log10, above the claim of `{python} fx(CL_M)` log10. The deletion of run 5 flattens the line, from `{python} fx(B1, 3)` to `{python} fx(D5['b1'], 3)` log10 per coded unit, and the mean prediction then meets the claim over the whole range studied. The NOR-propagated PAR of filtration volume then reaches the end of the range studied, and so does the design space. The deletion of run 2 steepens the line to `{python} fx(D2['b1'], 3)` and moves the point at which the mean prediction crosses the claim from `{python} fx(CROSS_V, 1)` to `{python} fx(CROSS2, 1)` L/m2. With run 3 or run 7 deleted, the Box-Cox interval of the remaining runs excludes 1, so that the model is fitted on the log scale, and the deletion of run 7 also carries the PAR edge to the end of the range. The position of the upper PAR edge of filtration volume therefore depends on single runs. The judgement over the NOR does not, and the NOR lies `{python} f"{MARG_MIN:g}"` L/m2 or more below the edge under every deletion. The model of all runs, which gives a narrower range of volume than the model without run 5, was kept for the ranges and the design space (@sec-discrepancies).
+
+```{python}
+#| output: asis
+_rt = RSM.set_index("run")["run_type"].to_dict()
+_cookm = {r: _cook(RIM, r) for r in RUNS}
+_mk = lambda r: (f"{r}^b)^" if r in RIM["over_f"] else f"{r}^a)^" if r in RIM["over"] else str(r))
+_edge = lambda o: (f"{inward(o['par_v'][1], up=False):g}" + (" (end)" if o["par_v"][1] == RNG_V[1] else ""))
+_med = lambda o: fx(o["worst"]) + ("^c)^" if o["scale"] == "log" else "")
+_drow = [["none", "–", "–", LOO[None]["scale"], _med(LOO[None]), _edge(LOO[None]), fx(100 * LOO[None]["ds_frac"], 0)]]
+for _r in RUNS:
+    _o = LOO[_r]
+    _drow.append([_mk(_r), _rt[_r].replace("center", "centre"), fx(_cookm[_r]), _o["scale"], _med(_o), _edge(_o),
+                  fx(100 * _o["ds_frac"], 0)])
+T.frame(pd.DataFrame(_drow, columns=["Run deleted", "Run type", "Cook's distance", "Scale", "Mean LRF at the least\nfavourable NOR combination",
+                                     "Upper edge of the PAR\nof volume (L/m2)", "Design space\n(% of grid)"]),
+        "Selected model of MVM LRF with each response-surface run deleted in turn, and the judgement over the NOR.",
+        "tbl-deletion", align=["l", "l", "r", "l", "P{2.8cm}", "P{2.6cm}", "P{1.8cm}"], size="footnotesize",
+        notes=[("a)", f"Cook's distance above 4/n = {fx(COOK_K / n_rsm)}, examined by deletion."),
+               ("b)", f"Cook's distance above the median of F(p, n − p) = {fx(RIM['f_limit'])}, the limit of the criterion."),
+               ("c)", "The median, because the model of the remaining runs is on the log scale."),
+               ("", "Every deletion keeps filtration volume as the only term, and every predicted LRF in the table meets "
+                    f"the claim of {fx(CL_M)} log10. Scale log, the Box-Cox interval of the remaining runs excludes 1. "
+                    "PAR, the NOR-propagated range, its edge rounded inward to three significant figures. "
+                    "End, the PAR reaches the end of the range studied.")],
+        notes_per_row=True).show()
+```
+
+XMuLV LRF has no adequate model. The selected model carries pressure alone, with a coefficient of `{python} fx(XB, 3)` log10 per coded unit and a residual SD of `{python} fx(FXV['rmse'])` log10, but its F-test is not significant (`{python} pv(FXV['p'])`) and R² exceeds predicted R² by `{python} fx(FXV['gap'])`, above the limit. XMuLV LRF is therefore judged on its measured results, all `{python} len(MEAS_X)` of which, from `{python} fx(MEAS_X.min())` to `{python} fx(MEAS_X.max())` log10, met the claim of `{python} fx(CL_X)` log10. The model with no term lies `{python} fx(NX_D, 1)` AICc units from the selected one and meets the second and third criteria. It predicts a mean LRF of `{python} fx(NX_MEAN)` log10 everywhere, and the judgement over the NOR would be the same under it. Because the selected model is not adequate, its fourth criterion decides nothing.
+
+Fragments have a selected model with no term, a mean of `{python} fx(F_MEAN)` % and a residual SD of `{python} fx(F_SD)` percentage points. The lack of fit is not significant (`{python} pv(FF['p_lof'])`), and the model meets the limit on overfitting with a gap of `{python} fx(FF['gap'])`. Its residuals show no departure from normality (Shapiro-Wilk `{python} pv(SW['lmw_cesds_pct'])`), and the upper 95 % limit of a single run, `{python} fx(F_PI_HI)` %, meets the criterion of `{python} fx(CR_F)` %, so both Version 1.0 conditions are met. For a model with no term R² is zero and predicted R² is 1 − (n/(n − 1))², so the gap, (2n − 1)/(n − 1)², is fixed by the number of runs. It is `{python} fx(GAP_NOTERM(n_rsm))` with `{python} n_rsm` runs and `{python} fx(GAP_NOTERM(n_rsm - 1))` with `{python} n_rsm - 1`. Run 9, a centre run, has a Cook's distance of `{python} fx(COOK9)`, above `{python} f"{COOK_K:g}"`/n and below the median of F(p, n − p), `{python} fx(RIF['f_limit'])`. The deletion of run 9, or of any other single run, leaves a model with no term on `{python} n_rsm - 1` runs, whose gap of `{python} fx(GAP_NOTERM(n_rsm - 1))` exceeds the limit. Criterion 3 then judges the number of runs and not the model. Fragments would then have no adequate model and no PAR, and they would be judged on their measured results, every one of which meets the criterion. The judgement over the NOR, the range carried into the control strategy, which the PARs of MVM LRF set, and the design space do not change.
+
+Step yield has a selected model with no term, a mean of `{python} fx(100 * Y_MEAN, 1)` % and a residual SD of `{python} fx(100 * Y_SD)` percentage points. The model with filtration volume lies `{python} fx(NY_D, 1)` AICc units from it, with a coefficient of `{python} fx(100 * NY_B)` points per coded unit that is not significant (`{python} pv(NY_P)`). Step yield has no criterion. The residual plots of XMuLV LRF, fragments and step yield are given in Appendix C (@fig-diag-xmulv, @fig-diag-frag and @fig-diag-yield).
+
+@fig-measured shows the measured results of both designs against filtration volume. The MVM LRF falls with volume at every pressure of the response-surface design, and at high volume the line of the model of all runs lies below the line with run 5 deleted. For XMuLV LRF and fragments no term was significant in either design.
+
+```{python}
+#| label: fig-measured
+#| fig-cap: "Measured results of both designs against filtration volume, with the claim or criterion of each output and the NOR shaded. Colour gives the filtration pressure, open circles the screening runs and filled squares the response-surface runs. For MVM LRF the lines are the selected model on all runs and with run 5 deleted. For fragments the line and band are the selected model and the 95 % prediction interval of a single run. XMuLV LRF has no adequate model and no line."
+_col = {RNG_P[0]: "#2a78d6", (RNG_P[0] + RNG_P[1]) / 2: "#6d6d6d", RNG_P[1]: "#c0392b"}
+fig, axs = plt.subplots(1, 3, figsize=(10, 4.2))
+_xs = np.linspace(RNG_V[0], RNG_V[1], 200)
+_panels = [("mvm_lrf", "MVM LRF (log10)", CL_M, "claim"), ("xmulv_lrf", "XMuLV LRF (log10)", CL_X, "claim"),
+           ("lmw_cesds_pct", "Fragments, LMW (%)", CR_F, "criterion")]
+for _ax, (_r, _ylab, _lim, _ll) in zip(axs, _panels):
+    _ax.axvspan(NOR_V[0], NOR_V[1], color="grey", alpha=0.12, lw=0, label="NOR")
+    for _d, _off, _mkr, _dl in ((SCR, -1.5, "o", "screening"), (RSM, 1.5, "s", "response surface")):
+        for _p, _cc in _col.items():
+            _s = _d[_d.pressure == _p]
+            _ax.scatter(_s.filtration_volume + _off, _s[_r], marker=_mkr, s=34, color=_cc,
+                        facecolors="none" if _d is SCR else _cc, label=f"{_dl}, {_p:g} {U_P}")
+    _ax.axhline(_lim, color="#c0392b", ls="--", lw=1.0, label=_ll)
+    _ax.set_xlabel(f"{NM_V} ({U_V})", fontsize=10)
+    _ax.set_ylabel(_ylab, fontsize=10)
+    _ax.tick_params(labelsize=9)
+_y_all = D.predict(UO, "mvm_lrf", natural={"filtration_volume": _xs})
+_y_5 = _pred(D5["sel"], {"filtration_volume": _xs, "pressure": np.full(len(_xs), SP_P)})[0]
+axs[0].plot(_xs, _y_all, color="#1f3b73", lw=1.4, label="model, all runs")
+axs[0].plot(_xs, _y_5, color="#1f3b73", lw=1.2, ls=":", label="model, run 5 deleted")
+axs[0].annotate("run 5", (RUN5.filtration_volume + 1.5, RUN5.mvm_lrf), xytext=(RUN5.filtration_volume + 16, RUN5.mvm_lrf - 0.2),
+                fontsize=9, arrowprops=dict(arrowstyle="-", lw=0.6))
+_m, _l, _h = D.prediction_interval(UO, "lmw_cesds_pct", {"filtration_volume": _xs, "pressure": np.full(len(_xs), SP_P)})
+axs[2].plot(_xs, _m, color="#1f3b73", lw=1.2, label="model")
+axs[2].fill_between(_xs, _l, _h, color="#1f3b73", alpha=0.15, lw=0, label="95 % interval, single run")
+axs[2].set_ylim(0, CR_F * 1.1)
+_h1, _l1 = axs[0].get_legend_handles_labels()
+fig.legend(_h1, _l1, loc="lower center", ncol=4, fontsize=9, frameon=False, bbox_to_anchor=(0.5, 0.0))
+fig.tight_layout(rect=[0, 0.2, 1, 1])
+plt.show()
+```
+
+## Mechanistic interpretation {#sec-mechanism}
+
+The fall of MVM LRF with filtration volume is the effect that the mechanism of the step predicts. As the membrane fouls, the flux shifts toward the largest pores, through which the parvovirus can pass, and the shift grows with the volume filtered per unit area. The data show the effect as a fall of `{python} fx(-EFF_V)` log10 across the range studied, with a standard error of `{python} fx(2 * SE_B1)` log10.
+
+The data do not show three other effects that PCP-009 expected from the same mechanism. First, the fall was expected to accelerate toward the top of the volume range. In the full quadratic of the planned runs the square of filtration volume is positive, `{python} fx(PF_A2, 3)` log10 per coded unit squared, which is the opposite sign, and it is not significant (`{python} pv(PF_A2_P)`). Within `{python} rng_s(RNG_V)` L/m2 the decline is consistent with a straight line, and the mechanism as PCP-009 states it does not explain the absence of the acceleration. Second, MVM retention was expected to fall at high pressure, and at low pressure through diffusion. The main effect of pressure in the full quadratic is `{python} fx(PF_B, 3)` log10 per coded unit (`{python} pv(PF_B_P)`). The square of pressure is negative, `{python} fx(PF_B2, 3)`, which would mean a lower LRF at both ends of the pressure range, the shape that the mechanism predicts, but it is not significant (`{python} pv(PF_B2_P)`) and was not selected. Third, the fall with volume was expected to be steeper at high pressure. The interaction in the full quadratic is `{python} fx(PF_AB, 3)` log10 per coded unit squared, with a standard error of `{python} fx(PF_AB_SE, 3)` (`{python} pv(PF_AB_P)`), and in the screening design `{python} fx(E_AB_M)` log10 across the range (`{python} pv(P_AB_M)`). Within the range studied no dependence of the volume effect on pressure was detected at the precision of these runs. A term that is not significant is not shown to be absent, and an effect of pressure of the size of these standard errors could exist within `{python} rng_s(RNG_P)` psi.
+
+For operation, the volume filtered per square metre of membrane is the parameter that bounds the MVM claim. Within the pressures studied, pressure had no detected effect on any output, and the condition of uninterrupted filtration rests on the mechanism and not on these data, because the designs did not study an interruption of flow.
+
+The results for XMuLV LRF agree with the expectation that a virus many times larger than the pores is retained independently of the operating parameters. No term was significant in either design, and every measured LRF met the claim. Every LRF in the record is a point value, and the record does not say whether any filtrate titre was below the limit of detection (@sec-analytical), so the data do not show whether retention was complete.
+
+Fragments did not depend on either parameter, and their level in the filtrate ranged from `{python} fx(MEAS_F.min())` to `{python} fx(MEAS_F.max())` %, against the criterion of `{python} fx(CR_F)` %. The expectation that the step does not change fragments cannot be tested on these data, because fragments were measured in the filtrate and not in the load. It rests on the size of the clipped species against the pores. Step yield did not depend on either parameter. The near model with filtration volume carries the slow fall with load that PCP-009 expected, but its coefficient is not significant.
+
+# Design space {#sec-design-space}
+
+The design space of the step is the part of the characterized region in which every output with a criterion meets it at once, each on the statistic on which it is judged (PCMP-001 §6.2). A setting lies inside it when the mean predicted MVM LRF meets its claim and both ends of the 95 % prediction interval of a single run for fragments lie within their criterion. XMuLV LRF has no adequate model and draws no boundary, because every measured result met its claim. The region was evaluated on an evenly spaced grid of `{python} GRID_N` by `{python} GRID_N` points over the characterized region, `{python} rng_s(RNG_V)` L/m2 by `{python} rng_s(RNG_P)` psi.
+
+Of the `{python} DS_N` grid points, `{python} DS_IN` lie inside the design space, `{python} fx(DS_PCT, 0)` % of the characterized region. The points outside are those at `{python} f"{RNG_V[1]:g}"` L/m2, the top of the volume range, where the mean predicted MVM LRF falls below the claim at every pressure. Between the grid points the boundary lies at `{python} fx(CROSS_V, 1)` L/m2 at every pressure, because the selected model has no pressure term. Fragments exclude no point. On the mean prediction of every output the region is the same, because the output that bounds it is judged on its mean either way.
+
+The NOR of both parameters lies inside the design space, and the design space lies inside the characterized region, which is the knowledge space of the study. Movement within the design space is not a change from the point of view of a regulatory filing under ICH Q8(R2), but it is evaluated under the change management system of the quality system [@ichq8; @ichq10]. At the boundary itself a single run meets the claim only about half the time if the variability is symmetrical, because the boundary is drawn on the mean prediction, as PCMP-001 §6.2 sets it for viral clearance. The lower 95 % limit of a single run at the least favourable NOR combination is `{python} fx(M_PI_LO)` log10, above the claim (for information).
+
+The boundary rests on single runs. With run 5 deleted, or run 7, the selected model meets the claim over the whole characterized region (@tbl-deletion). The design space is not confirmed at manufacturing scale at its edges, because virus cannot be spiked at that scale. Step yield has no term in its selected model, so the region carries the same mean yield, `{python} fx(100 * Y_MEAN, 1)` %, at every setting, and it costs no product that the designs detect (PCP-009 §7).
+
+# Proven acceptable ranges {#sec-par}
+
+Each output of the step with a criterion is judged against its intermediate acceptance criterion (@tbl-iac). MVM LRF and XMuLV LRF are each held to the platform claim of this step, `{python} fx(CL_M)` log10, the log reduction that the step delivered on the platform with X-Mab, Y-Mab and Z-Mab (PCMP-001 §7.4). The claims of the steps that clear each virus are summed and checked against the cumulative requirement of the drug substance. For XMuLV the claims of low-pH viral inactivation (`{python} fx(CL_VI_X)`), anion exchange (`{python} fx(CL_AEX_X)`) and this step sum to `{python} fx(SUM_X)` log10, against a requirement of `{python} f"{REQ_X:g}"` log10. For MVM the claims of anion exchange (`{python} fx(CL_AEX_M)`) and this step sum to `{python} fx(SUM_M)` log10, against `{python} f"{REQ_M:g}"` log10. The claim of this step is therefore one of three for XMuLV and one of two for MVM. Each step is judged against its own claim, so a shortfall at this step is not made up by another step. Fragments carry the drug substance criterion, `{python} fx(CR_F)` %, because no later step changes them.
+
+```{python}
+#| output: asis
+T.iac_derivation(["virus_filtration"]).show()
+```
+
+The criteria of this step were derived without its data. The claims come from the platform history and the fragment criterion from the register (PCMP-001 §7.3). The criteria in force equal their values derived in this way, because no verification changed them. No criterion of an earlier step rests on a platform worst case of this step, so this report has no worst case to verify. The fragment criteria of the earlier steps do assume that no later step changes fragments, and so that this step leaves its load unchanged. That assumption rests on the mechanism of the step, because the record holds fragments in the filtrate and not in the load (@sec-mechanism).
+
+@tbl-criteria-virus-filtration gives each output against its criterion over the NOR. MVM LRF met its claim, with a mean predicted LRF of `{python} fx(M_NORHI)` log10 at the least favourable NOR combination, the upper NOR edge of filtration volume. XMuLV LRF met its claim on its measured results. Fragments met their criterion, with an upper 95 % limit of a single run of `{python} fx(F_PI_HI)` % within the NOR.
+
+```{python}
+#| output: asis
+# layout only: the attribute column wraps, so that the builder's table stays above the 8 pt floor at this
+# step (its notes were set at 7.8 pt); no text, note or verdict changes
+_crit_t = T.criteria_results("virus_filtration")
+_crit_t.align = ["P{3.0cm}", "l", "r", "r", "r", "l"]
+_crit_t.show()
+```
+
+Two analyses give the PAR of each parameter for each output with a criterion and an adequate model (@tbl-par). The first scans the parameter across its range studied on a grid of `{python} D.PAR_GRID_SETPOINT` points and gives the contiguous range over which the mean prediction of the response-surface model meets the criterion. The second is the NOR-propagated analysis of PCMP-001 §6.4. It scans the parameter across the same range on a grid of `{python} D.PAR_GRID` points with the other parameter moving within its NOR. For viral clearance the other parameter is set at each grid point to its NOR low, its set-point and its NOR high, and the lowest of the three mean predicted LRF must meet the claim. For fragments, `{python} f"{D.PAR_MC_N:,}"` values of the other parameter are drawn at each grid point from a normal distribution centred on its set-point, with an SD equal to the width of its NOR divided by `{python} f"{D.NOR_SD_DIVISOR:g}"`, clipped to the range studied. Each draw carries the model residual and the uncertainty of the fitted coefficients, and the `{python} f"{PCT_UP:g}"`th percentile of the simulated batches must not exceed the criterion. The range reported is the contiguous range that contains the set-point, and the NOR-propagated range is the one carried into the control strategy (PCP-009 §8). An output with no adequate model has no PAR, and @tbl-par marks it n.a. (PCMP-001 §7.2).
+
+```{python}
+#| output: asis
+_par_t = D.par_table(UO)
+_lab_resp = {LAB_M: "mvm_lrf", LAB_X: "xmulv_lrf", LAB_F: "lmw_cesds_pct"}
+_par_t["Criterion"] = [T.crit(*D.effective_acceptance(UO, _lab_resp[c])) for c in _par_t["CQA"]]
+T.frame(_par_t, "Proven acceptable ranges of the parameters for each output with a criterion.", "tbl-par",
+        merge=["CQA", "Criterion", "Basis"], align=["P{2.6cm}", "P{2.6cm}", "l", "l", "l", "l", "l", "P{2.0cm}"],
+        size="footnotesize",
+        notes=[("", "Edges rounded inward to three significant figures. Basis, selected model, the PAR comes from the "
+                    "selected response-surface model. No adequate model, the output has no PAR (n.a.), and every "
+                    "measured result met the claim.")], notes_per_row=True).show()
+```
+
+The PAR of filtration volume for MVM ends inside the range studied in both analyses. It is `{python} PAR_V_S` L/m2 in the first analysis and `{python} PAR_V_N` L/m2 in the NOR-propagated analysis, as @tbl-par rounds them. The mean prediction crosses the claim at `{python} fx(CROSS_V, 1)` L/m2, which is the crossing value that PCP-009 §8 asks this report to state. Below that volume the selected model predicts a mean LRF above the claim at every pressure, because it has no pressure term. The NOR of filtration volume, `{python} rng_s(NOR_V)` L/m2, lies inside its NOR-propagated PAR, which extends `{python} f"{MARG_V:g}"` L/m2 beyond the upper NOR edge. The lower edge of the PAR is the lower end of the range studied, where the study stopped and not where the claim fails. Across the PAR the mean predicted LRF falls from `{python} fx(M_LO)` to `{python} fx(M_EDGE)` log10. The PAR of filtration pressure for MVM is the whole range studied in both analyses, and no claim is made beyond it.
+
+@fig-par-mvm shows the two analyses for MVM against filtration volume, with the claim drawn and the acceptable region shaded green. The two panels give nearly the same edge, because the selected model has no pressure term.
+
+```{python}
+#| label: fig-par-mvm
+#| fig-cap: "Proven acceptable range of filtration volume for MVM LRF, the first analysis (left) and the NOR-propagated analysis (right), with the claim of the step and the NOR."
+fig = D.fig_par(UO, "mvm_lrf", "filtration_volume")
+plt.show()
+```
+
+XMuLV LRF has no adequate model and therefore no PAR (n.a. in @tbl-par). Every measured result met the claim (@sec-rsm). Fragments have a selected model with no term, whose interval lies below the criterion everywhere, so both of their PARs are the whole range studied for both parameters. PCP-009 §8 planned a figure for each PAR, and only @fig-par-mvm is given.
+
+With two parameters and no interaction term in any selected model, the PARs and the design space describe one region. The design space is the characterized region below the volume at which MVM LRF crosses its claim, and the PARs are its edges. A movement of filtration volume within its PAR keeps the step inside the design space at any pressure within `{python} rng_s(RNG_P)` psi, and a movement of pressure within its PAR does so at any volume within the PAR of volume.
+
+# Process capability and robustness {#sec-capability}
+
+Capability at commercial scale was estimated from the integrated model of the train, which runs `{python} f"{N_MC:,}"` simulated batches through every step with each process parameter drawn within its NOR (PCMP-001 §6.5). The cumulative viral clearance of a simulated batch is the sum of the clearances of the steps that clear the virus. For MVM these are anion exchange (PCR-008) and this step, and for XMuLV low-pH viral inactivation (PCR-006), anion exchange and this step. The capability of the cumulative clearance therefore depends on those steps as well as on this one.
+
+```{python}
+#| output: asis
+_cp = cap_for(CAPK).set_index("CQA")
+_crow = []
+for _k in CAPK:
+    _row = CAPT.loc[_k]
+    _cf = cap_for([_k]).iloc[0]
+    _p = POOS.loc[_k]
+    _crow.append([_row["cqa"], T.crit(_row["acc_low"], _row["acc_high"], _row["spec_type"]),
+                  f"{fx(_row['mean'])} ± {fx(_row['sd'])}", fx(_row["Cpk"]),
+                  f"{int(_p['n_oos'])} of {int(_p['n']):,}", fx(_p["ppm_normal"])])
+T.frame(pd.DataFrame(_crow, columns=["Attribute", "Criterion", "Mean ± SD", "Cpk", "Batches outside",
+                                      "Normal tail\n(per million)"]),
+        "Capability of the drug substance attributes to which the step contributes, from the integrated model.",
+        "tbl-capability", align=["P{4.4cm}", "l", "l", "r", "r", "r"],
+        notes=[("", "Viral clearance, the cumulative log10 reduction of the drug substance against the cumulative "
+                    "requirement. Normal tail, the tail probability of a normal distribution with the simulated mean "
+                    "and SD.")], notes_per_row=True).show()
+```
+
+The Cpk of the cumulative MVM clearance is `{python} fx(CPK_M)` and that of the cumulative XMuLV clearance `{python} fx(CPK_X)`, against the requirements of `{python} f"{REQ_M:g}"` and `{python} f"{REQ_X:g}"` log10 (@tbl-capability). Both are above the target of `{python} fx(CPK_TARGET)` and the minimum of `{python} f"{CPK_MIN:.1f}"` of PCMP-001 §7.9, and MVM is the tighter of the two. The Cpk of fragments is `{python} fx(CPK_F)` against the criterion of `{python} fx(CR_F)` %, also above the target. No simulated batch fell outside any of the three criteria. With none of `{python} f"{N_MC:,}"` batches outside, the one-sided `{python} f"{100 * BOUND_CONF:g}"` % upper bound of the probability out of specification is `{python} fx(P_UP, 4)` for each attribute. That bound covers the sampling of the simulation and not the uncertainty of the integrated process model. The tail of a normal distribution with the simulated mean and SD gives `{python} fx(PPM_M)` per million for MVM, `{python} fx(PPM_X)` per million for XMuLV and a value that rounds to zero for fragments.
+
+Within this step, the claim is judged on the response-surface model at the least favourable NOR combination (@sec-par). The capability adds the variation of the parameters within their NOR and the clearance of the other steps. Fragments are judged per batch against their criterion and are tested at release of the drug substance.
+
+# Parameter classification {#sec-classification}
+
+The parameters were classified under SOP-4001. Under the rule of PCP-009 §7 a parameter affects an attribute when a term that contains the parameter is significant at α = `{python} f"{ALPHA:g}"`. The class of an affected parameter then follows from the size of its effect across its PAR and from the margin between the PAR and the NOR. Neither PCMP-001 nor SOP-4001 sets a number for either, so the classification of an affected parameter is a judgement on the values stated below.
+
+- `{python} NM_V`, `{python} CLASS_V`. A term containing the parameter is significant for MVM LRF (`{python} pv(FM['p'])`). Across its NOR-propagated PAR, `{python} PAR_V_N` L/m2, the mean predicted MVM LRF falls by `{python} fx(M_LO - M_EDGE)` log10. MVM clearance is an attribute of very high criticality. The PAR extends `{python} f"{MARG_V:g}"` L/m2 beyond the upper NOR edge, and its lower edge is the end of the range studied. The volumetric load is set by the volume of load applied to a filter of known area, so it can be held within its NOR. The parameter was classified as a WC-CPP on this margin and this control. With run 5 deleted the PAR would reach the end of the range studied, and the class would be the same.
+- `{python} NM_P`, `{python} CLASS_P`. No term containing the parameter is significant for any output, in either design (MVM LRF `{python} pv(PF_B_P)` for the main effect and `{python} pv(PF_B2_P)` for the square in the full quadratic, XMuLV LRF `{python} pv(XB_P)` in its selected model, which is not adequate). No effect of pressure on an attribute was therefore detected within `{python} rng_s(RNG_P)` psi, and the class does not follow from the rule of PCP-009 §7. The A-Mab case study classes both parameters of this step as WC-CPP, "since both are easy to control and have minimal impact on LRF when operated within their acceptable ranges" [@amab2009, p. 157]. The parameter was classified as a WC-CPP on that basis and on the scope of the viral clearance claim, which holds only for the pressures of the spiking runs, `{python} rng_s(RNG_P)` psi, and for uninterrupted flow. A transient excursion to `{python} dev_009_01_pmax_psi` psi in one run (DEV-009-01) lay inside the range studied. The PAR of the parameter is the whole range studied.
+
+The step has two critical process parameters, both of the well-controlled kind. Neither parameter had a detected effect on step yield.
+
+# Contribution to the control strategy {#sec-control}
+
+The step contributes two parameter ranges, a condition of operation, a test of each filter after use and its share of the modular viral clearance claim. Filtration volume is held within its NOR of `{python} rng_s(NOR_V)` L/m2 around the set-point of `{python} f"{SP_V:g}"` L/m2, and its NOR-propagated PAR of `{python} PAR_V_N` L/m2 bounds the assessment of an excursion. Filtration pressure is held within `{python} rng_s(NOR_P)` psi around `{python} f"{SP_P:g}"` psi, with a PAR of `{python} PAR_P_N` psi. The range carried into the control strategy for each parameter is the intersection of its PARs over the outputs with an adequate model (PCMP-001 §7.6). For both parameters that is the PAR for MVM LRF, because the PARs for fragments cover the range studied. Filtration is uninterrupted, because the claim does not cover an interruption of flow. An interruption at commercial scale is assessed against the mechanism of the step and not against these ranges (PCP-009 §12).
+
+Each filter is integrity tested after use under SOP-2012. A membrane that passes the test has no defect large enough for the test to detect, and the retention of XMuLV depends on that integrity.
+
+The step contributes `{python} fx(CL_M)` log10 to the cumulative MVM claim, beside anion exchange (`{python} fx(CL_AEX_M)` log10, PCR-008). It contributes `{python} fx(CL_X)` log10 to the cumulative XMuLV claim, beside low-pH viral inactivation (`{python} fx(CL_VI_X)` log10, PCR-006) and anion exchange (`{python} fx(CL_AEX_X)` log10, PCR-008). Viral clearance cannot be tested on a batch, so the claim rests on the operation of the step within its ranges. Fragments are tested at release of the drug substance by nrCE-SDS against the criterion of `{python} fx(CR_F)` %, and no later step changes them. Step yield carries no criterion. PCMR-001 consolidates these ranges, the classes and the viral clearance claims with those of the other steps.
+
+# Discussion {#sec-discussion}
+
+The study shows that filtration volume is the parameter that governs the MVM clearance of the step. The MVM LRF falls along a straight line from `{python} fx(M_LO)` log10 at `{python} f"{RNG_V[0]:g}"` L/m2 to `{python} fx(M_HI)` log10 at `{python} f"{RNG_V[1]:g}"` L/m2. The claim of `{python} fx(CL_M)` log10 holds on the mean prediction up to `{python} fx(CROSS_V, 1)` L/m2, `{python} fx(CROSS_MARG, 1)` L/m2 beyond the upper NOR edge of `{python} f"{NOR_V[1]:g}"` L/m2. The `{python} N_BELOW` measured MVM results below the claim were all at `{python} f"{RNG_V[1]:g}"` L/m2, beyond that point. No effect of pressure was detected on any output, and XMuLV LRF, fragments and step yield did not depend on either parameter.
+
+The scale-down model compared step yield alone with manufacturing scale, with an offset of `{python} fx(100*OFF_Y['offset'], 1)` percentage points. No output with a criterion was compared at both scales. The clearance claims therefore rest on the spiking model, as ICH Q5A(R2) provides, and the fragment results on the mechanism of the step [@ichq5a]. The flux decay profile, which PCP-009 named as the comparison that shows whether the model fouls like the commercial filter, is not recorded (PD-009-03). How far the fouling of the scale-down membrane represents the commercial filter is therefore not shown by these data, and the effect of filtration volume on MVM LRF is the effect at scale-down.
+
+The upper PAR edge of filtration volume depends on single runs. Run 5 fails the criterion on influential runs, and its deletion, or that of run 7, carries the edge to the end of the range studied. The model of all runs gives a narrower range than the model without run 5 and was kept, so the PAR and the design space do not rest on the deletion. Under every deletion the edge lies `{python} f"{MARG_MIN:g}"` L/m2 or more beyond the NOR, and no deletion changed the judgement over the NOR.
+
+The data did not show the acceleration of the MVM decline at high load, the effect of pressure or the interaction between load and pressure that the mechanism led PCP-009 to expect. A design of `{python} n_rsm` runs with an SD of the centre points of `{python} fx(SD_PE_M)` log10 detects a slope as large as the effect of volume, but not effects of the size of the standard errors of these terms. Interruptions of flow were not studied, so the condition of uninterrupted filtration rests on the mechanism.
+
+The record lacks several results that PCP-009 required (@sec-discrepancies). Two of them limit the claims. The record holds no spike titre and no limit of detection, so it cannot show whether any LRF is a lower bound. It also holds no integrity test result for any run, on which the XMuLV results depend, and Version 1.0 stated that every run passed its post-use test with no result recorded behind the statement. The record names a membrane lot only in DEV-009-02, so variation between membrane lots was not studied.
+
+The runs of the two study events were retained, and the record does not name them. Deleting each run of the response-surface design in turn shows that the judgement over the NOR does not depend on any single one of them (@tbl-deletion). That does not bound an event that affected several runs, such as the membrane lot of DEV-009-02 (@sec-events). Of the discrepancies from the plan, the model selection and the use of the MVM model that fails the criterion on influential runs concern the analysis, and their effect on the conclusions is stated in @sec-rsm. The others concern results the record does not hold and analyses the plan does not contain.
+
+# Conclusions {#sec-conclusions}
+
+1. Scale-down model (objective 1). The qualification compared step yield alone, with an offset of `{python} fx(100*OFF_Y['offset'], 1)` percentage points (`{python} f"{OFF_CI:g}"` % confidence interval `{python} fx(100*OFF_Y['lo'], 1)` to `{python} fx(100*OFF_Y['hi'], 1)`) and no criterion. Flux decay and the post-use integrity test are not recorded, so objective 1 was not met as PCP-009 states it. PCP-009 §7 asks how this report reads "the scale-down model is qualified". No output with a criterion was compared at the two scales, so no conclusion was decided by an offset, and the outputs with a criterion are judged on the scale-down results, the LRF on the spiking model and fragments on the mechanism of the step.
+2. Effects (objective 2). Filtration volume lowers the mean MVM LRF by `{python} fx(-EFF_V)` log10 across `{python} rng_s(RNG_V)` L/m2. No effect of filtration pressure was detected on any output, and no effect of either parameter on XMuLV LRF, fragments or step yield.
+3. Models (objective 3). The selected model of MVM LRF meets the first three adequacy criteria of PCMP-001 §7.2 and fails the fourth on run 5. XMuLV LRF has no adequate model and is judged on its measured results. Fragments and step yield have selected models with no term.
+4. Proven acceptable ranges (objective 4). The NOR-propagated PAR of filtration volume is `{python} PAR_V_N` L/m2 for MVM LRF and the whole range studied for fragments. The PAR of filtration pressure is the whole range studied, `{python} PAR_P_N` psi, for both. Every PAR contains the NOR. XMuLV LRF has no adequate model and no PAR, and every measured result met its claim across the range studied.
+5. Classification (objective 5). Both parameters are WC-CPP. The class of filtration pressure rests on the basis that the A-Mab case study gives and on the scope of the viral clearance claim, not on a detected effect.
+6. Criteria. Each output with a criterion met its intermediate acceptance criterion across the NOR, MVM LRF at `{python} fx(M_NORHI)` log10 against `{python} fx(CL_M)`, XMuLV LRF on measured results from `{python} fx(MEAS_X.min())` log10 against `{python} fx(CL_X)`, and fragments at `{python} fx(F_PI_HI)` % against `{python} fx(CR_F)` %.
+7. Design space. The design space covers `{python} fx(DS_PCT, 0)` % of the characterized region and excludes filtration volumes above `{python} fx(CROSS_V, 1)` L/m2. Its upper boundary depends on run 5.
+8. Capability. The Cpk of the cumulative MVM clearance, `{python} fx(CPK_M)`, is the tightest of the attributes to which the step contributes, above the target of `{python} fx(CPK_TARGET)` and the minimum of `{python} f"{CPK_MIN:.1f}"`. No simulated batch fell outside any criterion.
+9. Success of the study. PCP-009 §7 asks for a qualified scale-down model, two viral clearance models accepted as predictive and a PAR containing the NOR for each parameter against each viral clearance response. The PARs of MVM LRF contain the NOR. The MVM model was used for prediction although it fails the criterion on influential runs (@sec-discrepancies). The XMuLV model was not accepted, so XMuLV LRF has no PAR, and its measured results met the claim across the whole range studied. The qualification compared step yield alone. The success criterion is therefore not met in full.
+10. Record. The runs of the two study events were retained. The record does not name them, so their effect is bounded only for an event that affected a single response-surface run (@sec-events). The results roll up into PCMR-001.
+
+# Study events and discrepancies from the plan {#sec-record}
+
+PCP-009 calls a departure from the plan a deviation. A process characterization study is not GMP manufacture and raises no deviation. This report records the events of execution that Version 1.0 recorded as study events, under the numbers Version 1.0 gave them, and every departure from PCP-009 as a discrepancy from the plan.
+
+## Study events {#sec-events}
+
+Version 1.0 recorded `{python} N_EV` study events at this step (@tbl-events). In both events the runs concerned were retained in the analysis. The record does not name them, so no run can be analysed at its recorded conditions or excluded alone. Every run of the response-surface design was therefore deleted in turn (@tbl-deletion), and no single deletion changed the judgement over the NOR. That bounds an event that affected one response-surface run. It does not bound an event that affected several runs. Nor does it cover the screening runs, whose results enter only the screening effects and the judgement of XMuLV LRF on its measured results, or the qualification runs, which enter only the offset of step yield.
+
+```{python}
+#| output: asis
+print(dev_register(DOC))
+print()
+print(": Study events of the step. {#tbl-events}")
+```
+
+### DEV-009-01, transient excursion of the filtration pressure above the NOR {#sec-dev1}
+
+During in-process pressure monitoring the filtration pressure of one run rose for a short time to a maximum of `{python} dev_009_01_pmax_psi` psi, above the upper NOR edge of `{python} f"{NOR_P[1]:g}"` psi. The investigation attributed the excursion to an overshoot of the pump ramp. The record names neither the run nor the duration of the excursion, so the run was analysed at its design setting. The peak lies inside the range studied, `{python} rng_s(RNG_P)` psi, over which the designs estimated the effect of pressure, and no term containing pressure was significant for any output. If the run was a response-surface run, its deletion leaves the judgement over the NOR unchanged (@tbl-deletion). If it was a screening run, its result enters only the screening effects and the judgement of XMuLV LRF, every measured result of which met the claim. If it was a qualification run, it enters only the offset of step yield, which has no criterion. The run was retained in the analysis.
+
+### DEV-009-02, membrane lot flux below the value typical for the vendor {#sec-dev2}
+
+The pre-use flux verification of membrane lot `{python} LOT` (`{python} LOT_VENDOR`) gave a flux `{python} dev_009_02_flux_deficit_pct` % below the value typical for the vendor. The investigation attributed the low flux to variation of membrane permeability between lots. The record names the MVM infectivity method (`{python} EV2_METHOD`) with the event, but it holds no result of an assessment by that method. Version 1.0 recorded that the runs made on the lot were retained. The lot record gives the use of the lot as "`{python} LOT_USED`", and no record names the runs. The lot may therefore have been used for several runs, and the deletion of one run at a time does not bound its effect. A lower permeability lowers the flux at a given pressure. Whether it changed the retention of MVM was not tested, so the effect of the event on the results cannot be assessed from the record. The record does not link the lot to run 5.
+
+## Discrepancies from the plan {#sec-discrepancies}
+
+@tbl-discrepancies gives the discrepancies from PCP-009 that the register holds.
+
+```{python}
+#| output: asis
+print(discrepancy_register(DOC))
+print()
+print(": Discrepancies from the plan PCP-009. {#tbl-discrepancies}")
+```
+
+PD-009-01, the model selection. PCP-009 planned the full quadratic model of each response-surface output. Each output was analysed instead by the model selection that INV-002 adopted as corrective action CA3 (@sec-statistics), because the full quadratic carries terms the data do not support. The full quadratic failed the limit on overfitting for every output with a criterion (@tbl-reeval-virus-filtration). Under the plan's full quadratic no output with a criterion would have had an adequate model. Under the selection, MVM LRF has a model in filtration volume alone that meets the first three criteria, XMuLV LRF has no adequate model, and fragments have a model with no term. The selection moved no criterion of this step. With the criteria as they would have been without corrective action CA3, the criteria of this step, the judgement of each output over the NOR and the PARs of MVM LRF are the same.
+
+PD-009-02, conclusions resting on models that do not meet the criterion on residuals and influential runs. PCP-009 planned response-surface models meeting every adequacy criterion of PCMP-001 §7.2 for the ranges and the design space. The selected model of MVM LRF has a run, run 5, with a Cook's distance of `{python} fx(COOK5)`, above the median of F(p, n − p), `{python} fx(RIM['f_limit'])`. Neither residual trend is significant. The model of all runs was used for the PARs and the design space of MVM LRF. Run 5 was deleted, the selection repeated and the output judged over the NOR again (@tbl-deletion). The deletion leaves the term and the judgement over the NOR unchanged, and it carries the upper PAR edge of filtration volume and the design space to the end of the range studied. The ranges reported are those of the model of all runs, which are narrower than those without run 5.
+
+PD-009-03, the scale-down qualification without flux decay and integrity results. PCP-009 §5.1 planned the flux decay profile, the step yield and the post-use integrity test to be compared at both scales, with the load material, the filtration temperature and the hold-up volume per area matched. The record holds step yield alone, with no flux decay or integrity result and no record of the matching, and Version 1.0 stated that every run passed its post-use test with no result recorded. Step yield has no criterion, so no conclusion of this report depends on the qualification (@sec-sdm). Whether the scale-down membrane fouls like the commercial filter is not shown.
+
+PD-009-04, the integrity tests and virus controls of the design runs. PCP-009 planned a pre-use and a post-use integrity test on every run, the titres of the spiked load and of the filtrate with their limits of detection and flags for lower bounds, cytotoxicity, interference and spike recovery controls, the achieved titre of each run, a clarified virus stock of small volume, and each sample identified by run and volumetric load (§5.2, §5.3, §5.4 and §12). None of these is in the record, which holds the log reductions as results only. The record therefore cannot show that each membrane was intact, on which the XMuLV results depend, or whether any LRF is a lower bound (@sec-analytical).
+
+PD-009-05, step yield and filtrate fractions. PCP-009 §5.2 planned the yield of each spiked run by protein mass balance from the ultraviolet absorbance of the load and of the pooled filtrate. PCP-009 §5.4 asked for an unspiked load and filtrate pool for the yield, which conflicts with §5.2, and for filtrate fractions by volumetric load. The record holds the yield of each spiked run as a single value, with no concentration, volume, assay or load sample taken before spiking. It holds no filtrate fraction and not the volume actually filtered in each run. Step yield has no criterion. Without fractions the effect of filtration volume on MVM LRF is estimated between runs only (@sec-sampling).
+
+PD-009-06, the load material and the flux of the spiked runs. PCP-009 §12 planned the load material of each run to be identified and the flux decay of the spiked runs to be compared with that of the qualification runs. The record does neither, and it holds no flux data. Whether the spiked load fouled the membrane differently from unspiked process material is therefore not shown. PCP-009 §12 named that bias as largest at the top of the volume range, on which the claim depends.
+
+PD-009-07, analyses the plan does not contain. PCP-009 planned the analyses of its §5.5, §7 and §8, with the examination of the runs whose Cook's distance is above 4/n and a figure for each PAR. This report adds the deletion of every response-surface run (@tbl-deletion), the test of the curvature of the two designs against each other (@sec-screening), the Shapiro-Wilk test and the reading of the Version 1.0 conditions by the limit of a single run, which PCP-009 §7 leaves to the report (@sec-statistics), the comparisons with near-equivalent and stepwise models (@sec-rsm) and the capability analysis (@sec-capability). It gives the PAR figure for filtration volume and MVM LRF only (@fig-par-mvm).
+
+{{< pagebreak >}}
+
+```{python}
+#| output: asis
+print(appendix_numbering("A"))
+```
+
+# Appendix A. Screening design matrix and responses {.unnumbered #sec-appA}
+
+@tbl-doe-virus-filtration-screening gives the settings and results of the `{python} n_scr` screening runs in natural units.
+
+```{python}
+#| output: asis
+T.doe_results("virus_filtration", "screening").show()
+```
+
+```{python}
+#| output: asis
+print(appendix_numbering("B"))
+```
+
+# Appendix B. Response-surface design matrix and responses {.unnumbered #sec-appB}
+
+@tbl-doe-virus-filtration-rsm gives the settings and results of the `{python} n_rsm` response-surface runs in natural units.
+
+```{python}
+#| output: asis
+T.doe_results("virus_filtration", "rsm").show()
+```
+
+```{python}
+#| output: asis
+print(appendix_numbering("C"))
+```
+
+# Appendix C. Full effect and coefficient tables {.unnumbered #sec-appC}
+
+@tbl-appc-scr gives every effect of the screening models with its coefficient, @tbl-appc-sel the coefficients of every selected model of the response-surface design, and @tbl-appc-full the coefficients of the full quadratic models that PCP-009 planned, which Version 1.0 used.
+
+```{python}
+#| output: asis
+_rows_appc_scr = []
+for _r in RESP4:
+    _sc = 100 if _r == "step_yield" else 1
+    for _t in ["A", "B", "AB"]:
+        _e = SE[_r].loc[_t]
+        _rows_appc_scr.append([f"{_lab2[_r]} ({_unit[_r]})", _t, fx(_e["Effect"] * _sc, 3), fx(_e["Coef."] * _sc, 3),
+                      fx(_e["Std. err."] * _sc, 3), fx(_e["t"], 2), pn(_e["p-value"])])
+T.frame(pd.DataFrame(_rows_appc_scr, columns=["Response", "Term", "Effect", "Coefficient", "Std. err.", "t", "p-value"]),
+        "Effects and coefficients of the screening models.", "tbl-appc-scr", merge=["Response"],
+        align=["l", "l", "r", "r", "r", "r", "r"], size="footnotesize",
+        notes=[("", "A, filtration volume. B, filtration pressure. AB, their interaction. Coefficients in coded units. "
+                    "Std. err., the standard error of the coefficient.")], notes_per_row=True).show()
+```
+
+```{python}
+#| output: asis
+_rows_appc_sel = []
+for _r in RESP4:
+    _sc = 100 if _r == "step_yield" else 1
+    _cdf = D.rsm_coeff_df(UO, _r)
+    for _, _e in _cdf.iterrows():
+        _rows_appc_sel.append([f"{_lab2[_r]} ({_unit[_r] if _r != 'lmw_cesds_pct' else '%'})".replace("(% points)", "(%)"),
+                      _e["Term"], fx(_e["Coef."] * _sc, 3), fx(_e["Std. err."] * _sc, 3), fx(_e["t"], 2), pn(_e["p-value"])])
+T.frame(pd.DataFrame(_rows_appc_sel, columns=["Output", "Term", "Coefficient", "Std. err.", "t", "p-value"]),
+        "Coefficients of the selected models of the response-surface design.", "tbl-appc-sel", merge=["Output"],
+        align=["l", "l", "r", "r", "r", "r"], size="footnotesize",
+        notes=[("", "Coefficients in coded units. The selected model of XMuLV LRF is not adequate and sets no range.")],
+        notes_per_row=True).show()
+```
+
+```{python}
+#| output: asis
+_rows_appc_full = []
+for _r in RESP4:
+    _sc = 100 if _r == "step_yield" else 1
+    for _, _e in PFULL_COEF[_r].iterrows():
+        _rows_appc_full.append([f"{_lab2[_r]} ({_unit[_r] if _r != 'lmw_cesds_pct' else '%'})".replace("(% points)", "(%)"),
+                      _e["Term"], fx(_e["Coef."] * _sc, 3), fx(_e["Std. err."] * _sc, 3), pn(_e["p-value"])])
+T.frame(pd.DataFrame(_rows_appc_full, columns=["Output", "Term", "Coefficient", "Std. err.", "p-value"]),
+        "Coefficients of the full quadratic models on the planned runs, the model of PCP-009 and of Version 1.0.",
+        "tbl-appc-full", merge=["Output"], align=["l", "l", "r", "r", "r"], size="footnotesize",
+        notes=[("", "Coefficients in coded units. A², B², the squares. These models do not meet the limit on overfitting "
+                    "and are not used for any conclusion of Version 2.0.")], notes_per_row=True).show()
+```
+
+@fig-diag-xmulv, @fig-diag-frag and @fig-diag-yield give the residual plots of the selected models of the other three outputs, which PCP-009 §5.5 asks for every response. A model with no term predicts one value, so its residuals lie on one vertical line against the prediction, and its predictions on one horizontal line against the measured results.
+
+```{python}
+#| label: fig-diag-xmulv
+#| fig-cap: "Diagnostics of the selected model of XMuLV LRF, which is not adequate and sets no range."
+fig = D.fig_diagnostics(UO, "xmulv_lrf")
+plt.show()
+```
+
+```{python}
+#| label: fig-diag-frag
+#| fig-cap: "Diagnostics of the selected model of fragments, a model with no term."
+fig = D.fig_diagnostics(UO, "lmw_cesds_pct")
+plt.show()
+```
+
+```{python}
+#| label: fig-diag-yield
+#| fig-cap: "Diagnostics of the selected model of step yield, a model with no term, with the yield as a fraction."
+fig = D.fig_diagnostics(UO, "step_yield")
+plt.show()
+```
+
+```{python}
+#| output: asis
+print(appendix_numbering("D"))
+```
+
+# Appendix D. Analytical methods summary {.unnumbered #sec-appD}
+
+@tbl-appd summarises the methods behind the outputs of the designs.
+
+```{python}
+#| output: asis
+_md = pd.DataFrame([
+    ["MVM LRF", "Infectivity titre by TCID50, with qPCR confirmation", "AMV-3018", "LRF, log10", f"{fx(LOQ_MVM)} {LOQ_UNIT}"],
+    ["XMuLV LRF", "Infectivity titre by TCID50", "AMV-3017", "LRF, log10", f"{fx(LOQ_X)} {LOQ_UNIT}"],
+    ["Fragments, LMW", "Purity by nrCE-SDS", "AMV-3020", "LMW, % of total", f"{CESDS_LOQ:g} %"],
+    ["Step yield", "not stated in the record", "–", "%", "–"]],
+    columns=["Output", "Technique", "AMV", "Reportable value", "LOQ"])
+T.frame(_md, "Analytical methods for the outputs of the designs.", "tbl-appd",
+        align=["l", "P{4.4cm}", "l", "l", "P{3.0cm}"],
+        notes=[("", "AMV, the method validation, whose title the table of procedures and method validations of the "
+                    "analytical methods section gives. LOQ, the limit of quantitation of the "
+                    "titre or of the attribute, as the method record gives it. The LRF is calculated from the titres "
+                    "of the spiked load and of the filtrate.")],
+        notes_per_row=True).show()
+```
 
 <!-- ========================= BODY END ======================================== -->
 

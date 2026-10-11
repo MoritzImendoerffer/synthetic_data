@@ -149,3 +149,63 @@ Not committed.
    titre effect, which points to KPP); osmolality as a WC-CPP without a PAR; the alarm limit values are not in the
    record; no action limit for acidic variants at harvest; the ivcc effect at its NOR low is not covered by the risk
    decision (the median at the worst corner would be about 17.69 %).
+
+
+---
+
+# Final pass (2026-10-11): review run 2 + owner's decisions of 2026-10-10 (record) and 2026-10-11 (bioreactor)
+
+Inputs read: feedback-PCR-003.final.md, content-review-PCR-003.run2.md, REPORT-LESSONS §3 rule 1, §6 rule 9, §7;
+data-state-2026-10-10 §3 and §5; rendered PCP-003 (08:25) and PCMP-001 (08:21), content only; A-Mab text (galactose and
+CDC, p.38; DNA claimed range, p.47). Brief regenerated 08:25 (two study events, PD-003-01..13, new classes).
+Backups of the run-2 parts: rev/*.pre-final.*, rev/draft.run2.qmd.
+
+## Done (scratch parts rewritten: b1 fully, b2 by paragraph, b3 fully; setup asserts and new values)
+- Record: §13 is now "Study events and discrepancies from the plan". Its opening sentence is in the record rule's
+  terms. Events (DEV-003-01/02) come first, then the register and PD-003-01..13; the former DEV subsections are now
+  PD-003-07..13, and every mention was updated. "Deviation" survives only in Changes item 9 and the §13 opening (the
+  plan's term). PD-003-13 follows the register reason (the Version 1.0 test was stricter than the model's use needs).
+- Owner's decisions 2026-10-11:
+  - pH held by base addition and pCO2 by the CO2 fraction of the sparge gas (§3.2, Changes item 8, §9, §10).
+  - Classes argued by the PCMP-001 §7.7 rule (osmolality CPP, DO GPP, basal medium KPP), with the conflict
+    sentences deleted.
+  - The ivcc corner: one significant result in 28 tests, about 1.4 expected by chance, no correction set
+    afterwards. The acceptance is extended and production trending recommended (§5.4, §7.2, PD-003-11, §10).
+  - Alarms at pH 6.9, 115 mmHg pCO2 and 412.5 mOsm/kg, and an action limit of 18.72 %, from D.acidic_mitigation()
+    (§7.2, §10).
+- Errors (Q5): D-002 elaboration corrected, the sentence itself kept. Q5.2, Q5.4, Q5.6, Q5.8 ("single run" + what
+  the interval excludes, §3.5), Q5.10, Q5.11, Q5.12, Q5.15 (fitted means, slope n.s.), Q5.16 (bias 22.23/21.50,
+  22.83/21.85; biased worst-corner median about 17.79 %), Q5.17, Q5.18, Q5.19 and Q5.20 (half the time at 3.1 points,
+  4.3 points at 80 %) are all done.
+- Q4: the bands are stated as a judgement on which no class rests; normality in the criterion's words; aggregate 11
+  of 16 runs inside, stated as a limitation; the narrowing decision given its basis; "confirmed" removed.
+- Tables: 5.5 "F median"; 5.12 "Fitted mean"; the Table 7.1 rounding note (6.44 rounded against 6.46) and "the
+  increase applies to the upper limit only" in the text; 8.1 DNA as × 10⁻ⁿ, tails "< 0.01", dose in the note; the
+  Figure 6.1 caption names the grid over the NOR; Man5 dropped and CDC added in the abbreviations; the Appendix A
+  text says that Run is standard order and that run 4 is shown at its design setting.
+- HCP/DNA: what was measured where is stated in §4.6, as data-state §3 gives it.
+
+- Coordinator additions folded in:
+  - temperature as a fourth alarm (dd965f8);
+  - then the HOLD on alarm limits: no alarm value or rule is cited. The action limit (18.72 %, lower criterion + 2
+    icIEF intermediate-precision SDs), the trending against ivcc and the release test are kept. One alarm sentence
+    fits in §7.2 (last paragraph) and as a new item in §10 without restructuring. The register text PD-003-08 in
+    Table 13.2 still names the alarm limits.
+  - No fragments criterion is attributed to A-Mab.
+- Builder change under the draft (21f0a49, criteria-table header wraps): my chunk keeps only the column widths.
+
+## Final state (2026-10-11 09:5x)
+- check_render --render passes every gate (last two runs), and a separate check_render afterwards also passes.
+  Numeral lint advisory: 97 lines, all conventions.
+- PDF 85 pp (82 before the pass): Table 13.2 now carries 13 discrepancies with long builder cells, and the single-run
+  limits column and the required additions (action limit, tests and power, bias, ivcc acceptance, record intro)
+  outweigh the cuts. Prose 770 sentences / 16,070 words (15,817 before).
+- Page images read: Tables 4.3, 5.5, 5.12, 7.1, 7.2, 8.1, 13.1, 13.2, A.1 and Figure 6.1; §10.
+- .txt extract refreshed. Not committed. NEEDS: none.
+
+- 2026-10-11 ~10:10: the alarm decision was added (owner, option 1, dae4b7e), in §7.2 and §10 only.
+  - The combined alert fires when culture pH is above 6.79, pCO2 above 101 mmHg and culture temperature below
+    35.39 °C at the same time. The limits come from the helper, and `covers_nor` is asserted.
+  - §10 item 2 carries the rule, the coverage of the NOR, osmolality under the harvest action limit, and the NOR
+    read as about ±3 SD (PCMP-001 §6.4).
+  - check_render --render passes; 86 pp; 777 sentences / 16,241 words; .txt refreshed; not committed.

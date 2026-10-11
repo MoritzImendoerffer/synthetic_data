@@ -281,26 +281,34 @@ def _changed_by(cqa, kind):
     gg = _ver[_ver.cqa == cqa]
     gg = (gg[gg.met == False] if kind == "tight"                         # noqa: E712
           else gg[(gg.met == True) & (gg.widening_supported == True) & (gg.model_adequate == True)])  # noqa: E712
-    assert len(gg) == 1
-    return gg.iloc[0]
+    return {r.step_key: r for r in gg.itertuples()}
 
 
-AG_T = _changed_by("aggregates_hmw", "tight")
-AG_W = _changed_by("aggregates_hmw", "wide")
-assert AG_T.step_key == "cex" and AG_W.step_key == "viral_inactivation"
-assert all(int(x.step) > STEP for x in (AG_T, AG_W))   # no criterion uses data from the bioreactor studies
+_AG_TIGHT = _changed_by("aggregates_hmw", "tight")
+_AG_WIDE = _changed_by("aggregates_hmw", "wide")
+assert set(_AG_TIGHT) == {"cex", "ufdf"} and set(_AG_WIDE) == {"viral_inactivation"}
+AG_T, AG_U, AG_W = _AG_TIGHT["cex"], _AG_TIGHT["ufdf"], _AG_WIDE["viral_inactivation"]
+assert all(int(x.step) > STEP for x in (AG_T, AG_U, AG_W))   # no criterion uses data from the bioreactor studies
 assert AG_T.predicted_nor < AG_T.assumed and AG_T.predicted_nor_bound95 < AG_T.assumed   # CEX cleared less
 assert AG_W.predicted_nor < AG_W.assumed and AG_W.predicted_nor_bound95 < AG_W.assumed   # VI added less
+# UF/DF: the a priori derivation assumes no change after cation exchange, and PCMP-001 §7.3 sets an increase
+assert AG_U.assumption == "add_max" and float(AG_U.assumed) == 0.0 and AG_U.predicted_nor_bound95 > 0
+UF_ADD_TXT = f"{float(AG_U.predicted_nor_bound95):.3f}"
+# the increase carried by the cation exchange pool criterion is the UF/DF increase alone
+_cex_ag = D.iac_table("cex").set_index("response").loc["aggregate_out_pct"]
+assert float(_cex_ag.downstream_fold) == 1.0
+AG_ADD_U = float(_cex_ag.downstream_added)
+AG_ADD_W = float(AG.downstream_added) - AG_ADD_U        # the increase column of the table is the sum of the two
+assert abs(AG_ADD_U - AG_U.predicted_nor_bound95) < 1e-3 and abs(AG_ADD_W - AG_W.predicted_nor_bound95) < 1e-3
 assert abs(AG.downstream_fold - AG_T.predicted_nor_bound95) < 1e-3
-assert abs(AG.downstream_added - AG_W.predicted_nor_bound95) < 1e-3
 # acidic variants: the low-pH model is not adequate, so its bound does not replace the platform value
 _av_vi = _ver[_ver.cqa == "acidic_variants"]
 assert len(_av_vi) == 1 and not bool(_av_vi.iloc[0].model_adequate)
 AV_P = _av_vi.iloc[0]
 assert abs(AV.downstream_added - AV_P.assumed) < 1e-9 and float(AV.downstream_fold) == 1.0
 # the arithmetic the text prints: drug substance limit x clearance fold - increase, from unrounded values
-assert abs(AG.ds_high * AG.downstream_fold - AG.downstream_added - AG.iac_high) < 1e-6
-assert abs(AG.ds_high * AG_T.assumed - AG_W.assumed - AG.iac_high_apriori) < 1e-6
+assert abs((AG.ds_high - AG_ADD_U) * AG.downstream_fold - AG_ADD_W - AG.iac_high) < 1e-6
+assert abs((AG.ds_high - AG_U.assumed) * AG_T.assumed - AG_W.assumed - AG.iac_high_apriori) < 1e-6
 assert abs(AV.ds_high - AV.downstream_added - AV.iac_high) < 1e-6
 DOC_CEX = f"PCR-{int(AG_T.step):03d}"
 DOC_VI = f"PCR-{int(AG_W.step):03d}"
@@ -513,6 +521,7 @@ print(abbreviations_table([
     ("SEC", "size exclusion chromatography"),
     ("SOP", "standard operating procedure"),
     ("UDP", "uridine diphosphate"),
+    ("UF/DF", "ultrafiltration and diafiltration"),
     ("UPLC", "ultra-performance liquid chromatography"),
     ("VH", "very high (criticality level)"),
     ("VL", "very low (criticality level)"),
@@ -781,7 +790,7 @@ The criteria below apply the acceptance criteria framework of the master plan PC
 10. Capability is judged in the master report PCMR-001 against two values that PCMP-001 §7.9 sets. A Cpk of at least `{python} g(CPK_TARGET)` is expected of a critical quality attribute in routine manufacture. A Cpk below `{python} g(CPK_MIN)` requires an action in the control strategy. A Cpk between the two is acceptable, and the master report then states the side of the criterion that limits it and the parameters that drive it. The report of this step states the Cpk of each attribute with its margin to the limit and names the attribute whose capability is tightest.
 11. The study is complete when the qualification of the scale-down model is decided for every output with a criterion, when an adequate model exists for every modelled response or the reason for its absence is reported, when an operating region containing the NORs is defined, when a PAR is established for every parameter and every attribute that its model shows it changes, and when every parameter of @tbl-params is classified.
 
-@tbl-iac gives the intermediate acceptance criteria of the step and their derivation. Each drug substance criterion is carried back through the worst case of every downstream step, with no margin (PCMP-001 §7.3). The worst case is the platform value from X-Mab, Y-Mab and Z-Mab, unless the verification described below replaced it with an A-Mab value. The aggregate criterion is carried back through the aggregate clearance factor of cation exchange and the aggregate increase across low-pH viral inactivation. It is the drug substance limit multiplied by the clearance factor, less the increase. From the unrounded values in force this gives `{python} num(AG.ds_high)` × `{python} f"{AG.downstream_fold:.4f}"` − `{python} f"{AG.downstream_added:.4f}"` = `{python} num(AG.iac_high)`\ % HMW, against `{python} num(AG.ds_high)` × `{python} num(AG_T.assumed)` − `{python} num(AG_W.assumed)` = `{python} num(AG.iac_high_apriori)`\ % from the platform values alone. The upper limit for acidic variants is carried back through the platform worst case of the increase across low-pH viral inactivation, `{python} num(AV.ds_high)` − `{python} num(AV.downstream_added)` = `{python} num(AV.iac_high)`\ %. The lower limit is carried back unchanged at `{python} num(AV.iac_low)`\ %, which assumes that no downstream step lowers acidic variants (@sec-risks). Each increase is in percentage points of the attribute.
+@tbl-iac gives the intermediate acceptance criteria of the step and their derivation. Each drug substance criterion is carried back through the worst case of every downstream step, with no margin (PCMP-001 §7.3). The worst case is the platform value from X-Mab, Y-Mab and Z-Mab, unless the verification described below replaced it with an A-Mab value. The aggregate criterion is carried back through the aggregate increase across UF/DF, the aggregate clearance factor of cation exchange and the aggregate increase across low-pH viral inactivation. It is the drug substance limit less the UF/DF increase, multiplied by the clearance factor, less the low-pH increase. From the unrounded values in force this gives (`{python} num(AG.ds_high)` − `{python} f"{AG_ADD_U:.4f}"`) × `{python} f"{AG.downstream_fold:.4f}"` − `{python} f"{AG_ADD_W:.4f}"` = `{python} num(AG.iac_high)`\ % HMW, against `{python} num(AG.ds_high)` × `{python} num(AG_T.assumed)` − `{python} num(AG_W.assumed)` = `{python} num(AG.iac_high_apriori)`\ % from the platform values alone, which assume no change of aggregate after cation exchange. The increase in @tbl-iac is the sum of the two increases. The upper limit for acidic variants is carried back through the platform worst case of the increase across low-pH viral inactivation, `{python} num(AV.ds_high)` − `{python} num(AV.downstream_added)` = `{python} num(AV.iac_high)`\ %. The lower limit is carried back unchanged at `{python} num(AV.iac_low)`\ %, which assumes that no downstream step lowers acidic variants (@sec-risks). Each increase is in percentage points of the attribute.
 
 ```{python}
 #| output: asis
@@ -790,7 +799,7 @@ T.iac_derivation([UO]).show()
 
 Each criterion in force assumes that every downstream step performs at least as well as the worst case from which the criterion was derived. The report of each downstream step checks this from its own response-surface model, and the verification rule of PCMP-001 §7.5 lets the check change a criterion in either direction. Where the A-Mab worst case predicted within the NOR of a downstream step is worse than the platform worst case, the one-sided `{python} BOUND_PCT`\ % prediction bound of a single batch there replaces the platform value, and every criterion upstream becomes stricter. Where that bound is better than the platform value, and the response-surface model behind it meets the first three adequacy criteria of PCMP-001 §7.2 (a significant model, no significant lack of fit and the limit on overfitting) and is not an exact fit, the bound replaces the platform value, and every criterion upstream becomes wider. The fourth criterion, on the residuals and on influential runs, does not decide the change. The report that gives the bound examines it and states whether the bound depends on a single run.
 
-The verification rule changed the criterion of this step for `{python} CHANGED_TXT`. The cation exchange model predicted a lower aggregate clearance within its NOR than the platform worst case of `{python} num(AG_T.assumed)`-fold. The one-sided `{python} BOUND_PCT`\ % prediction bound of a single batch for that clearance, `{python} num(AG.downstream_fold)`-fold, tightened the criterion (cation exchange report `{python} DOC_CEX`). The bound for the aggregate increase across low-pH viral inactivation, `{python} num(AG.downstream_added)` percentage points against `{python} num(AG_W.assumed)` on the platform, widened it (low-pH viral inactivation report `{python} DOC_VI`). The aggregate criterion in force, ≤ `{python} num(AG.iac_high)`\ % HMW, is stricter than the a priori criterion of ≤ `{python} num(AG.iac_high_apriori)`\ %. The bioreactor report PCR-003 argues the change by its risk, as PCMP-001 §7.5 requires.
+The verification rule changed the criterion of this step for `{python} CHANGED_TXT`. The cation exchange model predicted a lower aggregate clearance within its NOR than the platform worst case of `{python} num(AG_T.assumed)`-fold. The one-sided `{python} BOUND_PCT`\ % prediction bound of a single batch for that clearance, `{python} num(AG.downstream_fold)`-fold, tightened the criterion (cation exchange report `{python} DOC_CEX`). The bound for the aggregate increase across low-pH viral inactivation, `{python} num(AG_ADD_W)` percentage points against `{python} num(AG_W.assumed)` on the platform, widened it (low-pH viral inactivation report `{python} DOC_VI`). PCMP-001 §7.3 also sets an increase across UF/DF, which the a priori derivation took as none. UF/DF raises aggregate within its NOR by up to `{python} UF_ADD_TXT` percentage points at the prediction bound of a single batch, and this tightened the criterion further. The aggregate criterion in force, ≤ `{python} num(AG.iac_high)`\ % HMW, is stricter than the a priori criterion of ≤ `{python} num(AG.iac_high_apriori)`\ %. The bioreactor report PCR-003 argues the change by its risk, as PCMP-001 §7.5 requires.
 
 # Proven acceptable ranges (planned analysis) {#sec-par}
 

@@ -825,13 +825,19 @@ def build():
        "plan enters them.", pq,
        "They come from the drug substance CQA register (PCMP-001 §3), and no result of the studies of "
        "this plan enters them.")
-    st(f"The derivation in PCMP-001 assumes that no step after {ns['LAST_AGG']} changes aggregate, and "
-       f"that no step after {ns['LAST_AV']} changes the acidic charge variants.", pq,
-       f"The derivation in PCMP-001 assumes that no step after {ns['LAST_AGG']} changes aggregate, and "
-       f"that no step after {ns['LAST_AV']} changes the acidic charge variants (PCMP-001 Table 7.1).")
+    st(f"The a priori derivation in PCMP-001 assumes that no step after {ns['LAST_AGG']} changes aggregate, "
+       f"and that no step after {ns['LAST_AV']} changes the acidic charge variants.", pq,
+       f"The a priori derivation in PCMP-001 assumes that no step after {ns['LAST_AGG']} changes aggregate, "
+       f"and that no step after {ns['LAST_AV']} changes the acidic charge variants (PCMP-001 Table 7.1).")
     st("The UF/DF step can add to aggregate and to the acidic charge variants, and its studies measure "
        "what it adds.", pq,
        "This step can add to both, and the studies of this plan measure what it adds.")
+    st(f"PCMP-001 Version {ns['VER']} sets the aggregate increase across UF/DF at {ns['UF_ADD']} percentage "
+       f"points, the prediction bound of a single batch within its NOR, and every aggregate criterion of the "
+       f"earlier steps carries that increase.", pq,
+       f"PCMP-001 Version {ns['VER']} sets the aggregate increase across this step at {ns['UF_ADD']} "
+       f"percentage points, the prediction bound of a single batch within its NOR, and every aggregate "
+       f"criterion of the earlier steps carries that increase (PCMP-001 §7.3).")
     st("The buffer exchange is accepted when the conductivity and the pH of the retentate have reached "
        "the plateau of the formulation buffer, at or below the lower edge of the diavolume NOR; the "
        "criterion is that of Version 1.0.", pq,

@@ -711,8 +711,11 @@ def build():
     I_TABLE = "The quality criteria the pool is judged against are given in @tbl-iac."
     I_EACH = "Each is an intermediate acceptance criterion (IAC)."
     I_DERIVE = "PCMP-001 §7.3 derives it by carrying the drug substance criterion backward through the train, step by step, with the platform worst case of each downstream step, and no margin is applied."
-    I_NOSTEP = "No step after cation exchange changes aggregate or fragments in this derivation."
-    I_DS = "The cation exchange pool is therefore judged against the drug substance criteria themselves, `{python} s_agg` % for aggregate and `{python} s_frag` % for fragments."
+    I_NOSTEP = "No step after cation exchange changes fragments in this derivation."
+    I_DS = "The cation exchange pool is therefore judged against the drug substance criterion for fragments itself, `{python} s_frag` %."
+    I_AAP = "The a priori derivation also assumed that no step after cation exchange changes aggregate, which made the aggregate criterion the drug substance criterion of `{python} s_ds_agg` %."
+    I_UF = "PCMP-001 §7.3 sets an increase across UF/DF of up to `{python} s_uf_add` percentage points at the prediction bound of a single batch within the UF/DF NOR."
+    I_AGG = "The aggregate criterion in force is the drug substance criterion less that increase, `{python} s_agg` %."
     I_HCP1 = "For host cell protein the drug substance criterion of `{python} s_ds_hcp` ng/mg is carried back through anion exchange."
     I_HCP2 = "With the platform worst case of anion exchange, a clearance factor of `{python} s_aex_pf`, the criterion is `{python} s_hcp_ap` ng/mg a priori."
     I_PCR8 = "The anion exchange report PCR-008 verified that worst case."
@@ -1245,7 +1248,7 @@ def build():
             add(f"attr:{key}", "attribute_measured_by_method", f"method:{a}",
                 f"{names[key]} is measured by {a} ({title_of[a]}).",
                 [ref("methods", q(q_method[a])), tref("related", sop_t, soprow, a)])
-    q_iac = {"aggregates_hmw": I_DS, "fragments_lmw": I_DS, "hcp": I_FORCE}
+    q_iac = {"aggregates_hmw": I_AGG, "fragments_lmw": I_DS, "hcp": I_FORCE}
     for key in irow:
         x = iac.loc[key]
         unit = re.search(r"\(([^)]*)\)$", T.ATTR_NAME[key]).group(1)  # as the row labels the attribute
@@ -1734,9 +1737,15 @@ def build():
     sq("iac", I_EACH, "Each quality criterion the pool is judged against is an intermediate acceptance criterion "
                       "(IAC).", also=[("iac", I_TABLE)])
     sq("iac", I_DERIVE)
-    sq("iac", I_DS, "No step after cation exchange changes aggregate or fragments in the derivation, so the cation "
-                    "exchange pool is judged against the drug substance criteria themselves, `{python} s_agg` % for "
-                    "aggregate and `{python} s_frag` % for fragments.", also=[("iac", I_NOSTEP)])
+    sq("iac", I_DS, "No step after cation exchange changes fragments in the derivation, so the cation exchange "
+                    "pool is judged against the drug substance criterion for fragments itself, `{python} s_frag` %.",
+       also=[("iac", I_NOSTEP)])
+    sq("iac", I_AGG, "The a priori aggregate criterion of the cation exchange pool is the drug substance criterion "
+                     "of `{python} s_ds_agg` %, because the a priori derivation assumes that no later step changes "
+                     "aggregate. PCMP-001 §7.3 sets an increase across UF/DF of up to `{python} s_uf_add` percentage "
+                     "points at the single-batch prediction bound, and the criterion in force is the drug substance "
+                     "criterion less that increase, `{python} s_agg` %.",
+       also=[("iac", I_AAP), ("iac", I_UF)])
     sq("iac", I_HCP2, "For host cell protein the drug substance criterion of `{python} s_ds_hcp` ng/mg is carried "
                       "back through anion exchange, and with the platform worst case of anion exchange, a clearance "
                       "factor of `{python} s_aex_pf`, the criterion is `{python} s_hcp_ap` ng/mg a priori.",
@@ -1756,7 +1765,7 @@ def build():
         how = (f"the drug substance criterion {ds_} {unit}, because no step after cation exchange changes it"
                if x["basis"] == "drug substance" else
                f"the drug substance criterion {ds_} {unit} carried back through a downstream clearance factor of "
-               f"{_cells(row)[2]} ({x['basis']}; {T.crit(x['iac_low_apriori'], x['iac_high_apriori'], x['spec_type'])} "
+               f"{_cells(row)[2]} and an increase of {_cells(row)[3]} ({x['basis']}; {T.crit(x['iac_low_apriori'], x['iac_high_apriori'], x['spec_type'])} "
                f"{unit} a priori)")
         st(f"The intermediate acceptance criterion for {names[key]} at the cation exchange step is {crit_} {unit}: "
            f"{how}.", [tref("iac", iac_t, irow, key)])

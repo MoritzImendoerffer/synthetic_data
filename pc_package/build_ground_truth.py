@@ -9254,7 +9254,7 @@ def build_plan_bioreactor():
              "widened the aggregate criterion of this step.", "criteria",
              "Acceptance and decision criteria",
              f"The bound for the aggregate increase across low-pH viral inactivation, "
-             f"{num(AG.downstream_added)} percentage points against {num(AG_W.assumed)} on the "
+             f"{num(ns['AG_ADD_W'])} percentage points against {num(AG_W.assumed)} on the "
              f"platform, widened it (low-pH viral inactivation report {DOC_VI}).")
     relation("references", INV2["id"], "The investigation of the response-surface models that did "
              "not meet the model adequacy criteria; what it changed is recorded in PCR-003.",
@@ -9683,11 +9683,18 @@ def build_plan_bioreactor():
                     f"{T.crit(x['iac_low_apriori'], x['iac_high_apriori'], x['spec_type'])}.")
         st(f"The intermediate acceptance criterion for {names[key]} at the production bioreactor "
            + how, crit, row, iacrow.header, iac_t.caption)
-    st(f"The aggregate criterion is {num(AG.ds_high)} × {AG.downstream_fold:.4f} − "
-       f"{AG.downstream_added:.4f} = {num(AG.iac_high)} % HMW from the unrounded values in force.",
+    st(f"The aggregate criterion is ({num(AG.ds_high)} − {ns['AG_ADD_U']:.4f}) × {AG.downstream_fold:.4f} − "
+       f"{ns['AG_ADD_W']:.4f} = {num(AG.iac_high)} % HMW from the unrounded values in force: the drug "
+       f"substance limit less the UF/DF increase, multiplied by the cation exchange clearance factor, "
+       f"less the low-pH increase.",
        crit,
-       f"From the unrounded values in force this gives {num(AG.ds_high)} × "
-       f"{AG.downstream_fold:.4f} − {AG.downstream_added:.4f} = {num(AG.iac_high)} % HMW")
+       f"From the unrounded values in force this gives ({num(AG.ds_high)} − "
+       f"{ns['AG_ADD_U']:.4f}) × {AG.downstream_fold:.4f} − {ns['AG_ADD_W']:.4f} = {num(AG.iac_high)} % HMW")
+    st(f"PCMP-001 §7.3 sets an increase across UF/DF of up to {ns['UF_ADD_TXT']} percentage points at "
+       f"the prediction bound of a single batch, which the a priori derivation took as none, and it "
+       f"tightened the aggregate criterion of the bioreactor further.", crit,
+       f"UF/DF raises aggregate within its NOR by up to {ns['UF_ADD_TXT']} percentage points at the "
+       f"prediction bound of a single batch, and this tightened the criterion further.")
     st(f"The upper limit for acidic variants is {num(AV.ds_high)} − {num(AV.downstream_added)} = "
        f"{num(AV.iac_high)} %, carried back through the platform worst case of the increase across "
        f"low-pH viral inactivation.", crit,

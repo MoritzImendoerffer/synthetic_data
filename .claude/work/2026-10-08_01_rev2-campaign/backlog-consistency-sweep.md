@@ -445,7 +445,7 @@ review is the last one, at reduced effort. PCR-007 and PCR-008 (authors running)
   event register prints a Version 2.0 summary beside the Version 1.0 record.
 - Shared annex helpers proposed by the PCR-009 builder: `S_(prefix, upto)` (unique prose span by prefix to sentence
   end) and an `md_captions` reader; candidates for annex_builders/__init__.py.
-- OWNER QUESTION (record): LOT-BUF-2287 / DEV-007-01 name a "Tris load/wash buffer" retested at pH 5.02; Tris
+- RESOLVED (owner 2026-10-11: acetate; PD-007-12 records the Version 1.0 error): LOT-BUF-2287 / DEV-007-01 name a "Tris load/wash buffer" retested at pH 5.02; Tris
   (pKa ~8.1) does not buffer at pH 5. Version 1.0 PCR-007 (frozen) prints "Tris" twice. Rename in the config (e.g.
   acetate) and accept the Version 1.0 mismatch, or keep the record as it is?
 - `doe_report.fig_rsm_contours` plots step yield as a fraction labelled "Step yield"; tables use %. PCR-007 captions say

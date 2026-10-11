@@ -122,6 +122,7 @@ SEC = {
     "pd09": (_REC, _PDS, "PD-007-09 Fractionated runs not in the plan"),
     "pd10": (_REC, _PDS, "PD-007-10 Approaches where the plan sets no threshold, and step-level capability"),
     "pd11": (_REC, _PDS, "PD-007-11 Feed lots not recorded"),
+    "pd12": (_REC, _PDS, "PD-007-12 Load/wash buffer named Tris in Version 1.0"),
     "app_a": ("Appendix A. Screening design matrix and responses",),
     "app_b": ("Appendix B. Response-surface design matrix and responses",),
     "app_c": ("Appendix C. Full effect and coefficient tables",),
@@ -1428,6 +1429,7 @@ def build():  # noqa: C901 - one document, one builder, in the order of the repo
     sq("exec", "Four concern the analysis and the scale-down model.")
     sq("exec", "Five concern records the plan required that are not in the study record.")
     sq("exec", "The other two are the fractionated runs of S-CEX-FRC")
+    sq("exec", "The last corrects an error of Version 1.0 of this report")
 
     # -- Introduction: objectives (PCP-007 §2, read from the numbered list of the .qmd) and changes ------------
     src_all = _source()
@@ -1465,6 +1467,8 @@ def build():  # noqa: C901 - one document, one builder, in the order of the repo
     sq("changes", "The record. The execution window of each study is recorded")
     sq("changes", "Version 1.0 of this report stated that the load, the flow-through and the wash of each run were")
     sq("changes", "No result of those assays or of that release is in the record")
+    sq("changes", "Version 1.0 of this report also named the load/wash buffer of screening run")
+    sq("changes", "It was an acetate buffer (discrepancy PD-007-12).")
     sq("changes", "A NOR-propagated range is the range of one parameter over which its criterion is met")
     sq("changes", "Under the Version 1.0 limits and the Version 1.0 analysis, these ranges ended inside the NOR")
     sq("changes", "The upper end of the protein load NOR,")
@@ -2024,6 +2028,7 @@ def build():  # noqa: C901 - one document, one builder, in the order of the repo
     sq("disc", "The execution departs from the plan in the flow-rate study without its set-point run")
     sq("disc", "The record lacks the load results, the residual DNA and leached Protein A results")
     sq("disc", "The missing load results matter most")
+    sq("disc", "Apart from these groups, discrepancy PD-007-12 corrects the name of the load/wash buffer")
     sq("disc", "Five limitations remain.")
     sq("disc", "Scale. The scale-down model does not reproduce the hold times")
     sq("disc", "The process performance qualification (PPQ) batches of Stage 2")
@@ -2047,8 +2052,10 @@ def build():  # noqa: C901 - one document, one builder, in the order of the repo
     sq("record", "Study events are the events of execution that Version 1.0 recorded")
     sq("record", "Discrepancies from the plan are departures from the approved plan PCP-007")
     sq("events", "The studies of this step recorded")
+    sq("dev1", "The lot is an acetate load/wash buffer, and Version 1.0 of this report named it a Tris buffer in error")
     sq("dev1", "A lot that is within its expiry date when it is prepared can still be expired when it is used")
     sq("dev1", "Under `{python} SOP2103['id']`")
+    sq("dev1", "That pH lies in the buffering range of acetate.")
     sq("dev1", "The impact was judged from the data.")
     sq("dev1", "Its studentized residuals on the screening models were")
     sq("dev2", "The record gives neither the temperature set-point nor a permitted range.")
@@ -2104,6 +2111,11 @@ def build():  # noqa: C901 - one document, one builder, in the order of the repo
     sq("pd10", "Capability is given for the drug substance from the integrated model instead")
     sq("pd11", "PCP-007 §6.2 required the feed lot of every run to be recorded")
     sq("pd11", "A lot effect therefore cannot be separated from the run-order drift of host cell protein")
+    sq("pd12", "Version 1.0 of this report named the load/wash buffer of lot")
+    sq("pd12", "The lot is an acetate load/wash buffer.")
+    sq("pd12", "The name in Version 1.0 was a transcription error, found in the Version 2.0 review.")
+    sq("pd12", "The re-test pH of the lot,")
+    sq("pd12", "The correction changes no result of this report.")
 
     sections = []
     for chap in CHAPTERS:
@@ -2164,7 +2176,7 @@ def build():  # noqa: C901 - one document, one builder, in the order of the repo
             "set-point' and 'PAR, NOR-propagated' print them; characterization_range is the range studied of the "
             "parameter table. The report's description of the two analyses is in report statements in its own words. "
             "Fragments have no adequate model and no PAR: an explicit non-claim.",
-            "The schema has no record type for a discrepancy from the plan. PD-007-01 to PD-007-11 are report "
+            "The schema has no record type for a discrepancy from the plan. PD-007-01 to PD-007-12 are report "
             "statements anchored on their rows of the discrepancy register; the studies they concern carry that row "
             "as a source reference.",
             "The report records no deviation: a characterization study is not GMP manufacture, so the two events of "

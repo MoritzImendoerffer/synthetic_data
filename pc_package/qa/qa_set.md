@@ -743,7 +743,7 @@ Documents in scope (21): INV-001, INV-002, PCMP-001, PCP-003, PCP-004, PCP-005, 
 
 **Q.** How many discrepancies from its plan does the Cation Exchange Chromatography characterization report (PCR-007) record?
 
-**A.** 11 (PD-007-01 to PD-007-11)
+**A.** 12 (PD-007-01 to PD-007-12)
 
 - Count the entries of the discrepancy register.
 > PCR-007: "PD-007-01 | Model selection for the response-surface outputs"
@@ -757,6 +757,7 @@ Documents in scope (21): INV-001, INV-002, PCMP-001, PCP-003, PCP-004, PCP-005, 
 > PCR-007: "PD-007-09 | Fractionated runs not in the plan"
 > PCR-007: "PD-007-10 | Approaches where the plan sets no threshold, and step-level capability"
 > PCR-007: "PD-007-11 | Feed lots not recorded"
+> PCR-007: "PD-007-12 | Load/wash buffer named Tris in Version 1.0 of the report"
 
 ### `L2-discrepancy-count-pcr-008`
 

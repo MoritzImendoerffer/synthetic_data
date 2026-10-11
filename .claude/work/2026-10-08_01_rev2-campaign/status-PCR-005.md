@@ -1,4 +1,4 @@
-# PCR-005 status, 2026-10-10 (follow-up pass after the record changed, complete; see §5)
+# PCR-005 status, 2026-10-10 (record pass after the owner's decision on deviations, complete; see §6)
 
 Draft: `pc_package/PCR-005_protein_a.DRAFT.qmd`. Nothing committed. No shared code changed in the run-3 cycle or in this follow-up.
 
@@ -407,3 +407,67 @@ For the coordinator:
   (INV-002 §8.4: 0.546–0.551 against 0.70). The fix list named only host cell protein, so §4.5 was not
   extended.
 - The annex needs re-anchoring (many quoted sentences and three tables changed).
+
+## 6. Record pass 2026-10-10 evening (`feedback-PCR-005.record-2026-10-10.md`)
+
+Owner's decision: a process characterization study is not GMP manufacture, so it raises no deviation. Author:
+Claude Opus 5.5. The backup is `PCR-005_protein_a.pre-record.qmd`. Only what the note names was changed, and
+nothing is committed.
+1. §13 is renamed "Study events and discrepancies from the plan" and opens with the note's sentence (PCP-005 calls
+   a departure a deviation; study events under the Version 1.0 numbers; every departure a discrepancy). It then
+   gives the events (Table 13.1, retitled "Study events recorded ...", from the new `dev_register`), then the
+   discrepancies.
+2. DEV-005-01 and DEV-005-02 stay as study events in their subsections. "The rule in the deviation record"
+   now reads "the record of the event", and in §9 "The study event DEV-005-01" and "the buffer of that event".
+3. The former DEV-005-03, -04 and -05 are now subsections PD-005-07, -08 and -09 of the discrepancy part
+   (anchors `sec-pd07` to `sec-pd09`, all cross-references updated), with their content kept.
+   - PD-005-08 states the Version 1.0 test (including "the model modified before the characterization studies"
+     from the register) and the difference under it (p = 0.037, computed as before). It gives the register's
+     reason (PCMP-001 Version 2.0 §7.1; the test was stricter than the use of the model needs). The sentence that
+     Version 1.0 called the model qualified was removed, so nothing calls it a failure of Version 1.0.
+   - PD-005-09 gives the recorded reason (`pd09_reason`).
+4. Mentions updated:
+   - the executive summary (two study events, investigated, runs retained, neither changes the judgement);
+   - §3.1 (PD-005-08), §4.1 (PD-005-09), §4.4, §5.6 and the Discussion (PD-005-07);
+   - Conclusion 11 ("Neither study event ...");
+   - the introduction of the discrepancy part (two further studies and three departures described below).
+   The counts are `n_dev` (asserted 2) and `n_pd` (9).
+5. Change item 10 now records the events that Version 1.0 numbered as deviations as study events under their
+   numbers, and the departures found in the re-analysis as discrepancies.
+6. Asserts: two events (both retained); nine PD entries in order; the subjects of PD-005-07 to -09, the
+   Version 1.0 test and the reason of PD-005-08, and the reason of PD-005-09. The data asserts (no centre runs,
+   chronology order, p = 0.037, no other output differs) stay.
+The criteria table: the sentences around it now name the new single-run limits column, and each verdict rests on
+its upper end (15,349 ng/mg, 5.52 ppm, 1.09 %, which equal the values in the text).
+Layout (table fit, as the note asks):
+- **Table 7.2.** The criteria table, with its new single-run limits column, was scaled below the floor (7.7 pt).
+  In my own chunk its attribute column is set to wrap at 1.9 cm (`cr.align`), and the builder's header, notes
+  and values are untouched. Body 8.8 pt, notes 7.94 pt.
+- **The discrepancy register.** With nine rows it fits no single page at the floor. The landscape setting of
+  the last pass overflowed its page (row PD-005-09 cut off), and the gate did not see it on the rotated page.
+  It is now set in two portrait parts from the same builder rows: Table 13.4 (PD-005-01 to -05, label
+  `tbl-pd`) and Table 13.5 (PD-005-06 to -09, label `tbl-pd-b`), with the cut point computed and the text
+  naming both.
+- **Executive summary.** The events sentence was shortened to keep the summary on its pages.
+
+Gate (`.venv/bin/python`, venv on PATH):
+- dry run green;
+- `--render` passes 21 to 23: font floor failures on Table 7.2, fixed;
+- `--render` 24 and 26: green;
+- explicit `quarto render --to pdf` and `--to docx`: both exit 0;
+- final `check_render`: exit 0, 798 inline expressions, no `<<NEEDS:>>`, 31 complex tables complete (both
+  register parts now probed), no page-foot overrun, nothing below 7.9 pt.
+
+**75 pp**, against 73 before this pass: Table 7.2 is taller and the register takes two pages. Page images read:
+Table 13.1 (events), Tables 13.4 and 13.5 (register), Table 7.2 (criteria).
+
+For the coordinator:
+- The register's own reason for PD-005-03 still reads "the deviation record shows the buffer below its target
+  pH". This is register text, so it was not retyped.
+- `check_render`'s page-foot check did not catch the overflow of a landscape table (rotated page). Other
+  documents with landscape tables may hide the same fault.
+- The annex: `tbl-pd` is now in two parts (`tbl-pd`, `tbl-pd-b`), §13 is restructured (anchors `sec-pd07` to
+  `sec-pd09` replace `sec-dev03` to `sec-dev05`), and Table 7.2 has a new column. Re-anchoring is needed.
+- `T.criteria_results` is too wide for PCR-005's attribute names at its default `llrrrl`, because the spanning
+  header "Mean predicted by the response-surface model" sets the width. The local wrap works here, but other
+  reports may hit the floor too.
